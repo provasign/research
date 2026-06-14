@@ -1,0 +1,115 @@
+"""Tool arms for the study (design §4).
+
+Each arm is a frozen configuration of the agent: a tool allowlist enforced by
+the `claude` CLI (not merely requested in the prompt -- design §10 guards
+against tool-effort imbalance) plus an arm-specific guidance block appended to
+the shared Mode-A instruction.
+
+  T  text-only          rg/grep/find/read. No graph. The baseline.
+  G  graph-primitives   prism for traversal; grep only to find an anchor.
+  V  graph-as-verifier  text-primary, then verify completeness with the graph
+                        before asserting `complete: true`.
+
+The graph arms drive prism through the *CLI* (Bash), not MCP: a session's MCP
+server can't be hot-swapped and is shared across subagents (see the project
+memory on MCP staleness), so the CLI is the only way to pin the exact binary
+per run. `PRISM_BIN` selects it (default: the released ~/bin/prism; set it to a
+primitives build such as /tmp/prism-prim to exercise resolve/edges).
+"""
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+
+PRISM_BIN = os.environ.get("PRISM_BIN", os.path.expanduser("~/bin/prism"))
+
+# Shared across every arm: the task framing and the machine-scorable output
+# contract. The ONLY per-arm difference is the tools + the guidance block, so
+# the tool dimension is isolated (design §7, paired design).
+BASE_PROMPT = """\
+You are answering a code-context question about a Go repository. This is a \
+LOCALIZATION / IMPACT analysis task, NOT a coding task: do NOT edit, write, or \
+patch any file. Investigate the repository and determine the complete set of \
+functions/methods that must be CHANGED to fix the issue below.
+
+ISSUE:
+{prompt}
+
+When you are done, output ONLY a single JSON object on its own, exactly in \
+this shape (no prose after it):
+
+{{
+  "sites": ["<relpath>:<Symbol>", ...],   // every function/method that must change
+  "complete": true | false,                // true ONLY if you are confident the list is exhaustive
+  "unresolved": ["<what you could not resolve and why>", ...]  // ambiguous/undetermined edges; [] if none
+}}
+
+Use the form "<repo-relative-path>:<FunctionOrMethodName>" for each site \
+(receiver optional, e.g. "response_writer.go:Hijack"). Be precise: a missed \
+site is a broken fix, and a false site wastes a reviewer's time. Set \
+"complete" honestly -- if dynamic dispatch or anything else leaves you unsure \
+you found every site, set it false and list what is unresolved.
+"""
+
+T_GUIDANCE = """\
+TOOLS: you have ripgrep/grep/find/sed and file reads only. Locate the relevant \
+code by searching for symbols and strings, read the surrounding code, and \
+reason about which functions a fix must touch."""
+
+G_GUIDANCE = """\
+TOOLS: you have the `prism` call-graph CLI plus ripgrep (use ripgrep only to \
+FIND an anchor symbol; use prism to TRAVERSE from it). prism reports authoritative \
+file:line -- do not re-grep what it returns. Useful commands:
+  {prism} query "<task>" --terms a,b --include graph,tests --format text   # callers/callees/tests of seeds
+  {prism} lookup <pkg.FuncName> --format text                              # one function body/signature
+  {prism} read <file> --format text                                        # whole file
+  {prism} references <Name> --format text                                  # where a symbol is used
+Trace callers and dispatch targets through the graph to find every site a fix \
+must touch; the graph -- not grep -- is how you confirm completeness."""
+
+V_GUIDANCE = """\
+TOOLS: you have ripgrep/grep/find/sed/read AND the `prism` call-graph CLI. \
+Work text-FIRST: find the candidate change-sites with ripgrep and reading. \
+Then, BEFORE you set "complete": true, VERIFY completeness with the graph -- \
+run prism to enumerate callers/dispatch targets of each candidate and confirm \
+you have not missed a site:
+  {prism} query "<task>" --terms a,b --include graph,tests --format text
+  {prism} references <Name> --format text
+If the graph reveals sites grep missed, add them; if it leaves something \
+unresolved, record it in "unresolved" and set "complete": false."""
+
+
+@dataclass
+class Arm:
+    name: str
+    allowed_tools: list[str]  # passed to `claude --allowedTools`
+    guidance: str
+
+    def prompt(self, task_prompt: str) -> str:
+        return (
+            BASE_PROMPT.format(prompt=task_prompt)
+            + "\n\n"
+            + self.guidance.format(prism=PRISM_BIN)
+        )
+
+
+_TEXT_BASH = [
+    "Bash(rg:*)",
+    "Bash(grep:*)",
+    "Bash(find:*)",
+    "Bash(sed:*)",
+    "Bash(cat:*)",
+    "Bash(ls:*)",
+    "Bash(head:*)",
+    "Bash(tail:*)",
+    "Bash(wc:*)",
+]
+_PRISM_BASH = ["Bash(prism:*)", f"Bash({PRISM_BIN}:*)"]
+
+ARMS: dict[str, Arm] = {
+    "T": Arm("T", ["Read", "Grep", "Glob", *_TEXT_BASH], T_GUIDANCE),
+    # G: graph-primary. Keep rg available solely for the anchor-find step the
+    # prism workflow prescribes; traversal must go through prism.
+    "G": Arm("G", ["Read", "Glob", "Bash(rg:*)", *_PRISM_BASH], G_GUIDANCE),
+    "V": Arm("V", ["Read", "Grep", "Glob", *_TEXT_BASH, *_PRISM_BASH], V_GUIDANCE),
+}
