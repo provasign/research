@@ -73,6 +73,16 @@ def test_weak_match_wrong_file_flagged():
     assert "response_writer.go:Hijack" in c.weak_matches
 
 
+def test_test_sites_are_neutral_not_false_positives():
+    # A rename task: listing the _test.go call site is correct, not an FP.
+    a = _ans('{"sites":["response_writer.go:Hijack","response_writer.go:CloseNotify",'
+             '"response_writer_test.go:TestHijack"],"complete":true}')
+    c = score(TASK, a, "G", 1)
+    assert c.recall == 1.0
+    assert c.precision == 1.0  # test site excluded from precision, not penalized
+    assert c.extra == []
+
+
 def test_no_json_yields_zero():
     c = score(TASK, _ans("I could not determine the sites."), "T", 1)
     assert c.recall == 0.0 and c.precision == 0.0

@@ -46,29 +46,43 @@ def changed_old_lines(repo: str, commit: str, path: str) -> set[int]:
     for line in diff.splitlines():
         m = HUNK_RE.match(line)
         if m:
+            # Set the old-side cursor; do NOT anchor here -- the hunk header
+            # names the function *preceding* the change, which would
+            # over-attribute (e.g. a rename's def lands the change on the
+            # neighbour above it).
             old_ln = int(m.group(1))
-            touched.add(old_ln)  # anchor the hunk (covers pure-addition hunks)
             continue
         if line.startswith("---") or line.startswith("+++"):
             continue
-        if line.startswith("-"):
+        if line.startswith("-"):  # deletion/modification: attribute, advance
             touched.add(old_ln)
             old_ln += 1
-        elif line.startswith("+"):
-            continue  # new-side only; doesn't advance old counter
-        else:
-            old_ln += 1  # context line
+        elif line.startswith("+"):  # insertion: attribute at this old pos, hold
+            touched.add(old_ln)
+        else:  # context line
+            old_ln += 1
     return touched
 
 
 def func_spans(source: str) -> list[tuple[int, int, str]]:
-    """(start_line, end_line, name) for every top-level func in `source`."""
+    """(start_line, end_line, name) for every top-level func in `source`.
+
+    A function's span starts at its leading doc-comment block (so a change to
+    that comment attributes to the function it documents, not the neighbour
+    above) and ends just before the next function's doc block.
+    """
     lines = source.splitlines()
-    starts: list[tuple[int, str]] = []
+    starts: list[tuple[int, str]] = []  # (doc_start_line, name)
     for i, line in enumerate(lines, start=1):
         m = FUNC_RE.match(line)
-        if m:
-            starts.append((i, m.group(1)))
+        if not m:
+            continue
+        doc = i
+        j = i - 1  # walk up over the contiguous // comment block
+        while j >= 1 and lines[j - 1].lstrip().startswith("//"):
+            doc = j
+            j -= 1
+        starts.append((doc, m.group(1)))
     spans: list[tuple[int, int, str]] = []
     for idx, (ln, name) in enumerate(starts):
         end = starts[idx + 1][0] - 1 if idx + 1 < len(starts) else len(lines)

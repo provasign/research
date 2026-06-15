@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import signal
 import subprocess
 import time
 from dataclasses import asdict
@@ -29,6 +31,7 @@ HARNESS_DIR = Path(__file__).resolve().parent
 WORKTREE_ROOT = Path("/tmp/gvg-corpus")
 RUNS_DIR = HARNESS_DIR / "runs"
 RUN_TIMEOUT_S = 600
+MAX_ATTEMPTS = 3  # retry transient API/infra failures before recording an error
 
 
 def ensure_worktree(task: Task) -> Path:
@@ -59,34 +62,118 @@ def preindex(workdir: Path) -> None:
     )
 
 
+def _bash_bin(command: str) -> str:
+    """Leading binary of a bash command (basename), for trace classification."""
+    tok = command.strip().split() or [""]
+    return Path(tok[0]).name
+
+
+def _parse_stream(stdout: str) -> dict:
+    """Parse `--output-format stream-json` into the result envelope + tool trace.
+
+    Captures every tool_use the agent issued (name + a short detail) so we can
+    *prove* which tools an arm actually touched -- the validity check the paper
+    needs (design §10): T must never reach the graph, G must traverse it.
+    """
+    env: dict = {"result": ""}
+    trace: list[dict] = []
+    for line in stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        kind = obj.get("type")
+        if kind == "assistant":
+            for block in obj.get("message", {}).get("content", []):
+                if block.get("type") != "tool_use":
+                    continue
+                name = block.get("name", "?")
+                inp = block.get("input", {})
+                if name == "Bash":
+                    cmd = inp.get("command", "")
+                    trace.append(
+                        {"tool": name, "bin": _bash_bin(cmd), "detail": cmd[:200]}
+                    )
+                else:
+                    detail = inp.get("pattern") or inp.get("file_path") or ""
+                    trace.append({"tool": name, "bin": "", "detail": str(detail)[:200]})
+        elif kind == "result":
+            env.update(obj)  # result text, usage, total_cost_usd, num_turns, duration_ms
+    env["tool_trace"] = trace
+    env["tools_used"] = sorted({t["bin"] or t["tool"] for t in trace})
+    env["graph_used"] = any(
+        t["tool"] == "Bash" and "prism" in t["detail"] for t in trace
+    )
+    return env
+
+
+def _is_errored(env: dict) -> str | None:
+    """Return an error reason if this run never reached the model, else None.
+
+    Distinguishes infra failure (API outage, timeout) from a genuine empty
+    answer: an outage shows is_error / zero input tokens / an "API Error"
+    banner, and must NOT be scored as recall 0 -- it is excluded and retried.
+    """
+    if env.get("_timed_out"):
+        return "timeout"
+    if env.get("is_error"):
+        return f"is_error:{env.get('subtype', '?')}"
+    result = env.get("result", "") or ""
+    if "API Error" in result or "Unable to connect" in result:
+        return "api_error"
+    usage = env.get("usage") or {}
+    if usage.get("input_tokens", 0) == 0 and not env.get("tool_trace"):
+        return "no_tokens"
+    return None
+
+
 def run_agent(prompt: str, allowed: list[str], workdir: Path) -> dict:
-    """Invoke `claude -p` headlessly; return parsed JSON envelope + latency."""
+    """Invoke `claude -p` headlessly; return result envelope + tool trace.
+
+    Runs in its own process group so a timeout kills the CLI *and* any child
+    it spawned (the CLI's own retry/backoff can otherwise outlive a plain
+    subprocess timeout)."""
     cmd = [
         "claude",
         "-p",
         prompt,
         "--output-format",
-        "json",
+        "stream-json",  # per-event stream so we can log the tool sequence
+        "--verbose",  # required for stream-json under -p
         "--strict-mcp-config",  # ignore filesystem .mcp.json; arms own the tools
         "--allowedTools",
         ",".join(allowed),
     ]
     t0 = time.time()
-    proc = subprocess.run(
+    timed_out = False
+    proc = subprocess.Popen(
         cmd,
         cwd=str(workdir),
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
-        timeout=RUN_TIMEOUT_S,
+        start_new_session=True,
     )
-    wall = time.time() - t0
-    env: dict = {}
     try:
-        env = json.loads(proc.stdout)
-    except json.JSONDecodeError:
-        env = {"result": proc.stdout, "_parse_error": True}
+        stdout, stderr = proc.communicate(timeout=RUN_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        stdout, stderr = proc.communicate()
+    wall = time.time() - t0
+    env = _parse_stream(stdout)
+    if not env.get("result") and stdout and not env.get("tool_trace"):
+        env["result"] = stdout  # fallback: stream didn't parse
+        env["_parse_error"] = True
     env["_wall_s"] = round(wall, 2)
-    env["_stderr"] = proc.stderr[-2000:]
+    env["_stderr"] = (stderr or "")[-2000:]
+    env["_timed_out"] = timed_out
     return env
 
 
@@ -108,18 +195,49 @@ def main() -> None:
         preindex(workdir)
 
     cards = []
+    errored: list[dict] = []
     for arm_name in args.arms:
         arm = ARMS[arm_name]
         for trial in range(1, args.trials + 1):
             tag = f"{arm_name}.t{trial}"
             print(f"[run] {task.id} {tag} (tools: {','.join(arm.allowed_tools)})")
-            env = run_agent(arm.prompt(task.prompt), arm.allowed_tools, workdir)
+            # Retry transient infra failures (API outage, timeout) so an
+            # outage mid-batch doesn't masquerade as recall 0.
+            for attempt in range(1, MAX_ATTEMPTS + 1):
+                env = run_agent(arm.prompt(task.prompt), arm.allowed_tools, workdir)
+                err = _is_errored(env)
+                if not err:
+                    break
+                print(f"      attempt {attempt}/{MAX_ATTEMPTS} errored ({err})"
+                      + ("; retrying" if attempt < MAX_ATTEMPTS else "; giving up"))
+                if attempt < MAX_ATTEMPTS:
+                    time.sleep(20 * attempt)
             result_text = env.get("result", "")
             answer = Answer.parse(result_text)
             card = score(task, answer, arm_name, trial)
 
+            if err:  # record the failure but keep it out of the scored set
+                rec = {
+                    "task_id": task.id, "arm": arm_name, "trial": trial,
+                    "status": "error", "error": err,
+                    "stderr": env.get("_stderr", ""), "wall_s": env.get("_wall_s"),
+                }
+                (out / f"{tag}.json").write_text(json.dumps(rec, indent=2) + "\n")
+                errored.append(rec)
+                print(f"      ERROR ({err}) -- excluded from scoring")
+                continue
+
+            # Validity guard (design §10): T must never reach the graph; G must.
+            graph_used = env.get("graph_used", False)
+            violation = None
+            if arm_name == "T" and graph_used:
+                violation = "T arm used the graph"
+            elif arm_name == "G" and not graph_used:
+                violation = "G arm never used the graph"
+
             (out / f"{tag}.transcript.txt").write_text(result_text)
             rec = {
+                "status": "ok",
                 **card.to_dict(),
                 "cost": {
                     "wall_s": env.get("_wall_s"),
@@ -128,6 +246,10 @@ def main() -> None:
                     "usage": env.get("usage"),
                     "total_cost_usd": env.get("total_cost_usd"),
                 },
+                "tools_used": env.get("tools_used", []),
+                "graph_used": graph_used,
+                "violation": violation,
+                "tool_trace": env.get("tool_trace", []),
                 "answer": {
                     "sites": [str(s) for s in answer.sites],
                     "complete": answer.complete,
@@ -136,29 +258,40 @@ def main() -> None:
             }
             (out / f"{tag}.json").write_text(json.dumps(rec, indent=2) + "\n")
             cards.append(rec)
+            warn = f"  !! {violation}" if violation else ""
             print(
                 f"      recall={card.recall} precision={card.precision} "
                 f"f1={card.f1} overconfident={card.overconfident} "
-                f"gap={card.surfaced_gap}"
+                f"gap={card.surfaced_gap} tools={env.get('tools_used')}{warn}"
             )
 
     summary = out / "summary.json"
-    summary.write_text(json.dumps(cards, indent=2) + "\n")
-    print(f"\n[done] {len(cards)} runs -> {summary}")
+    summary.write_text(json.dumps({"ok": cards, "errored": errored}, indent=2) + "\n")
+    print(f"\n[done] {len(cards)} scored, {len(errored)} errored -> {summary}")
+    if errored:
+        print(f"  {len(errored)} run(s) errored (excluded): "
+              + ", ".join(f"{e['arm']}.t{e['trial']}({e['error']})" for e in errored))
     _print_table(cards)
 
 
 def _print_table(cards: list[dict]) -> None:
     print(f"\n{'arm.trial':<10} {'recall':>7} {'prec':>7} {'f1':>7} "
-          f"{'overconf':>9} {'gap':>5} {'turns':>6} {'wall_s':>7}")
+          f"{'overconf':>9} {'gap':>5} {'graph':>6} {'turns':>6} {'wall_s':>7} viol")
+    viols = 0
     for c in cards:
         cost = c.get("cost", {})
+        v = c.get("violation")
+        viols += 1 if v else 0
         print(
             f"{c['arm']+'.t'+str(c['trial']):<10} "
             f"{c['recall']:>7} {c['precision']:>7} {c['f1']:>7} "
             f"{str(c['overconfident']):>9} {str(c['surfaced_gap']):>5} "
-            f"{str(cost.get('num_turns')):>6} {str(cost.get('wall_s')):>7}"
+            f"{str(c.get('graph_used')):>6} "
+            f"{str(cost.get('num_turns')):>6} {str(cost.get('wall_s')):>7} "
+            f"{v or ''}"
         )
+    if viols:
+        print(f"\n  WARNING: {viols} arm-boundary violation(s) -- inspect tool_trace")
 
 
 if __name__ == "__main__":

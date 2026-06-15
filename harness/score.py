@@ -25,6 +25,29 @@ def _file_agree(a: str, b: str) -> bool:
     return Path(a).name == Path(b).name or a.endswith(b) or b.endswith(a)
 
 
+def _is_test_path(relpath: str) -> bool:
+    """Test-file heuristic (Go/Py/TS/Java). Test sites are scored as neutral.
+
+    Production change-site completeness is the headline metric; whether the
+    agent also enumerates test call sites is a separate concern (and for a
+    rename the tests legitimately must change, so listing them is not a false
+    positive). We therefore exclude test-file answer sites from precision
+    rather than count them as errors -- and ground truth holds prod sites only.
+    """
+    name = Path(relpath).name
+    return (
+        relpath.endswith("_test.go")
+        or name.startswith("test_")
+        or name.endswith("_test.py")
+        or ".test." in name
+        or ".spec." in name
+        or "/test/" in relpath
+        or "/tests/" in relpath
+        or name.endswith("Test.java")
+        or name.endswith("Tests.java")
+    )
+
+
 def _match(gt: Site, answer_sites: list[Site]) -> tuple[Site | None, bool]:
     """Return (matched answer site, strong?) for a ground-truth site.
 
@@ -64,6 +87,8 @@ def score(task: Task, answer: Answer, arm: str, trial: int) -> Scorecard:
     for a in answer.sites:
         if a in matched_answer:
             continue
+        if _is_test_path(a.relpath):
+            continue  # test sites are neutral (see _is_test_path)
         key = (a.symbol, Path(a.relpath).name if a.relpath else "")
         sym_only = any(a.symbol == s.symbol for s in gt)
         if key in gt_symbols or sym_only:

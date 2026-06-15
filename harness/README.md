@@ -7,9 +7,11 @@ context question; don't write the patch) and scores the answer against an
 **independent**, PR-derived ground truth — never grove against grove (design
 §5, §10).
 
-**Status:** Phase 0 complete and smoke-tested end-to-end on gin (see below).
-Phase 1 = point it at Grafana. The agent runner is the local `claude` CLI in
-headless mode, so no API key is needed.
+**Status:** Phase 0 complete; **Phase-1 pilot run** (4 tasks, T/G/V, 3 trials on
+gin + Grafana) — see [`PILOT.md`](PILOT.md). Headline: harness + metrics
+validated; all arms tie at F1=1.0 on localization + rename tasks (H1 holds); the
+**discriminating dispatch tasks are not yet curated** (the critical next step).
+The agent runner is the local `claude` CLI headless, so no API key is needed.
 
 ## Design → code
 
@@ -111,9 +113,22 @@ large repo with interface dispatch — that's Phase 1.
 
 ### Known gaps to close in Phase 1
 
-- **Tool-trace logging.** We capture `num_turns` but not which tools fired.
-  Switch `run.py` to `--output-format stream-json` to log the tool sequence and
-  *prove* T never touched the graph and G traversed it (validity, design §10).
-- **Grafana indexing cost** is non-trivial; pre-index once per pin and reuse.
+- **Tool-trace logging.** DONE — `run.py` uses `--output-format stream-json`,
+  records the per-run tool sequence (`tool_trace`, `tools_used`, `graph_used`)
+  and flags arm-boundary violations (T touching the graph / G not). Verified on
+  gin: T `graph=False`, G `graph=True`.
+- **Grafana indexing cost** is non-trivial (~55s full); pre-index per pin and
+  reuse. DONE/measured.
+- **Errored-run handling.** DONE — `run.py` retries transient API/timeout
+  failures and records `status:error` instead of scoring them 0 (an API outage
+  hit the first pilot batch). Timeout now `SIGKILL`s the process group.
+- **Test-site scoring.** DONE — `score.py` treats `_test.go`/test sites as
+  neutral (not false positives); GT holds production sites only.
+- **Cumulative token accounting.** OPEN — the stream `result` event's
+  `usage.input_tokens` is only the final turn; sum per-event usage before
+  reporting RQ4 token cost. Use turns/wall as the cost proxy meanwhile.
+- **Dispatch tasks (highest priority).** The pilot tasks are all greppable, so
+  they cannot test the thesis. Curate Grafana PRs with interface/dynamic
+  dispatch where grep is silently incomplete (see PILOT.md).
 - **Mode B** (apply the patch, run affected tests) is out of Phase-0 scope
   (design §5) — add on a subset in Phase 2.
