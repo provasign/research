@@ -20,6 +20,7 @@ from pathlib import Path
 from schema import Site, Task
 
 FUNC_RE = re.compile(r"^func\s+(?:\([^)]*\)\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*[\[(]")
+TYPE_RE = re.compile(r"^type\s+([A-Za-z_][A-Za-z0-9_]*)\s+(?:interface|struct)\b")
 HUNK_RE = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+\d+(?:,\d+)? @@")
 
 
@@ -65,16 +66,20 @@ def changed_old_lines(repo: str, commit: str, path: str) -> set[int]:
 
 
 def func_spans(source: str) -> list[tuple[int, int, str]]:
-    """(start_line, end_line, name) for every top-level func in `source`.
+    """(start_line, end_line, name) for every top-level func/type in `source`.
 
-    A function's span starts at its leading doc-comment block (so a change to
-    that comment attributes to the function it documents, not the neighbour
-    above) and ends just before the next function's doc block.
+    Captures both `func`s and `type X interface/struct` decls (an interface
+    signature change is a real change-site, not the neighbouring function). A
+    decl's span starts at its leading doc-comment block (so a doc-comment change
+    attributes to the decl it documents) and ends at its closing `}` in column 0
+    (gofmt guarantees this), capped before the next decl. Lines *between* decls
+    (package vars, imports) belong to no span and are dropped, rather than
+    mis-attributed to the function above.
     """
     lines = source.splitlines()
-    starts: list[tuple[int, str]] = []  # (doc_start_line, name)
+    heads: list[tuple[int, int, str]] = []  # (doc_start, decl_line, name)
     for i, line in enumerate(lines, start=1):
-        m = FUNC_RE.match(line)
+        m = FUNC_RE.match(line) or TYPE_RE.match(line)
         if not m:
             continue
         doc = i
@@ -82,11 +87,16 @@ def func_spans(source: str) -> list[tuple[int, int, str]]:
         while j >= 1 and lines[j - 1].lstrip().startswith("//"):
             doc = j
             j -= 1
-        starts.append((doc, m.group(1)))
+        heads.append((doc, i, m.group(1)))
     spans: list[tuple[int, int, str]] = []
-    for idx, (ln, name) in enumerate(starts):
-        end = starts[idx + 1][0] - 1 if idx + 1 < len(starts) else len(lines)
-        spans.append((ln, end, name))
+    for idx, (doc, decl_line, name) in enumerate(heads):
+        next_doc = heads[idx + 1][0] if idx + 1 < len(heads) else len(lines) + 1
+        end = next_doc - 1  # cap: never spill into the next decl (one-liners)
+        for k in range(decl_line, next_doc):  # first column-0 closing brace
+            if lines[k - 1].rstrip() == "}":
+                end = k
+                break
+        spans.append((doc, end, name))
     return spans
 
 

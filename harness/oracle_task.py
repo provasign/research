@@ -1,0 +1,112 @@
+"""Build an impact task with compiler-grade ground truth (design §5, oracle).
+
+Given a go-ssa-vta truth file (from `grove-eval truth`) and a target method
+name, the ground truth for "change this method's signature, what must change?"
+is computed *independently of grove*:
+
+  ground_truth = every implementation matching the target name
+               + every function that calls one of them (direct callers).
+
+This is the design's primary, non-circular oracle: it can surface call sites a
+PR diff or a grep on the method name would silently miss (the H2/H3 case), and
+it is the only fair way to score recall on a distributed-dispatch task.
+
+Usage:
+  grove-eval truth --repo <repo> --commit <pin> --out truth.jsonl
+  python oracle_task.py --truth truth.jsonl --repo <repo> --commit <pin> \
+      --target Get --id grafana-secretsget --prompt "..." --out tasks/...json
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+from pathlib import Path
+
+from schema import Site, Task
+
+
+def _base(name: str) -> str:
+    """Bare method name from a truth name like 'pkgType.Method' or 'Func'."""
+    return name.rsplit(".", 1)[-1]
+
+
+def load_edges(truth_path: str) -> list[dict]:
+    edges = []
+    for line in Path(truth_path).read_text().splitlines():
+        if not line.strip():
+            continue
+        obj = json.loads(line)
+        if "caller" in obj and "callee" in obj:
+            edges.append(obj)
+    return edges
+
+
+def build(edges: list[dict], target: str,
+          impl_scope: str = "") -> tuple[list[Site], dict]:
+    """Return (ground-truth sites, stats) for changing `target`'s signature.
+
+    `target` matches a callee by exact bare-name (e.g. "Get" matches every
+    `T.Get`). `impl_scope` (a repo-relative path prefix) restricts which
+    matched callees count as implementations -- essential when an unrelated
+    method shares the name (gin's `Context.Render` vs the `render.Render`
+    interface): scope to `render/` and only the true impls + their direct
+    callers are ground truth.
+    """
+    impls: set[Site] = set()
+    callers: set[Site] = set()
+    impl_fns: set[str] = set()
+    for e in edges:
+        if _base(e["callee"]["name"]) != target:
+            continue
+        if impl_scope and not e["callee"]["file"].startswith(impl_scope):
+            continue
+        impls.add(Site(e["callee"]["file"], _base(e["callee"]["name"])))
+        impl_fns.add(e["callee"]["name"])
+        callers.add(Site(e["caller"]["file"], _base(e["caller"]["name"])))
+    sites = sorted(impls | callers, key=str)
+    stats = {
+        "impl_count": len(impls),
+        "distinct_impl_fns": len(impl_fns),
+        "caller_count": len(callers),
+        "files": len({s.relpath for s in sites}),
+        "packages": len({str(Path(s.relpath).parent) for s in sites}),
+    }
+    return sites, stats
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--truth", required=True)
+    ap.add_argument("--repo", required=True)
+    ap.add_argument("--commit", required=True, help="pin (the truth's commit)")
+    ap.add_argument("--target", required=True, help="bare method name, e.g. Get")
+    ap.add_argument("--impl-scope", default="", dest="impl_scope",
+                    help="repo-relative path prefix the implementations live "
+                         "under (disambiguates same-named methods)")
+    ap.add_argument("--id", required=True)
+    ap.add_argument("--lang", default="go")
+    ap.add_argument("--pr", default="")
+    ap.add_argument("--prompt", required=True)
+    ap.add_argument("--out", required=True)
+    args = ap.parse_args()
+
+    pin = subprocess.run(
+        ["git", "-C", args.repo, "rev-parse", args.commit],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    edges = load_edges(args.truth)
+    sites, stats = build(edges, args.target, args.impl_scope)
+    if not sites:
+        raise SystemExit(f"no edges reference a method named {args.target!r}")
+    Task(
+        id=args.id, repo=args.repo, lang=args.lang, pin=pin,
+        pr=args.pr or f"oracle:{args.target}", task_type="impact",
+        prompt=args.prompt, ground_truth=sites,
+    ).save(args.out)
+    print(f"[oracle-task] {args.id}  target={args.target}  sites={len(sites)}  {stats}")
+    print(f"       -> {args.out}")
+
+
+if __name__ == "__main__":
+    main()

@@ -36,12 +36,11 @@ def _is_test_path(relpath: str) -> bool:
     """
     name = Path(relpath).name
     return (
-        relpath.endswith("_test.go")
-        or name.startswith("test_")
+        relpath.endswith("_test.go")  # Go test files (NOT test_helpers.go)
+        or (name.startswith("test_") and name.endswith(".py"))
         or name.endswith("_test.py")
         or ".test." in name
         or ".spec." in name
-        or "/test/" in relpath
         or "/tests/" in relpath
         or name.endswith("Test.java")
         or name.endswith("Tests.java")

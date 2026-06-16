@@ -13,7 +13,11 @@ the thesis.** Mode A, arms T/G/V, 3 trials/cell.
 | grafana-124935 | grafana | localization | 2 | PR #124935 (alerting ORM table bug) |
 | grafana-126004 | grafana | impact (rename) | 7 | PR #126004 (export ToSnowflakeRV +callers) |
 
-## Result
+## Result (initial 4-task Opus pilot — superseded by the Update below)
+
+> The Opus-only result was "no effect"; adding **more trials** and a
+> **weak-model arm** (next section) revealed a real **model × task-type**
+> interaction. Read the Update for the actual conclusion.
 
 **Every arm scored recall = precision = F1 = 1.0 on every task. Zero
 over-confidence errors. Zero arm-boundary violations after re-runs.**
@@ -55,6 +59,61 @@ implementations of an interface, or callers reached through an interface field
 where a grep on the method name over- or under-matches. These are the tasks
 where recall(T) < recall(G) and over-confidence(T) > 0 should appear.
 
+## Update (2026-06-16): the effect is real — it's a model × task-type interaction
+
+Two follow-ups changed the conclusion from "no effect" to a **conditional
+effect**.
+
+**(1) More trials exposed the graph advantage on distributed dispatch.** The
+single-trial probe misled: at 3 trials, on the cross-package task
+`grafana-120119`, **T missed sites in 1/3 runs (overconfident) while G was 3/3**
+— the graph's first reliability edge, exactly where predicted (impact spread
+across packages).
+
+**(2) The weak-model arm (Haiku) is the headline.** Re-running all 6 tasks with
+Claude Haiku (`run.py --model haiku`, namespaced under `runs/<task>/haiku/`)
+against the Opus baseline:
+
+| task (type) | Haiku **T** recall | Haiku **G** recall |
+|---|---|---|
+| 120266, 124935 (localization) | [1,1,1] | [1,1,1] |
+| 126004 (rename impact) | **[0.29,1,1]** +1 overconfident | **[1,1,1]** |
+| 122750 (dispatch, Set×49) | [0.94,1,1] +1 overconfident | **[1,1,1]** |
+| 120119 (cross-pkg) | [0.87,0.87,1] +2 oc | [0.87,0.87,0.93] +3 oc |
+
+**Finding: the graph's value is a function of (model capability × task type).**
+On localization it is nil for both models. On impact/dispatch tasks the weak
+model with **text** drops recall and goes **overconfident**, but with the
+**graph** it is reliably complete (Haiku-T 0.29 → Haiku-G 1.0 on 126004). Opus
+is strong enough to read/grep its way to completeness, so the effect is *masked*
+at the frontier model. This reframes the thesis from "graph beats grep" to
+**"the graph is a completeness/calibration equalizer on completeness-critical
+tasks, most valuable for weaker (cheaper) models"** — a cost/quality result.
+
+`120119` is instructive, not broken. The two consistently-missed sites (across
+18 runs) are **interface declarations** — `RouteService` and a second
+package-private `routeService` interface, both declaring the changed methods.
+Agents reason in terms of *functions* and miss the type decls whose method
+signatures must also change; with two such interfaces, finding one and missing
+the other is a real completeness gap (not a GT artifact — the extractor's
+`type ... interface` capture is correct here). A clean qualitative example of
+what "completeness" costs, and why an interface-aware graph helps.
+
+## Oracle-grounded adversarial tasks (design's primary oracle)
+
+`grove-eval` (built `GOWORK=off go build ./cmd/grove-eval`) generates a
+**go-ssa-vta** call graph — the independent, compiler-grade oracle (never grove
+vs grove). `oracle_task.py` turns it into an impact task: for a target method,
+ground truth = every implementation + their *complete* direct-caller set (which
+can expose call sites a PR diff or a grep silently misses). `--impl-scope`
+disambiguates same-named methods (gin's `Context.Render` vs the `render.Render`
+interface).
+
+First oracle task: **`gin-render-impact`** — gin's `render.Render` interface has
+**12 implementations scattered across 12 files** + the `Context.Render`
+dispatcher (13 sites). Enumerating all 12 is the adversarial completeness
+challenge; results pending (running T/G/V × 5 on Opus + Haiku).
+
 ## Methodological lessons (captured in the harness)
 
 1. **API-outage runs must be excluded, not scored 0.** The first batch hit an
@@ -66,7 +125,15 @@ where recall(T) < recall(G) and over-confidence(T) > 0 should appear.
    them, a bug fix optionally adds them) — see `score.py:_is_test_path`.
 3. **PR-diff ground truth is sound** for these tasks: #126004's extracted 7
    prod sites matched an independent grep of all callers.
-4. **Token accounting is not yet cumulative.** The stream `result` event's
+4. **PR-diff ground truth breaks on codegen.** Candidate dispatch task #79392
+   (signature change) was dropped: its merged PR regenerated mockery mocks, so
+   the diff touched ~15 *unrelated* methods (DeleteProvenance, SetProvenance, …)
+   that changed only as regeneration churn, not because of the signature change.
+   A correct agent would be penalised for omitting them. Lesson: exclude
+   codegen-heavy PRs, or use the go-ssa-vta semantic oracle (the design's
+   primary oracle, task #7) which computes the true impact set. The chosen
+   thesis task #122750 has hand-written implementations (no mock churn).
+5. **Token accounting is not yet cumulative.** The stream `result` event's
    `usage.input_tokens` reflects only the final turn (~2.3k for all runs); sum
    per-assistant-event usage for true totals before reporting RQ4 token cost.
    Use `num_turns` / wall as the cost proxy until then.

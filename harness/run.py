@@ -130,7 +130,8 @@ def _is_errored(env: dict) -> str | None:
     return None
 
 
-def run_agent(prompt: str, allowed: list[str], workdir: Path) -> dict:
+def run_agent(prompt: str, allowed: list[str], workdir: Path,
+              model: str | None = None) -> dict:
     """Invoke `claude -p` headlessly; return result envelope + tool trace.
 
     Runs in its own process group so a timeout kills the CLI *and* any child
@@ -147,6 +148,8 @@ def run_agent(prompt: str, allowed: list[str], workdir: Path) -> dict:
         "--allowedTools",
         ",".join(allowed),
     ]
+    if model:  # pin the agent model (weak-model arm: --model haiku/sonnet)
+        cmd += ["--model", model]
     t0 = time.time()
     timed_out = False
     proc = subprocess.Popen(
@@ -182,11 +185,15 @@ def main() -> None:
     ap.add_argument("--task", required=True)
     ap.add_argument("--arms", nargs="+", default=["T", "G"])
     ap.add_argument("--trials", type=int, default=1)
+    ap.add_argument("--model", default=None,
+                    help="agent model (e.g. haiku, sonnet). Default = Opus; "
+                         "non-default models write to runs/<task>/<model>/")
     args = ap.parse_args()
 
     task = Task.load(args.task)
     workdir = ensure_worktree(task)
-    out = RUNS_DIR / task.id
+    # Namespace non-default models so the Opus baseline is never overwritten.
+    out = RUNS_DIR / task.id / args.model if args.model else RUNS_DIR / task.id
     out.mkdir(parents=True, exist_ok=True)
 
     needs_graph = any(a in ("G", "V") for a in args.arms)
@@ -204,7 +211,8 @@ def main() -> None:
             # Retry transient infra failures (API outage, timeout) so an
             # outage mid-batch doesn't masquerade as recall 0.
             for attempt in range(1, MAX_ATTEMPTS + 1):
-                env = run_agent(arm.prompt(task.prompt), arm.allowed_tools, workdir)
+                env = run_agent(arm.prompt(task.prompt), arm.allowed_tools,
+                                workdir, model=args.model)
                 err = _is_errored(env)
                 if not err:
                     break
@@ -238,6 +246,7 @@ def main() -> None:
             (out / f"{tag}.transcript.txt").write_text(result_text)
             rec = {
                 "status": "ok",
+                "model": args.model or "opus",
                 **card.to_dict(),
                 "cost": {
                     "wall_s": env.get("_wall_s"),
