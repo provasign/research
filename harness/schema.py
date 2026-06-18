@@ -66,6 +66,7 @@ class Task:
     task_type: str  # localization | impact | dead-code | test-coverage | comprehension
     prompt: str  # the issue text shown to the agent
     ground_truth: list[Site]  # production change-sites the PR touched
+    workdir: str = ""  # optional: run in this existing checkout (skip git worktree)
 
     @staticmethod
     def load(path: str | Path) -> "Task":

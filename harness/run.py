@@ -35,7 +35,15 @@ MAX_ATTEMPTS = 3  # retry transient API/infra failures before recording an error
 
 
 def ensure_worktree(task: Task) -> Path:
-    """Check out task.repo at task.pin in an isolated worktree (idempotent)."""
+    """Check out task.repo at task.pin in an isolated worktree (idempotent).
+
+    If the task names an existing `workdir`, run there directly (used when the
+    repo's git dir is unavailable, e.g. an oracle task built on a worktree)."""
+    if task.workdir:
+        wt = Path(task.workdir)
+        if not wt.exists():
+            raise SystemExit(f"task.workdir does not exist: {wt}")
+        return wt
     wt = WORKTREE_ROOT / f"{task.id}"
     if (wt / ".git").exists():
         return wt
