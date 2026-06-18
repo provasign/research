@@ -142,6 +142,35 @@ interface-declaration task neither Haiku arm fully solves (0.87): a real ceiling
 (Caveat: medians hide variance; the calibration value of G is in the *tails* —
 report worst-case recall + over-confidence rate, not just medians.)
 
+## Capability curve (Haiku → Sonnet → Opus) — the quantitative centerpiece
+
+Cells = median recall (min recall, over-confidence count). The value is in the
+**tails** (min + over-confidence), not the median — a model that is usually
+right but occasionally ships an incomplete change confidently is the failure the
+graph prevents.
+
+**grafana-126004 (impact, 7 sites):**
+
+| arm | Haiku | Sonnet | Opus |
+|---|---|---|---|
+| T | 1.00 (min **0.29**, oc 1/3) | 1.00 (min 1.00, oc 0) | 1.00 (min 1.00, oc 0) |
+| **G** | **1.00 (min 1.00, oc 0)** | 1.00 (min 1.00, oc 0) | 1.00 (min 1.00, oc 0) |
+| V | 0.29 (min **0.29**, oc 2/3) | 1.00 (min 1.00, oc 0) | 1.00 (min 1.00, oc 0) |
+
+**grafana-122750 (dispatch, 16 sites):**
+
+| arm | Haiku | Sonnet | Opus |
+|---|---|---|---|
+| T | 1.00 (min 0.94, oc 1/3) | 1.00 (min 1.00, oc 0) | 1.00 (min 1.00, oc 0) |
+| **G** | **1.00 (min 1.00, oc 0)** | 1.00 (min 1.00, oc 0) | 1.00 (min 1.00, oc 0) |
+
+**Reading:** on impact tasks the graph (G) lifts the **weakest** model to perfect,
+zero-over-confidence completeness, while text/verifier let it ship incomplete-
+but-confident answers. The gap **closes as the model strengthens** (Sonnet and
+Opus need no help here) — the task "ages out". The open question the adversarial
+task answers: does a *harder* task (secureValueClient.Get, 25 callers, name
+shared by 89 methods) push that threshold up to Sonnet or even Opus? (running)
+
 ## Qualitative finding: the interface-declaration blind spot
 
 Across the dispatch tasks, the single most consistently-missed change-site is
