@@ -171,6 +171,25 @@ Opus need no help here) — the task "ages out". The open question the adversari
 task answers: does a *harder* task (secureValueClient.Get, 25 callers, name
 shared by 89 methods) push that threshold up to Sonnet or even Opus? (running)
 
+
+### Full 3-model curve (all 4 pilot tasks, after Sonnet)
+
+Two thresholds emerge (cells = min recall / over-confidence):
+- **Difficulty threshold** — harder tasks make the graph valuable to *stronger*
+  models: gin-render (greppable) helps nobody; 126004/122750 (moderate) help only
+  Haiku (ages out by Sonnet); 120119 (interface-decl, hard) helps Sonnet **and**
+  Opus — text is incomplete+overconfident at *every* level (even Opus-T min 0.87,
+  oc), graph fixes Sonnet/Opus.
+- **Capability floor** — the model must be strong enough to *use* the graph:
+  Haiku can't exploit it on 120119 (G still 0.87, oc 3/3).
+
+Refines the headline: the graph is a completeness/calibration aid whose value is
+bounded below by task difficulty and above by... no — bounded by a *band*:
+needed only when the task exceeds the model's read-it-yourself reach, and usable
+only when the model can drive the graph. The adversarial secureValueClient.Get
+(ambiguity 89) + IsEnabled (17) pair tests whether *name ambiguity* widens that
+band up to Opus.
+
 ## Qualitative finding: the interface-declaration blind spot
 
 Across the dispatch tasks, the single most consistently-missed change-site is
