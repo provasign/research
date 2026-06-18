@@ -114,6 +114,53 @@ First oracle task: **`gin-render-impact`** — gin's `render.Render` interface h
 dispatcher (13 sites). Enumerating all 12 is the adversarial completeness
 challenge; results pending (running T/G/V × 5 on Opus + Haiku).
 
+## gin-render negative control + the cost/quality headline
+
+**`gin-render-impact` (oracle task, 12 scattered `render.Render` impls):** all
+arms, both models, recall=1.0 (5/5). A clean **negative control** — the impls
+are uniformly named (`Render`), one per file, in a dedicated `render/` package,
+so `grep "func.*Render" render/` finds all 12 even for Haiku. *Implementation
+count alone does not defeat grep;* the discriminator is **findability** (name
+ambiguity + sites buried in large files), not interface fan-out. Refines the
+earlier #126004/#122750 weak-model effect: it was driven by dense call sites in
+large files + ambiguous names (`Set`×49), not "dispatch" per se.
+
+**Cost/quality (median over 5 trials, `total_cost_usd`):**
+
+| task | Opus-T | Haiku-T | Haiku-G |
+|---|---|---|---|
+| 120266 | 1.00 / $0.18 | 1.00 / $0.20 | 1.00 / $0.26 |
+| 124935 | 1.00 / $0.55 | 1.00 / $0.44 | 1.00 / $0.35 |
+| 126004 | 1.00 / $0.36 | 1.00 / $0.17 | 1.00 / $0.16 |
+| 122750 | 1.00 / $0.51 | 1.00 / $0.29 | 1.00 / $0.28 |
+| 120119 | 1.00 / $0.85 | 0.87 / $0.39 | 0.87 / $0.43 |
+
+**Headline: Haiku+graph matches Opus+text median quality at ~half the cost** on
+impact/dispatch tasks, *and* removes Haiku-text's catastrophic tails +
+overconfidence (the 0.29 outlier on 126004). The exception is `120119` — the
+interface-declaration task neither Haiku arm fully solves (0.87): a real ceiling.
+(Caveat: medians hide variance; the calibration value of G is in the *tails* —
+report worst-case recall + over-confidence rate, not just medians.)
+
+## Qualitative finding: the interface-declaration blind spot
+
+Across the dispatch tasks, the single most consistently-missed change-site is
+the **interface *declaration*** — `DataKeyCache` (122750), `RouteService` and
+`routeService` (120119). Reading the transcripts, the failure is systematic and
+the same every time: the agent enumerates every *implementation* and *caller*
+thoroughly (122750 Opus-V even listed the test doubles and test funcs), then
+asserts `"complete": true, "unresolved": []` — while omitting the interface type
+whose method signatures must also change.
+
+This is a structural blind spot: agents reason in terms of functions/methods and
+forget that a method's signature is *also declared on its interface*. It is
+exactly the fact a graph encodes (`implements` / method-set), so it is a concrete
+hook for the **graph-as-verifier** product: "you changed these methods but not
+the interface(s) that declare them." Notably the **V arm had graph access and
+still missed it** — so the current prism output doesn't surface the declaring
+interface prominently, or the agent didn't think to check it. A precise,
+actionable target rather than a vague "graph helps."
+
 ## Methodological lessons (captured in the harness)
 
 1. **API-outage runs must be excluded, not scored 0.** The first batch hit an
