@@ -196,9 +196,14 @@ def main() -> None:
     ap.add_argument("--model", default=None,
                     help="agent model (e.g. haiku, sonnet). Default = Opus; "
                          "non-default models write to runs/<task>/<model>/")
+    ap.add_argument("--workdir", default=None,
+                    help="override task.workdir: run in this existing checkout "
+                         "(keeps machine-specific paths out of committed tasks)")
     args = ap.parse_args()
 
     task = Task.load(args.task)
+    if args.workdir:
+        task.workdir = args.workdir
     workdir = ensure_worktree(task)
     # Namespace non-default models so the Opus baseline is never overwritten.
     out = RUNS_DIR / task.id / args.model if args.model else RUNS_DIR / task.id
