@@ -199,6 +199,8 @@ def main() -> None:
     ap.add_argument("--workdir", default=None,
                     help="override task.workdir: run in this existing checkout "
                          "(keeps machine-specific paths out of committed tasks)")
+    ap.add_argument("--pace", type=float, default=0,
+                    help="seconds to sleep between runs (spread load under rate limits)")
     args = ap.parse_args()
 
     task = Task.load(args.task)
@@ -220,6 +222,8 @@ def main() -> None:
         arm = ARMS[arm_name]
         for trial in range(1, args.trials + 1):
             tag = f"{arm_name}.t{trial}"
+            if args.pace and not (arm_name == args.arms[0] and trial == 1):
+                time.sleep(args.pace)  # spread load to stay under rate limits
             print(f"[run] {task.id} {tag} (tools: {','.join(arm.allowed_tools)})")
             # Retry transient infra failures (API outage, timeout) so an
             # outage mid-batch doesn't masquerade as recall 0.
