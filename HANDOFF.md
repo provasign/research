@@ -102,16 +102,60 @@ flag <5 ok, 0.0 outliers, and mtimes < rebuild) — or just
   graph). They'd measure "VTA vs everyone," not graph-vs-grep. Their run data is
   in `runs/` but is NOT part of the finding.
 
-## 6. Next steps (for the paper)
+## 6. Flagship-paper campaign (the plan — target ACM TOSEM, not a workshop note)
 
-1. **Write Results** from §2 + PILOT.md (data is ready).
-2. (Optional, camera-ready) refresh the stale/short cells in §3 for uniformity.
-3. **Causal ablation (H7):** dispatch-fix ON/OFF — point `PRISM_BIN` at a
-   pre-fix grove build to show graph *quality* causes the outcome.
-4. **Scale** for significance: more tasks + a *valid* adversarial design
-   (interface-impl-**enumeration**, not concrete-caller).
-5. Token accounting (`run.py` cost uses final-turn `usage`; `total_cost_usd` is
-   cumulative and fine for cost-per-outcome).
+Decision (2026-06-20): we are going for a **flagship journal paper**, which means
+all four workstreams below, not just Results-from-pilot. `paper.md` already holds
+the draft with §5 Results written from the pilot; everything here feeds the
+camera-ready. **Infra prerequisite DONE:** `run.py` now pauses-and-resumes on the
+plan usage cap (daily ~5h + weekly) and backs off on transient rate limits, so
+the long unattended campaign survives both limits (see §5, `_wait_for_usage_reset`).
+
+**Workstream order** (W1 is the long pole and gates W2; W3/W4 run in parallel once
+the corpus + ablation binary exist):
+
+- **W1 — Scale Go tasks (non-negotiable; 3 tasks won't pass review).**
+  Target ~15–30 completeness-critical Go tasks. **Guardrails (hard-won, do not
+  relitigate):**
+  - Prefer the **compiler-grade oracle** path (`grove-eval truth` → `oracle_task.py`)
+    over PR-diff for impact tasks — PR-diff *breaks on codegen* (mockery churn) and
+    can't see distributed dispatch.
+  - The **valid adversarial = interface-impl-ENUMERATION** (find all implementors /
+    the declaring interface), **NOT concrete-caller**. The 4 excluded tasks
+    (`*-isenabled`, `*-routeregister-get`, `*-securevalue-get`, `*-session-delete`)
+    are mis-specified: callers reach the method via a k8s interface → VTA-only,
+    unanswerable by grep *or* graph, so they'd measure "VTA vs everyone."
+  - Span the taxonomy: keep localization + `gin-render` as negative controls;
+    grow the impact/dispatch/interface-decl set (where the effect lives).
+  - 5 trials × 3 models (Haiku/Sonnet/Opus) per task; run via `~/gvg-gapfill.sh`
+    (now inherits usage-cap pause). Corpus stays in `~/gvg-corpus` (never /tmp).
+
+- **W2 — Significance stats (needs W1's N).** Paired non-parametric per RQ
+  (Wilcoxon signed-rank), Holm correction across comparisons, Cliff's δ effect
+  sizes; a mixed-effects model with task/project as random effects. Add a
+  `stats.py` that reads `runs/` and emits the tables + p-values. Report
+  median+IQR and the **tail** metrics (min recall, over-confidence rate), not
+  means.
+
+- **W3 — H7 causal ablation (turns correlation into causation).** Build a
+  **pre-dispatch-fix grove** (pre-v0.13.0, the 45-way `Get` fanout) and a Prism
+  bound to it; point `PRISM_BIN` at it and re-run the headline tasks G-arm
+  ON vs OFF. If recall/over-confidence move with graph precision, graph *quality*
+  (not presence) drives the outcome — the rare causal claim that elevates the paper.
+
+- **W4 — Second & third language (Go-only → multi-language).** Java =
+  **Jackson-databind** (medium-accuracy graph → graceful-degradation / H5 story),
+  TS = **NestJS** (second high-accuracy point). Each needs its compiler-grade
+  oracle wired (javac/WALA or Soot; ts-compiler-api) and tasks curated under the
+  same guardrails. Biggest *work*, do once the Go story is locked.
+
+- **W5 — Polish (camera-ready).** Mode-B end-to-end patch subset (apply + run
+  affected tests); cumulative token accounting (sum per-turn `usage`, not the
+  final-turn value); refresh the stale/short cells in §3 for uniformity.
+
+**Immediate next action:** W1 curation — survey Grafana for interface targets with
+real implementor fan-out + hand-written impls (no mock churn), turn the best into
+oracle tasks, expand `tasks/`. Then launch a paced+caffeinated gap-fill pass.
 
 ## 7. Aside: Headroom (chopratejas/headroom) audit
 
