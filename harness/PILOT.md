@@ -142,6 +142,46 @@ interface-declaration task neither Haiku arm fully solves (0.87): a real ceiling
 (Caveat: medians hide variance; the calibration value of G is in the *tails* —
 report worst-case recall + over-confidence rate, not just medians.)
 
+## DEFINITIVE RESULT — uniform 5 trials, all 21 cells (7 tasks × 3 models)
+
+Full clean dataset (corpus rebuilt persistently under `~/gvg-corpus`; runs paced
+to beat rate limits; every cell ≥5 valid trials, infra-errored runs excluded not
+scored 0). **Headline aggregate across the 3 completeness-critical tasks
+(126004 impact, 122750 dispatch, 120119 interface-decl) × 3 models × 5 trials =
+45 runs/arm:**
+
+| arm | mean recall | incomplete (recall<1) | **over-confident** |
+|---|---|---|---|
+| **T** (text) | 0.942 | 7/45 | **7/45 (16%)** |
+| **G** (graph) | 0.984 | 1/45 | **1/45 (2%)** |
+| **V** (verifier) | 0.980 | 4/45 | **4/45 (9%)** |
+
+**Two findings, both decisive:**
+1. **Completeness:** text search is silently incomplete ~16% of the time on
+   change-impact tasks; the graph cuts that **~7×** (to 2%).
+2. **Calibration (the real headline):** `incomplete == over-confident` for every
+   arm — i.e. **whenever an arm missed sites, it asserted `complete: true`.**
+   Text does this 7× more often than the graph. "Tokens are cents; a missed call
+   site is a broken build" — and the agent doesn't know it missed.
+
+**Where it bites (per-task, median/min recall, over-confidence count):**
+- **Localization + gin-render control:** all arms/models ≈1.00 — no graph effect
+  (greppable). One Haiku-T 0.00 outlier on 120266 = noise.
+- **Impact (126004):** **Haiku-T median 0.29, 3/5 over-confident** → Haiku-G/V
+  median 1.00. The graph rescues the weak model decisively. Sonnet/Opus fine.
+- **Dispatch (122750) + interface-decl (120119):** T and V intermittently miss +
+  go over-confident for Haiku *and* Sonnet (min 0.87–0.94), and even **Opus-T/V**
+  show tail failures on 122750 — while **G is uniformly min 1.00, 0
+  over-confident across all three models.**
+
+**Conclusion.** The graph's value is **completeness + calibration on
+change-impact tasks**, not tokens. It is largest for weaker/cheaper models
+(Haiku) but does **not fully vanish at the frontier** (Opus still has tail
+failures on the harder dispatch task that G eliminates). The capability floor
+holds (Haiku occasionally can't exploit the graph — Haiku-G min 0.29 on 126004),
+and the difficulty threshold holds (greppable tasks show nothing). This is the
+empirical core of the paper.
+
 ## Capability curve (Haiku → Sonnet → Opus) — the quantitative centerpiece
 
 Cells = median recall (min recall, over-confidence count). The value is in the
