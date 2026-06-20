@@ -130,24 +130,26 @@ class Scorecard:
 
 
 def _last_json_object(text: str) -> dict | None:
-    """Return the last brace-balanced JSON object containing a "sites" key."""
+    """Return the last JSON object containing a "sites" key.
+
+    Uses raw_decode from every "{" rather than a naive brace counter: a "{" in a
+    prose code snippet (e.g. `func() {`) simply fails to decode and is skipped,
+    while a genuine JSON object decodes correctly regardless of surrounding text
+    or braces. (The brace-counter version mis-scored answers whose prose
+    contained unbalanced code braces.)
+    """
     candidates: list[dict] = []
-    depth = 0
-    start = -1
-    for i, ch in enumerate(text):
-        if ch == "{":
-            if depth == 0:
-                start = i
-            depth += 1
-        elif ch == "}":
-            if depth > 0:
-                depth -= 1
-                if depth == 0 and start >= 0:
-                    blob = text[start : i + 1]
-                    try:
-                        obj = json.loads(blob)
-                        if isinstance(obj, dict) and "sites" in obj:
-                            candidates.append(obj)
-                    except json.JSONDecodeError:
-                        pass
+    dec = json.JSONDecoder()
+    i = 0
+    while True:
+        idx = text.find("{", i)
+        if idx < 0:
+            break
+        try:
+            obj, _ = dec.raw_decode(text, idx)
+            if isinstance(obj, dict) and "sites" in obj:
+                candidates.append(obj)
+        except json.JSONDecodeError:
+            pass
+        i = idx + 1
     return candidates[-1] if candidates else None
