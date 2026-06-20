@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import signal
 import subprocess
 import time
@@ -32,6 +33,12 @@ WORKTREE_ROOT = Path("/tmp/gvg-corpus")
 RUNS_DIR = HARNESS_DIR / "runs"
 RUN_TIMEOUT_S = 600
 MAX_ATTEMPTS = 3  # retry transient API/infra failures before recording an error
+# Plan *usage* cap (the daily ~5h rolling window and the weekly cap) is NOT a
+# transient failure: retrying it back-to-back just burns attempts. We pause the
+# whole batch until it resets, then resume the same cell.
+USAGE_POLL_S = 900       # reset time unknown -> recheck every 15 min (a capped run fails fast/free)
+USAGE_BUFFER_S = 120     # wait this long past a reported reset before resuming
+USAGE_MAX_WAIT_S = 8 * 24 * 3600  # safety cap: covers a weekly reset + slack
 
 
 def ensure_worktree(task: Task) -> Path:
@@ -138,6 +145,65 @@ def _is_errored(env: dict) -> str | None:
     return None
 
 
+def _usage_limit_reset(env: dict) -> float | None:
+    """If an *errored* run was blocked by the plan usage cap (daily/weekly),
+    return its reset time as a unix epoch -- or -1.0 if the cap is hit but no
+    reset time was reported (caller should poll). Return None if this is not a
+    usage-limit event.
+
+    Only call on a run already flagged by _is_errored, so a successful answer
+    that merely mentions "usage limit" in prose can't false-positive. A
+    transient 'overloaded'/'rate_limit' 429 is NOT a usage cap -- it stays a
+    normal transient retry. The CLI surfaces the cap as e.g.
+    'Claude AI usage limit reached|<epoch>' or '... reset at <time>'."""
+    blob = ((env.get("_stderr") or "") + "\n" + (env.get("result") or "")).lower()
+    if "usage limit" not in blob:
+        return None
+    for pat in (r"usage limit reached\|(\d{10,13})", r"reset[^0-9]{0,12}(\d{10,13})"):
+        m = re.search(pat, blob)
+        if m:
+            ts = int(m.group(1))
+            return ts / 1000 if ts > 1e12 else ts  # ms -> s if needed
+    return -1.0  # cap hit, reset time unknown -> poll
+
+
+def _wait_for_usage_reset(reset: float, out: Path, task: Task,
+                          model: str | None, tag: str) -> float:
+    """Pause until the plan usage cap resets, then return seconds waited.
+
+    Handles both the rolling (daily ~5h) and weekly caps uniformly: whichever
+    reset the CLI reports drives the wake time; if unknown we re-probe every
+    USAGE_POLL_S (a capped run fails fast and ~free, so polling by retrying is
+    cheap). Sleeps in chunks so a multi-day weekly wait survives clock changes,
+    and writes a heartbeat file so the pause is visible, not mistaken for a hang."""
+    now = time.time()
+    if reset and reset > now:
+        target = min(reset + USAGE_BUFFER_S, now + USAGE_MAX_WAIT_S)
+        kind = "reported reset"
+    else:
+        target = now + USAGE_POLL_S
+        kind = "unknown reset; polling"
+    eta = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(target))
+    hb = out / ".usage_wait.json"
+    hb.write_text(json.dumps({
+        "task": task.id, "model": model or "opus", "cell": tag,
+        "paused_at": now, "resume_target": target, "resume_target_iso": eta,
+        "kind": kind,
+    }, indent=2) + "\n")
+    print(f"      USAGE LIMIT hit ({kind}); pausing until {eta} "
+          f"(~{(target - now) / 3600:.2f}h)", flush=True)
+    while True:
+        remaining = target - time.time()
+        if remaining <= 0:
+            break
+        time.sleep(min(300, remaining))
+    try:
+        hb.unlink()
+    except FileNotFoundError:
+        pass
+    return time.time() - now
+
+
 def run_agent(prompt: str, allowed: list[str], workdir: Path,
               model: str | None = None) -> dict:
     """Invoke `claude -p` headlessly; return result envelope + tool trace.
@@ -225,18 +291,34 @@ def main() -> None:
             if args.pace and not (arm_name == args.arms[0] and trial == 1):
                 time.sleep(args.pace)  # spread load to stay under rate limits
             print(f"[run] {task.id} {tag} (tools: {','.join(arm.allowed_tools)})")
-            # Retry transient infra failures (API outage, timeout) so an
-            # outage mid-batch doesn't masquerade as recall 0.
-            for attempt in range(1, MAX_ATTEMPTS + 1):
+            # Two failure classes, two policies:
+            #  - transient (API outage, timeout, overload): short backoff, up to
+            #    MAX_ATTEMPTS, so an outage doesn't masquerade as recall 0.
+            #  - plan usage cap (daily/weekly): pause the whole batch until it
+            #    resets, then resume the *same* cell -- never counts as an attempt.
+            attempt = 0
+            usage_waited = 0.0
+            while True:
                 env = run_agent(arm.prompt(task.prompt), arm.allowed_tools,
                                 workdir, model=args.model)
                 err = _is_errored(env)
                 if not err:
                     break
+                reset = _usage_limit_reset(env)
+                if reset is not None:
+                    usage_waited += _wait_for_usage_reset(
+                        reset, out, task, args.model, tag)
+                    if usage_waited >= USAGE_MAX_WAIT_S:
+                        print(f"      giving up: usage cap not cleared after "
+                              f"{usage_waited / 3600:.1f}h")
+                        break
+                    continue  # resume the same cell; do not consume an attempt
+                attempt += 1
                 print(f"      attempt {attempt}/{MAX_ATTEMPTS} errored ({err})"
                       + ("; retrying" if attempt < MAX_ATTEMPTS else "; giving up"))
-                if attempt < MAX_ATTEMPTS:
-                    time.sleep(20 * attempt)
+                if attempt >= MAX_ATTEMPTS:
+                    break
+                time.sleep(20 * attempt)
             result_text = env.get("result", "")
             answer = Answer.parse(result_text)
             card = score(task, answer, arm_name, trial)
