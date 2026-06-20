@@ -31,7 +31,9 @@ from score import score
 HARNESS_DIR = Path(__file__).resolve().parent
 WORKTREE_ROOT = Path("/tmp/gvg-corpus")
 RUNS_DIR = HARNESS_DIR / "runs"
-RUN_TIMEOUT_S = 600
+RUN_TIMEOUT_S = 1200  # big enumeration tasks (51 sites/43 pkgs) need ~12min on
+# sonnet (measured 740s, 70 turns, valid answer); 600s killed them ~80% done, and
+# near-cap API throttling slows runs further. Paired with no-retry-on-timeout.
 MAX_ATTEMPTS = 3  # retry transient API/infra failures before recording an error
 # Plan *usage* cap (the daily ~5h rolling window and the weekly cap) is NOT a
 # transient failure: retrying it back-to-back just burns attempts. We pause the
@@ -328,6 +330,11 @@ def main() -> None:
                               f"{usage_waited / 3600:.1f}h")
                         break
                     continue  # resume the same cell; do not consume an attempt
+                if err == "timeout":
+                    # A timeout is ~deterministic for a given task/model; retrying
+                    # just burns another full RUN_TIMEOUT_S (we were wasting 3x).
+                    print(f"      timeout after {env.get('_wall_s')}s -- not retried")
+                    break
                 attempt += 1
                 print(f"      attempt {attempt}/{MAX_ATTEMPTS} errored ({err})"
                       + ("; retrying" if attempt < MAX_ATTEMPTS else "; giving up"))
