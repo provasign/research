@@ -117,6 +117,10 @@ def _parse_stream(stdout: str) -> dict:
                     trace.append({"tool": name, "bin": "", "detail": str(detail)[:200]})
         elif kind == "result":
             env.update(obj)  # result text, usage, total_cost_usd, num_turns, duration_ms
+        elif kind == "rate_limit_event":
+            info = obj.get("rate_limit_info")
+            if info:  # emitted every run; status flips off 'allowed' when capped
+                env["rate_limit_info"] = info
     env["tool_trace"] = trace
     env["tools_used"] = sorted({t["bin"] or t["tool"] for t in trace})
     env["graph_used"] = any(
@@ -146,25 +150,36 @@ def _is_errored(env: dict) -> str | None:
 
 
 def _usage_limit_reset(env: dict) -> float | None:
-    """If an *errored* run was blocked by the plan usage cap (daily/weekly),
-    return its reset time as a unix epoch -- or -1.0 if the cap is hit but no
-    reset time was reported (caller should poll). Return None if this is not a
-    usage-limit event.
+    """If an *errored* run was blocked by the plan usage cap (the rolling
+    five_hour window OR the weekly cap), return its reset time as a unix epoch
+    -- or -1.0 if capped but no reset time was reported (caller should poll).
+    Return None if this is not a usage-cap event.
 
-    Only call on a run already flagged by _is_errored, so a successful answer
-    that merely mentions "usage limit" in prose can't false-positive. A
-    transient 'overloaded'/'rate_limit' 429 is NOT a usage cap -- it stays a
-    normal transient retry. The CLI surfaces the cap as e.g.
-    'Claude AI usage limit reached|<epoch>' or '... reset at <time>'."""
+    Primary signal: the CLI's structured `rate_limit_event`. rate_limit_info is
+    emitted on every run with status 'allowed' (or 'allowed_warning' near the
+    cap); it flips to a non-allowed state (rejected/blocked/...) when the cap is
+    hit, and `resetsAt` is the exact epoch to resume at. `rateLimitType` is
+    five_hour|weekly -- we handle both uniformly via resetsAt. Only called on a
+    run _is_errored already flagged, so an 'allowed' status on a healthy run
+    never reaches here. A text fallback covers older CLIs that lack the event."""
+    info = env.get("rate_limit_info") or {}
+    status = str(info.get("status", "")).lower()
+    if status and not status.startswith("allowed"):  # rejected/blocked/exceeded/...
+        reset = info.get("resetsAt")
+        try:
+            return float(reset) if reset else -1.0
+        except (TypeError, ValueError):
+            return -1.0
+    # Fallback: older CLI surfaces the cap only as text.
     blob = ((env.get("_stderr") or "") + "\n" + (env.get("result") or "")).lower()
-    if "usage limit" not in blob:
-        return None
-    for pat in (r"usage limit reached\|(\d{10,13})", r"reset[^0-9]{0,12}(\d{10,13})"):
-        m = re.search(pat, blob)
-        if m:
-            ts = int(m.group(1))
-            return ts / 1000 if ts > 1e12 else ts  # ms -> s if needed
-    return -1.0  # cap hit, reset time unknown -> poll
+    if "usage limit" in blob or ("rate limit" in blob and "reached" in blob):
+        for pat in (r"reset[^0-9]{0,12}(\d{10,13})", r"\|(\d{10,13})"):
+            m = re.search(pat, blob)
+            if m:
+                ts = int(m.group(1))
+                return ts / 1000 if ts > 1e12 else ts  # ms -> s if needed
+        return -1.0
+    return None
 
 
 def _wait_for_usage_reset(reset: float, out: Path, task: Task,
@@ -328,6 +343,9 @@ def main() -> None:
                     "task_id": task.id, "arm": arm_name, "trial": trial,
                     "status": "error", "error": err,
                     "stderr": env.get("_stderr", ""), "wall_s": env.get("_wall_s"),
+                    # telemetry so a future cap/limit is diagnosable from the record
+                    "rate_limit_info": env.get("rate_limit_info"),
+                    "result_snippet": (env.get("result") or "")[:300],
                 }
                 (out / f"{tag}.json").write_text(json.dumps(rec, indent=2) + "\n")
                 errored.append(rec)
