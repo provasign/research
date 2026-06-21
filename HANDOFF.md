@@ -117,18 +117,34 @@ the corpus + ablation binary exist):
 - **W1 — Scale Go tasks (non-negotiable; 3 tasks won't pass review).**
   Target ~15–30 completeness-critical Go tasks. **Guardrails (hard-won, do not
   relitigate):**
-  - Prefer the **compiler-grade oracle** path (`grove-eval truth` → `oracle_task.py`)
-    over PR-diff for impact tasks — PR-diff *breaks on codegen* (mockery churn) and
-    can't see distributed dispatch.
-  - The **valid adversarial = interface-impl-ENUMERATION** (find all implementors /
-    the declaring interface), **NOT concrete-caller**. The 4 excluded tasks
-    (`*-isenabled`, `*-routeregister-get`, `*-securevalue-get`, `*-session-delete`)
-    are mis-specified: callers reach the method via a k8s interface → VTA-only,
-    unanswerable by grep *or* graph, so they'd measure "VTA vs everyone."
-  - Span the taxonomy: keep localization + `gin-render` as negative controls;
-    grow the impact/dispatch/interface-decl set (where the effect lives).
+  - **Adversarial tasks: use the PR-derived path, NOT oracle bare-name.**
+    *Lesson, 2026-06-21:* `oracle_task.py --target <bareName>` cannot isolate one
+    interface — a bare method name (`CheckHealth`, `Set`, `Validate`, `Get`) is
+    shared by *unrelated* interfaces, so the GT conflates them (checkhealth pulled
+    in the gRPC `HealthServer`, storage, advisor → spurious recall<1 + false
+    over-confidence on ALL arms; fixed only by `--exclude`). A real merged PR that
+    changes one interface method's signature scopes cleanly to that interface and
+    is human-validated — that's how the 3 working adversarials (122750/126004/
+    120119) were built. Use `extract_task.py` on interface-signature-change PRs;
+    use the VTA oracle to *audit* GT completeness, not to *define* it by name.
+  - **Findability, not impl fan-out, is the discriminator.** Ranking targets by
+    implementation count repeats the gin-render mistake: uniformly-named handlers
+    in dedicated packages (the datasource `QueryData`/`CheckHealth`/`CallResource`
+    tasks) are *greppable* — recall=1.0 for every arm/model → **negative controls,
+    not adversarial.** The effect needs *name ambiguity* (grep over-matches) +
+    *sites buried in large files* (the 122750 `Set`×49 case).
+  - **Status of the 3 new oracle tasks (2026-06-21):** `grafana-querydata/
+    checkhealth/callresource-impact` are KEPT as **documented greppable controls**
+    (checkhealth/callresource recall=1.0 all arms; querydata ~0.90, graph no help).
+    `candidate_targets.py` is still useful but rank by ambiguity (distinct receiver
+    types per bare name), and every candidate needs source validation before use.
+  - The 4 excluded tasks (`*-isenabled`, `*-routeregister-get`, `*-securevalue-get`,
+    `*-session-delete`) remain mis-specified concrete-caller (VTA-only) — do not
+    revive.
   - 5 trials × 3 models (Haiku/Sonnet/Opus) per task; run via `~/gvg-gapfill.sh`
     (now inherits usage-cap pause). Corpus stays in `~/gvg-corpus` (never /tmp).
+    **Always audit GT cleanliness before launching** (rescore saved answers / check
+    cross-interface pollution) — re-running is the expensive way to find a bad task.
 
 - **W2 — Significance stats (needs W1's N).** Paired non-parametric per RQ
   (Wilcoxon signed-rank), Holm correction across comparisons, Cliff's δ effect
