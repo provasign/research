@@ -23,23 +23,31 @@ def main() -> None:
     ap.add_argument("--task", required=True)
     args = ap.parse_args()
     task = Task.load(args.task)
-    out = RUNS_DIR / task.id
-    summ = json.loads((out / "summary.json").read_text())
-    ok = summ["ok"]
-    for c in ok:
-        ans = c["answer"]
-        answer = Answer(
-            sites=[Site.parse(s) for s in ans["sites"]],
-            complete=ans["complete"],
-            unresolved=ans.get("unresolved", []),
-        )
-        card = score(task, answer, c["arm"], c["trial"])
-        c.update(card.to_dict())
-        (out / f"{c['arm']}.t{c['trial']}.json").write_text(json.dumps(c, indent=2) + "\n")
-        print(f"  {c['arm']}.t{c['trial']}  r={c['recall']} p={c['precision']} "
-              f"f1={c['f1']} extra={c['extra']}")
-    (out / "summary.json").write_text(json.dumps(summ, indent=2) + "\n")
-    print(f"[rescored] {len(ok)} runs in {out}")
+    base = RUNS_DIR / task.id
+    # Opus lives at runs/<task>/; other models at runs/<task>/<model>/.
+    dirs = [base] + sorted(
+        d for d in base.iterdir() if d.is_dir() and (d / "summary.json").exists()
+    )
+    total = 0
+    for out in dirs:
+        summ = json.loads((out / "summary.json").read_text())
+        ok = summ["ok"]
+        for c in ok:
+            ans = c["answer"]
+            answer = Answer(
+                sites=[Site.parse(s) for s in ans["sites"]],
+                complete=ans["complete"],
+                unresolved=ans.get("unresolved", []),
+            )
+            card = score(task, answer, c["arm"], c["trial"])
+            c.update(card.to_dict())
+            (out / f"{c['arm']}.t{c['trial']}.json").write_text(
+                json.dumps(c, indent=2) + "\n")
+        (out / "summary.json").write_text(json.dumps(summ, indent=2) + "\n")
+        label = out.name if out != base else "opus"
+        total += len(ok)
+        print(f"  [{label}] rescored {len(ok)} runs")
+    print(f"[rescored] {total} runs across {len(dirs)} model dir(s) in {base}")
 
 
 if __name__ == "__main__":

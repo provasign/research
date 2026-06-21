@@ -44,7 +44,7 @@ def load_edges(truth_path: str) -> list[dict]:
 
 
 def build(edges: list[dict], target: str, impl_scope: str = "",
-          full: bool = False) -> tuple[list[Site], dict]:
+          full: bool = False, exclude: tuple[str, ...] = ()) -> tuple[list[Site], dict]:
     """Return (ground-truth sites, stats) for changing `target`'s signature.
 
     By default `target` matches a callee by bare-name (e.g. "Get" matches every
@@ -53,6 +53,12 @@ def build(edges: list[dict], target: str, impl_scope: str = "",
     concrete method whose bare name is ambiguous across the repo. `impl_scope`
     (a repo-relative path prefix) is an alternative disambiguator (gin's
     `Context.Render` vs the `render.Render` interface: scope to `render/`).
+
+    `exclude` drops sites under any of the given path prefixes. A bare method
+    name can be shared by *unrelated interfaces* (e.g. the datasource
+    `backend.CheckHealthHandler.CheckHealth` vs the gRPC
+    `HealthServer.CheckHealth`); excluding the foreign interface's tree keeps the
+    ground truth to the one interface the task is about.
     """
     impls: set[Site] = set()
     callers: set[Site] = set()
@@ -70,6 +76,10 @@ def build(edges: list[dict], target: str, impl_scope: str = "",
         impls.add(Site(e["callee"]["file"], _base(e["callee"]["name"])))
         impl_fns.add(e["callee"]["name"])
         callers.add(Site(e["caller"]["file"], _base(e["caller"]["name"])))
+    if exclude:
+        drop = lambda s: any(s.relpath.startswith(p) for p in exclude)
+        impls = {s for s in impls if not drop(s)}
+        callers = {s for s in callers if not drop(s)}
     sites = sorted(impls | callers, key=str)
     stats = {
         "impl_count": len(impls),
@@ -93,6 +103,9 @@ def main() -> None:
     ap.add_argument("--impl-scope", default="", dest="impl_scope",
                     help="repo-relative path prefix the implementations live "
                          "under (disambiguates same-named methods)")
+    ap.add_argument("--exclude", default="",
+                    help="comma-separated path prefixes to drop (foreign "
+                         "interfaces that share the bare method name)")
     ap.add_argument("--id", required=True)
     ap.add_argument("--lang", default="go")
     ap.add_argument("--pr", default="")
@@ -109,7 +122,8 @@ def main() -> None:
     )
     pin = rp.stdout.strip() or args.commit  # tolerate a detached/odd git dir
     edges = load_edges(args.truth)
-    sites, stats = build(edges, args.target, args.impl_scope, args.full)
+    exclude = tuple(p for p in args.exclude.split(",") if p)
+    sites, stats = build(edges, args.target, args.impl_scope, args.full, exclude)
     if not sites:
         raise SystemExit(f"no edges reference a method named {args.target!r}")
     Task(
