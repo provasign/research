@@ -349,11 +349,14 @@ intact, and build the *released* prism v0.15.0 against this pre-fix grove. The O
 binary (`~/bin/prism`) and OFF binary therefore differ **only** in dispatch
 precision — same prism code, same model, same task.
 
-**Scope (1-day budget).** We run the OFF condition on **122750**, the task the fix
-directly targets (interface-dispatch fanout on `Set`), G arm × 3 models × 5
-trials, compared against the existing ON data. 126004 (rename) and 120119
-(interface-decl) are not dispatch-fanout tasks, so the fix is not expected to move
-them; 122750 is the decisive case. *Result pending this run; to be filled in.*
+**Status — attempted, not yet valid.** A first attempt reverse-applied only the
+12-line `edges.go` hunk and rebuilt prism against it. But grove's own regression
+test (`TestBuildCalls_ResolvedInterfaceDoesNotFanOut`) **still passed** on the
+reverted build — i.e. that hunk alone does *not* reintroduce the fanout, so the
+"OFF" binary was not actually pre-fix and the toggle would have been meaningless.
+We aborted rather than report a confounded null. A valid ablation needs a build
+that grove's regression test confirms *fails* (fanout restored) before any runs —
+deferred. This is the planned causal step and remains uncollected.
 
 ---
 
