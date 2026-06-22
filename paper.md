@@ -28,10 +28,20 @@ is *silently incomplete* 16% of the time — it omits change-sites and asserts t
 answer is complete anyway — while the graph reduces that confident-error rate
 roughly **7×, to 2%**. The effect is largest for weaker/cheaper models but does
 not fully vanish at the frontier. On localization / greppable tasks there is no
-effect, an honest negative result. We do **not** claim a code graph beats text
-search broadly; the defensible, evidence-backed claim is a completeness +
-calibration gap on change-impact tasks, with direct implications for whether a
-code graph's product role is a search replacement or a correctness gate.
+effect, an honest negative result.
+
+**Scope and honesty (read this first).** This is a *pilot*, not a settled result.
+The headline rests on **three tasks**, one codebase, one language (Go) — the
+statistical unit is the task, so the sample is far too small for a general claim.
+When we sampled *new* tasks by a fixed rule (§5.4) rather than picking for the
+effect, the advantage **did not replicate**: on interface-declaration changes the
+graph helped no more than text — both miss the declaring interface (§5.5), a
+robust *negative*. The defensible claim is therefore narrow and conditional: a
+code graph improves completeness and calibration **on tasks with dense,
+ambiguously-named call sites**, and *fails to help* on at least one common
+structure. We explicitly do **not** claim a code graph beats text search broadly.
+Establishing whether the effect survives unbiased scaling is the central piece of
+future work (§6, §8).
 
 ---
 
@@ -293,17 +303,57 @@ prominently enough, or the agent did not think to query it. That is a precise,
 actionable target rather than a vague "graph helps," and a lead for the verifier's
 next iteration.
 
+### 5.5 Replication check on out-of-sample tasks (the key caveat)
+
+The §5.1 headline is built from three tasks selected, in part, because they
+exercise the hypothesised mechanism. To test whether the effect is an artifact of
+that selection, we built **new** completeness tasks by a fixed, outcome-blind rule
+— recent merged Grafana PRs that change an interface method's signature, ground
+truth taken from the PR diff (codegen/mocks filtered), audited to a single
+interface. **The advantage did not replicate.**
+
+| new task (full cell, 15 runs/arm) | T over-confident | G over-confident |
+|---|---|---|
+| `grafana-cleanup-impact` (LifecycleManager) | 8/15 | **8/15** (no gain) |
+| `grafana-pr112043-impact` (ResourceIndex/SearchBackend) | 5/15 | **8/10** (worse) |
+
+On both, the **graph reduced confident errors little or not at all**, and the
+dominant missed site was again the **interface declaration** — exactly the §5.4
+blind spot, which the graph does *not* currently fix. (Two further outcome-blind
+tasks were queued; the campaign was stopped once the pattern was clear.) The
+greppable controls (`querydata`/`checkhealth`/`callresource`) reached recall ≈1.0
+for every arm — no effect, as expected.
+
+**Interpretation, stated plainly.** The clean §5.1 effect appears tied to a
+specific structure — *dense, ambiguously-named call sites* (e.g. 122750's `Set`×49)
+— and does **not** generalise to interface-declaration changes, where neither text
+nor the current graph succeeds. We cannot yet distinguish "the effect is real but
+narrow" from "the three headline tasks were favourably selected." Resolving this
+needs a pre-registered, outcome-blind task sample large enough for the task-level
+statistics in §7 — the single most important open item.
+
 ---
 
-## 6. Graph-quality ablation (H7) — **[PENDING]**
+## 6. Graph-quality ablation (H7) — *in progress*
 
 The causal claim: hold everything constant and toggle a known graph-precision knob
-— the interface-dispatch fix (grove v0.13.0, which collapsed a 45-way fanout on
-`Get` to the 3 real implementors). Run the G arm with the fix **ON vs OFF**
-(`PRISM_BIN` pointed at a pre-fix grove build) on the headline tasks. If recall /
-over-confidence move with graph precision while nothing else changes, graph
-*quality* — not mere graph *presence* — causes the outcome. This is the planned
-strengthening step and is not yet collected.
+— the interface-dispatch fix (grove v0.13.0, which collapsed a 45-way fanout to the
+real implementors). If recall / over-confidence move with graph precision while
+nothing else changes, graph *quality* — not mere graph *presence* — causes the
+outcome.
+
+**Implementation (clean toggle).** That fix and a new `Neighbors` accessor landed
+in one commit. We surgically **reverse only the 12-line dispatch-fix hunk** in
+`internal/graph/edges.go`, leaving `Neighbors` (and thus prism's graph path)
+intact, and build the *released* prism v0.15.0 against this pre-fix grove. The ON
+binary (`~/bin/prism`) and OFF binary therefore differ **only** in dispatch
+precision — same prism code, same model, same task.
+
+**Scope (1-day budget).** We run the OFF condition on **122750**, the task the fix
+directly targets (interface-dispatch fanout on `Set`), G arm × 3 models × 5
+trials, compared against the existing ON data. 126004 (rename) and 120119
+(interface-decl) are not dispatch-fanout tasks, so the fix is not expected to move
+them; 122750 is the decisive case. *Result pending this run; to be filled in.*
 
 ---
 
@@ -334,6 +384,14 @@ shipped broken change, regardless of token deltas, which are a wash.
 
 ## 8. Threats to validity
 
+- **Sample size / selection (the dominant threat).** The headline is **three
+  tasks**; the unit of analysis is the task, so this is far below what a
+  task-level significance test needs, and the three were chosen partly because
+  they show the mechanism. Our own out-of-sample replication (§5.5) found the
+  effect *did not* carry to interface-declaration tasks. Until a pre-registered,
+  outcome-blind task sample (target ~15–30) reproduces it, the result must be read
+  as a **pilot/existence-proof of a conditional effect**, not a general finding.
+  This is the first thing a reader should weight, and the top future-work item.
 - **Construct (recall-vs-PR).** PRs may over/under-change. We mitigate with the
   independent `go-ssa-vta` oracle as primary completeness ground truth and treat
   the PR diff as secondary; test sites are scored neutral. PR-diff ground truth
@@ -365,15 +423,20 @@ shipped broken change, regardless of token deltas, which are a wash.
 ## 9. Conclusion
 
 A resolved code graph does not beat text search on the variables the field
-optimizes — tokens and latency are a tie. Its value is **completeness and
-calibration on change-impact tasks**: text search is intermittently and *silently*
-incomplete and reports the answer as complete anyway; the graph cuts that
-confident-error rate ~7× (16% → 2%). The effect is largest for weaker/cheaper
-models, does not fully vanish at the frontier on harder tasks, vanishes entirely
-on greppable tasks, and is most economically delivered as a **verifier / correctness
-gate** rather than a search replacement. The remaining work — Java and TypeScript
-conditions, Mode B patches, the dispatch-fix causal ablation, and the significance
-model — is scoped in §3, §6, and §8.
+optimizes — tokens and latency are a tie. On a small pilot we find a **conditional**
+effect on the variables that matter for change tasks: on three tasks with dense,
+ambiguously-named call sites, text search is intermittently and *silently*
+incomplete (claims complete while wrong) and the graph cuts that confident-error
+rate ~7× (16% → 2%), largest for weaker/cheaper models and most cheaply delivered
+as a **verifier / correctness gate**. But the effect is **narrow and not yet
+established**: when we sampled new tasks by an outcome-blind rule it did not
+replicate, and on interface-declaration changes the graph fails just as text does
+(a robust negative and a concrete target for the verifier). We therefore present
+this as an existence proof of a conditional benefit plus a reproducible failure
+mode — not as "graph beats grep." Whether the benefit survives a pre-registered,
+outcome-blind task sample (the dominant open question), together with the causal
+ablation (§6), Java/TypeScript breadth, and Mode B, determines whether this becomes
+a general result; those are scoped in §3, §6, and §8.
 
 ---
 
