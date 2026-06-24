@@ -46,9 +46,15 @@ class Site:
         if not sym:  # no colon -> whole thing is the symbol spec
             sym = relpath
             relpath = ""
-        sym = sym.rsplit(".", 1)[-1]  # drop receiver / package qualifier
-        sym = re.sub(r"\(.*\)$", "", sym).strip()  # drop trailing "()"
-        return Site(relpath=relpath.strip(), symbol=sym)
+        # Canonicalize to the bare method name across Go and Java naming forms:
+        #   Go:   Recv.Method | pkg.Func
+        #   Java: Class.method | Class#method | a.b.c.Class#method | method(params)
+        # Strip the parameter signature FIRST -- it can contain '.' (e.g.
+        # "appendDetail(java.lang.Object)") which would otherwise be split wrong.
+        sym = re.sub(r"\(.*\)$", "", sym).strip()  # drop "(params)" / "()"
+        sym = sym.rsplit("#", 1)[-1]               # Java Class#method separator
+        sym = sym.rsplit(".", 1)[-1]               # receiver / package / FQN qualifier
+        return Site(relpath=relpath.strip(), symbol=sym.strip())
 
     def __str__(self) -> str:
         return f"{self.relpath}:{self.symbol}" if self.relpath else self.symbol
