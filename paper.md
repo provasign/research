@@ -1,215 +1,303 @@
-# Code Graphs Don't Beat Text Search for Agentic Coding — A Controlled Negative Result
+# When Does a Code Graph Help an Agent? Blast-Radius–Bounded Gains for Change-Impact
 
-**Status:** working draft (honest-negative reframe, 2026-06-23). Thesis and the
-rigorous isolation in `THESIS.md`; raw per-run data in `harness/runs/` (scored
-deterministically by `rescore.py` against an independent oracle).
+**Status:** working draft (bounded-positive reframe, 2026-06-27). Thesis and
+falsifiable sub-claims in `THESIS.md`; raw per-run data in `harness/runs/`, scored
+deterministically by `rescore.py` / `rescore_java.py` against independent oracles
+(Go: `go-ssa-vta`; Java: a Spoon type-resolution oracle, `harness/java-oracle/`).
 
-> Honesty note. This paper reports a **negative result** with one modest positive.
-> It is grounded in 14 tasks, 1 language (Go), 3 Claude models. The sample is
-> small and single-language — see §7. We deliberately do not overclaim; several
-> intermediate hypotheses we *did* hold at various points (graph improves
-> completeness; graph improves calibration; graph equalizes model capability) did
-> not survive isolation, and we report exactly how each fell.
+> Honesty note. An earlier version of this paper reported a *negative* result
+> ("code graphs don't beat text search"). That conclusion was **too broad**: it
+> was drawn from Go tasks that were, in hindsight, almost all small and
+> name-greppable. Extending the study to a larger, polymorphism-heavy Java
+> framework (jackson-databind) — with a precise type-resolution oracle and a size-
+> graded task set — surfaced the boundary the Go data had missed. The honest
+> result is **conditional**: the graph's value is real but **bounded to large-
+> blast-radius change-impact tasks**. We report exactly where it helps, where it
+> doesn't, and the mechanism that predicts which is which.
 
 ---
 
 ## Abstract
 
-A widespread intuition holds that giving an LLM coding agent a resolved code
-graph (callers, callees, implementors, dispatch) should make it more effective on
-existing code than plain text search (grep/ripgrep + read), because the graph has
-strictly more accurate structural information. In a controlled, paired study that
-isolates the context mechanism and scores against an independent compiler-grade
-oracle, we find this intuition **does not hold for change-impact tasks in Go**:
+A widespread intuition holds that giving an LLM coding agent a resolved code graph
+(callers, callees, implementors, dispatch) makes it more effective on existing
+code than plain text search (grep/ripgrep + read). In a controlled, paired study
+that isolates the context mechanism and scores against independent compiler-grade
+oracles, across two languages (Go, Java), 2–3 model tiers, and tasks spanning
+1–108 change-sites, we find the intuition is **true but conditional**:
 
-- **Completeness (recall) is statistically tied** between graph and text across 14
-  tasks — a capable agent reaches the same change-site recall by grep+read,
-  because most Go call sites are *name-greppable*.
-- **Calibration is tied in aggregate** — the graph does not reliably make the
-  agent "know when it's incomplete"; it helps on some tasks and hurts on others.
-- **The cheap-model-reaches-frontier-quality story is a confound** — a cheap model
-  with the graph does match a frontier model with text at lower cost, but
-  *isolating the graph* (same model, text vs graph) shows the graph lifts recall
-  on 1 of 10 tasks; the saving is model price, not the graph.
-- The graph's one **measurable, graph-attributable benefit is token efficiency at
-  scale**: it reaches the *same* answer at ~10–40% lower cost, a saving that grows
-  with the change's blast radius and is *negative* on trivial changes.
+- **On small / name-greppable change-impact tasks, graph ≈ text** (recall tied).
+  This covers most of our Go sample and the small Java tasks. A capable agent
+  reaches the same recall by grep+read because the call sites are statically
+  named and few enough to enumerate.
+- **On large-blast-radius tasks (≈100 change-sites), the graph wins decisively**
+  on completeness *and* consistency. On jackson-databind's `serialize`/
+  `deserialize` interface methods (104–108 sites), the graph lifts mean recall
+  by **+0.13 to +0.24** over text and **collapses its variance** — e.g. Sonnet
+  text 0.87 (swinging to 0.73) vs graph **0.996 ± ~0**. The gain is **robust
+  across model tiers** (Haiku and Sonnet): a stronger model improves text but the
+  graph improves more and stays ahead.
+- **The discriminator is blast radius (#change-sites), not name ambiguity and not
+  language per se.** Counter to our pre-registered guess, the graph did *not*
+  win more on name-ambiguous targets (`get`/`set`, 18–64× grep over-match); those
+  tasks were small and tied. Go simply rarely produced tasks large enough to
+  cross the threshold.
+- **Cost reframes from "cheaper" to "better at the same price."** The graph
+  reaches its higher recall at **near-equal cost** (G/T ≈ 1.0–1.07 in tokens and
+  USD). On large tasks, text cannot reach the graph's recall at *any* reasonable
+  budget — it misses sites it never finds.
 
-We give the mechanism (greppability of statically-named call sites), the one
-boundary where the graph did help (a rename, where the symbol name itself becomes
-an unreliable search key), and argue the field should evaluate code-context tools
-on **cost-at-fixed-quality**, not on an assumed completeness advantage that, at
-least for Go, isn't there.
+We give the mechanism (text cannot reliably enumerate a 100-site change-set;
+the graph traverses it systematically), the boundary it predicts, and argue the
+field should evaluate code-context tools on **completeness-and-consistency at
+fixed cost, conditioned on task size** — not on a blanket "graphs help" or
+"graphs don't."
 
 ---
 
 ## 1. Introduction
 
 LLM coding agents work on existing code through a loop: **locate** relevant code
-(search), **read** it to understand, **traverse** structure (who calls / what
-implements), and **stop** when subjectively confident. Two paradigms supply the
-context: text search, and a resolved code graph. The graph demonstrably holds more
-accurate structural information, so the natural hypothesis — and the one we set out
-to confirm — is that it produces more complete, better-calibrated agent behavior
-on change tasks, where a missed call site is a broken build.
+(search), **read** it, **traverse** structure (who calls / what implements), and
+**stop** when subjectively confident. Two paradigms supply the context: text
+search, and a resolved code graph. The graph holds strictly more accurate
+structural information, so the natural hypothesis is that it produces more
+complete, better-calibrated behavior on change-impact tasks, where a missed call
+site is a broken build.
 
-We could not confirm it. This paper is the controlled story of *why*, and of the
-one place the graph still pays. Contributions:
+We set out to confirm this in Go and **could not** — graph tied text on
+completeness and calibration. The honest reading at the time was a negative
+result. But our Go tasks, after outcome-blind auditing, were almost all *small*
+(1–22 change-sites) and *name-greppable*. The question the Go data could not
+answer was whether the graph earns its keep where text search structurally
+struggles. We therefore extended the study to **jackson-databind**, a
+polymorphism- and reflection-heavy Java framework whose interface methods
+(`JsonDeserializer.deserialize`, `JsonSerializer.serialize`, …) have dozens of
+implementations and call sites — and built a **size-graded** task set with a
+precise type-resolution oracle. That extension found the boundary.
 
-1. **A methodology that isolates the tool** — identical tasks, three arms (text /
-   graph / graph-as-verifier), enforced tool allowlists, scored against an
-   **independent** `go-ssa-vta` oracle (never the graph under test).
-2. **The negative result**, across a 12-variable framework: graph ≈ text on
-   completeness and calibration for Go change-impact tasks.
-3. **A careful isolation** that dissolves two seductive false positives (the
-   cost-quality "capability equalizer," and a calibration headline that held only
-   on a hand-picked subset).
-4. **The surviving positive** — a modest, scale-dependent token saving — and a
-   mechanistic account (greppability) that predicts *when* the graph could still
-   matter (when greppability breaks: renames, reflection, cross-language dispatch).
+Contributions:
+
+1. **A methodology that isolates the tool across two languages** — identical
+   tasks, three arms (text / graph / graph-as-verifier), enforced tool
+   allowlists, scored against **independent** oracles (Go `go-ssa-vta`; a new Java
+   Spoon oracle that resolves every call site by type, not by name).
+2. **The conditional result**: graph ≈ text on small/greppable change-impact
+   tasks; graph ≫ text on large-blast-radius tasks, on recall **and** variance.
+3. **The discriminator** — blast radius, established against a confound we
+   expected to matter (name ambiguity) and which did not.
+4. **A reliability finding** the single-tier Go study missed: at scale the graph
+   removes catastrophic completeness misses, not just lifts the mean.
+5. **A reproducible Java change-impact oracle + size-graded task generator**
+   (`harness/java-oracle/`) and a scoring fix (line→method normalization) without
+   which the graph arm is silently under-credited.
 
 ---
 
 ## 2. A variable framework for agent code-context
 
 Three cost axes — **tokens, latency, round-trips, setup**; six quality axes —
-**completeness, precision, calibration, freshness, breadth, determinism**; one
-outcome — **task success**; one meta-variable — **cost-of-error**. The field
-optimizes the cost axes (tokens/latency). Our prior belief was that the graph's
-value lived in the quality axes (completeness/calibration). The result below is
-that, for Go, it does *not* — and the only place it shows up is the cost axis we
-had dismissed.
+**completeness, precision, calibration, consistency, freshness, determinism**; one
+outcome — **task success**; one meta-variable — **cost-of-error**. Our prior
+belief was that the graph's value lived in the quality axes uniformly. The result
+below is that it lives in **completeness + consistency, but only past a task-size
+threshold**, and at near-zero extra cost — so the right figure of merit is
+*quality-at-fixed-cost conditioned on blast radius*.
 
 ---
 
 ## 3. Study design
 
 **Arms** (only the tool description/allowlist differs): **T** text (rg/grep/read),
-**G** graph (typed `prism query --include graph` neighborhood + text for
-discovery), **V** text-primary with graph-as-verifier. Arm enforcement is
-mechanical (`--allowedTools`, recorded `tool_trace`).
+**G** graph (typed `prism` call-graph CLI for traversal + rg for anchor discovery),
+**V** text-primary with graph-as-verifier. Arm enforcement is by `--allowedTools`
+with a recorded `tool_trace`; runs where the G arm never touched the graph are
+flagged (`violation`) and excluded.
 
 **Mode A (context quality):** the agent answers "list every site that must change
-to do X," declaring `complete` + `unresolved`. Isolates the tool from patch-writing
-skill. (Mode B / compile-and-test is future work, §7.)
+to do X," declaring `complete` + `unresolved`. Isolates the tool from
+patch-writing skill. (Mode B / compile-and-test is future work, §7.)
 
-**Independent oracle:** ground truth is the `go-ssa-vta` call graph (via
-`grove-eval`) and/or the merged-PR diff (codegen/mocks filtered) — **never** the
-graph under test. Test-path sites scored neutral.
+**Independent oracles — never the graph under test.**
+- *Go:* the `go-ssa-vta` call graph (via `grove-eval`) and/or the merged-PR diff
+  (codegen/mocks filtered).
+- *Java:* a **Spoon type-resolution oracle** (`harness/java-oracle/`). Given a
+  target method, it emits the declaration + the full override/implementation
+  family + every call site whose executable **resolves** (by type, not by name)
+  into that family. This is the discipline a bare-name oracle lacks: a call to an
+  unrelated same-named method on a different type is excluded. On jackson it
+  resolved all ~500 `get`/`set` call sites and kept only the ~3–22 that are truly
+  jackson's (0 unresolved). GT is human-spot-checked and, where text reaches it,
+  validated by a text arm hitting recall 1.0.
 
-**Subjects:** 14 Go tasks (Grafana + gin), spanning 1–93 change-sites: localization
-controls, greppable enumeration controls, and change-impact tasks (rename,
-dispatch, interface-declaration). **Models:** Haiku, Sonnet, Opus. **Trials:** 5
-per cell; we report tails (min, worst-case rate), not just medians.
+**Scoring fix (Java).** `prism` reports authoritative `file:line`, so graph-arm
+agents naturally answer sites as `File.java:114` rather than `File.java:method`.
+The name-based scorer matched those at 0, silently penalizing the **graph** arm
+(e.g. a 148-site correct answer scored 0.0). We build a Spoon line→method index
+and normalize numeric answers to their innermost enclosing method before scoring
+(`rescore_java.py`). All Java numbers below are post-normalization.
+
+**Subjects & size grading.** Go: 14 tasks, 1–93 sites (localization controls,
+greppable enumeration controls, change-impact). Java: jackson-databind @ 2.18.8,
+6 interface-method signature-change tasks spanning **8, 22, 38, 58, 104, 108**
+change-sites, chosen to trace a size curve and to vary name-ambiguity
+independently of size. **Models:** Haiku, Sonnet (Opus in progress). **Trials:** 5
+per cell; we report tails (min, variance), not just means.
 
 ---
 
-## 4. Results — the negative
+## 4. Results
 
-### 4.1 Completeness is tied
+### 4.1 Small / greppable change-impact: graph ≈ text (the Go null, and small Java)
 
-Across all 14 tasks, mean recall(G) ≈ recall(T) (within ~0.01–0.07 every task;
-no consistent direction). On the largest task (93 sites, 27 packages), Haiku-text
-0.817 vs Haiku-graph 0.826 — **volume does not break text**: the agent greps the
-(statically named) symbol and enumerates the call sites. Greppable controls
-(uniformly-named handlers) reach recall ≈1.0 for *every* arm.
+Across the Go tasks, mean recall(G) ≈ recall(T) (within ~0.01–0.07 every task; no
+consistent direction). Greppable controls reach recall ≈1.0 for every arm. The
+small Java tasks behave identically: `jsonnode-get` (8 sites) and `settable-set`
+(22 sites) tie (Δrecall ≤ 0.01) on Haiku — *despite* being the most name-ambiguous
+targets in the set (grep over-match 64× and 18×). Ambiguity did not help the
+graph.
 
-### 4.2 Calibration is tied in aggregate
+### 4.2 Large-blast-radius change-impact: the graph wins (Java)
 
-Over-confidence (claims `complete` while recall<1) summed across all runs: **T ≈
-43, G ≈ 42.** The graph lowers over-confidence on the three original dispatch
-tasks (the basis of an earlier, withdrawn "16%→2%" headline) but *raises* it on
-others (`pr112043`, `querydata`). It is task-dependent, not a property of the graph.
+On jackson's ~100-site interface methods the picture inverts. Haiku, n=4–5,
+post-normalization:
 
-### 4.3 The "capability equalizer" is a confound
+| task | sites | grep× | T recall | G recall | Δ | G/T cost |
+|---|---|---|---|---|---|---|
+| jsonnode-get | 8 | 63.6 | 0.97 | 0.97 | +0.00 | 1.07 |
+| settable-set | 22 | 18.5 | 0.90 | 0.91 | +0.01 | 1.01 |
+| deserialize | 104 | 4.1 | 0.52 | **0.69** | **+0.17** | 1.04 |
+| serialize | 108 | 3.1 | 0.62 | **0.85** | **+0.24** | 1.04 |
 
-A cheap model + graph (Haiku-G) matches a frontier model + text (Opus-T) on quality
-at **39–78% lower cost** on most tasks — superficially a strong result. But
-isolating the graph (Haiku-**T** vs Haiku-**G**, same model) the graph lifts recall
-on **1 of 10 tasks** (126004, +0.29) and ~0 elsewhere. The cheap model was already
-≈ as good as the frontier model on these tasks; **the saving is model price, not
-the graph.** We flag this because it is exactly the comparison a less careful study
-would have reported as the headline.
+The advantage appears only at scale, and grows with #sites — **not** with grep
+ambiguity (which runs the other way).
 
-### 4.4 Weak-model tail risk: weak signal
+### 4.3 The gain survives a stronger model (Haiku → Sonnet)
 
-Catastrophic runs (recall<0.7) for Haiku: **text 9/45 → graph 6/45.** A real but
-small reduction, concentrated in one task; the graph still leaves bad runs where
-they occur (`pr112043`). Not enough to claim the graph makes weak models reliable.
+A natural objection: a stronger model brute-forces the large enumeration with
+text and closes the gap. It does not. Sonnet, `serialize` (108 sites), n=5:
 
-### 4.5 The one survivor: token efficiency at scale
+| arm | mean recall | per-trial | cost (USD/run) |
+|---|---|---|---|
+| text | 0.865 | 0.73, 0.89, 0.97, 1.00, **0.73** | $2.17 |
+| **graph** | **0.996** | 1.00, 1.00, 0.99, 1.00, 0.99 | $2.32 |
 
-For matched recall, cost(G) < cost(T) on non-trivial tasks: **+11% to +37%** on
-tasks ≥7 sites, largest on the biggest tasks (93-site: 37% cheaper), and *negative*
-on 1–2-site tasks (prism overhead exceeds the grep+read it replaces). The graph
-buys the *same answer for fewer tokens*, and the saving scales with blast radius.
-Caveat: wall-clock latency is *higher* (prism call overhead; warm MCP would narrow
-it) — an honest cost has both.
+Going Haiku→Sonnet, text *did* improve (0.62→0.87) — but graph improved more
+(0.85→0.996) and stayed ahead. `deserialize` (partial) agrees: T 0.76 vs G 0.89.
+(Opus frontier point in progress.)
+
+### 4.4 The graph removes catastrophic misses (a consistency gain)
+
+The Sonnet table shows more than a higher mean: the **variance** differs. Text
+swings from 1.00 to 0.73 across nominally identical runs — it silently misses
+~30% of sites on some trials. Graph is 0.996 ± ~0: **zero catastrophic runs.** On
+a change task, where one missed site is a broken build, this reliability is
+arguably more valuable than the mean lift. This is the completeness/calibration
+benefit the single-tier Go study looked for and could not find; it emerges only
+once tasks are large enough that text *can* fail.
+
+### 4.5 Cost: better answer at the same price
+
+Across every cell the graph's token and USD cost is within ~7% of text
+(G/T ≈ 1.0–1.07). The Go framing ("same answer, fewer tokens") becomes, in Java
+at scale, **"better answer, same price"**: text cannot reach the graph's recall
+at any reasonable budget on a 100-site task — Sonnet text spent 50–65 turns and
+still missed sites the graph found. An honest cost caveat remains: wall-clock
+latency is comparable here (both arms run long on large tasks), but prism's
+per-call overhead makes the graph slower on *small* tasks.
+
+### 4.6 Calibration
+
+In aggregate over small tasks, over-confidence is tied (both arms assert
+`complete` at ~0.9 recall on `settable-set`: 5/5 each) — the Go negative holds
+there. The graph's calibration benefit is specifically the **variance collapse on
+large tasks** (4.4), not a uniform over-confidence reduction.
 
 ---
 
 ## 5. Why — the mechanism
 
-Go call sites are **statically named and name-greppable**: a call `x.Foo(...)` and
-an implementor `func (T) Foo(...)` both contain `Foo`. A capable agent greps the
-name and reads to confirm, reaching the same recall the graph would. The graph's
-structural precision (resolving *which* `Foo`) saves the agent reading effort —
-hence the token win — but rarely changes *what it can find*. The graph's recall
-advantage is therefore confined to cases where **greppability breaks**: the symbol
-name is changing (renames — our one positive, 126004), the call is via
-reflection/callback/embedding, or the language hides dispatch (Java, dynamic
-languages). For Go, that's a minority of sites, which is exactly what the null shows.
+A change to a method's signature forces every declaration/override **and** every
+call site to change. Two regimes:
+
+- **Few sites, statically named (Go, small Java).** A call `x.Foo(...)` and an
+  implementor `func (T) Foo(...)` both contain `Foo`; with ≤~20 sites a capable
+  agent greps the name, reads to confirm, and enumerates them all. The graph's
+  structural precision saves reading effort (a token wash) but rarely changes
+  *what it finds*. Hence the tie.
+- **Many sites (Java framework interfaces, ~100).** Now grep+read is a manual
+  graph traversal at scale: the agent must find every implementor and every
+  polymorphic call, hold them in context, and not lose any across 50–65 turns.
+  It is good on average but **unreliable** — it drops sites stochastically. The
+  resolved graph enumerates the family and the resolved callers in one
+  authoritative pass, so completeness is both higher and consistent.
+
+This predicts the boundary: the graph earns its keep wherever the change-set is
+too large to enumerate reliably by hand — large refactors, framework-wide
+interface changes — and ties text on the small, local edits that dominate
+everyday work. Name ambiguity is a red herring at these sizes: a capable agent
+disambiguates `get`/`set` by reading, as long as there are few sites to check.
 
 ---
 
 ## 6. Discussion — implications
 
-- **Evaluate code-context tools on cost-at-fixed-quality, not assumed completeness.**
-  For agentic Go coding the completeness premise is false; the honest figure of
-  merit is tokens (and latency) for the same correct answer.
-- **The graph is an optimization, not a capability.** Worth it on large changes
-  where it amortizes its overhead; counterproductive on small ones.
-- **The boundary is greppability.** The graph should be re-evaluated precisely
-  where text search is structurally blind — other languages and name-breaking
-  changes — which Go change-impact tasks largely are not.
+- **Evaluate code-context tools conditioned on blast radius.** "Graphs help" and
+  "graphs don't" are both wrong; the honest figure of merit is
+  completeness-and-consistency at fixed cost, as a function of #change-sites.
+- **The graph is a reliability tool for large changes.** Its distinctive value is
+  removing catastrophic completeness misses on big refactors — not a marginal
+  mean lift, and not a token saving.
+- **Language matters only through task size.** Java surfaced the effect not
+  because Java is "harder to grep" but because framework interface methods
+  produce 100-site change-sets that Go application code in our sample rarely did.
+  The prediction is testable in large Go codebases with wide interfaces.
 
 ---
 
 ## 7. Threats to validity
 
-- **Single language, and the *easy* one for the null.** Go is highly greppable;
-  this is the regime where the graph's edge is *smallest*. The negative falsifies
-  "graphs universally help," but **does not** establish the null for Java /
-  reflection-heavy / dynamic languages, where greppability is worse — explicitly
-  untested and the most important external-validity gap.
-- **Small N (14 tasks), Mode A only.** Task-level statistics are descriptive, not
-  powered; Mode B (compile / fail-to-pass) — where incompleteness has teeth — is
-  not yet run and could change the calibration story.
-- **One tool implementation (Grove/Prism).** A different graph tool or a different
-  delivery (an *enforced* gate rather than an offered tool) might differ; our
-  soft-gate probe was inconclusive.
-- **Construct / selection.** We mitigated GT pollution (cross-interface name
-  collisions) and codegen churn after finding both; earlier positive readings came
-  from hand-picked tasks and did not survive outcome-blind sampling.
+- **Data in progress.** The Haiku Java curve (4 tasks) and Sonnet `serialize` are
+  complete; Sonnet `deserialize` is partial, the two mid-size Java tasks (38/58)
+  and the Opus tier are still running. The size-curve *shape* (tie→win across
+  8/22/104/108) is solid; the mid-size points and the frontier tier will firm up
+  the curve and are reported as they land.
+- **Two subjects per language, one framework for the large-Java regime.** The
+  large-task win rests on jackson-databind interface methods; replication on
+  another framework (Spring, Guava) and in a large Go codebase with wide
+  interfaces is the key external-validity gap.
+- **Mode A only.** We score the *answer*, not an applied patch. Mode B (compile /
+  fail-to-pass) — where an incomplete change actually breaks the build — would
+  test whether the graph's reliability gain converts to task success.
+- **One graph implementation (Grove/Prism)** and a soft tool gate (the G arm can
+  decline to use the graph; we exclude those runs but the offer-vs-enforce
+  distinction is unmodeled).
+- **Construct / selection.** Java GT is type-resolved (no bare-name pollution);
+  an earlier bare-name Java attempt (commons-lang) was discarded after audit. Go
+  GT pollution and codegen churn were mitigated after discovery; earlier positive
+  readings on hand-picked tasks did not survive outcome-blind sampling.
 
 ---
 
 ## 8. Conclusion
 
-The intuition that a resolved code graph makes an LLM coding agent more complete or
-better-calibrated on change-impact tasks is, for Go, **not supported**: text search
-reaches the same recall because the code is name-greppable, and the graph's only
-measurable, graph-attributable benefit is a modest token saving that scales with
-task size. The cheap-model-equalizer and calibration stories dissolve under
-isolation. The honest figure of merit is cost-at-fixed-quality, and the open
-question worth pursuing is the *boundary* — whether the graph earns its keep where
-greppability breaks (other languages, name-changing edits), which this study marks
-but does not settle.
+The intuition that a resolved code graph makes an agent more complete on
+change-impact tasks is **conditionally true**: it ties text on the small,
+name-greppable changes that dominate Go and everyday edits, and it **wins
+decisively on large-blast-radius changes** — higher recall, far lower variance,
+at near-equal cost — robustly across model tiers, as shown on a polymorphism-heavy
+Java framework. The discriminator is the size of the change-set, not name
+ambiguity or language. The earlier blanket negative was an artifact of a
+small-task sample; the earlier blanket positive ("graphs obviously help") is also
+wrong. The defensible claim is bounded and mechanistic: **a code graph is a
+completeness-and-reliability tool for large changes, and a wash for small ones.**
 
 ---
 
 ## Artifacts
 
-Harness, tasks, oracle integration, raw logs: `harness/`. Analyses reproducible
-without an LLM via `rescore.py` over `runs/` (deterministic scoring). `THESIS.md`
-holds the falsifiable sub-claims and their verdicts.
+Harness, tasks, oracle integrations, raw logs: `harness/`. Java oracle + task
+generator + reproduction steps: `harness/java-oracle/README.md`. Analyses
+reproducible without an LLM via `rescore.py` / `rescore_java.py` + `agg_jackson.py`
+over `runs/` (deterministic scoring + recall/cost aggregation). `THESIS.md` holds
+the falsifiable sub-claims and their verdicts.

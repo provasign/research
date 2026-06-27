@@ -1,59 +1,64 @@
-# Reframed thesis — code graph for agentic coding (2026-06-23)
+# Thesis — code graph for agentic coding (bounded-positive reframe, 2026-06-27)
 
-## What we set out to prove (and could not)
-"A resolved code graph makes an LLM coding agent's change-impact answers more
-*complete* and better *calibrated* than text search." **Not supported by our
-data.** Across 14 tasks / 3 models:
-- **Recall is tied** between text (T) and graph (G) everywhere (within ~0.01–0.07).
-  Capable agents reach the same completeness via grep+read because most Go call
-  sites are name-greppable.
-- **Calibration is ~tied in aggregate** (over-confidence T≈43 vs G≈42 across all
-  runs). The graph lowers over-confidence on some tasks and *raises* it on others
-  (`pr112043`, `querydata`) — it is task-dependent, not a graph property. (An
-  earlier "16%→2%" headline was real but specific to the 3 pilot tasks; it does
-  not generalize.)
+## The arc (what we believed, in order)
+1. "Graph improves completeness + calibration on change-impact." — *Go: not
+   supported.* Recall tied, calibration tied. (Honest negative, 2026-06-23.)
+2. "Then graph is just a token optimization." — *Too weak.* It missed the
+   boundary: the Go tasks were almost all small (1–22 sites) and name-greppable.
+3. **Current:** "Graph's value is **bounded to large-blast-radius change-impact**:
+   there it improves recall AND consistency at near-equal cost, robustly across
+   model tiers. On small/greppable tasks it ties. The discriminator is
+   #change-sites, not name ambiguity or language." — *Supported by Go (small,
+   tie) + Java jackson-databind (size curve 8→108; win at scale).*
 
-## The reframed thesis (what the data actually supports)
-**A resolved code graph is a token-efficiency mechanism for change-impact tasks at
-scale: it reaches the *same* completeness as text search at ~10–40% lower token
-cost, and the saving grows with the blast radius of the change. On trivial changes
-the graph's query overhead makes it *more* expensive; its advantage appears only
-once the change is large enough that grep+read would cost real tokens.**
+## The thesis (what the data supports)
+**A resolved code graph is a completeness-and-reliability mechanism for
+large-blast-radius change-impact tasks. Once a signature change touches ~100
+sites, text search (grep+read) becomes an unreliable manual graph traversal — good
+on average but stochastically incomplete — while the graph enumerates the
+override family and resolved callers in one authoritative pass: higher mean
+recall AND collapsed variance, at near-equal token/USD cost. Below that size
+threshold (most Go tasks, everyday edits) graph ≈ text. The lever is blast radius,
+not greppability — name-ambiguous targets did NOT favor the graph; small ones
+tied regardless of ambiguity.**
 
-Corollary (TESTED — and it FAILED the isolation): we hoped the graph would let a
-cheap model reach strong-model quality (the capability-equalizer / cost-quality
-story). Haiku-graph *does* ≈ Opus-text quality at 39–78% lower cost — BUT that is
-**confounded by model price, not the graph**. Isolating the graph (same model,
-Haiku-T vs Haiku-G) the graph lifts recall on **1 of 10 tasks** (126004, +0.29)
-and ~0 on the rest. The cheap model was already ≈ as good as the strong one on
-these tasks; the graph is not the lever. **C4 is not supported once isolated.**
+## Falsifiable sub-claims & verdicts
+- **C1 (small-task parity):** recall(G) ≈ recall(T) on ≤~22-site change-impact
+  tasks. *[supported — Go 14 tasks; Java jsonnode-get/settable-set tie within
+  0.01, despite 18–64× grep ambiguity]*
+- **C2 (large-task recall win):** recall(G) > recall(T) on ~100-site tasks, and Δ
+  grows with #sites. *[supported — Java deserialize +0.17, serialize +0.24
+  (Haiku); serialize +0.13 (Sonnet). Mid-size 38/58 in progress to fill the
+  curve]*
+- **C3 (cross-tier robustness):** the large-task win persists for a stronger
+  model. *[supported so far — Sonnet serialize T 0.865 vs G 0.996; deserialize
+  partial agrees. Opus pending]*
+- **C4 (consistency / reliability):** Var(recall_G) < Var(recall_T) on large
+  tasks (graph removes catastrophic misses). *[supported — Sonnet serialize: G
+  0.996±~0 vs T swinging to 0.73. The calibration benefit Go couldn't show]*
+- **C5 (cost parity):** cost(G) ≈ cost(T) (within ~7%) at the higher recall —
+  "better answer, same price." *[supported — G/T ≈ 1.0–1.07 tokens & USD]*
+- **C6 (discriminator = size, not ambiguity):** grep-ambiguity does not predict
+  the graph's advantage; #sites does. *[supported — the most ambiguous tasks were
+  the smallest and tied]*
+- **C7 (calibration parity on small tasks):** over-confidence(G) ≈
+  over-confidence(T) on small tasks. *[supported — settable-set 5/5 both arms]*
 
-## Falsifiable sub-claims
-- **C1 (recall parity):** recall(G) ≈ recall(T) on change-impact tasks. *[supported]*
-- **C2 (cost saving + scaling):** cost(G) < cost(T) at matched recall for tasks
-  above a small-size threshold, and (1 − cost_G/cost_T) increases with #sites.
-  *[supported, n small: +11–37% on ≥7-site tasks, −20–25% on 1–2-site tasks]*
-- **C3 (calibration is NOT it):** over-confidence(G) ≈ over-confidence(T) in
-  aggregate. *[supported — this is a negative result, stated honestly]*
-- **C4 (budget-binding, under-tested):** the cost gap widens for weaker models /
-  larger tasks. *[only endpoints so far]*
+## What remains to lock it (see paper §7)
+1. **Finish the size curve:** mid-size Java (38/58) + Sonnet `deserialize` full +
+   Opus tier (in progress). Confirms C2's curve and C3 at the frontier.
+2. **Replicate the large-task regime** on a second framework (Spring/Guava) and
+   in a large Go codebase with wide interfaces — to prove the lever is size, not
+   "Java."
+3. **Mode B (compile / fail-to-pass)** — does the reliability gain (C4) convert to
+   task success when a missed site breaks the build?
+4. **Determinism:** recall/precision from the oracle scorers (`rescore.py` /
+   `rescore_java.py`, line→method normalized); cost from `total_cost_usd`. No LLM
+   in the measurement loop.
 
-## What proving it requires
-1. **Size-graded task set** (~8–12 tasks spanning ~5 → ~150 change-sites), oracle
-   GT, so C2's *scaling* is a curve, not two points.
-2. **≥2 models** (Haiku + a strong one) to test C4 (does the saving widen for the
-   weak model?).
-3. **Matched-recall cost**: report cost only where recall(T)≈recall(G) (else we're
-   comparing different answers). Report tokens *and* latency (graph is slower —
-   prism call overhead; an honest cost has both).
-4. **Determinism**: cost from `total_cost_usd`, recall/precision from the oracle
-   scorer (`rescore.py`) — no LLM in the measurement loop.
-
-## Honest framing for the paper
-This is a **modest efficiency result**, not a capability result: "graph ≈ same
-answer, ~10–40% cheaper at scale, no completeness or calibration gain." Tokens are
-cheap per task, so the story is *% efficiency that scales* + the cost/quality
-corollary (C4) — compelling only if C4 holds (cheap model reaches strong-model
-quality cheaper). Honest venue: a short/empirical paper or arXiv note, **not** the
-original flagship "graph beats grep on completeness." If C4 fails too, the honest
-conclusion is "for agentic Go coding, a code graph is a marginal token optimization."
+## Honest framing
+This is a **bounded positive**, not a blanket "graphs win." Most everyday edits
+are small and the graph is a wash there; its distinctive, defensible value is
+making large refactors *reliably complete*. Venue: an empirical SE paper whose
+contribution is the boundary + the size-conditioned evaluation methodology, not
+"graph beats grep."

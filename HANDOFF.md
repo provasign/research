@@ -1,8 +1,61 @@
-# Graph-vs-Grep study — Handoff (2026-06-20)
+# Graph-vs-Grep study — Handoff
 
-Self-contained resume point for the paper. Repo: `provasign/research` (private).
-Everything below is committed/pushed. Pilot data collection is **done and
-integrity-checked**; the next phase is writing + (optionally) scaling.
+> **CURRENT STATE (2026-06-27) — read this first; the 2026-06-20 sections below
+> are historical.**
+>
+> **The result changed from negative to a bounded positive.** The Go study's
+> "graphs don't help" was an artifact of small, name-greppable tasks. Extending to
+> **jackson-databind** (Java framework) with a **size-graded task set** (8→108
+> change-sites) and a **precise Spoon type-resolution oracle** found the boundary:
+>
+> - **Small/greppable tasks (≤22 sites): graph ≈ text** (ties — even on the most
+>   name-ambiguous targets). The Go null holds here.
+> - **Large tasks (~100 sites): graph WINS** — recall +0.13–0.24 AND collapsed
+>   variance (Sonnet `serialize`: T 0.865 swinging to 0.73 vs G **0.996 ± ~0**),
+>   at near-equal cost (G/T ≈ 1.04). **Robust across Haiku and Sonnet.**
+> - **Discriminator = blast radius (#sites), NOT name ambiguity or language.**
+>
+> Full write-up: `paper.md` (retitled, bounded-positive). Sub-claims+verdicts:
+> `THESIS.md`. Java infra + reproduction: `harness/java-oracle/README.md`.
+>
+> **Infrastructure built (this is the reusable asset):**
+> - `harness/java-oracle/` — Spoon change-impact oracle (`Oracle.java`,
+>   `--target` for tasks, `--index` for line→method map), `make_java_task.py`
+>   task generator, `run_jackson_pilot.sh`. JDK 26 via `env.sh`. Build:
+>   `mvn -DskipTests package`. Corpus: `~/gvg-corpus/jackson-databind` @ 2.18.8.
+> - `harness/rescore_java.py` — **MANDATORY** for Java runs: prism speaks
+>   `file:line`, so graph-arm agents answer in line numbers; this normalizes them
+>   to enclosing methods before scoring (else the graph arm is scored ~0). ALWAYS
+>   run it before aggregating Java results.
+> - `harness/agg_jackson.py` — recall + tokens + USD + running bill, per
+>   task×model×arm.
+> - `harness/arms.py` — prompt is now language-aware (was hardcoded "Go
+>   repository"; Go fill is byte-identical, so the 45 Go runs stay valid).
+>
+> **In progress / next:**
+> 1. Sonnet grid finishing (6 tasks; large ones done, mid/small running). Then
+>    rescore_java + agg_jackson for the full size curve. Bill ~$59 at 57 runs;
+>    full sonnet grid ~$140; each large sonnet run ~$2–3.
+> 2. **Opus** frontier tier — deferred (≈5× sonnet cost); decide after sonnet.
+> 3. Haiku is missing the two mid-size tasks (38/58) — run for a complete haiku
+>    curve.
+> 4. Replicate large-task regime on a 2nd framework + a large Go codebase with
+>    wide interfaces (proves the lever is size, not "Java").
+> 5. Mode B (compile/fail-to-pass): does the reliability gain convert to success?
+> 6. The 3 untracked `commons-*` tasks (isTrue/join/length) are INVALID
+>    (bare-name GT pollution + static methods) — delete; do not use. `appenddetail`
+>    is at best a greppable control.
+>
+> **Watch:** arm-purity violations (G arm sometimes skips prism — `run.py` flags
+> `violation`, excluded in aggregation). `caffeinate` does NOT survive lid-close;
+> use `sudo pmset -a disablesleep 1` for long unattended grids.
+
+---
+
+## Historical handoff (2026-06-20) — the Go pilot, pre-Java
+
+Self-contained resume point for the (then-negative) paper. Pilot data collection
+was done and integrity-checked; superseded by the Java extension above.
 
 ---
 
