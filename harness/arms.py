@@ -26,8 +26,13 @@ PRISM_BIN = os.environ.get("PRISM_BIN", os.path.expanduser("~/bin/prism"))
 # Shared across every arm: the task framing and the machine-scorable output
 # contract. The ONLY per-arm difference is the tools + the guidance block, so
 # the tool dimension is isolated (design §7, paired design).
+#
+# {lang} / {site_example} are filled per task language so a Java agent is not
+# told it is reading Go. The Go fill reproduces the original prompt byte-for-byte
+# (lang="Go", site_example="response_writer.go:Hijack") so the existing Go runs
+# stay comparable.
 BASE_PROMPT = """\
-You are answering a code-context question about a Go repository. This is a \
+You are answering a code-context question about a {lang} repository. This is a \
 LOCALIZATION / IMPACT analysis task, NOT a coding task: do NOT edit, write, or \
 patch any file. Investigate the repository and determine the complete set of \
 functions/methods that must be CHANGED to fix the issue below.
@@ -45,11 +50,26 @@ this shape (no prose after it):
 }}
 
 Use the form "<repo-relative-path>:<FunctionOrMethodName>" for each site \
-(receiver optional, e.g. "response_writer.go:Hijack"). Be precise: a missed \
+(receiver optional, e.g. "{site_example}"). Be precise: a missed \
 site is a broken fix, and a false site wastes a reviewer's time. Set \
 "complete" honestly -- if dynamic dispatch or anything else leaves you unsure \
 you found every site, set it false and list what is unresolved.
 """
+
+# Per-language fills. Keys are the task `lang` field (lowercased); "go" must
+# reproduce the historical prompt exactly. The lookup example feeds G/V guidance
+# so the graph arm is told the correct prism symbol syntax for the language.
+LANG_PROFILE: dict[str, dict[str, str]] = {
+    "go": {"name": "Go", "site_example": "response_writer.go:Hijack",
+           "lookup_example": "pkg.FuncName"},
+    "java": {"name": "Java",
+             "site_example": "StringUtils.java:join",
+             "lookup_example": "org.apache.commons.lang3.StringUtils#join"},
+}
+
+
+def lang_profile(lang: str) -> dict[str, str]:
+    return LANG_PROFILE.get((lang or "go").lower(), LANG_PROFILE["go"])
 
 T_GUIDANCE = """\
 TOOLS: you have ripgrep/grep/find/sed and file reads only. Locate the relevant \
@@ -61,7 +81,7 @@ TOOLS: you have the `prism` call-graph CLI plus ripgrep (use ripgrep only to \
 FIND an anchor symbol; use prism to TRAVERSE from it). prism reports authoritative \
 file:line -- do not re-grep what it returns. Useful commands:
   {prism} query "<task>" --terms a,b --include graph,tests --format text   # callers/callees/tests of seeds
-  {prism} lookup <pkg.FuncName> --format text                              # one function body/signature
+  {prism} lookup <{lookup_example}> --format text                          # one function body/signature
   {prism} read <file> --format text                                        # whole file
   {prism} references <Name> --format text                                  # where a symbol is used
 Trace callers and dispatch targets through the graph to find every site a fix \
@@ -85,11 +105,17 @@ class Arm:
     allowed_tools: list[str]  # passed to `claude --allowedTools`
     guidance: str
 
-    def prompt(self, task_prompt: str) -> str:
+    def prompt(self, task_prompt: str, lang: str = "go") -> str:
+        prof = lang_profile(lang)
         return (
-            BASE_PROMPT.format(prompt=task_prompt)
+            BASE_PROMPT.format(
+                prompt=task_prompt, lang=prof["name"],
+                site_example=prof["site_example"],
+            )
             + "\n\n"
-            + self.guidance.format(prism=PRISM_BIN)
+            + self.guidance.format(
+                prism=PRISM_BIN, lookup_example=prof["lookup_example"],
+            )
         )
 
 

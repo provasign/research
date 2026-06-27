@@ -316,8 +316,8 @@ def main() -> None:
             attempt = 0
             usage_waited = 0.0
             while True:
-                env = run_agent(arm.prompt(task.prompt), arm.allowed_tools,
-                                workdir, model=args.model)
+                env = run_agent(arm.prompt(task.prompt, task.lang),
+                                arm.allowed_tools, workdir, model=args.model)
                 err = _is_errored(env)
                 if not err:
                     break
