@@ -36,11 +36,16 @@ tied regardless of ambiguity.**
 - **C4 (consistency / reliability):** Var(recall_G) < Var(recall_T) on large
   tasks (graph removes catastrophic misses). *[supported — Sonnet serialize: G
   0.996±~0 vs T swinging to 0.73. The calibration benefit Go couldn't show]*
-- **C5 (cost parity):** cost(G) ≈ cost(T) (within ~7%) at the higher recall —
-  "better answer, same price." *[supported — G/T ≈ 1.0–1.07 tokens & USD]*
-- **C6 (discriminator = size, not ambiguity):** grep-ambiguity does not predict
-  the graph's advantage; #sites does. *[supported — the most ambiguous tasks were
-  the smallest and tied]*
+- **C5 (cost):** at matched/higher recall, cost(G) is regime-dependent — large
+  tasks G/T≈1.07–1.16 ("better answer, ~same price"); mid-size G/T≈0.63–0.77
+  (graph 25–37% CHEAPER at tied recall — the Go efficiency result); small tasks
+  G/T≈1.24–1.28 (prism overhead tax). *[supported, full Sonnet curve]*
+- **C6 (discriminator = blast radius, not ambiguity):** grep-ambiguity does not
+  predict the graph's advantage; #change-sites does — more precisely, the count of
+  sites reachable only via CALLER edges (callers not named after the target).
+  *[supported — the most ambiguous tasks were the smallest; the lone small-task
+  win (jsonnode-get) was driven by indirect callers has/hasNonNull/_at that don't
+  contain "get", exactly the caller-edge mechanism]*
 - **C7 (calibration parity on small tasks):** over-confidence(G) ≈
   over-confidence(T) on small tasks. *[supported — settable-set 5/5 both arms]*
 

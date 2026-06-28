@@ -157,20 +157,37 @@ small Java tasks behave identically: `jsonnode-get` (8 sites) and `settable-set`
 targets in the set (grep over-match 64× and 18×). Ambiguity did not help the
 graph.
 
-### 4.2 Large-blast-radius change-impact: the graph wins (Java)
+### 4.2 The size curve: the graph wins at scale, ties in the middle (Java)
 
-On jackson's ~100-site interface methods the picture inverts. Haiku, n=4–5,
-post-normalization:
+The full size-graded curve (n=5, post-normalization). Haiku (4 tasks) and Sonnet
+(6 tasks):
 
-| task | sites | grep× | T recall | G recall | Δ | G/T cost |
+| task | sites | grep× | Haiku T | Haiku G | Sonnet T | Sonnet G |
 |---|---|---|---|---|---|---|
-| jsonnode-get | 8 | 63.6 | 0.97 | 0.97 | +0.00 | 1.07 |
-| settable-set | 22 | 18.5 | 0.90 | 0.91 | +0.01 | 1.01 |
-| deserialize | 104 | 4.1 | 0.52 | **0.69** | **+0.17** | 1.04 |
-| serialize | 108 | 3.1 | 0.62 | **0.85** | **+0.24** | 1.04 |
+| jsonnode-get | 8 | 63.6 | 0.97 | 0.97 | 0.78 | **0.93** |
+| settable-set | 22 | 18.5 | 0.90 | 0.91 | 0.93 | 0.97 |
+| writeTypePrefix | 38 | — | — | — | 0.97 | 1.00 |
+| serializeWithType | 58 | — | — | — | 0.99 | 1.00 |
+| deserialize | 104 | 4.1 | 0.52 | **0.69** | 0.76 | **0.93** |
+| serialize | 108 | 3.1 | 0.62 | **0.85** | 0.86 | **1.00** |
 
-The advantage appears only at scale, and grows with #sites — **not** with grep
-ambiguity (which runs the other way).
+The robust, large signal is at the **large tasks (104/108): graph +0.13 to +0.24,
+both tiers.** The **mid-size dispatch tasks (38/58) tie on recall** — Sonnet's text
+arm maxes out (0.97–0.99) because their change-sets are small and the call sites
+are name-matched. And the advantage is **not** explained by grep ambiguity, which
+runs opposite to the effect (the most ambiguous targets are the smallest).
+
+**The one small-task exception is mechanistically informative.** On `jsonnode-get`
+(8 sites) Sonnet's *text* arm drops to 0.78, and the graph recovers it (+0.15).
+The sites text consistently missed are `JsonNode.has`, `JsonNode.hasNonNull`, and
+`ArrayNode._at` — methods that **call** `get(int)` but whose own names do **not**
+contain "get." A grep-for-`get` agent finds the get-named declarations and call
+lines but misses *callers named after something else*; the graph's caller edges
+return them directly. So the true predictor is not raw size but **the number of
+change-sites reachable only via caller edges, not by the target's name** — which
+grows with blast radius (the large tasks have many such indirect callers) but can
+bite even a tiny task. Haiku tied on this task by luck of sampling; Sonnet's text
+runs did not. This is the sharpest single illustration of the mechanism.
 
 ### 4.3 The gain survives a stronger model (Haiku → Sonnet)
 
@@ -198,13 +215,20 @@ once tasks are large enough that text *can* fail.
 
 ### 4.5 Cost: better answer at the same price
 
-Across every cell the graph's token and USD cost is within ~7% of text
-(G/T ≈ 1.0–1.07). The Go framing ("same answer, fewer tokens") becomes, in Java
-at scale, **"better answer, same price"**: text cannot reach the graph's recall
-at any reasonable budget on a 100-site task — Sonnet text spent 50–65 turns and
-still missed sites the graph found. An honest cost caveat remains: wall-clock
-latency is comparable here (both arms run long on large tasks), but prism's
-per-call overhead makes the graph slower on *small* tasks.
+Cost (USD/run) depends on the regime (Sonnet G/T ratios):
+- **Large tasks (104/108): G/T ≈ 1.07–1.16** — the graph buys +0.13–0.17 recall
+  for ~10% more. The Go framing ("same answer, fewer tokens") becomes **"better
+  answer, ~same price"**: text cannot reach the graph's recall at *any* reasonable
+  budget here — Sonnet text spent 50–65 turns and still missed sites.
+- **Mid-size tasks (38/58): G/T ≈ 0.63–0.77** — recall ties but the graph is
+  ~25–37% **cheaper**, recovering the Go token-efficiency result at matched
+  quality (a single authoritative traversal vs many grep+read turns).
+- **Small tasks (8/22): G/T ≈ 1.24–1.28** — prism's per-call overhead makes the
+  graph pricier where text was already near-complete.
+
+So the graph is *cheaper* in the middle, *better at ~par cost* at the top, and a
+*small overhead tax* at the bottom. Wall-clock latency is comparable on large
+tasks (both run long); prism overhead makes the graph slower on small ones.
 
 ### 4.6 Calibration
 
