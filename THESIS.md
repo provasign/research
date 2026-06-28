@@ -30,9 +30,14 @@ tied regardless of ambiguity.**
   grows with #sites. *[supported — Java deserialize +0.17, serialize +0.24
   (Haiku); serialize +0.13 (Sonnet). Mid-size 38/58 in progress to fill the
   curve]*
-- **C3 (cross-tier robustness):** the large-task win persists for a stronger
-  model. *[supported so far — Sonnet serialize T 0.865 vs G 0.996; deserialize
-  partial agrees. Opus pending]*
+- **C3 (capability-conditioned, NOT uniform):** the large-task recall win shrinks
+  as the model strengthens and, at the frontier, vanishes on tasks the model can
+  fully enumerate but persists on harder ones. *[supported, full 3 tiers —
+  serialize Δrecall: +0.24 (Haiku) → +0.13 (Sonnet) → +0.00 (Opus, both T=G=1.0).
+  deserialize (harder): +0.17 → +0.17 → +0.04 (Opus G 0.962 vs T 0.923, T dipped
+  to 0.71). At the frontier the value becomes reliability + cost, not raw recall.
+  Reframes the graph as a CAPABILITY EQUALIZER — the Go 'equalizer' hypothesis
+  that failed there (price confound) holds in the large-Java regime]*
 - **C4 (consistency / reliability):** Var(recall_G) < Var(recall_T) on large
   tasks (graph removes catastrophic misses). *[supported — Sonnet serialize: G
   0.996±~0 vs T swinging to 0.73. The calibration benefit Go couldn't show]*

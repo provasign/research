@@ -30,13 +30,16 @@ oracles, across two languages (Go, Java), 2–3 model tiers, and tasks spanning
   This covers most of our Go sample and the small Java tasks. A capable agent
   reaches the same recall by grep+read because the call sites are statically
   named and few enough to enumerate.
-- **On large-blast-radius tasks (≈100 change-sites), the graph wins decisively**
-  on completeness *and* consistency. On jackson-databind's `serialize`/
-  `deserialize` interface methods (104–108 sites), the graph lifts mean recall
-  by **+0.13 to +0.24** over text and **collapses its variance** — e.g. Sonnet
-  text 0.87 (swinging to 0.73) vs graph **0.996 ± ~0**. The gain is **robust
-  across model tiers** (Haiku and Sonnet): a stronger model improves text but the
-  graph improves more and stays ahead.
+- **On large-blast-radius tasks (≈100 change-sites), the graph is a capability
+  equalizer.** It lifts weaker models toward frontier-level completeness: on
+  jackson-databind's `serialize`/`deserialize` interface methods (104–108 sites)
+  it raises mean recall by **+0.24/+0.17 (Haiku)** and **+0.13/+0.17 (Sonnet)**
+  and collapses variance (Sonnet text 0.87 swinging to 0.73 vs graph 0.996 ± ~0).
+  **The recall gain shrinks with model capability and, at the frontier (Opus),
+  vanishes on tasks the model can fully enumerate (serialize: T=G=1.00) but
+  persists on harder ones (deserialize: T 0.92 with a 0.71 dip vs G 0.96 —
+  higher, more consistent, and cheaper).** So the graph's frontier value is
+  reliability + cost on hard changes, not raw recall.
 - **The discriminator is blast radius (#change-sites), not name ambiguity and not
   language per se.** Counter to our pre-registered guess, the graph did *not*
   win more on name-ambiguous targets (`get`/`set`, 18–64× grep over-match); those
@@ -200,8 +203,27 @@ text and closes the gap. It does not. Sonnet, both ~100-site tasks, n=5:
 | deserialize | 104 | 0.762 (±0.057) | **0.935 (±0.036)** | +0.17 |
 
 Going Haiku→Sonnet, text *did* improve (serialize 0.62→0.87) — but graph improved
-more (0.85→0.996) and stayed ahead, on **both** large tasks. (Opus frontier point
-in progress.)
+more (0.85→0.996) and stayed ahead, on **both** large tasks.
+
+**At the frontier (Opus) the advantage is conditioned on task difficulty.** Full
+three-tier recall (Δ = G−T):
+
+| tier | serialize (108) | deserialize (104, *harder*) |
+|---|---|---|
+| Haiku | .62 → .85 (**+.24**) | .52 → .69 (**+.17**) |
+| Sonnet | .87 → 1.00 (**+.13**) | .76 → .94 (**+.17**) |
+| Opus | 1.00 → 1.00 (**+.00**) | .92 → **.96** (**+.04**) |
+
+On `serialize` Opus's text arm fully enumerates the change (1.00 ± 0, 24 turns) and
+the graph is redundant. But on the *harder* `deserialize`, even Opus text drops
+sites (mean 0.923, with one run at **0.71**), while the graph holds 0.962 — higher
+recall, lower variance (sd .05 vs .12), **and cheaper** ($4.69 vs $5.64/run, it
+traverses rather than grinding). So the recall advantage shrinks monotonically with
+capability but **does not vanish on hard tasks** — it converts into a reliability +
+cost edge. The graph is best read as a **capability equalizer**: it lifts weak
+models to near-frontier completeness on large changes, and at the frontier still
+pays off on the changes hard enough that even a frontier model's text search is
+unreliable.
 
 ### 4.4 The graph removes catastrophic misses (a consistency gain)
 
@@ -211,7 +233,10 @@ swings from 1.00 to 0.73 across nominally identical runs — it silently misses
 a change task, where one missed site is a broken build, this reliability is
 arguably more valuable than the mean lift. This is the completeness/calibration
 benefit the single-tier Go study looked for and could not find; it emerges only
-once tasks are large enough that text *can* fail.
+once tasks are large enough that text *can* fail. **It persists to the frontier
+on hard tasks:** Opus text on `deserialize` still dropped to 0.71 on one run
+(sd .12), while the graph stayed at 0.96 (sd .05) — the graph removes the tail
+risk even when the mean is close.
 
 ### 4.5 Cost: better answer at the same price
 
@@ -225,6 +250,11 @@ Cost (USD/run) depends on the regime (Sonnet G/T ratios):
   quality (a single authoritative traversal vs many grep+read turns).
 - **Small tasks (8/22): G/T ≈ 1.24–1.28** — prism's per-call overhead makes the
   graph pricier where text was already near-complete.
+- **At the frontier (Opus), cost flips in the graph's favor on the hard large
+  task:** `deserialize` graph $4.69 vs text $5.64 (G/T ≈ 0.83) *at higher recall*
+  — the graph's authoritative traversal undercuts a frontier model grinding 39
+  text turns. On the easy large task (`serialize`) where both hit 1.00, the graph
+  is a ~3% premium ($3.60 vs $3.48).
 
 So the graph is *cheaper* in the middle, *better at ~par cost* at the top, and a
 *small overhead tax* at the bottom. Wall-clock latency is comparable on large
@@ -281,12 +311,11 @@ disambiguates `get`/`set` by reading, as long as there are few sites to check.
 
 ## 7. Threats to validity
 
-- **Data in progress.** The Haiku Java curve (4 tasks) and **both** Sonnet
-  large tasks (`serialize`, `deserialize`, n=5) are complete and agree; the two
-  mid-size Java tasks (38/58), the small-task Sonnet cells, and the Opus tier are
-  still running. The size-curve *shape* (tie→win across 8/22/104/108) is solid at
-  two model tiers; the mid-size points and the frontier tier will firm up the
-  interior of the curve and are reported as they land.
+- **Data status.** Complete: the Haiku Java curve (4 tasks), the full Sonnet
+  6-task curve, and **both** Opus large tasks (`serialize`, `deserialize`, n=5) —
+  the three-tier large-task story is locked. Still running: the four small/mid
+  Opus cells, which by the mechanism (and the Haiku/Sonnet pattern) tie and will
+  not change the headline; reported when they land.
 - **Two subjects per language, one framework for the large-Java regime.** The
   large-task win rests on jackson-databind interface methods; replication on
   another framework (Spring, Guava) and in a large Go codebase with wide
@@ -307,15 +336,21 @@ disambiguates `get`/`set` by reading, as long as there are few sites to check.
 ## 8. Conclusion
 
 The intuition that a resolved code graph makes an agent more complete on
-change-impact tasks is **conditionally true**: it ties text on the small,
-name-greppable changes that dominate Go and everyday edits, and it **wins
-decisively on large-blast-radius changes** — higher recall, far lower variance,
-at near-equal cost — robustly across model tiers, as shown on a polymorphism-heavy
-Java framework. The discriminator is the size of the change-set, not name
-ambiguity or language. The earlier blanket negative was an artifact of a
-small-task sample; the earlier blanket positive ("graphs obviously help") is also
-wrong. The defensible claim is bounded and mechanistic: **a code graph is a
-completeness-and-reliability tool for large changes, and a wash for small ones.**
+change-impact tasks is **conditionally true, and the condition is capability ×
+blast radius.** On small, name-greppable changes (most of Go, everyday edits) the
+graph ties text at every model tier. On large-blast-radius changes it acts as a
+**capability equalizer**: it lifts weaker/cheaper models toward frontier-level
+completeness (Haiku +0.17/+0.24, Sonnet +0.13/+0.17) with far lower variance. That
+recall gain shrinks as the model strengthens and, at the frontier, **vanishes on
+tasks the model can fully enumerate by text yet persists on harder ones** — where
+the graph still delivers higher recall, removes the tail risk (Opus text dipped to
+0.71 on `deserialize`; the graph did not), and even costs less. The earlier
+blanket negative was an artifact of a small-task sample; the blanket positive
+("graphs obviously help") is equally wrong. The defensible, mechanistic claim:
+**a code graph is a completeness-and-reliability tool that pays off in proportion
+to how far a change exceeds what the model's text search can reliably enumerate —
+large for weak models, narrowing to hard-task reliability at the frontier, and a
+wash for small local edits.**
 
 ---
 

@@ -25,7 +25,7 @@ RUNS = Path(__file__).resolve().parent / "runs"
 
 def cell(task: str, model: str, arm: str):
     rec, out_tok, cost, wall = [], [], [], []
-    base = RUNS / task / model if model != "opus" else RUNS / task
+    base = RUNS / task / model   # jackson uses a per-model subdir for every model
     for f in sorted(glob.glob(str(base / f"{arm}.t*.json"))):
         d = json.load(open(f))
         if d.get("status") != "ok" or d.get("violation"):
