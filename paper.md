@@ -175,16 +175,16 @@ ambiguity (which runs the other way).
 ### 4.3 The gain survives a stronger model (Haiku → Sonnet)
 
 A natural objection: a stronger model brute-forces the large enumeration with
-text and closes the gap. It does not. Sonnet, `serialize` (108 sites), n=5:
+text and closes the gap. It does not. Sonnet, both ~100-site tasks, n=5:
 
-| arm | mean recall | per-trial | cost (USD/run) |
-|---|---|---|---|
-| text | 0.865 | 0.73, 0.89, 0.97, 1.00, **0.73** | $2.17 |
-| **graph** | **0.996** | 1.00, 1.00, 0.99, 1.00, 0.99 | $2.32 |
+| task | sites | T recall (sd) | G recall (sd) | Δ |
+|---|---|---|---|---|
+| serialize | 108 | 0.865 (±0.115) | **0.996 (±0.005)** | +0.13 |
+| deserialize | 104 | 0.762 (±0.057) | **0.935 (±0.036)** | +0.17 |
 
-Going Haiku→Sonnet, text *did* improve (0.62→0.87) — but graph improved more
-(0.85→0.996) and stayed ahead. `deserialize` (partial) agrees: T 0.76 vs G 0.89.
-(Opus frontier point in progress.)
+Going Haiku→Sonnet, text *did* improve (serialize 0.62→0.87) — but graph improved
+more (0.85→0.996) and stayed ahead, on **both** large tasks. (Opus frontier point
+in progress.)
 
 ### 4.4 The graph removes catastrophic misses (a consistency gain)
 
@@ -257,11 +257,12 @@ disambiguates `get`/`set` by reading, as long as there are few sites to check.
 
 ## 7. Threats to validity
 
-- **Data in progress.** The Haiku Java curve (4 tasks) and Sonnet `serialize` are
-  complete; Sonnet `deserialize` is partial, the two mid-size Java tasks (38/58)
-  and the Opus tier are still running. The size-curve *shape* (tie→win across
-  8/22/104/108) is solid; the mid-size points and the frontier tier will firm up
-  the curve and are reported as they land.
+- **Data in progress.** The Haiku Java curve (4 tasks) and **both** Sonnet
+  large tasks (`serialize`, `deserialize`, n=5) are complete and agree; the two
+  mid-size Java tasks (38/58), the small-task Sonnet cells, and the Opus tier are
+  still running. The size-curve *shape* (tie→win across 8/22/104/108) is solid at
+  two model tiers; the mid-size points and the frontier tier will firm up the
+  interior of the curve and are reported as they land.
 - **Two subjects per language, one framework for the large-Java regime.** The
   large-task win rests on jackson-databind interface methods; replication on
   another framework (Spring, Guava) and in a large Go codebase with wide
