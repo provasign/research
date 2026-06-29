@@ -32,18 +32,24 @@
 > - `harness/arms.py` — prompt is now language-aware (was hardcoded "Go
 >   repository"; Go fill is byte-identical, so the 45 Go runs stay valid).
 >
-> **In progress / next:**
-> 1. Sonnet grid finishing (6 tasks; large ones done, mid/small running). Then
->    rescore_java + agg_jackson for the full size curve. Bill ~$59 at 57 runs;
->    full sonnet grid ~$140; each large sonnet run ~$2–3.
-> 2. **Opus** frontier tier — deferred (≈5× sonnet cost); decide after sonnet.
-> 3. Haiku is missing the two mid-size tasks (38/58) — run for a complete haiku
->    curve.
-> 4. Replicate large-task regime on a 2nd framework + a large Go codebase with
->    wide interfaces (proves the lever is size, not "Java").
-> 5. Mode B (compile/fail-to-pass): does the reliability gain convert to success?
-> 6. The 3 untracked `commons-*` tasks (isTrue/join/length) are INVALID
->    (bare-name GT pollution + static methods) — delete; do not use. `appenddetail`
+> **EXPERIMENT COMPLETE (2026-06-29).** All 3 tiers × 6 tasks, n=5, 157 runs,
+> **$264.93 total**. Final result — the graph's value MORPHS with model capability:
+> - **Haiku (weak):** large RECALL win on big tasks (104/108: +0.17/+0.24).
+> - **Sonnet (mid):** moderate recall win + variance collapse; cheaper on mid-size.
+> - **Opus (frontier):** recall ties everywhere (Δ≤0.04 — text enumerates all),
+>   but graph is CHEAPER on 4/6 (G/T 0.64–0.90, incl. mid+hard-large) → cost lever.
+>
+> So: capability equalizer (quality lever for weak models) → cost optimizer at the
+> frontier. paper.md + THESIS.md fully updated and committed.
+>
+> **Next (open work, not blocking):**
+> 1. Replicate large-task regime on a 2nd framework (Spring/Guava) + a large Go
+>    codebase with wide interfaces (proves the lever is size, not "Java").
+> 2. Mode B (compile/fail-to-pass): does the reliability gain convert to success?
+> 3. Haiku is missing the two mid-size tasks (38/58) — optional, for a symmetric
+>    haiku curve (won't change the headline).
+> 4. The 3 `commons-*` tasks (isTrue/join/length) were INVALID (bare-name GT
+>    pollution + static methods) — already deleted; do not revive. `appenddetail`
 >    is at best a greppable control.
 >
 > **Watch:** arm-purity violations (G arm sometimes skips prism — `run.py` flags

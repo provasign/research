@@ -162,17 +162,23 @@ graph.
 
 ### 4.2 The size curve: the graph wins at scale, ties in the middle (Java)
 
-The full size-graded curve (n=5, post-normalization). Haiku (4 tasks) and Sonnet
-(6 tasks):
+The full size-graded curve (recall, n=5, post-normalization). Haiku ran the 4
+original tasks; Sonnet and Opus ran all 6:
 
-| task | sites | grep× | Haiku T | Haiku G | Sonnet T | Sonnet G |
-|---|---|---|---|---|---|---|
-| jsonnode-get | 8 | 63.6 | 0.97 | 0.97 | 0.78 | **0.93** |
-| settable-set | 22 | 18.5 | 0.90 | 0.91 | 0.93 | 0.97 |
-| writeTypePrefix | 38 | — | — | — | 0.97 | 1.00 |
-| serializeWithType | 58 | — | — | — | 0.99 | 1.00 |
-| deserialize | 104 | 4.1 | 0.52 | **0.69** | 0.76 | **0.93** |
-| serialize | 108 | 3.1 | 0.62 | **0.85** | 0.86 | **1.00** |
+| task | sites | Haiku T | Haiku G | Sonnet T | Sonnet G | Opus T | Opus G |
+|---|---|---|---|---|---|---|---|
+| jsonnode-get | 8 | 0.97 | 0.97 | 0.78 | **0.93** | 0.93 | 0.95 |
+| settable-set | 22 | 0.90 | 0.91 | 0.93 | 0.97 | 0.97 | 0.99 |
+| writeTypePrefix | 38 | — | — | 0.97 | 1.00 | 1.00 | 1.00 |
+| serializeWithType | 58 | — | — | 0.99 | 1.00 | 0.99 | 1.00 |
+| deserialize | 104 | 0.52 | **0.69** | 0.76 | **0.93** | 0.92 | **0.96** |
+| serialize | 108 | 0.62 | **0.85** | 0.86 | **1.00** | 1.00 | 1.00 |
+
+The graph's **recall** advantage is largest for the weakest model on the largest
+tasks (Haiku, 104/108: +0.17/+0.24), shrinks as the model strengthens, and is
+≤0.04 everywhere at the frontier — Opus reaches near-perfect recall by text. At
+that point the graph's payoff moves to **cost** (§4.5): it ties on recall but is
+20–36% cheaper on the mid/large tasks.
 
 The robust, large signal is at the **large tasks (104/108): graph +0.13 to +0.24,
 both tiers.** The **mid-size dispatch tasks (38/58) tie on recall** — Sonnet's text
@@ -250,11 +256,14 @@ Cost (USD/run) depends on the regime (Sonnet G/T ratios):
   quality (a single authoritative traversal vs many grep+read turns).
 - **Small tasks (8/22): G/T ≈ 1.24–1.28** — prism's per-call overhead makes the
   graph pricier where text was already near-complete.
-- **At the frontier (Opus), cost flips in the graph's favor on the hard large
-  task:** `deserialize` graph $4.69 vs text $5.64 (G/T ≈ 0.83) *at higher recall*
-  — the graph's authoritative traversal undercuts a frontier model grinding 39
-  text turns. On the easy large task (`serialize`) where both hit 1.00, the graph
-  is a ~3% premium ($3.60 vs $3.48).
+- **At the frontier (Opus), the graph becomes a cost lever.** Recall ties on all
+  six tasks (Δ ≤ 0.04 — Opus text enumerates everything), but the graph is
+  *cheaper* on 4 of 6, including every mid/large task: G/T ≈ **0.64** (38),
+  **0.71** (58), **0.83** (104, *at higher recall*), 1.03 (108), 0.90 (8); only
+  the tiny `settable-set` is pricier (1.24). The graph's authoritative traversal
+  undercuts a frontier model grinding 24–39 text turns. So at the frontier the
+  graph stops being a quality lever and recovers the Go "same answer, fewer
+  tokens" result.
 
 So the graph is *cheaper* in the middle, *better at ~par cost* at the top, and a
 *small overhead tax* at the bottom. Wall-clock latency is comparable on large
@@ -299,9 +308,11 @@ disambiguates `get`/`set` by reading, as long as there are few sites to check.
 - **Evaluate code-context tools conditioned on blast radius.** "Graphs help" and
   "graphs don't" are both wrong; the honest figure of merit is
   completeness-and-consistency at fixed cost, as a function of #change-sites.
-- **The graph is a reliability tool for large changes.** Its distinctive value is
-  removing catastrophic completeness misses on big refactors — not a marginal
-  mean lift, and not a token saving.
+- **The graph's value morphs with model capability.** On large changes it is a
+  *quality/reliability* lever for weak and mid models (big recall lift, variance
+  collapse) and a *cost* lever at the frontier (recall ties, but it traverses
+  more cheaply than a frontier model grinding dozens of text turns). One tool,
+  two payoffs, selected by how capable the model already is.
 - **Language matters only through task size.** Java surfaced the effect not
   because Java is "harder to grep" but because framework interface methods
   produce 100-site change-sets that Go application code in our sample rarely did.
@@ -311,11 +322,9 @@ disambiguates `get`/`set` by reading, as long as there are few sites to check.
 
 ## 7. Threats to validity
 
-- **Data status.** Complete: the Haiku Java curve (4 tasks), the full Sonnet
-  6-task curve, and **both** Opus large tasks (`serialize`, `deserialize`, n=5) —
-  the three-tier large-task story is locked. Still running: the four small/mid
-  Opus cells, which by the mechanism (and the Haiku/Sonnet pattern) tie and will
-  not change the headline; reported when they land.
+- **Data status: complete.** Haiku (4 tasks), Sonnet (6 tasks), and Opus (6 tasks)
+  full grids, n=5/cell, 157 scored runs. The three-tier × size-curve result is
+  final; numbers are deterministic via the oracle scorers (no LLM in the loop).
 - **Two subjects per language, one framework for the large-Java regime.** The
   large-task win rests on jackson-databind interface methods; replication on
   another framework (Spring, Guava) and in a large Go codebase with wide
