@@ -1,0 +1,471 @@
+\documentclass[11pt]{article}
+
+% --- arXiv-friendly preamble (standard packages only) ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{cleveref} % must load AFTER hyperref
+
+\newcommand{\code}[1]{\texttt{#1}}
+
+\title{\textbf{When Does a Code Graph Help an Agent?}\\
+\large Capability-- and Blast-Radius--Bounded Gains for Change-Impact Tasks}
+
+% TODO(author): confirm author list and affiliation before submission.
+\author{
+  Tapabrata ``Topo'' Pal\\
+  \texttt{topo.pal@gmail.com}\\
+  % Affiliation: TODO
+}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+A widespread intuition holds that giving an LLM coding agent a resolved code
+graph (callers, callees, implementors, dispatch) makes it more effective on
+existing code than plain text search (grep/ripgrep + read). In a controlled,
+paired study that isolates the context mechanism and scores against independent
+compiler-grade oracles---across two languages (Go, Java), three model tiers, and
+change-impact tasks spanning 1--108 change-sites---we find the intuition is
+\emph{true but conditional}. On small, name-greppable changes (most of our Go
+sample and the small Java tasks) the graph ties text: a capable agent reaches the
+same recall by grep+read. On large-blast-radius changes ($\approx$100
+change-sites) the graph acts as a \emph{capability equalizer}, lifting weaker
+models toward frontier-level completeness (mean recall $+0.17$ to $+0.24$ for a
+small model, $+0.13$ to $+0.17$ for a mid model) while collapsing the variance
+that makes text search silently incomplete. That recall advantage shrinks as the
+model strengthens and, at the frontier, \emph{vanishes} on tasks the model can
+fully enumerate by text but \emph{persists} on harder ones---where the graph
+remains more reliable and cheaper. The discriminator is blast radius (the number
+of change-sites reachable only via caller edges), \emph{not} name ambiguity or
+language. We give the mechanism, a deterministic type-resolution oracle and a
+size-graded task generator, and a scoring pitfall (line-number normalization)
+that silently penalizes graph tools; and we argue the field should evaluate
+code-context tools on \emph{completeness-and-consistency at fixed cost,
+conditioned on task size}.
+\end{abstract}
+
+\paragraph{Honesty note.}
+An earlier version of this study reported a \emph{negative} result (``code graphs
+don't beat text search''). That conclusion was too broad: it was drawn from Go
+tasks that were, in hindsight, almost all small and name-greppable. Extending the
+study to a larger, polymorphism-heavy Java framework
+(\code{jackson-databind})---with a precise type-resolution oracle and a
+size-graded task set---surfaced the boundary the Go data had missed. The honest
+result is \emph{conditional}: the graph's value is real but bounded to
+large-blast-radius change-impact tasks, and its character changes with model
+capability. We report exactly where it helps, where it does not, and the
+mechanism that predicts which is which.
+
+\section{Introduction}
+\label{sec:intro}
+
+LLM coding agents work on existing code through a loop: \textbf{locate} relevant
+code (search), \textbf{read} it, \textbf{traverse} structure (who calls / what
+implements), and \textbf{stop} when subjectively confident. Two paradigms supply
+the context: text search, and a resolved code graph. The graph holds strictly
+more accurate structural information, so the natural hypothesis is that it
+produces more complete, better-calibrated behavior on change-impact tasks, where
+a missed call site is a broken build.
+
+We set out to confirm this in Go and \emph{could not}---graph tied text on
+completeness and calibration. The honest reading at the time was a negative
+result. But our Go tasks, after outcome-blind auditing, were almost all
+\emph{small} (1--22 change-sites) and \emph{name-greppable}. The question the Go
+data could not answer was whether the graph earns its keep where text search
+structurally struggles. We therefore extended the study to \code{jackson-databind},
+a polymorphism- and reflection-heavy Java framework whose interface methods
+(\code{JsonDeserializer.deserialize}, \code{JsonSerializer.serialize}, \ldots)
+have dozens of implementations and call sites---and built a \emph{size-graded}
+task set with a precise type-resolution oracle. That extension found the boundary.
+
+\paragraph{Contributions.}
+\begin{enumerate}[leftmargin=*]
+\item \textbf{A methodology that isolates the tool across two languages}---identical
+tasks, three arms (text / graph / graph-as-verifier), enforced tool allowlists,
+scored against \emph{independent} oracles (Go \code{go-ssa-vta}; a new Java Spoon
+oracle that resolves every call site by type, not by name).
+\item \textbf{The conditional result}: graph $\approx$ text on small/greppable
+change-impact tasks; graph $\gg$ text on large-blast-radius tasks, on recall
+\emph{and} variance.
+\item \textbf{The discriminator}---blast radius, established against a confound we
+expected to matter (name ambiguity) and which did not.
+\item \textbf{A capability-conditioned reading}: the graph is a \emph{quality}
+lever for weak/mid models on large changes and a \emph{cost} lever at the
+frontier; one tool, two payoffs.
+\item \textbf{A reproducible Java change-impact oracle + size-graded task
+generator}, and a scoring fix (line$\rightarrow$method normalization) without
+which the graph arm is silently under-credited.
+\end{enumerate}
+
+\section{Related work}
+\label{sec:related}
+
+% TODO(author): citation details below are best-effort and MUST be verified
+% before submission (see paper/README.md). Cross-listed cs.SE / cs.AI.
+
+\paragraph{Agentic coding and repository-level evaluation.}
+Benchmarks such as SWE-bench~\cite{swebench} and repository-level completion
+suites~\cite{repobench,repocoder} established that resolving real changes requires
+\emph{repository} context, not just local context. Agent scaffolds---SWE-agent's
+agent--computer interface~\cite{sweagent}, and pipeline approaches such as
+Agentless~\cite{agentless}---differ chiefly in \emph{how} they gather that
+context. Our study isolates one axis of that design space (text search vs.\ a
+resolved code graph) and measures it directly, rather than as part of an
+end-to-end agent.
+
+\paragraph{Code context: retrieval vs.\ structure.}
+Retrieval-augmented generation~\cite{rag} and its code-specific
+variants~\cite{repocoder} supply context by similarity; code-graph approaches
+supply it by resolved structure. Graph-based code context for
+LLMs~\cite{codexgraph} and graph-structured retrieval more
+broadly~\cite{graphrag} argue structure should help. We ask the prior question
+empirically---\emph{when} does the structure change the answer rather than just
+the path to it---and find the answer is conditioned on task size and model
+capability.
+
+\paragraph{Static call-graph construction (our oracle, not the tool under test).}
+Sound change-impact ground truth requires resolved dispatch. We use Class
+Hierarchy Analysis~\cite{cha} and Variable Type Analysis~\cite{vta} lineage call
+graphs (Go \code{go-ssa-vta}) and, for Java, source-level type resolution via
+Spoon~\cite{spoon} (cf.\ bytecode frameworks Soot~\cite{soot} and
+WALA~\cite{wala}). Crucially the oracle is \emph{independent} of the graph tool
+under test, so we never grade the tool against itself.
+
+\section{A variable framework for agent code-context}
+\label{sec:framework}
+
+Three cost axes---\textbf{tokens, latency, round-trips, setup}; six quality
+axes---\textbf{completeness, precision, calibration, consistency, freshness,
+determinism}; one outcome---\textbf{task success}; one
+meta-variable---\textbf{cost-of-error}. Our prior belief was that the graph's
+value lived in the quality axes uniformly. The result below is that it lives in
+\textbf{completeness + consistency, but only past a task-size threshold}, and at
+near-zero extra cost---so the right figure of merit is
+\emph{quality-at-fixed-cost conditioned on blast radius}.
+
+\section{Study design}
+\label{sec:design}
+
+\paragraph{Arms (only the tool description/allowlist differs).}
+\textbf{T} text (rg/grep/read); \textbf{G} graph (typed \code{prism} call-graph
+CLI for traversal + rg for anchor discovery); \textbf{V} text-primary with
+graph-as-verifier. Arm enforcement is by \code{--allowedTools} with a recorded
+\code{tool\_trace}; runs where the G arm never touched the graph are flagged
+(\code{violation}) and excluded.
+
+\paragraph{Mode A (context quality).}
+The agent answers ``list every site that must change to do X,'' declaring
+\code{complete} + \code{unresolved}. This isolates the tool from patch-writing
+skill. (Mode B / compile-and-test is future work, \cref{sec:threats}.)
+
+\paragraph{Independent oracles---never the graph under test.}
+\emph{Go:} the \code{go-ssa-vta} call graph (via \code{grove-eval}) and/or the
+merged-PR diff (codegen/mocks filtered). \emph{Java:} a Spoon type-resolution
+oracle. Given a target method, it emits the declaration + the full
+override/implementation family + every call site whose executable \emph{resolves}
+(by type, not by name) into that family. This is the discipline a bare-name
+oracle lacks: a call to an unrelated same-named method on a different type is
+excluded. On jackson it resolved all $\sim$500 \code{get}/\code{set} call sites
+and kept only the 3--22 that are truly jackson's (0 unresolved). Ground truth is
+human-spot-checked and, where text reaches it, validated by a text arm hitting
+recall 1.0.
+
+\paragraph{A scoring pitfall (Java).}
+\code{prism} reports authoritative \code{file:line}, so graph-arm agents naturally
+answer sites as \code{File.java:114} rather than \code{File.java:method}. A
+name-based scorer matches those at 0, silently penalizing the \emph{graph} arm
+(e.g.\ a 148-site correct answer scored 0.0). We build a Spoon
+line$\rightarrow$method index and normalize numeric answers to their innermost
+enclosing method before scoring. All Java numbers below are post-normalization.
+We flag this because it is an easy way to accidentally under-report a structural
+tool's performance.
+
+\paragraph{Subjects and size grading.}
+Go: 14 tasks, 1--93 sites (localization controls, greppable enumeration controls,
+change-impact). Java: \code{jackson-databind} @ 2.18.8, 6 interface-method
+signature-change tasks spanning \textbf{8, 22, 38, 58, 104, 108} change-sites,
+chosen to trace a size curve and to vary name-ambiguity independently of size.
+\textbf{Models:} a small, a mid, and a frontier tier (denoted Haiku / Sonnet /
+Opus). \textbf{Trials:} 5 per cell; we report tails (min, variance), not just
+means. The full grid is 157 scored runs.
+
+\section{Results}
+\label{sec:results}
+
+\subsection{Small / greppable change-impact: graph $\approx$ text}
+Across the Go tasks, mean recall(G) $\approx$ recall(T) (within $\sim$0.01--0.07
+every task; no consistent direction). Greppable controls reach recall $\approx$1.0
+for every arm. The small Java tasks behave identically: \code{jsonnode-get} (8
+sites) and \code{settable-set} (22 sites) tie ($\Delta$recall $\le 0.01$) on the
+small model---\emph{despite} being the most name-ambiguous targets in the set
+(grep over-match $64\times$ and $18\times$). Ambiguity did not help the graph.
+
+\subsection{The size curve}
+\label{sec:curve}
+\Cref{tab:curve} gives the full size-graded curve (recall, $n=5$,
+post-normalization). The small model ran the 4 original tasks; the mid and
+frontier models ran all 6.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{lrccccc}
+\toprule
+task & sites & Small T & Small G & Mid T & Mid G & Frontier T \(\to\) G \\
+\midrule
+jsonnode-get      & 8   & 0.97 & 0.97 & 0.78 & \textbf{0.93} & 0.93 \(\to\) 0.95 \\
+settable-set      & 22  & 0.90 & 0.91 & 0.93 & 0.97          & 0.97 \(\to\) 0.99 \\
+writeTypePrefix   & 38  & ---  & ---  & 0.97 & 1.00          & 1.00 \(\to\) 1.00 \\
+serializeWithType & 58  & ---  & ---  & 0.99 & 1.00          & 0.99 \(\to\) 1.00 \\
+deserialize       & 104 & 0.52 & \textbf{0.69} & 0.76 & \textbf{0.93} & 0.92 \(\to\) \textbf{0.96} \\
+serialize         & 108 & 0.62 & \textbf{0.85} & 0.86 & \textbf{1.00} & 1.00 \(\to\) 1.00 \\
+\bottomrule
+\end{tabular}
+\caption{Recall across three model tiers and the jackson size curve. The graph's
+recall advantage is largest for the weakest model on the largest tasks, shrinks
+as the model strengthens, and is $\le 0.04$ everywhere at the frontier.}
+\label{tab:curve}
+\end{table}
+
+The robust, large signal is at the \textbf{large tasks (104/108): graph $+0.13$ to
+$+0.24$, on both the small and mid tiers.} The \textbf{mid-size dispatch tasks
+(38/58) tie on recall}---the mid model's text arm maxes out (0.97--0.99) because
+their change-sets are small and the call sites are name-matched. And the advantage
+is \emph{not} explained by grep ambiguity, which runs opposite to the effect (the
+most ambiguous targets are the smallest).
+
+\paragraph{The one small-task exception is mechanistically informative.}
+On \code{jsonnode-get} (8 sites) the mid model's \emph{text} arm drops to 0.78,
+and the graph recovers it ($+0.15$). The sites text consistently missed are
+\code{JsonNode.has}, \code{JsonNode.hasNonNull}, and \code{ArrayNode.\_at}---methods
+that \emph{call} \code{get(int)} but whose own names do \emph{not} contain
+``get.'' A grep-for-\code{get} agent finds the get-named declarations and call
+lines but misses \emph{callers named after something else}; the graph's caller
+edges return them directly. So the true predictor is not raw size but
+\textbf{the number of change-sites reachable only via caller edges, not by the
+target's name}---which grows with blast radius (the large tasks have many such
+indirect callers) but can bite even a tiny task. This is the sharpest single
+illustration of the mechanism.
+
+\subsection{The gain survives a stronger model, then converts at the frontier}
+\label{sec:tiers}
+A natural objection: a stronger model brute-forces the large enumeration with text
+and closes the gap. Going small$\rightarrow$mid, text \emph{did} improve
+(serialize $0.62\rightarrow0.87$)---but the graph improved more
+($0.85\rightarrow0.996$) and stayed ahead on \emph{both} large tasks
+(\cref{tab:tiers}). At the frontier the advantage is conditioned on task
+difficulty: on \code{serialize} the frontier text arm fully enumerates the change
+(1.00, 24 turns) and the graph is redundant; but on the harder \code{deserialize},
+even frontier text drops sites (mean 0.923, one run at \textbf{0.71}) while the
+graph holds 0.962---higher recall, lower variance (sd .05 vs .12), \emph{and}
+cheaper (\$4.69 vs \$5.64/run). The recall advantage shrinks monotonically with
+capability but \emph{does not vanish on hard tasks}---it converts into a
+reliability + cost edge.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{lcc}
+\toprule
+tier & serialize (108) & deserialize (104, \emph{harder}) \\
+\midrule
+Small    & $.62 \to .85$ (\textbf{+.24}) & $.52 \to .69$ (\textbf{+.17}) \\
+Mid      & $.87 \to 1.00$ (\textbf{+.13}) & $.76 \to .94$ (\textbf{+.17}) \\
+Frontier & $1.00 \to 1.00$ (+.00)         & $.92 \to \mathbf{.96}$ (\textbf{+.04}) \\
+\bottomrule
+\end{tabular}
+\caption{Recall (text $\to$ graph, $\Delta=$ G$-$T) on the two large tasks across
+tiers. The graph is a capability equalizer: large lift for weak models, narrowing
+to a hard-task reliability/cost edge at the frontier.}
+\label{tab:tiers}
+\end{table}
+
+\subsection{The graph removes catastrophic misses (a consistency gain)}
+\label{sec:consistency}
+The tier data show more than a higher mean: the \emph{variance} differs. Mid-model
+text on \code{serialize} swings from 1.00 to 0.73 across nominally identical
+runs---it silently misses $\sim$30\% of sites on some trials. The graph is
+$0.996 \pm {\sim}0$: \emph{zero catastrophic runs}. On a change task, where one
+missed site is a broken build, this reliability is arguably more valuable than the
+mean lift. This is the completeness/calibration benefit the single-tier Go study
+looked for and could not find; it emerges only once tasks are large enough that
+text \emph{can} fail, and it persists to the frontier on hard tasks (frontier text
+dipped to 0.71 on \code{deserialize}; the graph stayed at 0.96).
+
+\subsection{Cost: cheaper in the middle, par at the top, overhead tax at the bottom}
+\label{sec:cost}
+Cost (USD/run) depends on the regime. On the \textbf{large tasks} (mid tier) the
+graph buys $+0.13$--$0.17$ recall for $\sim$10\% more (G/T $\approx$ 1.07--1.16):
+``better answer, $\sim$same price''---text cannot reach the graph's recall at
+\emph{any} reasonable budget. On the \textbf{mid-size tasks} recall ties but the
+graph is $\sim$25--37\% \emph{cheaper} (G/T $\approx$ 0.63--0.77), recovering a
+token-efficiency result at matched quality. On the \textbf{small tasks} per-call
+overhead makes the graph pricier (G/T $\approx$ 1.24--1.28) where text was already
+near-complete. \textbf{At the frontier the graph becomes a cost lever}: recall
+ties on all six tasks but the graph is cheaper on 4 of 6, including every mid/large
+task (G/T $\approx$ 0.64--0.90), undercutting a frontier model grinding 24--39 text
+turns.
+
+\subsection{Calibration}
+In aggregate over small tasks, over-confidence is tied (both arms assert
+\code{complete} at $\sim$0.9 recall on \code{settable-set}: 5/5 each)---the Go
+negative holds there. The graph's calibration benefit is specifically the variance
+collapse on large tasks (\cref{sec:consistency}), not a uniform over-confidence
+reduction.
+
+\section{Why---the mechanism}
+\label{sec:mechanism}
+
+A change to a method's signature forces every declaration/override \emph{and}
+every call site to change. Two regimes:
+\begin{itemize}[leftmargin=*]
+\item \textbf{Few sites, statically named (Go, small Java).} A call
+\code{x.Foo(...)} and an implementor \code{func (T) Foo(...)} both contain
+\code{Foo}; with $\le\!\sim$20 sites a capable agent greps the name, reads to
+confirm, and enumerates them all. The graph's structural precision saves reading
+effort (a token wash) but rarely changes \emph{what it finds}. Hence the tie.
+\item \textbf{Many sites (Java framework interfaces, $\sim$100).} Now grep+read is
+a manual graph traversal at scale: the agent must find every implementor and every
+polymorphic call, hold them in context, and not lose any across 50--65 turns. It
+is good on average but \emph{unreliable}---it drops sites stochastically,
+especially callers not named after the target. The resolved graph enumerates the
+family and the resolved callers in one authoritative pass, so completeness is both
+higher and consistent.
+\end{itemize}
+
+This predicts the boundary: the graph earns its keep wherever the change-set is too
+large to enumerate reliably by hand---large refactors, framework-wide interface
+changes---and ties text on the small, local edits that dominate everyday work.
+Name ambiguity is a red herring at these sizes: a capable agent disambiguates
+\code{get}/\code{set} by reading, as long as there are few sites to check.
+
+\section{Discussion}
+\label{sec:discussion}
+\begin{itemize}[leftmargin=*]
+\item \textbf{Evaluate code-context tools conditioned on blast radius.} ``Graphs
+help'' and ``graphs don't'' are both wrong; the honest figure of merit is
+completeness-and-consistency at fixed cost, as a function of \#change-sites.
+\item \textbf{The graph's value morphs with model capability.} On large changes it
+is a quality/reliability lever for weak and mid models and a cost lever at the
+frontier. One tool, two payoffs, selected by how capable the model already is.
+\item \textbf{Language matters only through task size.} Java surfaced the effect
+not because Java is ``harder to grep'' but because framework interface methods
+produce 100-site change-sets that Go application code in our sample rarely did. The
+prediction is testable in large Go codebases with wide interfaces.
+\end{itemize}
+
+\section{Threats to validity}
+\label{sec:threats}
+\begin{itemize}[leftmargin=*]
+\item \textbf{Two subjects per language; one framework for the large-Java regime.}
+The large-task win rests on \code{jackson-databind} interface methods; replication
+on another framework (Spring, Guava) and in a large Go codebase with wide
+interfaces is the key external-validity gap.
+\item \textbf{Mode A only.} We score the \emph{answer}, not an applied patch. Mode
+B (compile / fail-to-pass)---where an incomplete change actually breaks the
+build---would test whether the reliability gain converts to task success.
+\item \textbf{One graph implementation} and a soft tool gate (the G arm can decline
+to use the graph; we exclude those runs, but the offer-vs-enforce distinction is
+unmodeled).
+\item \textbf{Construct / selection.} Java ground truth is type-resolved (no
+bare-name pollution); an earlier bare-name Java attempt was discarded after audit.
+Go ground-truth pollution and codegen churn were mitigated after discovery; earlier
+positive readings on hand-picked tasks did not survive outcome-blind sampling.
+\item \textbf{Determinism.} Recall/precision come from the oracle scorers and cost
+from per-run accounting; no LLM is in the measurement loop, so the numbers are
+reproducible from the released run logs.
+\end{itemize}
+
+\section{Conclusion}
+\label{sec:conclusion}
+The intuition that a resolved code graph makes an agent more complete on
+change-impact tasks is \emph{conditionally true, and the condition is capability
+$\times$ blast radius}. On small, name-greppable changes (most of Go, everyday
+edits) the graph ties text at every model tier. On large-blast-radius changes it
+acts as a \emph{capability equalizer}: it lifts weaker/cheaper models toward
+frontier-level completeness with far lower variance. That recall gain shrinks as
+the model strengthens and, at the frontier, vanishes on tasks the model can fully
+enumerate by text yet persists on harder ones---where the graph still delivers
+higher recall, removes the tail risk, and even costs less. The earlier blanket
+negative was an artifact of a small-task sample; the blanket positive (``graphs
+obviously help'') is equally wrong. The defensible, mechanistic claim: \textbf{a
+code graph is a completeness-and-reliability tool that pays off in proportion to
+how far a change exceeds what the model's text search can reliably enumerate---large
+for weak models, narrowing to hard-task reliability at the frontier, and a wash for
+small local edits.}
+
+\section*{Artifact availability}
+\label{sec:artifacts}
+The graph engine (Grove), the agent-facing context CLI (Prism), and the evaluation
+harness (arms runner, tasks, the Spoon change-impact oracle, the
+line$\rightarrow$method rescorer, and the recall/cost aggregator) are open source.
+All analyses are reproducible \emph{without} an LLM from the released run logs via
+the deterministic scorers. % TODO(author): insert repository URLs and a frozen
+% release tag / DOI (e.g. Zenodo) for the camera-ready.
+\begin{itemize}[leftmargin=*]
+\item Grove (code-intelligence graph): \url{https://example.com/grove} % TODO URL
+\item Prism (agent context CLI): \url{https://example.com/prism} % TODO URL
+\item Evaluation harness + Java oracle + tasks: \url{https://example.com/harness} % TODO URL
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+% References. NOTE: best-effort entries; verify every field before submission.
+% ---------------------------------------------------------------------------
+\begin{thebibliography}{99}
+\small
+
+\bibitem{swebench} C.~E. Jimenez, J.~Yang, A.~Wettig, S.~Yao, K.~Pei, O.~Press,
+and K.~Narasimhan. SWE-bench: Can Language Models Resolve Real-World GitHub
+Issues? \emph{ICLR}, 2024.
+
+\bibitem{sweagent} J.~Yang, C.~E. Jimenez, A.~Wettig, K.~Lieret, S.~Yao,
+K.~Narasimhan, and O.~Press. SWE-agent: Agent-Computer Interfaces Enable Automated
+Software Engineering. \emph{NeurIPS}, 2024.
+
+\bibitem{agentless} C.~S. Xia, Y.~Deng, S.~Dunn, and L.~Zhang. Agentless:
+Demystifying LLM-based Software Engineering Agents. \emph{arXiv:2407.01489}, 2024.
+
+\bibitem{repobench} T.~Liu, C.~Xu, and J.~McAuley. RepoBench: Benchmarking
+Repository-Level Code Auto-Completion Systems. \emph{ICLR}, 2024.
+
+\bibitem{repocoder} F.~Zhang, B.~Chen, Y.~Zhang, J.~Keung, J.~Liu, D.~Zan,
+Y.~Mao, J.-G. Lou, and W.~Chen. RepoCoder: Repository-Level Code Completion
+Through Iterative Retrieval and Generation. \emph{EMNLP}, 2023.
+
+\bibitem{rag} P.~Lewis et al. Retrieval-Augmented Generation for
+Knowledge-Intensive NLP Tasks. \emph{NeurIPS}, 2020.
+
+\bibitem{codexgraph} X.~Liu et al. CodexGraph: Bridging Large Language Models and
+Code Repositories via Code Graph Databases. \emph{arXiv:2408.03910}, 2024.
+
+\bibitem{graphrag} D.~Edge et al. From Local to Global: A Graph RAG Approach to
+Query-Focused Summarization. \emph{arXiv:2404.16130}, 2024.
+
+\bibitem{cha} J.~Dean, D.~Grove, and C.~Chambers. Optimization of Object-Oriented
+Programs Using Static Class Hierarchy Analysis. \emph{ECOOP}, 1995.
+
+\bibitem{vta} V.~Sundaresan, L.~Hendren, C.~Razafimahefa, R.~Vall\'ee-Rai,
+P.~Lam, E.~Gagnon, and C.~Godin. Practical Virtual Method Call Resolution for
+Java. \emph{OOPSLA}, 2000.
+
+\bibitem{spoon} R.~Pawlak, M.~Monperrus, N.~Petitprez, C.~Noguera, and
+L.~Seinturier. Spoon: A Library for Implementing Analyses and Transformations of
+Java Source Code. \emph{Software: Practice and Experience}, 46(9):1155--1179, 2016.
+
+\bibitem{soot} R.~Vall\'ee-Rai, P.~Co, E.~Gagnon, L.~Hendren, P.~Lam, and
+V.~Sundaresan. Soot---a Java Bytecode Optimization Framework. \emph{CASCON}, 1999.
+
+\bibitem{wala} IBM. T.J. Watson Libraries for Analysis (WALA).
+\url{https://github.com/wala/WALA}.
+
+\end{thebibliography}
+
+\end{document}
