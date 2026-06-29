@@ -19,8 +19,23 @@ TASKS = [  # ordered by GT size
     ("jackson-writetypeprefix", 38), ("jackson-serializewithtype", 58),
     ("jackson-deserialize", 104), ("jackson-serialize", 108),
 ]
-MODELS = ["haiku", "sonnet", "opus"]
 RUNS = Path(__file__).resolve().parent / "runs"
+# Known Claude tiers print first, in order; any other model dir (e.g. a GPT model
+# run via run_codex.py) is auto-discovered and appended.
+KNOWN_ORDER = ["haiku", "sonnet", "opus"]
+
+
+def discover_models() -> list[str]:
+    found: set[str] = set()
+    for task, _ in TASKS:
+        d = RUNS / task
+        if d.is_dir():
+            for sub in d.iterdir():
+                if sub.is_dir() and any(sub.glob("[TGV].t*.json")):
+                    found.add(sub.name)
+    ordered = [m for m in KNOWN_ORDER if m in found]
+    ordered += sorted(m for m in found if m not in KNOWN_ORDER)
+    return ordered
 
 
 def cell(task: str, model: str, arm: str):
@@ -44,7 +59,7 @@ def cell(task: str, model: str, arm: str):
 def main() -> None:
     grand_cost = 0.0
     grand_n = 0
-    for model in MODELS:
+    for model in discover_models():
         rows = []
         for task, size in TASKS:
             t = cell(task, model, "T")
