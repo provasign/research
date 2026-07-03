@@ -53,11 +53,41 @@ Falsifiable sub-claims + verdicts: `THESIS.md` (C1–C7). Full prose: `paper.md`
 
 ## 2. The product bet (the new direction) — "free local + graph vs commercial"
 
-**Thesis:** the graph's completeness win is *largest for weak/cheap models on
-large changes*. So a **free local model + the right graph tool** should reach
-*commercial-frontier completeness* on change-impact — for $0/query. If true, that
-reframes Grove/Prism from "a nice context source" to "the thing that lets free
-local models compete with GPT/Claude on real repo tasks."
+### HEADLINE PRINCIPLE (the whole product thesis in one line)
+**A deterministic graph traversal must not run inside the stochastic,
+token-expensive LLM loop — the graph engine should compute it and hand the agent
+the answer.** Grove/Prism today expose *primitives* (`references`, `lookup`,
+`query`) the model has to **orchestrate** over many turns (find declaration → find
+overrides → find callers → dedup). That orchestration is exactly what is
+expensive, unreliable, and capability-gated. The enhancement is to **raise the
+tool altitude**: expose task-shaped operations — first and foremost
+`change_impact(method) → declaration + override/impl family + resolved callers` —
+that do the traversal in the engine. `change_impact` is the clearest instance of a
+*class* (all implementors of an interface, full call chains, file blast radius);
+primitives stay underneath for drill-down.
+
+**This helps EVERY tier, not just local models** — the value shifts by capability
+but never disappears (numbers from our grid):
+
+| tier | on primitives today | with `change_impact` |
+|---|---|---|
+| Local 30B | **0.0** (can't orchestrate at all) | **enabling** — 0.0 → complete; the graph is otherwise unusable to it |
+| Haiku | large tasks **0.69 / 0.85** (imperfect orchestration) | **raises the ceiling** → ~1.0, far fewer turns |
+| Sonnet | good recall but **50–65 turns**, real variance | **kills variance + slashes cost/latency** — one deterministic call |
+| Opus | ~1.0 but **24–39 turns, ~$5.64/run** on deserialize | recall ~unchanged; **cost → cents, latency → one call, deterministic** |
+
+So: enabling for weak/local, *correctness+cost* for cheap cloud, *cost+latency+
+determinism* for the frontier. No model should hand-simulate a traversal the graph
+can answer exactly. This is why the enhancement is a general Grove/Prism win, and
+why the "free local competes with commercial" bet is its most dramatic (0 → works)
+demonstration, not its only justification.
+
+**Thesis (the bet):** the graph's completeness win is *largest for weak/cheap
+models on large changes*. So a **free local model + the right graph tool** should
+reach *commercial-frontier completeness* on change-impact — for $0/query. If true,
+that reframes Grove/Prism from "a nice context source" to "the thing that lets free
+local models compete with GPT/Claude on real repo tasks" — while also making the
+commercial models themselves cheaper and more reliable.
 
 **What we've shown (PoC, `harness/LOCAL-TIER-FINDINGS.md`):**
 - A local `qwen3-coder:30b` on graph **primitives** (CLI *or* MCP-style tools)
