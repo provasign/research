@@ -77,5 +77,12 @@ blast radius). The GPT arm tests whether that pattern reproduces across model
 - **Sandbox.** Runs use `-s workspace-write` so `prism`'s sqlite/.grove WAL works;
   `--reset-corpus` does `git checkout` between runs to undo any stray edits (Mode
   A forbids edits and we never read the tree, so this is just hygiene).
-- **Cost.** Token/USD capture from Codex isn't wired (fields are null); recall is
-  the cross-family signal. Add cost parsing if your Codex `--json` exposes usage.
+- **Cost.** Token/USD capture is best-effort from Codex `--json` events. If your
+  installed Codex emits `usage`/`token_usage`, `total_cost_usd`/`cost_usd`,
+  `duration_ms`, or turn-count fields, `run_codex.py` writes them into the same
+  `cost` object used by the Claude runs. If those fields are absent, recall and
+  wall-clock remain the cross-family signal.
+- **Usage caps.** Codex usage-limit/rate-limit errors are treated like the Claude
+  path: `run_codex.py` writes `.usage_wait.json`, sleeps until the reported reset
+  time when available (or polls every 15 minutes), then retries the same cell
+  instead of scoring the cap as a failed answer.
