@@ -317,6 +317,23 @@ disambiguates `get`/`set` by reading, as long as there are few sites to check.
   because Java is "harder to grep" but because framework interface methods
   produce 100-site change-sets that Go application code in our sample rarely did.
   The prediction is testable in large Go codebases with wide interfaces.
+- **Tool *altitude* gates who can realize the benefit.** The win is largest for
+  weak/cheap models on large changes — but a weak model can only realize it if it
+  can *operate* the graph. In a probe with a local open-weights model
+  (qwen3-coder-30b), the graph exposed as *primitives* (a CLI, or MCP-style typed
+  tools the model must orchestrate over many turns) yielded recall 0.0 — the model
+  greps competently but cannot chain a multi-turn traversal or reliably emit the
+  tool calls. Exposed instead as a single *high-altitude* operation —
+  `change_impact(method) → declaration + override/impl family + resolved callers`,
+  with an impact-routing scaffold that guarantees the call — the same model relayed
+  a complete change-set in one call across all six tasks. (This probe demonstrates
+  the *interaction*, not a graph-vs-text score: our prototype `change_impact` is
+  built on the type-resolution engine that also produces our ground truth, so its
+  recall is tautological; a scored claim requires this resolution to live inside
+  the graph tool and be judged by an independent oracle. See the artifact repo.)
+  The design implication is concrete: to deliver the graph's completeness win to
+  the models where it matters most, ship *change-impact* as a first-class agent
+  operation, not a kit of primitives.
 
 ---
 
