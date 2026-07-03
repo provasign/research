@@ -131,15 +131,28 @@ def _lead(command: str) -> str:
 
 
 def run_shell(command: str, arm: str, workdir: Path) -> tuple[str, str]:
-    """Return (leading_bin, output). Refuses binaries not in the arm allowlist."""
-    toks = command.strip().split()
+    """Return (leading_bin, output). Refuses binaries not in the arm allowlist.
+
+    Two robustness fixes vs a naive subprocess: (1) stdin=DEVNULL, else `rg`/`grep`
+    with no path block reading stdin (non-tty) and hit the timeout; (2) if a
+    search command omits a path, append '.' so it searches the repo like a shell
+    would in a tty -- weak agents routinely write `rg 'pat'` with no path.
+    """
+    command = command.strip()
+    toks = command.split()
     lead = Path(toks[0]).name if toks else ""
     if lead not in ALLOW[arm]:
         return lead, f"[refused] '{lead}' is not permitted for this arm."
+    if lead in ("rg", "grep", "egrep", "fgrep"):
+        nonflag = [t for t in toks[1:] if not t.startswith("-")]
+        if len(nonflag) <= 1:   # only a pattern, no path -> search the repo tree
+            command = command + " ."
     try:
         p = subprocess.run(command, shell=True, cwd=str(workdir),
-                           capture_output=True, text=True, timeout=CMD_TIMEOUT)
+                           stdin=subprocess.DEVNULL, capture_output=True,
+                           text=True, timeout=CMD_TIMEOUT)
         out = (p.stdout or "") + (("\n[stderr] " + p.stderr) if p.stderr else "")
+        out = out or "[no output / no matches]"
     except subprocess.TimeoutExpired:
         out = "[timeout]"
     return lead, out[:TOOL_OUT_CAP]
