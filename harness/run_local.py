@@ -71,7 +71,11 @@ To investigate, run a shell command (read-only):
 Allowed commands (leading program must be one of): {allow}.
 I will reply with the command's output. Use {tool_hint}.
 
-When you are confident you have found every site, output the FINAL answer:
+Be persistent: investigate over MANY turns. If a search returns nothing, try \
+DIFFERENT terms (a call site rarely contains the exact text you searched). Do not \
+give up after one command, and never finalize an EMPTY list.
+
+Only when you have actually found the sites, output the FINAL answer:
   {{"sites": ["<relpath>:<Symbol>", ...], "complete": true|false, "unresolved": [ ... ]}}
 Each site is "<repo-relative-path>:<FunctionOrMethodName>" (receiver optional). A \
 missed site is a broken fix; set "complete" honestly. Output ONLY the JSON object.\
@@ -121,6 +125,11 @@ def last_json(text: str) -> dict | None:
     return best
 
 
+def _lead(command: str) -> str:
+    toks = command.strip().split()
+    return Path(toks[0]).name if toks else ""
+
+
 def run_shell(command: str, arm: str, workdir: Path) -> tuple[str, str]:
     """Return (leading_bin, output). Refuses binaries not in the arm allowlist."""
     toks = command.strip().split()
@@ -141,6 +150,9 @@ def run_one(task: Task, arm: str, model: str, workdir: Path) -> dict:
                 {"role": "user", "content": "Begin. Output your first JSON action."}]
     trace: list[dict] = []
     answer_text = ""
+    empty_pushbacks = 0
+    seen: dict[str, str] = {}   # command -> output (dedup weak-agent loops)
+    repeats = 0
     t0 = time.time()
     for _ in range(MAX_TURNS):
         content = ollama_chat(model, messages)
@@ -152,10 +164,33 @@ def run_one(task: Task, arm: str, model: str, workdir: Path) -> dict:
                                         'action or the final {"sites": [...], ...} answer.'})
             continue
         if "sites" in obj:
+            # Arm-neutral guard: don't accept a premature EMPTY answer without
+            # having actually investigated -- push back up to twice.
+            if not obj.get("sites") and empty_pushbacks < 2:
+                empty_pushbacks += 1
+                messages.append({"role": "assistant", "content": json.dumps(obj)})
+                messages.append({"role": "user",
+                                 "content": "Your site list is empty. Keep investigating "
+                                            "with the tools (try different search terms) "
+                                            "and do not finalize until you have found the "
+                                            "sites."})
+                continue
             answer_text = json.dumps(obj)
             break
         cmd = str(obj.get("shell", ""))
+        if cmd in seen:  # weak agents loop on a failing command; nudge, don't rerun
+            repeats += 1
+            if repeats >= 6:
+                break  # not converging -- stop wasting turns, finalize what we have
+            note = ("[note] You already ran this exact command; its output is "
+                    "unchanged (shown below). Try a DIFFERENT command (e.g. "
+                    f"`{PRISM_BIN} references <BareName>`) or finalize.\n" + seen[cmd])
+            trace.append({"tool": "Bash", "bin": _lead(cmd), "detail": cmd[:200]})
+            messages.append({"role": "assistant", "content": json.dumps({"shell": cmd})})
+            messages.append({"role": "user", "content": f"OUTPUT:\n{note}"})
+            continue
         lead, out = run_shell(cmd, arm, workdir)
+        seen[cmd] = out
         trace.append({"tool": "Bash", "bin": lead, "detail": cmd[:200]})
         messages.append({"role": "assistant", "content": json.dumps({"shell": cmd})})
         messages.append({"role": "user", "content": f"OUTPUT:\n{out}"})
