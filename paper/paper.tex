@@ -726,23 +726,30 @@ commons-collections task---Go's structural typing leaves no
 them (engine roadmap: method-set matching).
 
 \textbf{TypeScript (TypeORM, \code{Driver.escape}, 37 sites,
-compiler-resolved GT via a ts-morph oracle).} The engine ceiling is
-\emph{low}: $0.540$ recall / $0.645$ precision. Family resolution works
-(11 of 12 driver implementations; \code{implements Driver} clauses are
+compiler-resolved GT via a ts-morph oracle).} This corpus produced the
+study's only \emph{controlled ceiling intervention}. The engine's initial
+ceiling was low---$0.540$ recall / $0.645$ precision: family resolution
+worked (11 of 12 driver implementations; \code{implements} clauses are
 nominal), but callers bind through interface-typed \emph{fields}
-(\code{this.driver.escape(...)}) in files that never import a concrete
-driver, and the TS call resolver does not yet track field types. Both
-\gstar{} arms score exactly the ceiling---local 30B $0.540/0.645$ in one
-turn, Haiku $0.540/0.645$ in two turns (18\,s)---a lossless relay of an
-imperfect engine, and the cleanest demonstration in the study that
-\gstar{} completeness is a tool property: raise the ceiling and every
-tier rises; here the ceiling is low and every relay lands on it. And the
-boundary cuts both ways, as predicted: Haiku~T \emph{exceeds} the low
-ceiling on recall ($0.568$) by brute enumeration, at $0.382$ precision
-and 36 turns. When the engine ceiling is below what text search reaches,
-text wins recall---which is precisely what the per-language,
-no-LLM ceiling measurement is for: it tells the steering layer where
-\gstar{} is authoritative before any model runs.
+(\code{this.connection.driver.escape(...)}), and the TS resolver tracked
+neither field types nor multi-hop receiver chains. Both \gstar{} arms
+scored exactly that ceiling ($0.540/0.645$; local 30B in one turn, Haiku
+in two), while Haiku~T \emph{exceeded} it on recall ($0.568$, at $0.382$
+precision over 36 turns)---when the ceiling is below what text search
+reaches, text wins recall, which is what the per-language no-LLM ceiling
+measurement is for. We then raised the ceiling in the engine (class-body
+field-type extraction, source-recovered multi-hop chain resolution
+through class- and interface-typed hops, nominal gating of structural
+interface satisfaction, and synthesized declarations for unparsed
+interface members): the ceiling moved to $0.946/0.761$, with every other
+language's ceiling regression-verified unchanged. Re-running the
+untouched \gstar{} arms, both again landed exactly on the new ceiling
+($0.946/0.761$; local 30B one turn, Haiku two turns, 25\,s)---the
+completeness of the change-set moved with the tool while the models,
+prompts, and task stayed fixed. This is the tool-property claim
+demonstrated in both directions on one task: lower the ceiling and every
+tier sits on it; raise it and every tier rises to it, past the text
+baseline it had trailed.
 
 \section{Why---the mechanism}
 \label{sec:mechanism}
