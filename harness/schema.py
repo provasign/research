@@ -143,9 +143,14 @@ def _last_json_object(text: str) -> dict | None:
     while a genuine JSON object decodes correctly regardless of surrounding text
     or braces. (The brace-counter version mis-scored answers whose prose
     contained unbalanced code braces.)
+
+    strict=False accepts literal control characters (newlines, tabs) inside
+    string values — agents writing long `unresolved` notes emit those, and a
+    strict decoder silently zeroed the whole answer (observed: a Sonnet T run
+    scored 0.0 with a complete 350-site answer in the transcript).
     """
     candidates: list[dict] = []
-    dec = json.JSONDecoder()
+    dec = json.JSONDecoder(strict=False)
     i = 0
     while True:
         idx = text.find("{", i)

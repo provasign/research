@@ -1,3 +1,11 @@
+"""Re-parse every run transcript with the current Answer parser and rescore.
+
+WARNING: this scores the RAW transcript, which clobbers rescore_java.py's
+line->method mapping on Java runs (a graph-arm answer citing File.java:114
+scores 0 name-based). After running this on any Java corpus you MUST re-run:
+    for t in tasks/<corpus>-*.json: python rescore_java.py --task $t --index <lineindex>
+Observed 2026-07-04: skipping that step silently zeroed 4 jackson runs.
+"""
 import json,glob,sys
 from pathlib import Path
 sys.path.insert(0,'.')
