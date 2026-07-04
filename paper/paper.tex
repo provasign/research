@@ -53,7 +53,10 @@ smallest, reaches mean recall $0.997$, and completeness becomes
 matches the frontier model driving graph primitives (\$3.06/task) at $1/28$th the
 cost and $5$--$15\times$ fewer agent turns. Tier-invariance extends below the
 commercial API floor: a local 30B model (zero API cost) achieves the same
-$0.997$ mean recall in a single agent turn. The engine operation itself scores
+$0.997$ mean recall in a single agent turn. The pattern replicates in a second
+framework (Guava, a 310-site change): the small tier collapses on text
+($0.17$) but sits at the engine ceiling ($0.997$) with the operation, at
+$1/21$st the frontier-text cost. The engine operation itself scores
 $0.993$ recall / $0.948$ precision against the oracle with no LLM in the loop.
 Building the deterministic operation also surfaced five latent resolution defects
 that every LLM-orchestrated arm had silently absorbed---evidence that
@@ -632,14 +635,68 @@ the same audit discipline that discarded the bare-name commons-lang tasks
 (\cref{sec:threats}).
 
 The attempt still produced a mechanism finding: the graph engine's family
-traversal currently stops at external supertypes (project-local recall on
-the dispatch closure: $0.32$), even though the \code{extends} clause that
-roots the hierarchy is \emph{in project source}. The project-local subtype
-closure of an external interface is computable from project sources alone,
-so this is an engine iteration, not a representation limit. Large-task
-replication in a second corpus therefore remains open, and constrains the
-target choice: it must be large ($\gtrsim$60 sites), rooted in a
-\emph{project-local} type, and distinctively named.
+traversal stopped at external supertypes (project-local recall on the
+dispatch closure: $0.32$), even though the \code{extends} clause that roots
+the hierarchy is \emph{in project source}. In response the engine now (a)
+reports a contract boundary (\code{completeness: project-local} +
+\code{overridesExternal}) whenever the queried method belongs to an external
+supertype's contract---the excluded task above now \emph{self-reports} its
+ill-posedness---and (b) answers external-rooted queries
+(\code{Iterator.next}) with the project-local implementation closure, the
+well-posed migration form of the question. The task generator likewise
+rejects targets that override external methods.
+
+\textbf{Large-task replication: Guava, 310 sites.} The audit constrained
+the replacement target: large, rooted in a \emph{project-local} type,
+distinctively named. \code{ForwardingObject\#delegate} in Guava qualifies
+(310 oracle sites: 84-member override family + 280 resolved callers; three
+times the largest jackson task). The engine ceiling on it is $0.997$ recall
+at $1.000$ precision.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{llrrrrr}
+\toprule
+tier & arm & recall & prec & turns & wall (s) & USD \\
+\midrule
+Haiku  & T        & 0.171 & 1.000 & 41 & 173 & 0.43 \\
+Haiku  & \gstar{} & \textbf{0.997} & 1.000 & 4 & 102 & 0.18 \\
+Sonnet & T        & 0.997 & 1.000 & 55 & 811 & 3.85 \\
+Sonnet & \gstar{} & 0.961 & 0.909 & 25 & 314 & 1.75 \\
+Local 30B & \gstar{} & \textbf{0.997} & 1.000 & \textbf{1} & 224 & \textbf{0} \\
+\bottomrule
+\end{tabular}
+\caption{Guava \code{ForwardingObject.delegate} (310 sites), one trial per
+cell. A first Haiku~T attempt exhausted a 20-minute budget without
+answering; the scored run is a 40-minute-budget retry that answered early
+and incompletely (54 sites), claiming completeness.}
+\label{tab:guava}
+\end{table}
+
+Three findings. \emph{First}, ceiling delivery replicates: Haiku~\gstar{}
+and the local 30B sit exactly at the engine ceiling ($0.997$) on a
+blast radius $3\times$ anything in the jackson corpus, while Haiku~T
+collapses to $0.171$ (or times out)---the capability-equalizer result,
+reproduced in a third corpus at $1/21$st the frontier-text cost.
+\emph{Second}, Sonnet~T \emph{ties} recall here. \code{delegate()} is a
+globally unique, literally greppable name, so the change-set---though
+huge---never exceeds what text search reliably enumerates. This sharpens
+the boundary variable: the graph's recall advantage is gated by
+\emph{text-enumerability}, not raw site count (jackson's \code{serialize}
+callers required type-level disambiguation among same-named methods;
+\code{delegate()} does not). The economics still invert at equal recall:
+\$3.85 and 55 turns versus \$0 and one turn. \emph{Third}, a new
+mechanism datum: Sonnet~\gstar{} scored \emph{below} the weaker tiers
+($0.961$, precision $0.909$) because it re-processed the engine's output
+through its own grep/awk/python pipeline across 25 turns, dropping 12
+real sites and adding 30 spurious ones, then asserted completeness. The
+scaffolded local arm and the minimally-interventionist Haiku arm relayed
+the deterministic set losslessly. At task altitude the model's remaining
+job is \emph{relay}; capability spent re-orchestrating a solved traversal
+is negative capability. The product implication: ship the relay
+discipline (a scaffold or steering rule that forbids re-deriving the
+tool's answer), not just the tool.
 
 \section{Why---the mechanism}
 \label{sec:mechanism}
@@ -736,16 +793,15 @@ address---there T/G localization ability still binds.
 and the engine (tree-sitter indexer + resolution heuristics) both perform type
 resolution but share no code or algorithms; the engine's initial 0.05 recall and
 residual 0.993 (not 1.0) demonstrate they do not trivially agree.
-\item \textbf{Two subjects per language; one framework for the large-Java regime.}
-The large-task and altitude results rest on \code{jackson-databind} interface
-methods. The small-task tie replicated in Apache Commons Collections
-(\cref{sec:external}); our large-task replication attempt there failed audit
-(the target overrides a JDK interface, making the refactor ill-posed, the
-oracle closure over-broad, and the generic name scorer-hostile) and is
-excluded. Replication on a corpus with a large \emph{project-rooted}
-hierarchy (Guava, Netty, Spring) remains the key external-validity gap.
-Targets that override external-library methods are now rejected at
-task-generation time.
+\item \textbf{Corpus coverage.} The altitude results now span three Java
+frameworks: jackson-databind (6 size-graded tasks), Apache Commons
+Collections (small-task tie; one large-task attempt failed audit---the
+target overrode a JDK interface, making the refactor ill-posed, the oracle
+closure over-broad, and the generic name scorer-hostile---and is excluded;
+such targets are now rejected at task-generation time), and Guava (310-site
+replication, \cref{tab:guava}, $n{=}1$ per cell). A large Go codebase with
+wide interfaces remains untested, and the Guava cells warrant replication
+trials.
 \item \textbf{Mode A only.} We score the \emph{answer}, not an applied patch. Mode
 B (compile / fail-to-pass)---where an incomplete change actually breaks the
 build---would test whether the reliability gain converts to task success.

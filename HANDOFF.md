@@ -205,6 +205,16 @@ Regenerate a task: `python java-oracle/make_java_task.py --id <id> --display 'Cl
 - **Usage/rate caps** pause the Claude/GPT runners (they wait + resume). Long
   unattended grids: `sudo pmset -a disablesleep 1` (caffeinate doesn't survive
   lid-close). `runs/` is gitignored — data lives only on this machine.
+- **`reparse_all.py` clobbers rescore_java's line→method mapping** — always
+  re-run rescore_java for every Java corpus after it (see its docstring; four
+  jackson runs were silently zeroed this way on 2026-07-04 and restored).
+- **Answer parser is now strict=False** (schema.py): agents emit literal
+  newlines inside JSON strings; the strict decoder used to zero the entire
+  answer (a 350-site Sonnet T answer scored 0.0 until fixed).
+- **Weak-match audit**: agg_jackson.py flags runs whose credited sites are
+  >34% symbol-only fallback. Jackson corpus mean is 3.5% (clean); any task
+  whose GT shares one generic symbol name (next, get) is scorer-hostile —
+  prefer distinctively-named targets.
 
 ---
 
@@ -253,23 +263,42 @@ Regenerate a task: `python java-oracle/make_java_task.py --id <id> --display 'Cl
 **2. Mode B (compile / fail-to-pass)** — §5.5 has derived metric (expected
 compile failures); actual compilation not yet run.
 
-**3. External validity (partially done; large-task question OPEN, not negative)**
-- Small-task tie confirmed in commons-collections ✓
-- Large-task attempt (MapIterator.next) failed audit — excluded (see Done).
-  A collections library is structurally hostile: every big hierarchy roots
-  in java.util.*, which makes signature-change tasks ill-posed there.
-- Remaining gap: a corpus with a LARGE (≥60 sites) PROJECT-ROOTED,
-  distinctively-named hierarchy. Candidates: Guava `AbstractIterator.computeNext`
-  (guava-owned abstract method, many inner-class implementors), Netty
-  `ChannelHandler` family, Spring.
-- Task-generation guard: reject targets that override external-library
-  methods (oracle detects via Spoon top-definitions; wired into
-  `make_java_task.py`).
-- Engine work unlocked by the audit: (a) external-supertype family expansion
-  (project-local subtype closure of an external interface is computable from
-  project source alone); (b) contract-boundary flag in change_impact output
-  (`overridesExternal` + completeness field) so agents know when the set is
-  authoritative vs project-local-bounded — turns the boundary into a feature.
+**3. External validity — DONE (third corpus: Guava)**
+- Small-task tie confirmed in commons-collections ✓ (17 GT, all arms 1.0;
+  T 61 turns vs G* 27 — efficiency gap persists at equal recall)
+- mapiterator-next failed audit — excluded (see Done). Guard added.
+- **guava-forwarding-delegate: 310 GT sites** (ForwardingObject#delegate,
+  guava-owned root, passes guard). Engine ceiling 0.997/1.000. Results:
+  | arm | rec | prec | turns | wall | $ |
+  |---|---|---|---|---|---|
+  | Haiku G* | 0.997 | 1.000 | 4 | 102s | 0.18 |
+  | Local30B G* | 0.997 | 1.000 | 1 | 224s | 0 |
+  | Sonnet T | 0.997 | 1.000 | 55 | 811s | 3.85 |
+  | Sonnet G* | 0.961 | 0.909 | 25 | 314s | 1.75 |
+  | Haiku T | TIMEOUT at 20min (excluded); 40-min retry pending |
+- **Findings:** (1) G* ceiling delivery replicates in corpus 3 at 3× the
+  largest jackson blast radius. (2) Sonnet T TIES recall here — delegate()
+  is name-unique/greppable, so the task is text-enumerable despite 310
+  sites; refines the boundary variable: it's text-enumerability, not raw
+  site count. Economics still invert ($3.85/55turns vs $0/1turn). (3) NEW
+  mechanism datum: Sonnet G* (0.961) UNDERPERFORMS Haiku/local G* (0.997) —
+  it re-processed the engine output through grep/awk/python and corrupted
+  the relay; the scaffolded/minimal arms relayed losslessly. At task
+  altitude, extra model initiative is negative capability — ship the relay
+  scaffold, not just the tool.
+
+**3b. Engine work landed (grove/prism, committed)**
+- Contract-boundary detection in change_impact: `externalSupers`,
+  `overridesExternal` ("Iterator#next"), `completeness: closed|project-local`
+  + explicit warning in MCP output. The excluded mapiterator task now
+  self-reports its invalidity.
+- External-rooted queries: `Iterator.next` (type not indexed) returns the
+  project-local implementation closure (162 sites on commons-collections)
+  instead of erroring — the well-posed migration/deprecation query.
+- 5 new tests; jackson ceiling regression clean (engine_ceiling.py:
+  1.0/1.0/.982/1.0/1.0/1.0). Steering templates teach the completeness field.
+- Oracle guard: `overrides_external` in Oracle.java; make_java_task.py
+  rejects ill-posed targets (--allow-external-override to bypass).
 
 **4. GPT/Codex tier** (`java-oracle/CODEX.md`) — cross-family point for the paper.
 
