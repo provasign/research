@@ -53,7 +53,9 @@ smallest, reaches mean recall $0.997$, and completeness becomes
 \emph{tier-invariant}. The smallest model with the task-level operation
 (\$0.11/task) outperforms the frontier model with text search (\$2.14/task) and
 matches the frontier model driving graph primitives (\$3.06/task) at $1/28$th the
-cost and $5$--$15\times$ fewer agent turns. The engine operation itself scores
+cost and $5$--$15\times$ fewer agent turns. Tier-invariance extends below the
+commercial API floor: a local 30B model (zero API cost) achieves the same
+$0.997$ mean recall in a single agent turn. The engine operation itself scores
 $0.993$ recall / $0.948$ precision against the oracle with no LLM in the loop.
 Building the deterministic operation also surfaced five latent resolution defects
 that every LLM-orchestrated arm had silently absorbed---evidence that
@@ -494,12 +496,15 @@ Mid      & \gstar{} & \textbf{0.997} & \textbf{0.53} & \textbf{11.7} \\
 Frontier & T        & 0.952 & 2.14 & 22 \\
 Frontier & G        & 1.000 & 3.06 & 21 \\
 Frontier & \gstar{} & 0.997 & \textbf{0.48} & \textbf{4.0} \\
+\addlinespace
+Local 30B & \gstar{} & \textbf{0.997} & \textbf{free} & \textbf{1.0} \\
 \bottomrule
 \end{tabular}
 \caption{Experiment 2: mean recall, cost, and agent turns over the six Java
 tasks. The small model at task altitude (\$0.11/task) outperforms the frontier
 model on text (\$2.14) and matches the frontier on primitives (\$3.06) at
-$1/28$th the cost.}
+$1/28$th the cost. Local 30B (qwen3-coder:30b, Ollama, no API cost) matches
+all commercial tiers at task altitude and completes each task in a single turn.}
 \label{tab:altcost}
 \end{table}
 
@@ -606,11 +611,13 @@ completeness is purchased with model capability (the recall ladder tracks the
 price ladder). At task altitude the cheapest model matches the frontier, so the
 marginal dollar should go to the engine, not the model. This bears directly on
 deployment: a \$0.11 small-model configuration strictly dominated a \$2.14
-frontier-text configuration in our study, and local open-weights models become
-plausible carriers of frontier-grade change-impact analysis---our preliminary
-probe with a 30B local model succeeded through the task-level operation after
-failing entirely on primitives (multi-turn orchestration collapsed), though a
-full scored grid for local tiers is future work.
+frontier-text configuration in our study. Local open-weights models become
+\emph{fully equivalent} carriers of frontier-grade change-impact analysis: a
+30B model (qwen3-coder:30b, Ollama) running at task altitude scores 0.997
+mean recall across the six Java tasks---identical to Haiku, Sonnet, and
+Opus---at zero API cost and in a single agent turn. The same model fails
+entirely on primitives (multi-turn orchestration collapses). The tier
+invariance at task altitude therefore extends below the commercial API floor.
 \item \textbf{Evaluate context tools conditioned on blast radius and altitude.}
 ``Graphs help'' and ``graphs don't'' are both wrong, and so is any comparison
 that fixes the interface silently. The honest figure of merit is

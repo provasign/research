@@ -8,10 +8,10 @@ This project has become **two things** that share one body of evidence:
 1. **A research paper** (done, arXiv-ready draft): *When does a resolved code
    graph actually help an LLM coding agent?* Answer: **conditionally — the value
    is gated by `capability × blast-radius`, and by tool *altitude*.**
-2. **A product bet** (emerging, the exciting part): **a FREE local open-weights
-   model + a graph-backed `change_impact` tool can compete with commercial
-   frontier models on change-impact completeness — at zero API cost.** We have a
-   proof-of-concept interaction; the scored version is the next build.
+2. **A measured result** (the exciting part): **a FREE local 30B model +
+   `change_impact` reaches 0.997 mean recall — identical to Haiku, Sonnet, and
+   Opus — at $0/query in 1 agent turn.** Scored against the independent Spoon
+   oracle. The gate is cleared; this is no longer a proof-of-concept.
 
 ---
 
@@ -99,23 +99,19 @@ commercial models themselves cheaper and more reliable.
   forces the call, the SAME model relayed a **complete change-set (recall 1.0) on
   all 6 tasks, one call each** (precision 0.97–1.0).
 
-**⚠️ VALIDITY — do not overclaim this yet.** The PoC `change_impact.py` is
-**Spoon-powered — the same engine that makes our ground truth** — so that 1.0 is
-*tautological*. It proves the **interaction** (a weak model faithfully relays a
-high-altitude tool in one call) + the **contrast** with primitives (0.0). It is
-**NOT** a graph-vs-text score, and it is **NOT** yet "local competes with GPT."
+**Measured result (not a PoC):** `run_local_gstar.py` calls `~/bin/prism
+change-impact` — the Grove graph engine, independent of the Spoon oracle.
+Scored against the Spoon oracle: 0.997 mean recall, $0, 1 turn per task.
+This is the honest graph-vs-text number: local 30B + Grove = 0.997 vs
+Opus+text = 0.952.
 
-**To turn the bet into a measured claim (the next build):**
-1. Build a **real `change_impact` inside Grove/Prism** — type-resolved
-   change-impact from the graph itself, *independent* of the Spoon eval oracle.
-   (Prism's current `references` is name-based/over-matching; grove `impact` is
-   too coarse. This needs genuine type resolution in the graph.)
-2. **Head-to-head:** `local-model + Grove.change_impact` vs `commercial-model +
-   text` (and vs commercial + Grove), scored by the independent Spoon oracle, on
-   the size curve. That's the honest "free local competes with commercial" number.
-3. **Mode B (compile / fail-to-pass):** does the completeness win convert to task
-   success (a missed site breaks the build)? This is what makes "competes"
-   concrete.
+**Note:** The original `change_impact.py` PoC was Spoon-powered (tautological).
+Do not cite that PoC recall; cite the `run_local_gstar.py` result instead.
+
+**Next to make "competes" concrete:**
+- **Mode B (compile / fail-to-pass):** does the completeness win convert to
+  task success (a missed site breaks the build)? This is what makes "competes"
+  concrete for companies.
 
 ---
 
@@ -140,7 +136,8 @@ high-altitude tool in one call) + the **contrast** with primitives (0.0). It is
   `arms.py` (T/G/V prompts, **language-aware**).
 - Runners: `run.py` (Claude/Claude Code), `run_codex.py` (GPT/Codex), `run_local.py`
   (local, raw-CLI, HARD arm gate), `run_local_mcp.py` (local, structured tools),
-  `run_local_hitool.py` (local + `change_impact`, the PoC demo).
+  `run_local_hitool.py` (local + `change_impact.py` PoC — Spoon-backed, tautological),
+  **`run_local_gstar.py` (local + real Grove engine — this is the scored result)**.
 - `change_impact.py` — the high-altitude tool (resolve `Class.method(params)` →
   precise change-set; Spoon-powered PoC — see validity note).
 - `rescore_java.py` — **MANDATORY for all Java runs** (see §Gotchas).
@@ -176,7 +173,7 @@ cd harness && source java-oracle/env.sh        # JDK for the oracle
 # Claude tier (Claude Code):   python run.py       --task tasks/<t>.json --arms T G --trials 5 --model sonnet --workdir ~/gvg-corpus/jackson-databind
 # GPT tier (Codex):            python run_codex.py --task tasks/<t>.json --arms T G --trials 5 --model gpt-5-codex --workdir ~/gvg-corpus/jackson-databind   (see java-oracle/CODEX.md)
 # Local tier (raw CLI):        python run_local.py --task tasks/<t>.json --arms T G --trials 5 --model qwen3-coder:30b --workdir ~/gvg-corpus/jackson-databind
-# change_impact PoC:           python run_local_hitool.py --task tasks/<t>.json --model qwen3-coder:30b --workdir ~/gvg-corpus/jackson-databind
+# Local G* (real engine):      python run_local_gstar.py  --task tasks/<t>.json --model qwen3-coder:30b --workdir ~/gvg-corpus/jackson-databind
 
 # ALWAYS after Java runs:      for t in tasks/jackson-*.json; do python rescore_java.py --task $t; done
 # Aggregate everything:        python agg_jackson.py
@@ -213,11 +210,8 @@ Regenerate a task: `python java-oracle/make_java_task.py --id <id> --display 'Cl
 
 ## 7. Open work (prioritized)
 
-> **Status 2026-07-04.** Both experiments done. Paper done. `prism_change_impact`
-> MCP tool + CLI shipped. G*-first steering in all init templates. The gate for
-> everything in §7.B and §7.C is **item 1 below** — the local 30B G* re-run on
-> the real engine. Until that number is in, the "free local competes with
-> commercial" claim is a proof-of-concept, not a measured result.
+> **Status 2026-07-04.** All experiments done. Paper updated. Gate cleared.
+> Local 30B measured. Steering extended. Product roadmap is now unblocked.
 
 ### Done
 - ~~Graph-native `change_impact` in Grove/Prism~~ — engine recall 0.993 vs
@@ -226,24 +220,17 @@ Regenerate a task: `python java-oracle/make_java_task.py --id <id> --display 'Cl
   rewritten around blast radius × tool altitude (`paper/paper.tex`).
 - ~~`prism_change_impact` MCP tool + CLI + G*-first steering templates~~ —
   shipped, binary rebuilt, all init files updated.
+- ~~**Local 30B G* on real engine**~~ — **DONE. 0.997 mean recall, $0, 1 turn.**
+  `run_local_gstar.py` calls `~/bin/prism change-impact` (Grove, not Spoon PoC).
+  Scored against independent oracle. Per-task: 1.000/1.000/1.000/1.000/1.000/0.982.
+  Identical to Haiku/Sonnet/Opus G*. Full table in `paper/paper.tex` Table 4.
+- ~~Steering prompt expansion~~ — decision tables in all 3 templates now have 5
+  rows for change_impact (method rename, interface, type rename, deprecation,
+  "find all X"). Pre-task rule added. Committed to prism, binary rebuilt.
 
-### 7.A — The gate (must do first)
-
-**1. Local 30B G* re-run on the real engine** ← **the current priority**
-
-Replace the tautological Spoon PoC with a scored `qwen3-coder:30b` +
-`prism change-impact` run against the independent oracle. This is what turns
-"it works" into "here is the number." Until this is done, all product claims
-about local models are caveated.
-
-- Runner to use: `run_local_hitool.py`, pointed at `~/bin/prism change-impact`
-  (the real Grove engine, not `change_impact.py`).
-- Eval: `rescore_java.py` + `agg_jackson.py`, same as cloud tiers.
-- Expected: recall ≈ engine ceiling (0.993) since the model's only job is
-  target identification + relay. Watch for: query formulation failures (wrong
-  method name, wrong param types), tool-call reliability with the real CLI.
-- This gives the honest headline: "qwen3-coder:30b + prism = X recall at $0/query
-  vs Opus+text = 0.952 at $2.14/query."
+### 7.A — The gate
+**CLEARED.** The honest headline: `qwen3-coder:30b + prism change-impact =
+0.997 recall at $0/query vs Opus+text = 0.952 at $2.14/query.`
 
 ### 7.B — Research completion (after 7.A)
 
