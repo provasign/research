@@ -8,15 +8,18 @@ Single, self-contained restart point. Everything below is committed on `main`
 > ceiling; **Sonnet G* relay failure replicated, then FIXED structurally** —
 > removing rg from the G* arm restores Sonnet to the ceiling on both Guava
 > 0.997/1.000 and Django 1.000/0.865; the harness G* arm is now prism-only).
-> **Released:** astkit v0.4.17, grove v0.14.0 (change_impact engine), prism
-> v0.16.0 (MCP+CLI+steering; init no longer clobbers global Zed/Codex configs),
-> fuse v0.13.1 (dep bump); homebrew-shale tap updated (prism, fuse); released
-> darwin-arm64 binary checksum-verified and reproduces the Django 55-site
-> answer. Engine-ceiling regression sweep clean across all 4 languages.
-> Grove repo: 1.1GB committed go-build cache untracked (history purge = open
-> decision). Paper: abstract now 4 languages; §5 Python paragraph + structural
-> relay finding. Remaining paper TODOs: affiliation, artifact URLs, citation
-> check — next session is paper finalization.
+> **Released (final, after clean-tree re-release):** astkit v0.4.17, grove
+> v0.14.1, prism v0.16.1, fuse v0.13.2; homebrew-shale tap current. The first
+> round (grove v0.14.0 / prism v0.16.0 / fuse v0.13.1) was deleted: grove's
+> v0.14.0 tag tree carried 1.1GB of accidentally committed go-build cache
+> (plus a 36MB eval binary), so the module zip was bloated; both are
+> untracked now and the clean tags supersede. History NOT purged (user
+> decision). Released binary checksum-verified, reproduces the Django
+> 55-site answer. Engine-ceiling regression sweep clean across all 4
+> languages. Paper: abstract 4 languages; §5 Python + structural relay
+> finding; full de-AI voice pass done (bold-as-argument, First/Second/Third
+> scaffolding, capper slogans removed). Remaining paper TODOs: affiliation,
+> artifact URLs (cite the four tags above), citation check.
 
 This project has become **two things** that share one body of evidence:
 
