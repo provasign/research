@@ -664,6 +664,9 @@ Haiku  & T        & 0.171 & 1.000 & 41 & 173 & 0.43 \\
 Haiku  & \gstar{} & \textbf{0.997} & 1.000 & 4 & 102 & 0.18 \\
 Sonnet & T        & 0.997 & 1.000 & 55 & 811 & 3.85 \\
 Sonnet & \gstar{} & 0.961 & 0.909 & 25 & 314 & 1.75 \\
+Opus   & T        & 0.997 & 1.000 & 3 & 516 & 5.46 \\
+Opus   & \gstar{} & \textbf{0.997} & 1.000 & 8 & 119 & 0.66 \\
+Fable  & \gstar{} & \textbf{0.997} & 1.000 & 9 & 155 & 1.40 \\
 Local 30B & \gstar{} & \textbf{0.997} & 1.000 & \textbf{1} & 224 & \textbf{0} \\
 \bottomrule
 \end{tabular}
@@ -674,29 +677,68 @@ and incompletely (54 sites), claiming completeness.}
 \label{tab:guava}
 \end{table}
 
-Three findings. \emph{First}, ceiling delivery replicates: Haiku~\gstar{}
-and the local 30B sit exactly at the engine ceiling ($0.997$) on a
-blast radius $3\times$ anything in the jackson corpus, while Haiku~T
-collapses to $0.171$ (or times out)---the capability-equalizer result,
-reproduced in a third corpus at $1/21$st the frontier-text cost.
-\emph{Second}, Sonnet~T \emph{ties} recall here. \code{delegate()} is a
-globally unique, literally greppable name, so the change-set---though
-huge---never exceeds what text search reliably enumerates. This sharpens
-the boundary variable: the graph's recall advantage is gated by
-\emph{text-enumerability}, not raw site count (jackson's \code{serialize}
-callers required type-level disambiguation among same-named methods;
-\code{delegate()} does not). The economics still invert at equal recall:
-\$3.85 and 55 turns versus \$0 and one turn. \emph{Third}, a new
-mechanism datum: Sonnet~\gstar{} scored \emph{below} the weaker tiers
-($0.961$, precision $0.909$) because it re-processed the engine's output
-through its own grep/awk/python pipeline across 25 turns, dropping 12
-real sites and adding 30 spurious ones, then asserted completeness. The
-scaffolded local arm and the minimally-interventionist Haiku arm relayed
-the deterministic set losslessly. At task altitude the model's remaining
-job is \emph{relay}; capability spent re-orchestrating a solved traversal
-is negative capability. The product implication: ship the relay
-discipline (a scaffold or steering rule that forbids re-deriving the
-tool's answer), not just the tool.
+Three findings. \emph{First}, ceiling delivery replicates: Haiku~\gstar{},
+Opus~\gstar{}, Fable~\gstar{}, and the local 30B all sit exactly at the
+engine ceiling ($0.997$) on a blast radius $3\times$ anything in the
+jackson corpus, while Haiku~T collapses to $0.171$ (or times out)---the
+capability-equalizer result, reproduced in a third corpus at $1/21$st the
+frontier-text cost. \emph{Second}, Sonnet~T and Opus~T \emph{tie} recall
+here. \code{delegate()} is a globally unique, literally greppable name, so
+the change-set---though huge---never exceeds what text search reliably
+enumerates. This sharpens the boundary variable: the graph's recall
+advantage is gated by \emph{text-enumerability}, not raw site count
+(jackson's \code{serialize} callers required type-level disambiguation
+among same-named methods; \code{delegate()} does not). The economics still
+invert at equal recall: \$3.85--\$5.46 and up to 55 turns versus \$0 and
+one turn. \emph{Third}, a new mechanism datum: Sonnet~\gstar{} scored
+\emph{below} every other \gstar{} tier ($0.961$, precision $0.909$)
+because it re-processed the engine's output through its own
+grep/awk/python pipeline across 25 turns, dropping 12 real sites and
+adding 30 spurious ones, then asserted completeness. The scaffolded local
+arm and the Haiku/Opus/Fable arms relayed the deterministic set
+losslessly (the Fable run touched no tool but \code{prism}). Relay
+fidelity is thus not a capability gradient but a \emph{behavioral}
+variable---any tier can fumble it by re-deriving. At task altitude the
+model's remaining job is relay; capability spent re-orchestrating a
+solved traversal is negative capability. The product implication: ship
+the relay discipline (a steering rule that forbids re-deriving the
+tool's answer---now part of the shipped templates), not just the tool.
+
+\subsection{Cross-language external validity: Go and TypeScript}
+\label{sec:crosslang}
+
+The same protocol extends beyond Java. In each language the engine
+ceiling is measured first (no LLM), then the arms.
+
+\textbf{Go (grafana, \code{SQLStore.WithTransactionalDbSession}, 93
+sites).} Resolving this target required one engine fix (Go receiver
+methods live in any file of the type's package; the contains edge
+previously required same-file declarations), after which the ceiling is
+$1.000$ recall / $1.000$ precision. The historical text/primitives arms
+from Experiment~1 average $0.817$ (T) and $0.826$ (G) at the small tier,
+with per-trial recall swinging $0.495$--$1.0$. At task altitude:
+Haiku~\gstar{} $1.000/1.000$ in 5 turns (75\,s, \$0.10); local
+30B~\gstar{} $1.000/1.000$ in one turn (81\,s, \$0). The variance
+collapse is total. The two other large grafana targets root in an
+\emph{external} plugin-SDK interface, the Go analog of the excluded
+commons-collections task---Go's structural typing leaves no
+\code{implements} clause to traverse, so nominal closure cannot answer
+them (engine roadmap: method-set matching).
+
+\textbf{TypeScript (TypeORM, \code{Driver.escape}, 37 sites,
+compiler-resolved GT via a ts-morph oracle).} The engine ceiling is
+\emph{low}: $0.540$ recall / $0.645$ precision. Family resolution works
+(11 of 12 driver implementations; \code{implements Driver} clauses are
+nominal), but callers bind through interface-typed \emph{fields}
+(\code{this.driver.escape(...)}) in files that never import a concrete
+driver, and the TS call resolver does not yet track field types. The
+local 30B \gstar{} arm scores exactly the ceiling ($0.540/0.645$, one
+turn)---a lossless relay of an imperfect engine, and the cleanest
+demonstration in the study that \gstar{} completeness is a tool
+property: raise the ceiling and every tier rises; here the ceiling is
+low and every relay lands on it. Text arms can exceed a low ceiling
+(the boundary cuts both ways), which is precisely what the
+per-language ceiling measurement is for.
 
 \section{Why---the mechanism}
 \label{sec:mechanism}

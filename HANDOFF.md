@@ -287,6 +287,29 @@ compile failures); actual compilation not yet run.
   altitude, extra model initiative is negative capability — ship the relay
   scaffold, not just the tool.
 
+**3c. Cross-language + tier completion (2026-07-04 PM)**
+- **Guava full tier table:** Opus T 0.997/$5.46/516s; Opus G* 0.997/$0.66/119s;
+  Fable G* 0.997/$1.40/155s (touched ONLY prism). Relay fidelity is
+  behavioral, not a capability gradient — only Sonnet's trial re-derived.
+  Relay rule shipped in all steering templates + MCP tool description.
+- **Go (grafana bigblast, 93 GT):** engine fix (Go receiver methods attach
+  cross-file within package) → ceiling 1.000/1.000. Haiku G* 1.000 (5 turns,
+  $0.10), Local30B G* 1.000 (1 turn, $0) vs historical Haiku T 0.817±var /
+  G 0.826. Variance collapse total. querydata/checkhealth tasks root in the
+  external plugin-sdk interface (Go structural typing, no implements clause)
+  — Go analog of the excluded Java task; method-set matching = engine v2.
+- **TypeScript (TypeORM Driver.escape, 37 GT):** NEW ts-morph oracle
+  (`harness/ts-oracle/oracle.mjs`, compiler-resolved GT + lineindex mode).
+  Engine fix: subtype-closure rooting when interface members aren't indexed
+  symbols (also fixed Go interface queries: DB.WithTransactionalDbSession).
+  Engine ceiling LOW: 0.540/0.645 — family resolution works (11/12
+  implements-clause drivers) but callers bind through interface-typed FIELDS
+  (this.driver.escape) and the TS call resolver doesn't track field types.
+  Local30B G* = 0.5405/0.6452 = EXACTLY the ceiling — lossless relay of an
+  imperfect engine, cleanest tool-property demonstration in the study.
+  TS field-type tracking = top engine roadmap item.
+- Paper §5.6 + new §5.7 (cross-language) updated with all cells.
+
 **3b. Engine work landed (grove/prism, committed)**
 - Contract-boundary detection in change_impact: `externalSupers`,
   `overridesExternal` ("Iterator#next"), `completeness: closed|project-local`

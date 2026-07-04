@@ -23,7 +23,8 @@ PRISM = Path.home() / "bin" / "prism"
 
 
 def prism_query(task: Task) -> str:
-    fqn = task.pr.split("oracle-spoon:", 1)[1]
+    # pr is "oracle-spoon:FQN#m(params)" (Java) or "oracle-ts:Type#m" (TS).
+    fqn = task.pr.split(":", 1)[1]
     type_part, mspec = fqn.split("#", 1)
     simple = type_part.rsplit(".", 1)[-1]
     return f"{simple}.{mspec}"
