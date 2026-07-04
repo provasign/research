@@ -213,35 +213,130 @@ Regenerate a task: `python java-oracle/make_java_task.py --id <id> --display 'Cl
 
 ## 7. Open work (prioritized)
 
-> **See `ROADMAP.md`.** Status 2026-07-04: the shared prerequisite and both
-> paths' first legs are DONE — graph-native `change_impact` built (engine
-> recall 0.993 vs oracle, `harness/GROVE-CHANGE-IMPACT.md`), the G* grid ran
-> (tier-invariant 0.997; Haiku+G* $0.11 beats Opus+T $2.14 —
-> `tool-altitude` Exp 2), the paper is rewritten around blast radius × tool
-> altitude (`paper/paper.tex`, builds with tectonic), and the product ships
-> G*-first steering (`prism_change_impact` MCP tool + CLI + init templates).
+> **Status 2026-07-04.** Both experiments done. Paper done. `prism_change_impact`
+> MCP tool + CLI shipped. G*-first steering in all init templates. The gate for
+> everything in §7.B and §7.C is **item 1 below** — the local 30B G* re-run on
+> the real engine. Until that number is in, the "free local competes with
+> commercial" claim is a proof-of-concept, not a measured result.
 
-1. ~~Product build: graph-native `change_impact`~~ **DONE** (grove
-   `internal/graph/changeimpact.go`; scored 0.993/0.948 by the Spoon oracle).
-2. ~~G* grid + paper rewrite~~ **DONE** (Exp 2 in `paper/paper.tex` §Results II;
-   THESIS.md C8/C9).
-3. **Local tier re-run on the real engine** — replace the tautological PoC
-   probe with scored qwen3-coder-30b + `prism change-impact` cells (the "free
-   local competes with commercial" result, now legitimately scorable).
-4. **Mode B** (compile / fail-to-pass) — does completeness convert to task success.
-5. **External validity:** 2nd framework (Spring/Guava) + a large Go codebase with
-   wide interfaces; also fill Exp-2 n (Sonnet/Opus G* are n=1).
-6. **Finish the GPT/Codex tier** (`java-oracle/CODEX.md`) — cross-family point.
-7. **arXiv polish:** authors/affiliation, artifact URLs, verify the 12 citations
-   in `paper/paper.tex` (best-effort from memory — must be checked).
+### Done
+- ~~Graph-native `change_impact` in Grove/Prism~~ — engine recall 0.993 vs
+  oracle (`harness/GROVE-CHANGE-IMPACT.md`).
+- ~~G* grid (T/G/G* × 3 tiers × 6 tasks)~~ — tier-invariant 0.997; paper
+  rewritten around blast radius × tool altitude (`paper/paper.tex`).
+- ~~`prism_change_impact` MCP tool + CLI + G*-first steering templates~~ —
+  shipped, binary rebuilt, all init files updated.
+
+### 7.A — The gate (must do first)
+
+**1. Local 30B G* re-run on the real engine** ← **the current priority**
+
+Replace the tautological Spoon PoC with a scored `qwen3-coder:30b` +
+`prism change-impact` run against the independent oracle. This is what turns
+"it works" into "here is the number." Until this is done, all product claims
+about local models are caveated.
+
+- Runner to use: `run_local_hitool.py`, pointed at `~/bin/prism change-impact`
+  (the real Grove engine, not `change_impact.py`).
+- Eval: `rescore_java.py` + `agg_jackson.py`, same as cloud tiers.
+- Expected: recall ≈ engine ceiling (0.993) since the model's only job is
+  target identification + relay. Watch for: query formulation failures (wrong
+  method name, wrong param types), tool-call reliability with the real CLI.
+- This gives the honest headline: "qwen3-coder:30b + prism = X recall at $0/query
+  vs Opus+text = 0.952 at $2.14/query."
+
+### 7.B — Research completion (after 7.A)
+
+**2. Mode B (compile / fail-to-pass)**
+Does the completeness win convert to actual task success? A missed site
+breaks the build; does G* zero-miss rate translate to higher build pass rate?
+This is what makes "competes with commercial" concrete for companies.
+
+**3. External validity**
+- 2nd Java framework (Spring/Guava) — proves the lever is blast radius,
+  not "jackson-databind."
+- Large Go codebase with wide interfaces — proves it's not "Java."
+- Fill Exp-2 n: Sonnet/Opus G* are n=1; cheap to replicate.
+
+**4. GPT/Codex tier** (`java-oracle/CODEX.md`) — cross-family point for the paper.
+
+**5. arXiv polish** — authors/affiliation, artifact URLs, verify the 12 citations
+in `paper/paper.tex` (all marked TODO; best-effort from memory, must be checked
+before submission).
+
+### 7.C — Product roadmap (after 7.A proves the pattern)
+
+The `change_impact` killer use cases are a well-defined set. The pattern that
+makes them work: **the agent needs a *complete* set, the set is reachable only
+by graph traversal, and missing one item breaks something.** Agents currently do
+this with unreliable multi-turn orchestration; we replace it with one
+deterministic call. The four validated use cases today:
+
+| Use case | Trigger phrase | Cost of a miss |
+|---|---|---|
+| Method signature change | rename, add/remove param, change return type | build breaks at every missed call site |
+| Interface/base class evolution | add method to interface, change abstract method | every non-compliant implementor fails |
+| Type rename/refactor | rename a class, struct, or type alias | every usage of the old name breaks |
+| Deprecation + migration | deprecate a symbol, migrate all call sites | incomplete migration ships deprecated code |
+
+**6. Steering prompt improvement (small change, high impact)**
+The current steering fires on "signature change." Extend to also catch the
+interface and type cases explicitly — these are the same G* trigger but agents
+don't always recognize them today:
+
+```
+| Changing/renaming a method signature            | prism_change_impact |
+| Adding/changing a method on an interface        | prism_change_impact |
+| Renaming a class, type, or struct               | prism_change_impact |
+| Migrating/deprecating a symbol (find all sites) | prism_change_impact |
+```
+
+Also add a pre-task rule: *"Before writing any code on a task that involves
+changing an existing symbol's name or signature: call `prism_change_impact`
+first to establish the complete change-set — even if the change looks small."*
+The `jsonnode-get` result (8 sites, Sonnet text 0.78) is the proof: agents think
+they're done when they aren't. The rule removes the assumption.
+
+**7. `dead_code(entry_points)` → complete list of unreachable symbols**
+Same pattern as `change_impact`. Agents today: grep for call sites manually,
+give up after a few files, miss transitive dead code. With the op: one
+deterministic BFS backward from all entry points. Use case: before large
+cleanups, library extractions, open-sourcing. Expected economics: identical
+to `change_impact` — LLM can't enumerate transitively-unreachable symbols
+reliably; the graph can in milliseconds.
+
+**8. `untested_surface(symbol or package)` → all code paths with no test in call chain**
+Graph knows who calls what; harness knows which files have tests; intersection
+is computable. Use case: "before I refactor this, what do I need to cover?" —
+agent writes tests for exactly the returned list. Natural pairing:
+`change_impact` → `untested_surface(change_set)` → write tests for those.
+
+**9. `missing_implementations(interface)` → all types claiming to implement the interface but missing methods**
+Direct companion to `change_impact` for interface evolution. Use case: add a
+method to an interface → `change_impact` finds callers, `missing_implementations`
+finds every implementor now broken. Fully deterministic; the compiler knows it,
+we should surface it before the compiler does.
+
+**10. `rename_plan(old_symbol, new_name)` → complete change-set with suggested substitutions**
+`change_impact` + the new name applied to each site as a structured edit plan.
+Agent's job becomes: review and apply, not discover. Crosses into Mode B
+territory — the first "do" operation, not just "find."
+
+**Sequencing rule:** items 7–10 all block on 7.A. If the local 30B G* run
+confirms the pattern (relay a complete answer from the engine, one call), then
+the same architecture works for all of them — build `dead_code` next as the
+second proof, then `untested_surface`, then the rest.
 
 ---
 
 ## 8. One-line status
 
-Research result: **done, both experiments** (blast radius × tool altitude).
-Paper: **full arXiv-ready draft** with Exp 2 (`paper/paper.tex`; TODOs:
-affiliation, artifact URLs, citation check). Product: **G* shipped end-to-end**
-— engine op (0.993 vs oracle), `prism_change_impact` MCP + CLI, G*-first agent
-steering. Next big rocks: local-tier re-run on the real engine, Mode B,
-2nd framework. Daily local-coding setup: **live** (`LOCAL-MODEL-SETUP.md`).
+Research: **done, both experiments** (blast radius × tool altitude). Paper:
+**arXiv-ready** (`paper/paper.tex`; 3 TODOs: affiliation, URLs, citation check).
+Product: **`change_impact` shipped end-to-end** (engine 0.993, MCP + CLI,
+G*-first steering in all init templates). **Gate for everything next: local 30B
+G* re-run on the real engine** (item 7.A.1) — that number turns the product
+claim from a PoC into a measured fact. After that: Mode B, 2nd framework,
+then the sibling ops (`dead_code`, `untested_surface`, `missing_implementations`)
+follow the same architecture. Daily local-coding setup: **live**
+(`LOCAL-MODEL-SETUP.md`).
