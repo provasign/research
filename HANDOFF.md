@@ -1,7 +1,22 @@
 # HANDOFF — provasign/research (read this first)
 
 Single, self-contained restart point. Everything below is committed on `main`
-(run *data* is gitignored, machine-local — see §Assets). Last updated 2026-07-03.
+(run *data* is gitignored, machine-local — see §Assets). Last updated 2026-07-04.
+
+> **2026-07-04 product finalization (this session):** Python 4th-language arm
+> done (Django quote_name, 32 GT: engine 1.000/0.865; Haiku & Local30B G* at
+> ceiling; **Sonnet G* relay failure replicated, then FIXED structurally** —
+> removing rg from the G* arm restores Sonnet to the ceiling on both Guava
+> 0.997/1.000 and Django 1.000/0.865; the harness G* arm is now prism-only).
+> **Released:** astkit v0.4.17, grove v0.14.0 (change_impact engine), prism
+> v0.16.0 (MCP+CLI+steering; init no longer clobbers global Zed/Codex configs),
+> fuse v0.13.1 (dep bump); homebrew-shale tap updated (prism, fuse); released
+> darwin-arm64 binary checksum-verified and reproduces the Django 55-site
+> answer. Engine-ceiling regression sweep clean across all 4 languages.
+> Grove repo: 1.1GB committed go-build cache untracked (history purge = open
+> decision). Paper: abstract now 4 languages; §5 Python paragraph + structural
+> relay finding. Remaining paper TODOs: affiliation, artifact URLs, citation
+> check — next session is paper finalization.
 
 This project has become **two things** that share one body of evidence:
 
@@ -400,12 +415,13 @@ second proof, then `untested_surface`, then the rest.
 
 ## 8. One-line status
 
-Research: **done, both experiments** (blast radius × tool altitude). Paper:
-**arXiv-ready** (`paper/paper.tex`; 3 TODOs: affiliation, URLs, citation check).
-Product: **`change_impact` shipped end-to-end** (engine 0.993, MCP + CLI,
-G*-first steering in all init templates). **Gate for everything next: local 30B
-G* re-run on the real engine** (item 7.A.1) — that number turns the product
-claim from a PoC into a measured fact. After that: Mode B, 2nd framework,
-then the sibling ops (`dead_code`, `untested_surface`, `missing_implementations`)
-follow the same architecture. Daily local-coding setup: **live**
+Research: **done, both experiments, 4 languages** (blast radius × tool
+altitude; Go/Java/TS/Python). Paper: **arXiv-ready** (`paper/paper.tex`;
+3 TODOs: affiliation, URLs, citation check — the only remaining work).
+Product: **RELEASED 2026-07-04** — astkit v0.4.17, grove v0.14.0, prism
+v0.16.0, fuse v0.13.1; homebrew tap current; released binary verified
+end-to-end. Relay discipline is structural in the harness (G* arm is
+prism-only). Sibling ops (`dead_code`, `untested_surface`,
+`missing_implementations`, `rename_plan`) are the post-paper roadmap.
+Daily local-coding setup: **live**
 (`LOCAL-MODEL-SETUP.md`).
