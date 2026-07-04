@@ -7,6 +7,8 @@ the shared Mode-A instruction.
 
   T  text-only          rg/grep/find/read. No graph. The baseline.
   G  graph-primitives   prism for traversal; grep only to find an anchor.
+  G* graph-change-impact  prism change-impact delivers the full change-set in
+                        ONE call; the agent just parses the result.
   V  graph-as-verifier  text-primary, then verify completeness with the graph
                         before asserting `complete: true`.
 
@@ -87,6 +89,30 @@ file:line -- do not re-grep what it returns. Useful commands:
 Trace callers and dispatch targets through the graph to find every site a fix \
 must touch; the graph -- not grep -- is how you confirm completeness."""
 
+GSTAR_GUIDANCE = """\
+TOOLS: you have the `prism change-impact` command, which returns the COMPLETE \
+change-set for a method signature change in one call: the declaration(s), every \
+override/implementation in the subtype closure (family), and every resolved \
+call site (callers). Your workflow:
+
+1. Read the issue and identify the TYPE and METHOD being changed.
+2. Run ONE command:
+     {prism} change-impact 'Type.method(ParamType, ...)' .
+   Use the exact type and method name from the issue. Include param types for \
+precision (e.g. 'JsonSerializer.serialize(T, JsonGenerator, SerializerProvider)').
+   If you are not sure of the exact param types, omit them: 'Type.method' also works.
+3. Parse the JSON output. The result has four groups:
+   - declarations: the method itself (must change)
+   - family:       every override/implementation in the subtype closure (must change)
+   - callers:      every resolved call site (must change)
+   - supers:       informational only; the supertype declarations (usually must change too)
+4. Union declarations + family + callers (+ supers if they are separate methods) \
+and output those as your sites list.
+
+Do NOT manually hunt for overrides or grep for callers — the graph computed the \
+full traversal for you. Use `{prism} search <Name>` only if you need to confirm \
+the exact type name before running change-impact."""
+
 V_GUIDANCE = """\
 TOOLS: you have ripgrep/grep/find/sed/read AND the `prism` call-graph CLI. \
 Work text-FIRST: find the candidate change-sites with ripgrep and reading. \
@@ -137,5 +163,8 @@ ARMS: dict[str, Arm] = {
     # G: graph-primary. Keep rg available solely for the anchor-find step the
     # prism workflow prescribes; traversal must go through prism.
     "G": Arm("G", ["Read", "Glob", "Bash(rg:*)", *_PRISM_BASH], G_GUIDANCE),
+    # G*: one high-altitude call to change-impact; agent just reads the result.
+    # rg and prism search/lookup are allowed for type-name lookup only.
+    "Gstar": Arm("Gstar", ["Bash(rg:*)", *_PRISM_BASH], GSTAR_GUIDANCE),
     "V": Arm("V", ["Read", "Grep", "Glob", *_TEXT_BASH, *_PRISM_BASH], V_GUIDANCE),
 }

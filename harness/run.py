@@ -128,6 +128,9 @@ def _parse_stream(stdout: str) -> dict:
     env["graph_used"] = any(
         t["tool"] == "Bash" and "prism" in t["detail"] for t in trace
     )
+    env["change_impact_used"] = any(
+        t["tool"] == "Bash" and "change-impact" in t["detail"] for t in trace
+    )
     return env
 
 
@@ -294,7 +297,7 @@ def main() -> None:
     out = RUNS_DIR / task.id / args.model if args.model else RUNS_DIR / task.id
     out.mkdir(parents=True, exist_ok=True)
 
-    needs_graph = any(a in ("G", "V") for a in args.arms)
+    needs_graph = any(a in ("G", "Gstar", "V") for a in args.arms)
     if needs_graph:
         print(f"[preindex] {workdir} via {PRISM_BIN}")
         preindex(workdir)
@@ -359,13 +362,17 @@ def main() -> None:
                 print(f"      ERROR ({err}) -- excluded from scoring")
                 continue
 
-            # Validity guard (design §10): T must never reach the graph; G must.
+            # Validity guard (design §10): T must never reach the graph; G must;
+            # G* must use change-impact specifically (not just any prism primitive).
             graph_used = env.get("graph_used", False)
+            change_impact_used = env.get("change_impact_used", False)
             violation = None
             if arm_name == "T" and graph_used:
                 violation = "T arm used the graph"
             elif arm_name == "G" and not graph_used:
                 violation = "G arm never used the graph"
+            elif arm_name == "Gstar" and not change_impact_used:
+                violation = "G* arm never used change-impact"
 
             (out / f"{tag}.transcript.txt").write_text(result_text)
             rec = {
@@ -381,6 +388,7 @@ def main() -> None:
                 },
                 "tools_used": env.get("tools_used", []),
                 "graph_used": graph_used,
+                "change_impact_used": change_impact_used,
                 "violation": violation,
                 "tool_trace": env.get("tool_trace", []),
                 "answer": {

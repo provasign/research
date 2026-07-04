@@ -64,24 +64,41 @@ def main() -> None:
         for task, size in TASKS:
             t = cell(task, model, "T")
             g = cell(task, model, "G")
-            if not t[0] and not g[0]:
+            gs = cell(task, model, "Gstar")
+            if not t[0] and not g[0] and not gs[0]:
                 continue
-            rows.append((task, size, t, g))
+            rows.append((task, size, t, g, gs))
         if not rows:
             continue
+        has_gstar = any(r[4][0] for r in rows)
         print(f"\n================ {model.upper()} ================")
-        print(f"{'task':<26}{'sz':>4}  {'Trec':>6}{'Grec':>6}{'Δrec':>6}  "
-              f"{'Tcost$':>7}{'Gcost$':>7}{'G/T':>5}  {'nT':>3}{'nG':>3}")
-        for task, size, t, g in rows:
+        hdr = (f"{'task':<26}{'sz':>4}  {'Trec':>6}{'Grec':>6}"
+               + ("{'G*rec':>6}" if has_gstar else "")
+               + "{'ΔG-T':>6}  {'Tcost$':>7}{'Gcost$':>7}{'G/T':>5}"
+               + ("{'G*cost$':>8}" if has_gstar else "")
+               + "{'nT':>4}{'nG':>4}" + ("{'nG*':>4}" if has_gstar else ""))
+        print(f"{'task':<26}{'sz':>4}  {'Trec':>6}{'Grec':>6}"
+              + (f"{'G*rec':>6}" if has_gstar else "")
+              + f"{'ΔG-T':>6}  {'Tcost$':>7}{'Gcost$':>7}{'G/T':>5}"
+              + (f"{'G*cost$':>8}" if has_gstar else "")
+              + f"  {'nT':>3}{'nG':>3}" + (f"{'nG*':>4}" if has_gstar else ""))
+        for task, size, t, g, gs in rows:
             tr = statistics.mean(t[0]) if t[0] else float("nan")
             gr = statistics.mean(g[0]) if g[0] else float("nan")
+            gsr = statistics.mean(gs[0]) if gs[0] else float("nan")
             tc = statistics.mean(t[2]) if t[2] else float("nan")
             gc = statistics.mean(g[2]) if g[2] else float("nan")
+            gsc = statistics.mean(gs[2]) if gs[2] else float("nan")
             ratio = (gc / tc) if (t[2] and g[2] and tc) else float("nan")
-            grand_cost += sum(t[2]) + sum(g[2])
-            grand_n += len(t[2]) + len(g[2])
-            print(f"{task:<26}{size:>4}  {tr:>6.2f}{gr:>6.2f}{gr-tr:>+6.2f}  "
-                  f"{tc:>7.2f}{gc:>7.2f}{ratio:>5.2f}  {len(t[0]):>3}{len(g[0]):>3}")
+            grand_cost += sum(t[2]) + sum(g[2]) + sum(gs[2])
+            grand_n += len(t[2]) + len(g[2]) + len(gs[2])
+            row = (f"{task:<26}{size:>4}  {tr:>6.2f}{gr:>6.2f}"
+                   + (f"{gsr:>6.2f}" if has_gstar else "")
+                   + f"{gr-tr:>+6.2f}  {tc:>7.4f}{gc:>7.4f}{ratio:>5.2f}"
+                   + (f"{gsc:>8.4f}" if has_gstar else "")
+                   + f"  {len(t[0]):>3}{len(g[0]):>3}"
+                   + (f"{len(gs[0]):>4}" if has_gstar else ""))
+            print(row)
     print(f"\n--- running bill: ${grand_cost:.2f} over {grand_n} scored jackson runs ---")
 
 
