@@ -38,11 +38,17 @@ def pin(repo: Path) -> str:
                           capture_output=True, text=True, check=True).stdout.strip()
 
 
+def src_root(repo: Path) -> Path:
+    """Maven layout (src/main/java) or bare src/ (guava-style)."""
+    maven = repo / "src" / "main" / "java"
+    return maven if maven.is_dir() else repo / "src"
+
+
 def run_oracle(target: str, repo: Path, cp: Path | None) -> dict:
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tf:
         out = Path(tf.name)
     cmd = [JAVA, "-jar", str(JAR),
-           "--src", str(repo / "src" / "main" / "java"),
+           "--src", str(src_root(repo)),
            "--repo", str(repo),
            "--target", target, "--out", str(out)]
     if cp is not None and cp.exists():

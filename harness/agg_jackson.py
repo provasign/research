@@ -45,6 +45,14 @@ def cell(task: str, model: str, arm: str):
         d = json.load(open(f))
         if d.get("status") != "ok" or d.get("violation"):
             continue
+        # Weak-match audit: symbol-only fallback credits a same-named symbol in
+        # another file. Fine as a trickle; a dominant fraction means the score
+        # measures the matcher, not the search (see the mapiterator-next audit).
+        found_n = len(d.get("found", []))
+        weak_n = len(d.get("weak_matches", []))
+        if found_n and weak_n / found_n > 0.34:
+            print(f"  !! WEAK-MATCH AUDIT {f}: {weak_n}/{found_n} credited sites "
+                  f"are symbol-only — recall {d['recall']} is unreliable")
         rec.append(d["recall"])
         c = d.get("cost") or {}
         u = c.get("usage") or {}
