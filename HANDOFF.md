@@ -229,11 +229,20 @@ Regenerate a task: `python java-oracle/make_java_task.py --id <id> --display 'Cl
   "find all X"). Pre-task rule added. Committed to prism, binary rebuilt.
 - ~~**External validity (partial, Apache Commons Collections)**~~ — 2 tasks
   created and run (`tasks/commons-collections-*.json`). Small-task tie
-  replicates (17 GT: T=G*=Local30B=1.000). Large task (142 GT,
-  `MapIterator.next`) shows T≈G*≈0.585 due to standard-library boundary
-  (MapIterator extends java.util.Iterator → engine ceiling ~0.317). This
-  confirms: completeness ceiling is governed by the engine, not the model.
-  §5.6 + §Threats updated in `paper/paper.tex`.
+  replicates (17 GT: T=G*=Local30B=1.000; T needed 61 turns vs G* 27).
+  **Large task (142 GT, `MapIterator.next`) FAILED AUDIT — excluded, do not
+  cite its 0.585 numbers.** Three defects: (1) ill-posed — MapIterator
+  extends java.util.Iterator, so next() overrides a JDK method whose
+  signature can't change; (2) oracle GT is a virtual-dispatch closure
+  through the external interface (includes callers on plain Iterator
+  receivers, e.g. CollectionUtils.addAll), not a must-change set;
+  (3) `next` is so generic the scorer's symbol-only fallback dominated
+  (55/83 credited sites weak) — T and G* got IDENTICAL scores for
+  near-identical answers. Same audit discipline as commons-lang.
+  §5.6 + §Threats rewritten in `paper/paper.tex`. Side finding kept: the
+  engine's family walk stops at external supertypes (project-local dispatch
+  recall 0.32) although the `extends` clause is in project source — engine
+  work item, see below.
 
 ### 7.A — The gate
 **CLEARED.** The honest headline: `qwen3-coder:30b + prism change-impact =
@@ -244,14 +253,23 @@ Regenerate a task: `python java-oracle/make_java_task.py --id <id> --display 'Cl
 **2. Mode B (compile / fail-to-pass)** — §5.5 has derived metric (expected
 compile failures); actual compilation not yet run.
 
-**3. External validity (partially done)**
+**3. External validity (partially done; large-task question OPEN, not negative)**
 - Small-task tie confirmed in commons-collections ✓
-- G* > T on large tasks NOT confirmed in commons-collections (engine ceiling
-  governs — consistent with tool-property thesis, but doesn't demonstrate
-  the advantage in a second corpus)
-- Remaining gap: 2nd corpus with large clean-hierarchy methods (Spring, Guava)
-  where engine recall is high AND blast radius is large. Commons methods that
-  inherit from java.util.* have low engine ceilings.
+- Large-task attempt (MapIterator.next) failed audit — excluded (see Done).
+  A collections library is structurally hostile: every big hierarchy roots
+  in java.util.*, which makes signature-change tasks ill-posed there.
+- Remaining gap: a corpus with a LARGE (≥60 sites) PROJECT-ROOTED,
+  distinctively-named hierarchy. Candidates: Guava `AbstractIterator.computeNext`
+  (guava-owned abstract method, many inner-class implementors), Netty
+  `ChannelHandler` family, Spring.
+- Task-generation guard: reject targets that override external-library
+  methods (oracle detects via Spoon top-definitions; wired into
+  `make_java_task.py`).
+- Engine work unlocked by the audit: (a) external-supertype family expansion
+  (project-local subtype closure of an external interface is computable from
+  project source alone); (b) contract-boundary flag in change_impact output
+  (`overridesExternal` + completeness field) so agents know when the set is
+  authoritative vs project-local-bounded — turns the boundary into a feature.
 
 **4. GPT/Codex tier** (`java-oracle/CODEX.md`) — cross-family point for the paper.
 

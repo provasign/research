@@ -602,44 +602,44 @@ confirming it is a tool property, not a model property.
 \label{sec:external}
 
 To test whether the patterns in \cref{tab:altitude} are specific to
-\code{jackson-databind}, we replicated the two boundary cases---small greppable
-task and large-blast-radius task---in Apache Commons Collections 4, a different
-Java framework with deep interface hierarchies (\code{MapIterator},
-\code{Transformer}, \code{Bag}).
+\code{jackson-databind}, we generated two boundary-case tasks in Apache
+Commons Collections 4: a small greppable change
+(\code{Transformer.transform}, 17 sites) and a large cross-hierarchy change
+(\code{MapIterator.next}, 142 oracle sites).
 
-\begin{table}[ht]
-\centering
-\small
-\begin{tabular}{lrrrr}
-\toprule
-task & GT & T & \gstar{} & Local 30B+\gstar{} \\
-\midrule
-\code{Transformer.transform}  & 17  & 1.000 & 1.000 & 1.000 \\
-\code{MapIterator.next}       & 142 & 0.585 & 0.585 & 0.613 \\
-\bottomrule
-\end{tabular}
-\caption{External validity in Apache Commons Collections (Sonnet unless noted).
-Pattern 1 replicates: the small-task tie holds. On the 142-site task both arms
-reach $\approx{}$0.585, but through different failure modes; see text.}
-\label{tab:external}
-\end{table}
+\textbf{The small-task tie replicates.} On \code{Transformer.transform}
+every arm---Sonnet+T, Sonnet+\gstar{}, and local 30B+\gstar{}---achieves
+recall $1.0$, confirming the small-task tie is not specific to
+\code{jackson-databind}. The efficiency asymmetry persists even at equal
+recall: the T arm needed 61 agent turns (512\,s); \gstar{} needed 27
+(185\,s), and the local arm one call.
 
-\textbf{Pattern 1 replicates.} On the 17-site task every arm achieves
-recall 1.0, confirming the small-task tie is not specific to
-\code{jackson-databind}.
+\textbf{The large task failed audit and is excluded.} \code{MapIterator}
+extends \code{java.util.Iterator}, which invalidates the task on three
+independent grounds. First, the refactor is ill-posed:
+\code{MapIterator.next()} \emph{overrides} \code{Iterator.next()}, so its
+signature cannot change without breaking the JDK contract---``every site
+that must change'' has no coherent answer. Second, the oracle's ground
+truth for such a target is a virtual-dispatch closure through the external
+interface: it includes call sites whose receiver is a plain
+\code{java.util.Iterator} (e.g.\ \code{CollectionUtils.addAll}), which
+would not change under any reading of the task. Third, \code{next} is
+generic enough that the scorer's symbol-only fallback dominates---55 of the
+83 credited sites per arm were weak matches, and the T and \gstar{} arms
+received identical scores for near-identical answer sets, i.e.\ the number
+measures the matcher, not the search strategy. We exclude the task under
+the same audit discipline that discarded the bare-name commons-lang tasks
+(\cref{sec:threats}).
 
-\textbf{Large task: a different ceiling.}
-On the 142-site task, T and \gstar{} are roughly equal at $\approx{}0.585$---a
-striking contrast with the jackson large tasks where \gstar{} reaches 0.997
-and T falls to 0.274--0.952. The mechanism is the engine ceiling: \code{MapIterator}
-extends \code{java.util.Iterator}, so the full family traversal must cross
-the standard-library boundary. Grove does not have standard-library sources
-in scope; its raw recall on this task is $\approx{}0.31$. The \gstar{} arm
-is bounded by what the engine returns; the T arm hits a similar ceiling
-through text enumeration. The result is not ``G* $\approx$ T is the norm''
----it is ``\emph{when the engine ceiling drops, G* drops with it}.'' This
-is precisely the tool-property thesis: the completeness ceiling is set by
-the engine, and \gstar{} delivers that ceiling to every model tier.
+The attempt still produced a mechanism finding: the graph engine's family
+traversal currently stops at external supertypes (project-local recall on
+the dispatch closure: $0.32$), even though the \code{extends} clause that
+roots the hierarchy is \emph{in project source}. The project-local subtype
+closure of an external interface is computable from project sources alone,
+so this is an engine iteration, not a representation limit. Large-task
+replication in a second corpus therefore remains open, and constrains the
+target choice: it must be large ($\gtrsim$60 sites), rooted in a
+\emph{project-local} type, and distinctively named.
 
 \section{Why---the mechanism}
 \label{sec:mechanism}
@@ -738,12 +738,14 @@ resolution but share no code or algorithms; the engine's initial 0.05 recall and
 residual 0.993 (not 1.0) demonstrate they do not trivially agree.
 \item \textbf{Two subjects per language; one framework for the large-Java regime.}
 The large-task and altitude results rest on \code{jackson-databind} interface
-methods. We replicated the small-task tie in Apache Commons Collections
-(\cref{sec:external}); the large-task result there is complicated by a
-standard-library boundary that depresses the engine ceiling, so the
-G* $>$ T dominance from the jackson corpus does not replicate on the
-cross-hierarchy task. Replication in a corpus with large clean hierarchies
-(Spring, Guava) remains the key external-validity gap.
+methods. The small-task tie replicated in Apache Commons Collections
+(\cref{sec:external}); our large-task replication attempt there failed audit
+(the target overrides a JDK interface, making the refactor ill-posed, the
+oracle closure over-broad, and the generic name scorer-hostile) and is
+excluded. Replication on a corpus with a large \emph{project-rooted}
+hierarchy (Guava, Netty, Spring) remains the key external-validity gap.
+Targets that override external-library methods are now rejected at
+task-generation time.
 \item \textbf{Mode A only.} We score the \emph{answer}, not an applied patch. Mode
 B (compile / fail-to-pass)---where an incomplete change actually breaks the
 build---would test whether the reliability gain converts to task success.
