@@ -690,23 +690,27 @@ advantage is gated by \emph{text-enumerability}, not raw site count
 (jackson's \code{serialize} callers required type-level disambiguation
 among same-named methods; \code{delegate()} does not). The economics still
 invert at equal recall: \$3.85--\$5.46 and up to 55 turns versus \$0 and
-one turn. \emph{Third}, a new mechanism datum: Sonnet~\gstar{} scored
-\emph{below} every other \gstar{} tier ($0.961$, precision $0.909$)
-because it re-processed the engine's output through its own
-grep/awk/python pipeline across 25 turns, dropping 12 real sites and
-adding 30 spurious ones, then asserted completeness. The scaffolded local
-arm and the Haiku/Opus/Fable arms relayed the deterministic set
-losslessly (the Fable run touched no tool but \code{prism}). Relay
-fidelity is thus not a capability gradient but a \emph{behavioral}
-variable---any tier can fumble it by re-deriving. At task altitude the
-model's remaining job is relay; capability spent re-orchestrating a
-solved traversal is negative capability. The observation replicates in
-the Python corpus (\S\ref{sec:crosslang}): Sonnet~\gstar{} on Django
-again augmented the engine answer with text-search extras ($0.256$
-precision, 93 false positives), while Haiku and local 30B relayed the
-result losslessly. The product implication: ship the relay discipline
-(a steering rule that forbids re-deriving the tool's answer---now part
-of the shipped templates), not just the tool.
+one turn. \emph{Third}, a relay-discipline experiment. The initial Sonnet~\gstar{}
+run (with ripgrep available in the tool allowlist alongside prism) scored
+\emph{below} every other \gstar{} tier ($0.961$, precision $0.909$):
+Sonnet re-processed the engine's output through its own grep/awk/python
+pipeline across 25 turns, dropping 12 real sites and adding 30 spurious
+ones, then asserted completeness. Relay fidelity is thus not a
+capability gradient but a \emph{behavioral} variable---any tier can
+fumble it by re-deriving. To test whether structural enforcement
+corrects the failure, we re-ran Sonnet~\gstar{} with ripgrep
+\emph{removed} from the allowlist (prism only). Result: $0.997$~recall
+/ $1.000$~precision in 30 turns---exactly the engine ceiling, and
+identical to every other \gstar{} tier. The relay failure was entirely
+an artifact of having a text-search escape hatch available; removing it
+restores tier-invariance. The same structural fix was applied to the
+Python corpus (\S\ref{sec:crosslang}): Sonnet~\gstar{} on Django under
+the original allowlist scored $0.256$ precision (93 false positives via
+schema-editor text sweep); under the restricted allowlist it scores
+$0.865$ precision (engine ceiling). The product implication: the
+\gstar{} arm must be defined without a text-search escape. A steering
+rule alone is insufficient---Sonnet ignores it; removing the tool is
+what enforces relay.
 
 \subsection{Cross-language external validity: Go and TypeScript}
 \label{sec:crosslang}
