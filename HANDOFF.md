@@ -305,9 +305,13 @@ compile failures); actual compilation not yet run.
   Engine ceiling LOW: 0.540/0.645 — family resolution works (11/12
   implements-clause drivers) but callers bind through interface-typed FIELDS
   (this.driver.escape) and the TS call resolver doesn't track field types.
-  Local30B G* = 0.5405/0.6452 = EXACTLY the ceiling — lossless relay of an
-  imperfect engine, cleanest tool-property demonstration in the study.
-  TS field-type tracking = top engine roadmap item.
+  Local30B G* AND Haiku G* both = 0.540/0.645 = EXACTLY the ceiling (18s,
+  2 turns for Haiku) — lossless relay of an imperfect engine, cleanest
+  tool-property demonstration in the study. Haiku T EXCEEDS the ceiling on
+  recall (0.568) by brute enumeration at 0.382 precision / 36 turns — the
+  boundary cuts both ways, and the no-LLM ceiling measurement is what tells
+  steering where G* is authoritative. TS field-type tracking = top engine
+  roadmap item (would flip this cell).
 - Paper §5.6 + new §5.7 (cross-language) updated with all cells.
 
 **3b. Engine work landed (grove/prism, committed)**
