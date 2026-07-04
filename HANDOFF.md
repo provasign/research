@@ -302,16 +302,16 @@ compile failures); actual compilation not yet run.
   (`harness/ts-oracle/oracle.mjs`, compiler-resolved GT + lineindex mode).
   Engine fix: subtype-closure rooting when interface members aren't indexed
   symbols (also fixed Go interface queries: DB.WithTransactionalDbSession).
-  Engine ceiling LOW: 0.540/0.645 — family resolution works (11/12
-  implements-clause drivers) but callers bind through interface-typed FIELDS
-  (this.driver.escape) and the TS call resolver doesn't track field types.
-  Local30B G* AND Haiku G* both = 0.540/0.645 = EXACTLY the ceiling (18s,
-  2 turns for Haiku) — lossless relay of an imperfect engine, cleanest
-  tool-property demonstration in the study. Haiku T EXCEEDS the ceiling on
-  recall (0.568) by brute enumeration at 0.382 precision / 36 turns — the
-  boundary cuts both ways, and the no-LLM ceiling measurement is what tells
-  steering where G* is authoritative. TS field-type tracking = top engine
-  roadmap item (would flip this cell).
+  CEILING RAISED (grove 42355c4): 0.540/0.645 → 0.946/0.761 via field-type
+  extraction + multi-hop chain resolution + nominal satisfaction gating +
+  synthesized interface-member declarations. Untouched G* arms re-ran to
+  EXACTLY the new ceiling (haiku 2 turns/25s, local30B 1 turn/42s, both
+  0.9459/0.7609). Haiku T (0.568/0.382/36 turns) now BEATEN on both axes.
+  The controlled ceiling intervention: models/prompts/task fixed, only the
+  tool changed, and both tiers moved in lockstep — tool-property thesis
+  demonstrated in both directions on one task (paper §5.7). All other
+  language ceilings regression-verified unchanged. Remaining FPs: 11
+  query-builder wrapper this.escape() callers.
 - Paper §5.6 + new §5.7 (cross-language) updated with all cells.
 
 **3b. Engine work landed (grove/prism, committed)**
