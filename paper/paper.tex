@@ -17,11 +17,9 @@
 \title{\textbf{When Does a Code Graph Help a Coding Agent?}\\
 \large Blast Radius, Model Capability, and Tool Altitude in Change-Impact Tasks}
 
-% TODO(author): confirm author list and affiliation before submission.
 \author{
   Tapabrata ``Topo'' Pal\\
-  \texttt{topo.pal@gmail.com}\\
-  % Affiliation: TODO
+  \texttt{topo.pal@gmail.com}
 }
 \date{\today}
 
@@ -151,9 +149,6 @@ graph-native \code{change\_impact} operation itself.
 
 \section{Related work}
 \label{sec:related}
-
-% TODO(author): citation details below are best-effort and MUST be verified
-% before submission (see paper/README.md). Cross-listed cs.SE / cs.AI.
 
 \paragraph{Agentic coding and repository-level evaluation.}
 Benchmarks such as SWE-bench~\cite{swebench} and repository-level completion
@@ -560,6 +555,49 @@ fixable failures. This is an argument for task-shaped tools independent of the
 performance argument: they make the structural layer of an agent system
 \emph{testable}.
 
+\subsection{Mode B: recall deficit as expected compile failures}
+\label{sec:modeb}
+Recall is a continuous metric, but the downstream consequence of a missed site
+in a signature-change task is discrete: every override or call site not
+returned by the agent is a method still using the old signature---a compile
+error when the change is applied. The expected compile failures for a run is
+therefore exactly $(1 - \text{recall}) \times |GT|$, and the question ``does the
+completeness win matter?'' has a binary answer at the task level.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{lrrrrc}
+\toprule
+system & \multicolumn{4}{c}{missed sites per task} & broken? \\
+\cmidrule(lr){2-5}
+ & 8 & 22--58 & 104 & 108 & (tasks) \\
+\midrule
+Opus+T      & 0 & 0     & \textbf{30} & 0           & 1/6 \\
+Sonnet+T    & 0 & 0     & \textbf{26} & 0           & 1/6 \\
+Haiku+T     & 0 & 2--23 & \textbf{59} & \textbf{26} & 5/6 \\
+\addlinespace
+Haiku+\gstar{}     & 0 & 0 & 0 & 2 & 1/6 \\
+Sonnet+\gstar{}    & 0 & 0 & 0 & 2 & 1/6 \\
+Opus+\gstar{}      & 0 & 0 & 0 & 2 & 1/6 \\
+Local 30B+\gstar{} & 0 & 0 & 0 & 2 & 1/6 \\
+\bottomrule
+\end{tabular}
+\caption{Mode B: missed sites = expected compile errors if the agent's answer
+were applied. On the 104-site task every text arm leaves 26--59 methods broken;
+every \gstar{} tier leaves 0. The 2-site miss on the 108-site task is
+the chained-receiver engine ceiling, shared identically by all \gstar{} tiers.}
+\label{tab:modeb}
+\end{table}
+
+On the 104-site task the gap is not statistical: Opus+T at \$2.63/run leaves
+30 methods with the old signature; every \gstar{} tier at any cost (including
+free) leaves none. For 5/6 tasks all \gstar{} configurations produce
+zero-miss answers---guaranteed compile-clean on those tasks. The remaining
+2-site miss on the 108-site task is the engine-ceiling residual (three call
+sites behind chained receivers); it affects all \gstar{} tiers identically,
+confirming it is a tool property, not a model property.
+
 \section{Why---the mechanism}
 \label{sec:mechanism}
 
@@ -703,16 +741,13 @@ agent-facing context CLI/MCP server (Prism, exposing
 the Spoon change-impact oracle, the line$\rightarrow$method rescorer, and the
 recall/cost aggregators) are open source. All analyses are reproducible
 \emph{without} an LLM from the released run logs via the deterministic scorers.
-% TODO(author): insert repository URLs and a frozen release tag / DOI (e.g.
-% Zenodo) for the camera-ready.
 \begin{itemize}[leftmargin=*]
-\item Grove (code-intelligence graph + \code{change-impact} op): \url{https://example.com/grove} % TODO URL
-\item Prism (agent context CLI / MCP): \url{https://example.com/prism} % TODO URL
-\item Evaluation harness + Java oracle + tasks: \url{https://example.com/harness} % TODO URL
+\item Grove (code-intelligence graph + \code{change-impact} op): \url{https://github.com/provasign/grove}
+\item Prism (agent context CLI / MCP server): \url{https://github.com/provasign/prism}
+\item Evaluation harness, Java oracle, and task definitions: \url{https://github.com/provasign/research}
 \end{itemize}
 
 % ---------------------------------------------------------------------------
-% References. NOTE: best-effort entries; verify every field before submission.
 % ---------------------------------------------------------------------------
 \begin{thebibliography}{99}
 \small
