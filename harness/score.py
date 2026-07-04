@@ -42,6 +42,7 @@ def _is_test_path(relpath: str) -> bool:
         or ".test." in name
         or ".spec." in name
         or "/tests/" in relpath
+        or relpath.startswith("tests/")  # root-level tests/ dir (Django, etc.)
         or name.endswith("Test.java")
         or name.endswith("Tests.java")
     )

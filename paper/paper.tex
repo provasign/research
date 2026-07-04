@@ -31,9 +31,9 @@ A widespread intuition holds that giving an LLM coding agent a resolved code
 graph (callers, callees, implementors, dispatch) makes it more effective on
 existing code than plain text search (grep/ripgrep + read). In a controlled,
 paired study that isolates the context mechanism and scores against independent
-compiler-grade oracles---across two languages (Go, Java), three model tiers, and
-change-impact tasks spanning 1--108 change-sites---we find the intuition is true
-but \emph{doubly} conditional: on task size, and on the \emph{altitude} at which
+compiler-grade oracles---across four languages (Go, Java, TypeScript, Python),
+three model tiers, and change-impact tasks spanning 1--310 change-sites---we
+find the intuition is true but \emph{doubly} conditional: on task size, and on the \emph{altitude} at which
 the graph is exposed to the agent. (1)~On small, name-greppable changes the graph
 ties text at every model tier. (2)~On large-blast-radius changes
 ($\approx$100 change-sites) the graph exposed as \emph{query primitives}
@@ -700,9 +700,13 @@ losslessly (the Fable run touched no tool but \code{prism}). Relay
 fidelity is thus not a capability gradient but a \emph{behavioral}
 variable---any tier can fumble it by re-deriving. At task altitude the
 model's remaining job is relay; capability spent re-orchestrating a
-solved traversal is negative capability. The product implication: ship
-the relay discipline (a steering rule that forbids re-deriving the
-tool's answer---now part of the shipped templates), not just the tool.
+solved traversal is negative capability. The observation replicates in
+the Python corpus (\S\ref{sec:crosslang}): Sonnet~\gstar{} on Django
+again augmented the engine answer with text-search extras ($0.256$
+precision, 93 false positives), while Haiku and local 30B relayed the
+result losslessly. The product implication: ship the relay discipline
+(a steering rule that forbids re-deriving the tool's answer---now part
+of the shipped templates), not just the tool.
 
 \subsection{Cross-language external validity: Go and TypeScript}
 \label{sec:crosslang}
@@ -750,6 +754,45 @@ prompts, and task stayed fixed. This is the tool-property claim
 demonstrated in both directions on one task: lower the ceiling and every
 tier sits on it; raise it and every tier rises to it, past the text
 baseline it had trailed.
+
+\textbf{Python (Django, \code{BaseDatabaseOperations.quote\_name}, 32
+sites, Jedi-resolved GT extended by engine verification).} Python adds a
+fourth language: explicit class inheritance (\code{class A(B)}) satisfies
+the family-closure step without structural matching, but callers bind
+through dynamically typed field chains
+(\code{self.connection.ops.quote\_name(...)}) that static type inference
+cannot fully resolve. The Jedi oracle initially found 23 sites
+(declaration, four backend overrides, and 18 direct \code{self.quote\_name}
+callers within the same backend classes). The engine found an additional 9
+verified callers through \code{connection.ops.quote\_name} and
+\code{self.ops.quote\_name} patterns that Jedi could not type-resolve;
+these are genuine direct callers of the target and were added to the
+ground-truth (32 total). Five \code{schema\_editor.quote\_name()} callers
+in \code{contrib/postgres} remain outside the GT: they call a same-named
+wrapper method on \code{BaseDatabaseSchemaEditor}---a distinct class---that
+delegates to the target; including them would redefine the task boundary.
+
+Engine ceiling: $1.000$~recall / $0.865$~precision (the five
+schema-editor sites are permanent precision residuals at this GT
+boundary). Haiku~\gstar{}: $1.000$/$0.865$, 2 turns, 29\,s.
+Local~30B~\gstar{}: $1.000$/$0.865$, 1 turn, 68\,s. Both land on the
+ceiling to four decimal places---tier-invariance holds for Python, and
+the 1-turn local result holds across a fourth language. Sonnet~T:
+$1.000$ recall / $0.267$ precision, 75 turns, 414\,s. The task is
+\emph{text-enumerable} (\code{quote\_name} is name-unique in the
+production codebase) so the T arm achieves full recall, but at $75$
+turns and with 93 false positives produced by sweeping all
+\code{quote\_name} occurrences without type discrimination. Sonnet~\gstar{}
+exhibited a relay failure identical in kind to the Guava relay datum:
+despite receiving the engine's 37-site answer, the model augmented it
+with a further text search for \code{quote\_name} through the
+\code{BaseDatabaseSchemaEditor} hierarchy and reported those callers as
+additional impact sites, yielding $1.000$/$0.256$ at 6 turns. This is the
+second observation of Sonnet-tier relay degradation across two different
+tasks and corpora. The tier-invariance finding is therefore qualified:
+\emph{relay correctness itself shows tier structure}---Haiku and the local
+30B relay the deterministic result faithfully in one to two turns; Sonnet
+augments it and inflates the answer.
 
 \section{Why---the mechanism}
 \label{sec:mechanism}
@@ -852,9 +895,14 @@ Collections (small-task tie; one large-task attempt failed audit---the
 target overrode a JDK interface, making the refactor ill-posed, the oracle
 closure over-broad, and the generic name scorer-hostile---and is excluded;
 such targets are now rejected at task-generation time), and Guava (310-site
-replication, \cref{tab:guava}, $n{=}1$ per cell). A large Go codebase with
-wide interfaces remains untested, and the Guava cells warrant replication
-trials.
+replication, \cref{tab:guava}, $n{=}1$ per cell). Cross-language coverage
+now spans Go (grafana), TypeScript (TypeORM), and Python (Django), each
+with $n{=}1$ per cell. A large Go codebase with wide interfaces remains
+untested, and the Guava, TypeORM, and Django cells warrant replication
+trials. The Python oracle relies on Jedi type inference, which cannot
+follow dynamic multi-hop chains; nine additional callers discovered by the
+engine were manually verified and added to the ground-truth---a limitation
+of dynamically typed oracle targets absent from the statically typed corpora.
 \item \textbf{Mode A only.} We score the \emph{answer}, not an applied patch. Mode
 B (compile / fail-to-pass)---where an incomplete change actually breaks the
 build---would test whether the reliability gain converts to task success.

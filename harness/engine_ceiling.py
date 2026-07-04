@@ -23,11 +23,15 @@ PRISM = Path.home() / "bin" / "prism"
 
 
 def prism_query(task: Task) -> str:
-    # pr is "oracle-spoon:FQN#m(params)" (Java) or "oracle-ts:Type#m" (TS).
+    # pr is "oracle-spoon:FQN#m(params)" (Java), "oracle-ts:Type#m" (TS),
+    # or "oracle-py:Type.method" (Python — dot separator, no hash).
     fqn = task.pr.split(":", 1)[1]
-    type_part, mspec = fqn.split("#", 1)
-    simple = type_part.rsplit(".", 1)[-1]
-    return f"{simple}.{mspec}"
+    if "#" in fqn:
+        type_part, mspec = fqn.split("#", 1)
+        simple = type_part.rsplit(".", 1)[-1]
+        return f"{simple}.{mspec}"
+    # Python: "BaseDatabaseOperations.quote_name" → already in Type.method form.
+    return fqn
 
 
 def engine_sites(query: str, workdir: Path) -> tuple[list[str], dict]:
