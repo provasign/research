@@ -109,9 +109,10 @@ precision (e.g. 'JsonSerializer.serialize(T, JsonGenerator, SerializerProvider)'
 4. Union declarations + family + callers (+ supers if they are separate methods) \
 and output those as your sites list.
 
-Do NOT manually hunt for overrides or grep for callers — the graph computed the \
-full traversal for you. Use `{prism} search <Name>` only if you need to confirm \
-the exact type name before running change-impact."""
+Do NOT manually hunt for overrides or search for callers — the graph computed \
+the full traversal for you. If you need to confirm the exact type name before \
+running change-impact, use `{prism} search <Name>`; do not use any other search \
+tool. Relay the result directly into your answer without re-filtering or augmenting."""
 
 V_GUIDANCE = """\
 TOOLS: you have ripgrep/grep/find/sed/read AND the `prism` call-graph CLI. \
@@ -164,7 +165,9 @@ ARMS: dict[str, Arm] = {
     # prism workflow prescribes; traversal must go through prism.
     "G": Arm("G", ["Read", "Glob", "Bash(rg:*)", *_PRISM_BASH], G_GUIDANCE),
     # G*: one high-altitude call to change-impact; agent just reads the result.
-    # rg and prism search/lookup are allowed for type-name lookup only.
-    "Gstar": Arm("Gstar", ["Bash(rg:*)", *_PRISM_BASH], GSTAR_GUIDANCE),
+    # rg removed: prism search covers the only legitimate pre-call use (type-name
+    # lookup). Removing rg structurally enforces relay -- the agent cannot augment
+    # the engine answer with text search.
+    "Gstar": Arm("Gstar", [*_PRISM_BASH], GSTAR_GUIDANCE),
     "V": Arm("V", ["Read", "Grep", "Glob", *_TEXT_BASH, *_PRISM_BASH], V_GUIDANCE),
 }
