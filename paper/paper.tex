@@ -12,9 +12,10 @@
 \usepackage{cleveref} % must load AFTER hyperref
 
 \newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\gstar}{G$^{*}$}
 
-\title{\textbf{When Does a Code Graph Help an Agent?}\\
-\large Capability-- and Blast-Radius--Bounded Gains for Change-Impact Tasks}
+\title{\textbf{When Does a Code Graph Help a Coding Agent?}\\
+\large Blast Radius, Model Capability, and Tool Altitude in Change-Impact Tasks}
 
 % TODO(author): confirm author list and affiliation before submission.
 \author{
@@ -33,23 +34,34 @@ graph (callers, callees, implementors, dispatch) makes it more effective on
 existing code than plain text search (grep/ripgrep + read). In a controlled,
 paired study that isolates the context mechanism and scores against independent
 compiler-grade oracles---across two languages (Go, Java), three model tiers, and
-change-impact tasks spanning 1--108 change-sites---we find the intuition is
-\emph{true but conditional}. On small, name-greppable changes (most of our Go
-sample and the small Java tasks) the graph ties text: a capable agent reaches the
-same recall by grep+read. On large-blast-radius changes ($\approx$100
-change-sites) the graph acts as a \emph{capability equalizer}, lifting weaker
-models toward frontier-level completeness (mean recall $+0.17$ to $+0.24$ for a
-small model, $+0.13$ to $+0.17$ for a mid model) while collapsing the variance
-that makes text search silently incomplete. That recall advantage shrinks as the
-model strengthens and, at the frontier, \emph{vanishes} on tasks the model can
-fully enumerate by text but \emph{persists} on harder ones---where the graph
-remains more reliable and cheaper. The discriminator is blast radius (the number
-of change-sites reachable only via caller edges), \emph{not} name ambiguity or
-language. We give the mechanism, a deterministic type-resolution oracle and a
-size-graded task generator, and a scoring pitfall (line-number normalization)
-that silently penalizes graph tools; and we argue the field should evaluate
-code-context tools on \emph{completeness-and-consistency at fixed cost,
-conditioned on task size}.
+change-impact tasks spanning 1--108 change-sites---we find the intuition is true
+but \emph{doubly} conditional: on task size, and on the \emph{altitude} at which
+the graph is exposed to the agent. (1)~On small, name-greppable changes the graph
+ties text at every model tier. (2)~On large-blast-radius changes
+($\approx$100 change-sites) the graph exposed as \emph{query primitives}
+(look up a symbol, list callers, list implementors) acts as a capability
+equalizer, lifting weaker models ($+0.17$ to $+0.24$ mean recall) and collapsing
+the variance that makes text search silently incomplete---but orchestrating a
+multi-turn traversal over primitives is itself a frontier-model skill, so the
+smallest tier leaves much of the benefit unrealized (mean recall $0.833$ with the
+same tools a frontier model drives to $1.000$). (3)~Exposing the \emph{same
+graph} at \emph{task altitude}---a single deterministic
+$\code{change\_impact}(\text{method})$ operation that computes the declaration,
+the override/implementation family, and all resolved callers inside the
+engine---removes the orchestration barrier entirely: every tier, including the
+smallest, reaches mean recall $0.997$, and completeness becomes
+\emph{tier-invariant}. The smallest model with the task-level operation
+(\$0.11/task) outperforms the frontier model with text search (\$2.14/task) and
+matches the frontier model driving graph primitives (\$3.06/task) at $1/28$th the
+cost and $5$--$15\times$ fewer agent turns. The engine operation itself scores
+$0.993$ recall / $0.948$ precision against the oracle with no LLM in the loop.
+Building the deterministic operation also surfaced five latent resolution defects
+that every LLM-orchestrated arm had silently absorbed---evidence that
+task-shaped operations are not only more effective but \emph{testable}. We give
+the mechanism and the boundary it predicts, and argue that structural code tools
+should ship task-shaped operations rather than primitive kits, and be evaluated
+on completeness-and-consistency at fixed cost, conditioned on blast radius
+\emph{and} interface altitude.
 \end{abstract}
 
 \paragraph{Honesty note.}
@@ -58,11 +70,13 @@ don't beat text search''). That conclusion was too broad: it was drawn from Go
 tasks that were, in hindsight, almost all small and name-greppable. Extending the
 study to a larger, polymorphism-heavy Java framework
 (\code{jackson-databind})---with a precise type-resolution oracle and a
-size-graded task set---surfaced the boundary the Go data had missed. The honest
-result is \emph{conditional}: the graph's value is real but bounded to
-large-blast-radius change-impact tasks, and its character changes with model
-capability. We report exactly where it helps, where it does not, and the
-mechanism that predicts which is which.
+size-graded task set---surfaced the boundary the Go data had missed, and a
+subsequent extension surfaced a second, independent condition: the interface
+altitude at which the graph is offered. The honest result is \emph{conditional
+twice over}: the graph's value is real but bounded to large-blast-radius
+change-impact tasks, and \emph{who can realize it} is gated by whether the tool
+demands orchestration the model cannot reliably supply. We report exactly where
+it helps, where it does not, and the mechanism that predicts which is which.
 
 \section{Introduction}
 \label{sec:intro}
@@ -84,25 +98,53 @@ structurally struggles. We therefore extended the study to \code{jackson-databin
 a polymorphism- and reflection-heavy Java framework whose interface methods
 (\code{JsonDeserializer.deserialize}, \code{JsonSerializer.serialize}, \ldots)
 have dozens of implementations and call sites---and built a \emph{size-graded}
-task set with a precise type-resolution oracle. That extension found the boundary.
+task set with a precise type-resolution oracle. That extension found the first
+boundary: blast radius.
+
+The blast-radius result, however, contained a puzzle. The graph's recall
+advantage was largest exactly where the model was weakest---yet the weak model
+still left much of the advantage on the table. With identical graph primitives,
+the frontier tier reached recall $1.000$ and the small tier only $0.833$. The
+graph had the answer; the small model could not extract it. This motivated a
+second extension: move the extraction \emph{into the tool}. We implemented the
+change-impact traversal as a single deterministic operation inside the graph
+engine---$\code{change\_impact}(\text{method}) \rightarrow$ declaration $+$
+override/implementation family $+$ resolved callers---and re-ran the grid with a
+third arm that exposes only this operation. The result is the second boundary:
+\emph{tool altitude}. At task altitude, completeness is tier-invariant
+($0.997$ at every tier), and the cheapest model becomes the best-value system in
+the study.
 
 \paragraph{Contributions.}
 \begin{enumerate}[leftmargin=*]
 \item \textbf{A methodology that isolates the tool across two languages}---identical
-tasks, three arms (text / graph / graph-as-verifier), enforced tool allowlists,
-scored against \emph{independent} oracles (Go \code{go-ssa-vta}; a new Java Spoon
-oracle that resolves every call site by type, not by name).
-\item \textbf{The conditional result}: graph $\approx$ text on small/greppable
-change-impact tasks; graph $\gg$ text on large-blast-radius tasks, on recall
-\emph{and} variance.
-\item \textbf{The discriminator}---blast radius, established against a confound we
-expected to matter (name ambiguity) and which did not.
-\item \textbf{A capability-conditioned reading}: the graph is a \emph{quality}
-lever for weak/mid models on large changes and a \emph{cost} lever at the
-frontier; one tool, two payoffs.
-\item \textbf{A reproducible Java change-impact oracle + size-graded task
-generator}, and a scoring fix (line$\rightarrow$method normalization) without
-which the graph arm is silently under-credited.
+tasks, enforced tool allowlists per arm, scored against \emph{independent}
+oracles (Go \code{go-ssa-vta}; a new Java Spoon oracle that resolves every call
+site by type, not by name).
+\item \textbf{The size-conditioned result}: graph $\approx$ text on
+small/greppable change-impact tasks; graph $\gg$ text on large-blast-radius
+tasks, on recall \emph{and} variance. The discriminator is blast radius
+(specifically, change-sites reachable only via caller edges), \emph{not} name
+ambiguity and not language.
+\item \textbf{A capability-conditioned reading}: with graph \emph{primitives},
+the recall lift shrinks as the model strengthens---the graph is a quality lever
+for weak/mid models and a cost lever at the frontier.
+\item \textbf{The tool-altitude result (new)}: the same graph exposed as a single
+task-level \code{change\_impact} operation makes completeness tier-invariant
+(mean recall $0.997$ at every tier). The smallest model then outperforms the
+frontier model on text search at $1/20$th the cost, and matches the frontier
+model on graph primitives at $1/28$th. Orchestration over primitives, not graph
+access, was the binding constraint.
+\item \textbf{A testability finding}: implementing the traversal as a
+deterministic, oracle-scorable engine operation exposed five latent Java
+resolution defects (multi-line signatures, generic bounds parsed as inheritance,
+wildcard-import scope, same-file shadowing over typed receivers, nested generic
+types) that every LLM-orchestrated arm had silently absorbed. Task-shaped
+operations are not only more effective; they are \emph{debuggable}.
+\item \textbf{Reproducible artifacts}: a Java change-impact oracle and
+size-graded task generator, a scoring fix (line$\rightarrow$method
+normalization) without which graph arms are silently under-credited, and the
+graph-native \code{change\_impact} operation itself.
 \end{enumerate}
 
 \section{Related work}
@@ -117,9 +159,12 @@ suites~\cite{repobench,repocoder} established that resolving real changes requir
 \emph{repository} context, not just local context. Agent scaffolds---SWE-agent's
 agent--computer interface~\cite{sweagent}, and pipeline approaches such as
 Agentless~\cite{agentless}---differ chiefly in \emph{how} they gather that
-context. Our study isolates one axis of that design space (text search vs.\ a
-resolved code graph) and measures it directly, rather than as part of an
-end-to-end agent.
+context. SWE-agent demonstrated that interface design materially changes agent
+performance at fixed model; our tool-altitude result quantifies one axis of that
+design space for structural code tools: the same underlying capability, offered
+as primitives versus as a task-shaped operation, produces a $0.16$ mean-recall
+swing for a small model. Our study isolates the context mechanism directly,
+rather than as part of an end-to-end agent.
 
 \paragraph{Code context: retrieval vs.\ structure.}
 Retrieval-augmented generation~\cite{rag} and its code-specific
@@ -128,8 +173,8 @@ supply it by resolved structure. Graph-based code context for
 LLMs~\cite{codexgraph} and graph-structured retrieval more
 broadly~\cite{graphrag} argue structure should help. We ask the prior question
 empirically---\emph{when} does the structure change the answer rather than just
-the path to it---and find the answer is conditioned on task size and model
-capability.
+the path to it---and find the answer is conditioned on task size, model
+capability, and interface altitude.
 
 \paragraph{Static call-graph construction (our oracle, not the tool under test).}
 Sound change-impact ground truth requires resolved dispatch. We use Class
@@ -145,21 +190,30 @@ under test, so we never grade the tool against itself.
 Three cost axes---\textbf{tokens, latency, round-trips, setup}; six quality
 axes---\textbf{completeness, precision, calibration, consistency, freshness,
 determinism}; one outcome---\textbf{task success}; one
-meta-variable---\textbf{cost-of-error}. Our prior belief was that the graph's
-value lived in the quality axes uniformly. The result below is that it lives in
-\textbf{completeness + consistency, but only past a task-size threshold}, and at
-near-zero extra cost---so the right figure of merit is
-\emph{quality-at-fixed-cost conditioned on blast radius}.
+meta-variable---\textbf{cost-of-error}. To these we add a tool-design
+axis this study shows is load-bearing: \textbf{interface altitude}---whether the
+tool exposes \emph{primitives} the agent must orchestrate (look up, list callers,
+list implementors) or a \emph{task-shaped operation} that returns the completed
+traversal. Our prior belief was that the graph's value lived in the quality axes
+uniformly. The result below is that it lives in \textbf{completeness +
+consistency, past a task-size threshold}, and that \emph{who can collect it}
+depends on altitude: at primitive altitude the payoff is gated by model
+capability; at task altitude it is not.
 
 \section{Study design}
 \label{sec:design}
 
 \paragraph{Arms (only the tool description/allowlist differs).}
-\textbf{T} text (rg/grep/read); \textbf{G} graph (typed \code{prism} call-graph
-CLI for traversal + rg for anchor discovery); \textbf{V} text-primary with
-graph-as-verifier. Arm enforcement is by \code{--allowedTools} with a recorded
-\code{tool\_trace}; runs where the G arm never touched the graph are flagged
-(\code{violation}) and excluded.
+\textbf{T} text (rg/grep/read); \textbf{G} graph primitives (typed \code{prism}
+call-graph CLI---symbol lookup, references, typed edge traversal---plus rg for
+anchor discovery); \textbf{V} text-primary with graph-as-verifier; and, in the
+altitude extension, \textbf{\gstar{}} task-level graph (the agent may call
+\code{prism change-impact 'Type.method(Params)'}, which returns declaration,
+override/implementation family, and resolved callers in one response, plus rg
+and symbol search for identifying the target). Arm enforcement is by
+\code{--allowedTools} with a recorded \code{tool\_trace}; runs where the G arm
+never touched the graph---or the \gstar{} arm never called
+\code{change-impact}---are flagged (\code{violation}) and excluded.
 
 \paragraph{Mode A (context quality).}
 The agent answers ``list every site that must change to do X,'' declaring
@@ -176,7 +230,10 @@ oracle lacks: a call to an unrelated same-named method on a different type is
 excluded. On jackson it resolved all $\sim$500 \code{get}/\code{set} call sites
 and kept only the 3--22 that are truly jackson's (0 unresolved). Ground truth is
 human-spot-checked and, where text reaches it, validated by a text arm hitting
-recall 1.0.
+recall 1.0. The oracle and the graph engine under test are \emph{separate
+implementations} (a compiler frontend versus a tree-sitter-based incremental
+indexer); their agreement is the measurement, and---as \cref{sec:bugs}
+shows---their disagreement was the debugging signal.
 
 \paragraph{A scoring pitfall (Java).}
 \code{prism} reports authoritative \code{file:line}, so graph-arm agents naturally
@@ -194,11 +251,32 @@ change-impact). Java: \code{jackson-databind} @ 2.18.8, 6 interface-method
 signature-change tasks spanning \textbf{8, 22, 38, 58, 104, 108} change-sites,
 chosen to trace a size curve and to vary name-ambiguity independently of size.
 \textbf{Models:} a small, a mid, and a frontier tier (denoted Haiku / Sonnet /
-Opus). \textbf{Trials:} 5 per cell; we report tails (min, variance), not just
-means. The full grid is 157 scored runs.
+Opus).
 
-\section{Results}
-\label{sec:results}
+\paragraph{Two experiments.}
+\emph{Experiment 1} (T vs.\ G vs.\ V; $n{=}5$ trials per cell; 157 scored runs)
+establishes the blast-radius and capability results
+(\cref{sec:results-exp1}). \emph{Experiment 2} (the altitude extension;
+\cref{sec:altitude}) adds the \gstar{} arm across all three tiers and all six
+Java tasks, with fresh T and G baselines re-run on the repaired engine
+(next paragraph); $\approx$50 additional scored runs. The \gstar{} engine
+operation is deterministic, so per-cell variance in \gstar{} can arise only from
+the agent's query formulation and answer relay; we replicate the small tier
+($n{=}3$) and observe the determinism directly (\cref{sec:altitude}).
+
+\paragraph{Engine repair between experiments (a result in itself).}
+Implementing \code{change\_impact} \emph{inside} the graph engine---and scoring
+its raw output against the independent oracle with no LLM in the loop---exposed
+five latent Java resolution defects in the engine's indexer that Experiment~1's
+LLM-driven G arm had partially masked by supplementing the graph with its own
+reading (\cref{sec:bugs}). All five were fixed with regression tests before
+Experiment~2; Experiment~2's G baselines therefore run on a strictly better
+engine than Experiment~1's, which biases \emph{against} the altitude effect we
+report (the primitives arm is as strong as we can make it). Text arms are
+unaffected by engine version.
+
+\section{Results I: blast radius and capability (graph as primitives)}
+\label{sec:results-exp1}
 
 \subsection{Small / greppable change-impact: graph $\approx$ text}
 Across the Go tasks, mean recall(G) $\approx$ recall(T) (within $\sim$0.01--0.07
@@ -229,9 +307,10 @@ deserialize       & 104 & 0.52 & \textbf{0.69} & 0.76 & \textbf{0.93} & 0.92 \(\
 serialize         & 108 & 0.62 & \textbf{0.85} & 0.86 & \textbf{1.00} & 1.00 \(\to\) 1.00 \\
 \bottomrule
 \end{tabular}
-\caption{Recall across three model tiers and the jackson size curve. The graph's
-recall advantage is largest for the weakest model on the largest tasks, shrinks
-as the model strengthens, and is $\le 0.04$ everywhere at the frontier.}
+\caption{Experiment 1: recall across three model tiers and the jackson size
+curve, graph exposed as primitives. The graph's recall advantage is largest for
+the weakest model on the largest tasks, shrinks as the model strengthens, and is
+$\le 0.04$ everywhere at the frontier.}
 \label{tab:curve}
 \end{table}
 
@@ -282,9 +361,11 @@ Mid      & $.87 \to 1.00$ (\textbf{+.13}) & $.76 \to .94$ (\textbf{+.17}) \\
 Frontier & $1.00 \to 1.00$ (+.00)         & $.92 \to \mathbf{.96}$ (\textbf{+.04}) \\
 \bottomrule
 \end{tabular}
-\caption{Recall (text $\to$ graph, $\Delta=$ G$-$T) on the two large tasks across
-tiers. The graph is a capability equalizer: large lift for weak models, narrowing
-to a hard-task reliability/cost edge at the frontier.}
+\caption{Experiment 1: recall (text $\to$ graph, $\Delta=$ G$-$T) on the two
+large tasks across tiers. With primitives the graph is a capability equalizer:
+large lift for weak models, narrowing to a hard-task reliability/cost edge at the
+frontier. Note the equalization is \emph{partial}---the small tier's graph arm
+(.69/.85) remains far below the frontier's (.96/1.00) with identical tools.}
 \label{tab:tiers}
 \end{table}
 
@@ -321,59 +402,261 @@ negative holds there. The graph's calibration benefit is specifically the varian
 collapse on large tasks (\cref{sec:consistency}), not a uniform over-confidence
 reduction.
 
+\section{Results II: tool altitude (graph as a task-level operation)}
+\label{sec:altitude}
+
+Experiment 1 leaves a gap between what the graph \emph{knows} and what a weak
+model can \emph{extract from it}: with identical primitives, the small tier
+plateaus at mean recall $0.833$ while the frontier tier reaches $1.000$.
+Experiment 2 closes the gap by moving the extraction into the engine. The
+\gstar{} arm may issue one command---%
+\code{prism change-impact 'Type.method(Params)'}---whose response is the
+completed traversal: the declaration, every override/implementation in the
+subtype closure, and every call site whose receiver \emph{resolves} into that
+family. The agent's residual job is to identify the target method from the issue
+text, run the command, and relay the result.
+
+\subsection{Completeness becomes tier-invariant}
+\Cref{tab:altitude} gives recall for all three arms at all three tiers on the six
+Java tasks (repaired engine; one fresh trial per cell, small-tier \gstar{}
+replicated $n{=}3$).
+
+\begin{table}[ht]
+\centering
+\small
+\setlength{\tabcolsep}{4.5pt}
+\begin{tabular}{lrccccccccc}
+\toprule
+& & \multicolumn{3}{c}{Small} & \multicolumn{3}{c}{Mid} & \multicolumn{3}{c}{Frontier} \\
+\cmidrule(lr){3-5}\cmidrule(lr){6-8}\cmidrule(lr){9-11}
+task & sites & T & G & \gstar{} & T & G & \gstar{} & T & G & \gstar{} \\
+\midrule
+jsonnode-get      & 8   & 1.00 & 1.00 & \textbf{1.00} & 1.00 & 1.00 & \textbf{1.00} & 1.00 & 1.00 & \textbf{1.00} \\
+settable-set      & 22  & 0.91 & 1.00 & \textbf{1.00} & 0.95 & 0.95 & \textbf{1.00} & 1.00 & 1.00 & \textbf{1.00} \\
+writeTypePrefix   & 38  & 0.84 & 1.00 & \textbf{1.00} & 1.00 & 1.00 & \textbf{1.00} & 1.00 & 1.00 & \textbf{1.00} \\
+serializeWithType & 58  & 0.60 & 0.60 & \textbf{1.00} & 1.00 & 1.00 & \textbf{1.00} & 1.00 & 1.00 & \textbf{1.00} \\
+deserialize       & 104 & 0.43 & 0.67 & \textbf{1.00} & 0.75 & 0.93 & \textbf{1.00} & 0.71 & 1.00 & \textbf{1.00} \\
+serialize         & 108 & 0.76 & 0.72 & \textbf{0.98} & 1.00 & 0.98 & \textbf{0.98} & 1.00 & 1.00 & \textbf{0.98} \\
+\midrule
+\textbf{mean}     &     & 0.76 & 0.83 & \textbf{1.00} & 0.95 & 0.98 & \textbf{1.00} & 0.95 & 1.00 & \textbf{1.00} \\
+\bottomrule
+\end{tabular}
+\caption{Experiment 2: recall by arm and tier on the repaired engine (means to
+two decimals; exact \gstar{} mean 0.997 at every tier). Under \gstar{},
+completeness is tier-invariant---the per-task values are \emph{identical} across
+tiers, including the one shared miss (serialize 0.98, an engine residual, not a
+model failure). The small tier's remaining T/G deficits vanish entirely.}
+\label{tab:altitude}
+\end{table}
+
+Three observations. \textbf{First, the \gstar{} column is the same at every
+tier}: per-task recall is identical to three decimals, and the single shared
+imperfection (serialize $0.982$) traces to two call sites the engine's
+chained-receiver inference cannot yet resolve (\code{w.serializer.serialize})---an
+engine residual, visible and fixable in one place, rather than a stochastic model
+failure distributed over a transcript. \textbf{Second, the small tier gains the
+most}: mean recall moves from $0.758$ (T) and $0.833$ (G) to $0.997$
+(\gstar{})---the entire equalization Experiment 1 promised but could not deliver
+through primitives. \textbf{Third, the frontier gains too}: not in recall (Opus~G
+already reached $1.000$) but in effort---4 agent turns instead of 21, 70 seconds
+instead of 429 (\cref{tab:altcost}).
+
+The determinism is visible in the transcripts. The small model's entire tool use
+on the 8-site task is one line---%
+\code{prism change-impact 'JsonNode.get(int)' .}---followed by the relayed
+answer: 2 turns, 22.6 seconds, \$0.04, recall 1.0. The small-tier replication
+($n{=}3$ per task, 18 runs) scored \emph{identically} in every trial: per-task
+recall and precision are exact across trials, as the deterministic engine
+output predicts. Site sets were byte-identical in four of six tasks; in the
+other two, a single trial transcribed one method's directory path differently
+while naming the same method---relay noise, not a traversal difference, and
+scored identically. The residual stochastic surface (query formulation)
+produced no failures.
+
+\subsection{The economics invert}
+\label{sec:alt-econ}
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{llrrr}
+\toprule
+tier & arm & mean recall & \$/task & agent turns \\
+\midrule
+Small    & T        & 0.758 & 0.48 & 31 \\
+Small    & G        & 0.833 & 0.53 & 41 \\
+Small    & \gstar{} & \textbf{0.997} & \textbf{0.11} & \textbf{2.8} \\
+\addlinespace
+Mid      & T        & 0.951 & 2.13 & 45 \\
+Mid      & G        & 0.978 & 2.20 & 44 \\
+Mid      & \gstar{} & \textbf{0.997} & \textbf{0.53} & \textbf{11.7} \\
+\addlinespace
+Frontier & T        & 0.952 & 2.14 & 22 \\
+Frontier & G        & 1.000 & 3.06 & 21 \\
+Frontier & \gstar{} & 0.997 & \textbf{0.48} & \textbf{4.0} \\
+\bottomrule
+\end{tabular}
+\caption{Experiment 2: mean recall, cost, and agent turns over the six Java
+tasks. The small model at task altitude (\$0.11/task) outperforms the frontier
+model on text (\$2.14) and matches the frontier on primitives (\$3.06) at
+$1/28$th the cost.}
+\label{tab:altcost}
+\end{table}
+
+At primitive altitude, completeness must be \emph{bought with model capability}:
+the recall ladder ($0.833 \to 0.978 \to 1.000$) tracks the price ladder
+(\$0.53 $\to$ \$2.20 $\to$ \$3.06). At task altitude the ladder collapses: every
+tier delivers $0.997$, so the rational choice is the cheapest tier, and the
+cost of a near-complete change-set falls from \$3.06 (frontier + primitives) to
+\$0.11 (small + \gstar{})---a $28\times$ reduction at a $-0.003$ recall
+difference. Against the strongest text baseline (frontier T, $0.952$ mean with a
+$0.71$ dip on \code{deserialize}), the small + \gstar{} system is
+\emph{strictly better}: higher mean, no tail risk, $1/20$th the cost, $5\times$
+fewer turns. Once the traversal lives in the engine, the completeness of a
+change-set is a property of the \emph{tool}, and the model reverts to what it is
+actually needed for: identifying the target and consuming the result.
+
+\subsection{The engine ceiling, measured without an LLM}
+\label{sec:ceiling}
+Because the \gstar{} operation is deterministic, we can score it directly against
+the oracle with no model in the loop: mean recall $0.993$, mean precision
+$0.948$ across the six tasks (per-task recall $\ge 0.974$; the misses are three
+call sites behind chained receivers and one multi-line call-site argument-count
+extraction). Agent-mediated \gstar{} runs reproduce this ceiling ($0.997$; the
+small difference reflects task-scope judgments such as including supertype
+declarations). This decomposition---engine ceiling measured deterministically,
+agent overhead measured separately---is only possible \emph{because} the
+traversal is a tool, and we propose it as the right way to evaluate structural
+code tools: report the tool's oracle score and the agent's realization of it,
+not a single conflated number. Precision at task altitude is high but not
+perfect ($0.80$ on the overload-ambiguous 8-site task, where callers of other
+\code{get} overloads are included absent literal-argument evidence;
+$0.97$--$1.00$ elsewhere).
+
+\subsection{What building the operation revealed: LLM arms absorb engine defects}
+\label{sec:bugs}
+The deterministic operation initially scored recall \emph{0.05} on the 108-site
+task. Tracing every oracle miss to a mechanism exposed five latent defects in the
+engine's Java resolution---(1) signatures truncated at the first line, so
+wrapped \code{extends}/\code{implements} clauses and annotations destroyed
+inheritance edges; (2) generic bounds (\code{<T extends Enum<T>{}>}) parsed as
+inheritance; (3) wildcard imports resolving to nothing; (4) same-file method
+shadowing defeating explicitly-typed receivers; (5) nested generics breaking
+field-type inference. All five were fixed with regression tests; recall rose
+$0.05 \to 0.99$ from engine fixes alone.
+
+The methodological point: \emph{these defects were invisible in Experiment 1}.
+The G arm's LLM supplemented the degraded graph with its own reading and grep,
+producing plausible mid-range recall (0.6--0.9) that read as ``the graph helps
+somewhat'' rather than ``the graph is broken.'' An LLM in the loop is an adaptive
+error-masker: it converts tool defects into quiet score depression. A
+deterministic, oracle-scored operation converts them into visible, traceable,
+fixable failures. This is an argument for task-shaped tools independent of the
+performance argument: they make the structural layer of an agent system
+\emph{testable}.
+
 \section{Why---the mechanism}
 \label{sec:mechanism}
 
 A change to a method's signature forces every declaration/override \emph{and}
-every call site to change. Two regimes:
+every call site to change. Three regimes:
 \begin{itemize}[leftmargin=*]
 \item \textbf{Few sites, statically named (Go, small Java).} A call
 \code{x.Foo(...)} and an implementor \code{func (T) Foo(...)} both contain
 \code{Foo}; with $\le\!\sim$20 sites a capable agent greps the name, reads to
 confirm, and enumerates them all. The graph's structural precision saves reading
 effort (a token wash) but rarely changes \emph{what it finds}. Hence the tie.
-\item \textbf{Many sites (Java framework interfaces, $\sim$100).} Now grep+read is
-a manual graph traversal at scale: the agent must find every implementor and every
-polymorphic call, hold them in context, and not lose any across 50--65 turns. It
-is good on average but \emph{unreliable}---it drops sites stochastically,
-especially callers not named after the target. The resolved graph enumerates the
-family and the resolved callers in one authoritative pass, so completeness is both
-higher and consistent.
+\item \textbf{Many sites, graph as primitives (Java framework interfaces,
+$\sim$100).} Now grep+read is a manual graph traversal at scale, and so---
+crucially---is \emph{driving the graph primitives}. The agent must choose seeds,
+chain lookup$\to$references$\to$overrides$\to$callers per family member, hold
+$\sim$100 partial results across 30--60 turns, and union them without loss. Each
+step is individually easy; their conjunction is a long-horizon orchestration task
+whose success probability decays with length and with model capability. This is
+why the primitives arm equalizes only partially: the graph removes the
+\emph{search} burden but leaves the \emph{orchestration} burden, and
+orchestration is itself a frontier skill.
+\item \textbf{Many sites, graph at task altitude.} The traversal is one
+deterministic closure computed where the data lives. The LLM's remaining surface
+is target identification and relay---short-horizon, low-variance work that every
+tier performs equally well. Completeness stops being a model property and
+becomes a tool property; the tiers converge.
 \end{itemize}
 
-This predicts the boundary: the graph earns its keep wherever the change-set is too
-large to enumerate reliably by hand---large refactors, framework-wide interface
-changes---and ties text on the small, local edits that dominate everyday work.
-Name ambiguity is a red herring at these sizes: a capable agent disambiguates
+This predicts the boundary structure we observe: the graph earns its keep
+wherever the change-set exceeds what text search reliably enumerates; \emph{who}
+collects that value depends on whether the tool's interface demands
+orchestration; and at task altitude the value is collected by construction. Name
+ambiguity is a red herring at every altitude: a capable agent disambiguates
 \code{get}/\code{set} by reading, as long as there are few sites to check.
 
 \section{Discussion}
 \label{sec:discussion}
 \begin{itemize}[leftmargin=*]
-\item \textbf{Evaluate code-context tools conditioned on blast radius.} ``Graphs
-help'' and ``graphs don't'' are both wrong; the honest figure of merit is
-completeness-and-consistency at fixed cost, as a function of \#change-sites.
-\item \textbf{The graph's value morphs with model capability.} On large changes it
-is a quality/reliability lever for weak and mid models and a cost lever at the
-frontier. One tool, two payoffs, selected by how capable the model already is.
+\item \textbf{Ship task-shaped operations, not primitive kits.} The largest gains
+in this study came not from adding structure but from moving a traversal across
+the tool boundary. For agent tool builders (MCP servers, IDE integrations), the
+design rule is: identify the traversals agents repeatedly orchestrate---%
+change-impact, dead-code reachability, test-coverage closure---and expose each as
+one deterministic operation returning the completed answer. Primitives remain
+useful for ad-hoc exploration; they are the wrong \emph{primary} interface for
+completeness-critical tasks.
+\item \textbf{The economics of completeness invert.} At primitive altitude,
+completeness is purchased with model capability (the recall ladder tracks the
+price ladder). At task altitude the cheapest model matches the frontier, so the
+marginal dollar should go to the engine, not the model. This bears directly on
+deployment: a \$0.11 small-model configuration strictly dominated a \$2.14
+frontier-text configuration in our study, and local open-weights models become
+plausible carriers of frontier-grade change-impact analysis---our preliminary
+probe with a 30B local model succeeded through the task-level operation after
+failing entirely on primitives (multi-turn orchestration collapsed), though a
+full scored grid for local tiers is future work.
+\item \textbf{Evaluate context tools conditioned on blast radius and altitude.}
+``Graphs help'' and ``graphs don't'' are both wrong, and so is any comparison
+that fixes the interface silently. The honest figure of merit is
+completeness-and-consistency at fixed cost, as a function of \#change-sites,
+with the tool's oracle ceiling and the agent's realization of it reported
+separately (\cref{sec:ceiling}).
+\item \textbf{Deterministic operations make agent systems testable.} The
+five-defect arc (\cref{sec:bugs}) generalizes: any capability buried in an LLM
+orchestration loop is shielded from regression testing by the model's adaptive
+error-masking. Moving it into a scorable tool is how it becomes engineering.
 \item \textbf{Language matters only through task size.} Java surfaced the effect
 not because Java is ``harder to grep'' but because framework interface methods
-produce 100-site change-sets that Go application code in our sample rarely did. The
-prediction is testable in large Go codebases with wide interfaces.
+produce 100-site change-sets that Go application code in our sample rarely did.
+The prediction is testable in large Go codebases with wide interfaces.
 \end{itemize}
 
 \section{Threats to validity}
 \label{sec:threats}
 \begin{itemize}[leftmargin=*]
+\item \textbf{Experiment 2 trial counts.} \gstar{} cells run $n{=}3$ (small
+tier) and $n{=}1$ (mid, frontier); T/G baselines in \cref{tab:altitude} are
+single fresh trials on the repaired engine (Experiment 1 supplies $n{=}5$
+history for T/G on the older engine, consistent in direction). The engine's
+output is deterministic and independently scored (\cref{sec:ceiling}), so
+\gstar{} variance is confined to query formulation; the small-tier replication
+observed no score variance (two trials differed from their siblings only in
+the transcribed directory of one site each). Larger $n$ on the remaining cells
+is cheap and planned.
+\item \textbf{Query formulation is prompt-assisted.} Our task prompts name the
+changing method (as a signature-change ticket would); \gstar{} still requires the
+agent to produce the parameter-typed query. Tasks where the target must first be
+\emph{localized} from a vague report exercise a skill \gstar{} does not
+address---there T/G localization ability still binds.
+\item \textbf{Oracle--engine independence.} The oracle (Spoon, compiler-grade)
+and the engine (tree-sitter indexer + resolution heuristics) both perform type
+resolution but share no code or algorithms; the engine's initial 0.05 recall and
+residual 0.993 (not 1.0) demonstrate they do not trivially agree.
 \item \textbf{Two subjects per language; one framework for the large-Java regime.}
-The large-task win rests on \code{jackson-databind} interface methods; replication
-on another framework (Spring, Guava) and in a large Go codebase with wide
-interfaces is the key external-validity gap.
+The large-task and altitude results rest on \code{jackson-databind} interface
+methods; replication on another framework (Spring, Guava) and in a large Go
+codebase with wide interfaces is the key external-validity gap.
 \item \textbf{Mode A only.} We score the \emph{answer}, not an applied patch. Mode
 B (compile / fail-to-pass)---where an incomplete change actually breaks the
 build---would test whether the reliability gain converts to task success.
-\item \textbf{One graph implementation} and a soft tool gate (the G arm can decline
-to use the graph; we exclude those runs, but the offer-vs-enforce distinction is
+\item \textbf{One graph implementation} and a soft tool gate (arms can decline
+their tools; we exclude violating runs, but the offer-vs-enforce distinction is
 unmodeled).
 \item \textbf{Construct / selection.} Java ground truth is type-resolved (no
 bare-name pollution); an earlier bare-name Java attempt was discarded after audit.
@@ -387,32 +670,37 @@ reproducible from the released run logs.
 \section{Conclusion}
 \label{sec:conclusion}
 The intuition that a resolved code graph makes an agent more complete on
-change-impact tasks is \emph{conditionally true, and the condition is capability
-$\times$ blast radius}. On small, name-greppable changes (most of Go, everyday
-edits) the graph ties text at every model tier. On large-blast-radius changes it
-acts as a \emph{capability equalizer}: it lifts weaker/cheaper models toward
-frontier-level completeness with far lower variance. That recall gain shrinks as
-the model strengthens and, at the frontier, vanishes on tasks the model can fully
-enumerate by text yet persists on harder ones---where the graph still delivers
-higher recall, removes the tail risk, and even costs less. The earlier blanket
-negative was an artifact of a small-task sample; the blanket positive (``graphs
-obviously help'') is equally wrong. The defensible, mechanistic claim: \textbf{a
-code graph is a completeness-and-reliability tool that pays off in proportion to
-how far a change exceeds what the model's text search can reliably enumerate---large
-for weak models, narrowing to hard-task reliability at the frontier, and a wash for
-small local edits.}
+change-impact tasks is \emph{conditionally true, and the conditions are blast
+radius and tool altitude}. On small, name-greppable changes the graph ties text
+at every model tier. On large-blast-radius changes, the graph as
+\emph{primitives} is a partial capability equalizer: it lifts weaker models and
+collapses variance, but orchestrating it remains a frontier skill, so the
+weakest models leave most of the benefit unrealized. The same graph exposed as a
+single deterministic \code{change\_impact} operation completes the
+equalization: recall becomes tier-invariant ($0.997$), the smallest model
+strictly dominates the frontier-model text baseline at $1/20$th the cost, and
+the completeness of a change-set becomes a testable property of the tool rather
+than an emergent property of the model. The earlier blanket negative was an
+artifact of a small-task sample; the blanket positive (``graphs obviously
+help'') is equally wrong; and the primitives-only framing under-sells the graph
+exactly where it matters most. The defensible, mechanistic claim: \textbf{a code
+graph pays off in proportion to how far a change exceeds what text search
+reliably enumerates---and that payoff reaches whichever models the tool's
+interface altitude permits. At task altitude, it reaches all of them.}
 
 \section*{Artifact availability}
 \label{sec:artifacts}
-The graph engine (Grove), the agent-facing context CLI (Prism), and the evaluation
-harness (arms runner, tasks, the Spoon change-impact oracle, the
-line$\rightarrow$method rescorer, and the recall/cost aggregator) are open source.
-All analyses are reproducible \emph{without} an LLM from the released run logs via
-the deterministic scorers. % TODO(author): insert repository URLs and a frozen
-% release tag / DOI (e.g. Zenodo) for the camera-ready.
+The graph engine (Grove, including the \code{change\_impact} operation), the
+agent-facing context CLI/MCP server (Prism, exposing
+\code{prism\_change\_impact}), and the evaluation harness (arms runner, tasks,
+the Spoon change-impact oracle, the line$\rightarrow$method rescorer, and the
+recall/cost aggregators) are open source. All analyses are reproducible
+\emph{without} an LLM from the released run logs via the deterministic scorers.
+% TODO(author): insert repository URLs and a frozen release tag / DOI (e.g.
+% Zenodo) for the camera-ready.
 \begin{itemize}[leftmargin=*]
-\item Grove (code-intelligence graph): \url{https://example.com/grove} % TODO URL
-\item Prism (agent context CLI): \url{https://example.com/prism} % TODO URL
+\item Grove (code-intelligence graph + \code{change-impact} op): \url{https://example.com/grove} % TODO URL
+\item Prism (agent context CLI / MCP): \url{https://example.com/prism} % TODO URL
 \item Evaluation harness + Java oracle + tasks: \url{https://example.com/harness} % TODO URL
 \end{itemize}
 

@@ -213,26 +213,35 @@ Regenerate a task: `python java-oracle/make_java_task.py --id <id> --display 'Cl
 
 ## 7. Open work (prioritized)
 
-> **See `ROADMAP.md`** — the plan forward: two paths (paper redo, product) forking
-> off one shared prerequisite (item 1 below, the graph-native `change_impact`).
+> **See `ROADMAP.md`.** Status 2026-07-04: the shared prerequisite and both
+> paths' first legs are DONE — graph-native `change_impact` built (engine
+> recall 0.993 vs oracle, `harness/GROVE-CHANGE-IMPACT.md`), the G* grid ran
+> (tier-invariant 0.997; Haiku+G* $0.11 beats Opus+T $2.14 —
+> `tool-altitude` Exp 2), the paper is rewritten around blast radius × tool
+> altitude (`paper/paper.tex`, builds with tectonic), and the product ships
+> G*-first steering (`prism_change_impact` MCP tool + CLI + init templates).
 
-1. **Product build (the bet):** type-resolved `change_impact` *inside Grove/Prism*
-   (independent of the Spoon oracle) → head-to-head **local+graph vs commercial**,
-   scored by the independent oracle. This is the "free local competes with
-   commercial" result. (§2.)
-2. **Mode B** (compile / fail-to-pass) — does completeness convert to task success.
-3. **External validity:** replicate the large-task regime on a 2nd framework
-   (Spring/Guava) + a large Go codebase with wide interfaces (proves lever = size,
-   not "Java").
-4. **Finish the GPT/Codex tier** (`java-oracle/CODEX.md`) — smoke-test one cell to
-   tune the event-trace parser, then the grid; gives a cross-family point.
-5. **arXiv polish:** authors/affiliation, artifact URLs, verify the 12 citations
+1. ~~Product build: graph-native `change_impact`~~ **DONE** (grove
+   `internal/graph/changeimpact.go`; scored 0.993/0.948 by the Spoon oracle).
+2. ~~G* grid + paper rewrite~~ **DONE** (Exp 2 in `paper/paper.tex` §Results II;
+   THESIS.md C8/C9).
+3. **Local tier re-run on the real engine** — replace the tautological PoC
+   probe with scored qwen3-coder-30b + `prism change-impact` cells (the "free
+   local competes with commercial" result, now legitimately scorable).
+4. **Mode B** (compile / fail-to-pass) — does completeness convert to task success.
+5. **External validity:** 2nd framework (Spring/Guava) + a large Go codebase with
+   wide interfaces; also fill Exp-2 n (Sonnet/Opus G* are n=1).
+6. **Finish the GPT/Codex tier** (`java-oracle/CODEX.md`) — cross-family point.
+7. **arXiv polish:** authors/affiliation, artifact URLs, verify the 12 citations
    in `paper/paper.tex` (best-effort from memory — must be checked).
 
 ---
 
 ## 8. One-line status
 
-Research result: **done and committed.** Paper: **arXiv-ready draft** (3 TODOs).
-Product bet: **PoC in hand, honestly caveated; the measured version is build #1
-above.** Daily local-coding setup: **live** (`LOCAL-MODEL-SETUP.md`).
+Research result: **done, both experiments** (blast radius × tool altitude).
+Paper: **full arXiv-ready draft** with Exp 2 (`paper/paper.tex`; TODOs:
+affiliation, artifact URLs, citation check). Product: **G* shipped end-to-end**
+— engine op (0.993 vs oracle), `prism_change_impact` MCP + CLI, G*-first agent
+steering. Next big rocks: local-tier re-run on the real engine, Mode B,
+2nd framework. Daily local-coding setup: **live** (`LOCAL-MODEL-SETUP.md`).
