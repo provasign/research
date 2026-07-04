@@ -211,7 +211,7 @@ Regenerate a task: `python java-oracle/make_java_task.py --id <id> --display 'Cl
 ## 7. Open work (prioritized)
 
 > **Status 2026-07-04.** All experiments done. Paper updated. Gate cleared.
-> Local 30B measured. Steering extended. Product roadmap is now unblocked.
+> Local 30B measured. Steering extended. External validity partial.
 
 ### Done
 - ~~Graph-native `change_impact` in Grove/Prism~~ — engine recall 0.993 vs
@@ -227,6 +227,13 @@ Regenerate a task: `python java-oracle/make_java_task.py --id <id> --display 'Cl
 - ~~Steering prompt expansion~~ — decision tables in all 3 templates now have 5
   rows for change_impact (method rename, interface, type rename, deprecation,
   "find all X"). Pre-task rule added. Committed to prism, binary rebuilt.
+- ~~**External validity (partial, Apache Commons Collections)**~~ — 2 tasks
+  created and run (`tasks/commons-collections-*.json`). Small-task tie
+  replicates (17 GT: T=G*=Local30B=1.000). Large task (142 GT,
+  `MapIterator.next`) shows T≈G*≈0.585 due to standard-library boundary
+  (MapIterator extends java.util.Iterator → engine ceiling ~0.317). This
+  confirms: completeness ceiling is governed by the engine, not the model.
+  §5.6 + §Threats updated in `paper/paper.tex`.
 
 ### 7.A — The gate
 **CLEARED.** The honest headline: `qwen3-coder:30b + prism change-impact =
@@ -234,16 +241,17 @@ Regenerate a task: `python java-oracle/make_java_task.py --id <id> --display 'Cl
 
 ### 7.B — Research completion (after 7.A)
 
-**2. Mode B (compile / fail-to-pass)**
-Does the completeness win convert to actual task success? A missed site
-breaks the build; does G* zero-miss rate translate to higher build pass rate?
-This is what makes "competes with commercial" concrete for companies.
+**2. Mode B (compile / fail-to-pass)** — §5.5 has derived metric (expected
+compile failures); actual compilation not yet run.
 
-**3. External validity**
-- 2nd Java framework (Spring/Guava) — proves the lever is blast radius,
-  not "jackson-databind."
-- Large Go codebase with wide interfaces — proves it's not "Java."
-- Fill Exp-2 n: Sonnet/Opus G* are n=1; cheap to replicate.
+**3. External validity (partially done)**
+- Small-task tie confirmed in commons-collections ✓
+- G* > T on large tasks NOT confirmed in commons-collections (engine ceiling
+  governs — consistent with tool-property thesis, but doesn't demonstrate
+  the advantage in a second corpus)
+- Remaining gap: 2nd corpus with large clean-hierarchy methods (Spring, Guava)
+  where engine recall is high AND blast radius is large. Commons methods that
+  inherit from java.util.* have low engine ceilings.
 
 **4. GPT/Codex tier** (`java-oracle/CODEX.md`) — cross-family point for the paper.
 

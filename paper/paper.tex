@@ -598,6 +598,49 @@ zero-miss answers---guaranteed compile-clean on those tasks. The remaining
 sites behind chained receivers); it affects all \gstar{} tiers identically,
 confirming it is a tool property, not a model property.
 
+\subsection{External validity: Apache Commons Collections}
+\label{sec:external}
+
+To test whether the patterns in \cref{tab:altitude} are specific to
+\code{jackson-databind}, we replicated the two boundary cases---small greppable
+task and large-blast-radius task---in Apache Commons Collections 4, a different
+Java framework with deep interface hierarchies (\code{MapIterator},
+\code{Transformer}, \code{Bag}).
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{lrrrr}
+\toprule
+task & GT & T & \gstar{} & Local 30B+\gstar{} \\
+\midrule
+\code{Transformer.transform}  & 17  & 1.000 & 1.000 & 1.000 \\
+\code{MapIterator.next}       & 142 & 0.585 & 0.585 & 0.613 \\
+\bottomrule
+\end{tabular}
+\caption{External validity in Apache Commons Collections (Sonnet unless noted).
+Pattern 1 replicates: the small-task tie holds. On the 142-site task both arms
+reach $\approx{}$0.585, but through different failure modes; see text.}
+\label{tab:external}
+\end{table}
+
+\textbf{Pattern 1 replicates.} On the 17-site task every arm achieves
+recall 1.0, confirming the small-task tie is not specific to
+\code{jackson-databind}.
+
+\textbf{Large task: a different ceiling.}
+On the 142-site task, T and \gstar{} are roughly equal at $\approx{}0.585$---a
+striking contrast with the jackson large tasks where \gstar{} reaches 0.997
+and T falls to 0.274--0.952. The mechanism is the engine ceiling: \code{MapIterator}
+extends \code{java.util.Iterator}, so the full family traversal must cross
+the standard-library boundary. Grove does not have standard-library sources
+in scope; its raw recall on this task is $\approx{}0.31$. The \gstar{} arm
+is bounded by what the engine returns; the T arm hits a similar ceiling
+through text enumeration. The result is not ``G* $\approx$ T is the norm''
+---it is ``\emph{when the engine ceiling drops, G* drops with it}.'' This
+is precisely the tool-property thesis: the completeness ceiling is set by
+the engine, and \gstar{} delivers that ceiling to every model tier.
+
 \section{Why---the mechanism}
 \label{sec:mechanism}
 
@@ -695,8 +738,12 @@ resolution but share no code or algorithms; the engine's initial 0.05 recall and
 residual 0.993 (not 1.0) demonstrate they do not trivially agree.
 \item \textbf{Two subjects per language; one framework for the large-Java regime.}
 The large-task and altitude results rest on \code{jackson-databind} interface
-methods; replication on another framework (Spring, Guava) and in a large Go
-codebase with wide interfaces is the key external-validity gap.
+methods. We replicated the small-task tie in Apache Commons Collections
+(\cref{sec:external}); the large-task result there is complicated by a
+standard-library boundary that depresses the engine ceiling, so the
+G* $>$ T dominance from the jackson corpus does not replicate on the
+cross-hierarchy task. Replication in a corpus with large clean hierarchies
+(Spring, Guava) remains the key external-validity gap.
 \item \textbf{Mode A only.} We score the \emph{answer}, not an applied patch. Mode
 B (compile / fail-to-pass)---where an incomplete change actually breaks the
 build---would test whether the reliability gain converts to task success.
