@@ -60,12 +60,23 @@ def main() -> None:
                     help="corpus root (default: ~/gvg-corpus/jackson-databind)")
     ap.add_argument("--cp", default=None,
                     help="classpath file; omit for projects with no external main deps")
+    ap.add_argument("--allow-external-override", action="store_true",
+                    help="bypass the external-override guard (audit demos only; "
+                         "such tasks are ill-posed as signature changes)")
     args = ap.parse_args()
 
     repo = Path(args.repo).expanduser().resolve() if args.repo else DEFAULT_REPO
     cp = Path(args.cp).expanduser() if args.cp else (DEFAULT_CP if repo == DEFAULT_REPO else None)
 
     res = run_oracle(args.target, repo, cp)
+    ext = res.get("overrides_external", [])
+    if ext and not args.allow_external_override:
+        raise SystemExit(
+            f"REJECTED: {args.target} overrides external method(s) {ext}.\n"
+            "A signature-change task on such a target is ill-posed (the external\n"
+            "contract can't change) and the oracle closure is a virtual-dispatch\n"
+            "set, not a must-change set (see the mapiterator-next audit).\n"
+            "Pick a project-rooted target, or pass --allow-external-override.")
     gt = res["ground_truth"]
     task = {
         "id": args.id,

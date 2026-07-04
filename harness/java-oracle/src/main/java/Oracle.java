@@ -89,6 +89,22 @@ public final class Oracle {
             if (tops == null || tops.isEmpty()) roots.add(t);
             else roots.addAll(tops);
         }
+        // --- external-override detection: a root declared outside project sources.
+        // If the target overrides a method of an external type (JDK or dependency),
+        // a "signature change" task is ill-posed (the external contract can't change)
+        // and the family/caller closure below is a virtual-dispatch closure through
+        // that external interface, not a must-change set. Surface it for audit;
+        // make_java_task.py rejects such targets.
+        TreeSet<String> externalRoots = new TreeSet<>();
+        for (CtMethod<?> r : roots) {
+            CtType<?> dt = r.getDeclaringType();
+            boolean external = dt == null || dt.isShadow()
+                    || dt.getPosition() == null || !dt.getPosition().isValidPosition();
+            if (external)
+                externalRoots.add((dt == null ? "?" : dt.getQualifiedName())
+                        + "#" + r.getSimpleName());
+        }
+
         Set<String> familyKeys = new LinkedHashSet<>();   // declFQN#signature
         Set<CtMethod<?>> family = new LinkedHashSet<>(targets);
         family.addAll(roots);
@@ -131,6 +147,7 @@ public final class Oracle {
         StringBuilder sb = new StringBuilder();
         sb.append("{\n");
         sb.append("  \"target\": ").append(quote(target)).append(",\n");
+        sb.append("  \"overrides_external\": ").append(jsonArr(externalRoots)).append(",\n");
         sb.append("  \"family\": ").append(jsonArr(familySites)).append(",\n");
         sb.append("  \"callers\": ").append(jsonArr(callerSites)).append(",\n");
         sb.append("  \"ground_truth\": ").append(jsonArr(gt)).append(",\n");
