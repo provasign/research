@@ -213,6 +213,9 @@ Regenerate a task: `python java-oracle/make_java_task.py --id <id> --display 'Cl
 
 ## 7. Open work (prioritized)
 
+> **See `ROADMAP.md`** — the plan forward: two paths (paper redo, product) forking
+> off one shared prerequisite (item 1 below, the graph-native `change_impact`).
+
 1. **Product build (the bet):** type-resolved `change_impact` *inside Grove/Prism*
    (independent of the Spoon oracle) → head-to-head **local+graph vs commercial**,
    scored by the independent oracle. This is the "free local competes with
