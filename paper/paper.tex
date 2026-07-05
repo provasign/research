@@ -58,6 +58,11 @@ framework (Guava, a 310-site change): the small tier collapses on text
 ($0.17$) but sits at the engine ceiling ($0.997$) with the operation, at
 $1/21$st the frontier-text cost. The engine operation itself scores
 $0.993$ recall / $0.948$ precision against the oracle with no LLM in the loop.
+Applying each answer as edits and compiling converts the recall gap into
+build outcomes: across 162 runs, every answer that missed a site failed to
+compile and every complete answer compiled; the smallest tier on text search
+produced no compiling build (0/16), while its task-altitude failures reduce
+to a single shared two-error engine residual.
 Building the deterministic operation also surfaced five latent resolution defects
 that every LLM-orchestrated arm had silently absorbed; a traversal that lives in
 a tool can be regression-tested in a way that a traversal buried in an agent
@@ -203,7 +208,7 @@ never touched the graph---or the \gstar{} arm never called
 \paragraph{Mode A (context quality).}
 The agent answers ``list every site that must change to do X,'' declaring
 \code{complete} + \code{unresolved}. This isolates the tool from patch-writing
-skill. (Mode B / compile-and-test is future work, \cref{sec:threats}.)
+skill. Mode B applies the answer as edits and compiles (\cref{sec:modeb}).
 
 \paragraph{Independent oracles---never the graph under test.}
 \emph{Go:} the \code{go-ssa-vta} call graph (via \code{grove-eval}) and/or the
@@ -539,48 +544,97 @@ operation converts them into visible, traceable, fixable failures---an argument
 for task-shaped tools that stands apart from the performance argument, since it
 is what makes the structural layer of an agent system testable at all.
 
-\subsection{Mode B: recall deficit as expected compile failures}
+\subsection{Mode B: applying the answer and compiling}
 \label{sec:modeb}
 Recall is a continuous metric, but the downstream consequence of a missed site
 in a signature-change task is discrete: every override or call site not
-returned by the agent is a method still using the old signature---a compile
-error when the change is applied. The expected compile failures for a run is
-therefore exactly $(1 - \text{recall}) \times |GT|$, and the question ``does the
-completeness win matter?'' has a binary answer at the task level.
+returned by the agent is a method still using the old signature. To test
+whether the completeness differences of \cref{tab:altitude} convert to build
+outcomes, we applied each scored answer as a mechanical rename and compiled
+the corpus.
+
+\paragraph{Protocol.}
+The Spoon oracle emits the exact source positions of every occurrence that
+must change---family declaration name tokens plus family-resolving call and
+method-reference lines---each attributed to its containing method. For a
+given run, the target identifier is renamed at the occurrences whose
+containing site appears in the run's credited answer; sites the run missed
+keep the old name; the corpus (at the study tag) is then compiled
+(\code{mvn compile}; ground truth covers main sources only). Edit positions
+come from the oracle rather than from textual matching because a credited
+method body can contain same-named calls of \emph{other} contracts
+(\code{JsonSerializable.serializeWithType} inside a
+\code{JsonSerializer.serializeWithType} override): applying an answer
+faithfully requires type-resolved positions even when the answer itself is
+not. As a validation gate, applying the full ground truth must compile
+cleanly---which doubles as an external compiler audit of oracle recall. One
+task fails the gate and is excluded: \code{jsonnode-get} targets the
+\code{get(int)} overload, which line-level renaming cannot separate from
+\code{get(String)} calls sharing a line. This leaves five tasks and 162
+scored runs (T~65, G~67, \gstar{}~30, the latter including the local tier).
+The archived run set additionally contains a 50-run GPT-5.5 pilot under a
+different harness (Codex); we exclude it from the table for the cross-family
+comparability reasons of \cref{sec:threats}, noting that it satisfies the
+same invariant reported below.
+
+\paragraph{Result.}
+Across all compiled runs the build outcome tracked the recall deficit
+exactly: every run that missed at least one site failed to compile, and
+every run with a complete credited answer compiled. No run passed with
+misses and no complete run broke.
 
 \begin{table}[ht]
 \centering
 \small
-\begin{tabular}{lrrrrc}
+\begin{tabular}{llrr}
 \toprule
-system & \multicolumn{4}{c}{missed sites per task} & broken? \\
-\cmidrule(lr){2-5}
- & 8 & 22--58 & 104 & 108 & (tasks) \\
+tier & arm & builds passing & mean errors when broken \\
 \midrule
-Opus+T      & 0 & 0     & \textbf{30} & 0           & 1/6 \\
-Sonnet+T    & 0 & 0     & \textbf{26} & 0           & 1/6 \\
-Haiku+T     & 0 & 2--23 & \textbf{59} & \textbf{26} & 5/6 \\
+Haiku  & T        & 0/16  & 37.4 \\
+Sonnet & T        & 9/25  & 17.0 \\
+Opus   & T        & 18/24 & 7.5 \\
 \addlinespace
-Haiku+\gstar{}     & 0 & 0 & 0 & 2 & 1/6 \\
-Sonnet+\gstar{}    & 0 & 0 & 0 & 2 & 1/6 \\
-Opus+\gstar{}      & 0 & 0 & 0 & 2 & 1/6 \\
-Local 30B+\gstar{} & 0 & 0 & 0 & 2 & 1/6 \\
+Haiku  & G        & 3/17  & 30.7 \\
+Sonnet & G        & 14/25 & 6.3 \\
+Opus   & G        & 21/25 & 11.5 \\
+\addlinespace
+Haiku  & \gstar{} & 12/15 & 2.0 \\
+Sonnet & \gstar{} & 4/5   & 2.0 \\
+Opus   & \gstar{} & 4/5   & 2.0 \\
+Local 30B & \gstar{} & 4/5 & 2.0 \\
 \bottomrule
 \end{tabular}
-\caption{Mode B: missed sites = expected compile errors if the agent's answer
-were applied. On the 104-site task every text arm leaves 26--59 methods broken;
-every \gstar{} tier leaves 0. The 2-site miss on the 108-site task is
-the chained-receiver engine ceiling, shared identically by all \gstar{} tiers.}
+\caption{Mode B: build outcomes when each scored answer is applied as a
+rename and compiled (five jackson tasks; error counts are distinct compiler
+errors). Every \gstar{} failure at every tier is the same two-error outcome
+from the same two engine-unresolved call sites.}
 \label{tab:modeb}
 \end{table}
 
-On the 104-site task the gap is not statistical: Opus+T at \$2.63/run leaves
-30 methods with the old signature; every \gstar{} tier at any cost (including
-free) leaves none. For 5/6 tasks all \gstar{} configurations produce
-zero-miss answers---guaranteed compile-clean on those tasks. The remaining
-2-site miss on the 108-site task is the engine-ceiling residual (three call
-sites behind chained receivers); it affects all \gstar{} tiers identically,
-confirming it is a tool property, not a model property.
+\paragraph{What each direction establishes.}
+The two halves of this result carry different evidential weight. That
+complete answers compile is largely true by construction: the scorer credits
+a matched site by recording the ground-truth identifier, so a recall-1.0
+answer reproduces the validation configuration. The empirical content lies
+in the other direction: none of the incomplete answers produced a
+coincidentally compiling build. Two properties of the protocol could in
+principle have allowed one. First, symbol-only (weak) matches credit a site
+when the agent named the method but not its file; the simulated edit is then
+more faithful than the agent's literal answer, a bias that favors compiling.
+Second, a fully missed \emph{closed} subgraph---a declaration missed
+together with every one of its callers---would compile trivially, as would a
+missed override that does not carry \code{@Override}; compile breakage is
+therefore a lower bound on the damage of a missed answer. Neither case
+materialized (minimum recall in the run set is 0.433), but both bound what
+the metric can show.
+
+\paragraph{The residual is a tool property.}
+Every \gstar{} failure, at every tier including the free local model, is the
+identical outcome: two compiler errors from the two \code{serialize} call
+sites behind chained receivers that the engine cannot resolve
+(\cref{sec:ceiling}). The failure attributes to one engine limitation rather
+than to any model, consistent with the ceiling-intervention observation of
+\cref{sec:crosslang} that engine repairs move all tiers simultaneously.
 
 \subsection{External validity: Apache Commons Collections}
 \label{sec:external}
@@ -886,9 +940,11 @@ trials. The Python oracle relies on Jedi type inference, which cannot
 follow dynamic multi-hop chains; nine additional callers discovered by the
 engine were manually verified and added to the ground-truth---a limitation
 of dynamically typed oracle targets absent from the statically typed corpora.
-\item \textbf{Mode A only.} We score the \emph{answer}, not an applied patch. Mode
-B (compile / fail-to-pass)---where an incomplete change actually breaks the
-build---would test whether the reliability gain converts to task success.
+\item \textbf{Mode B is compile-only and Java-only.} \Cref{sec:modeb} applies
+answers and compiles, but does not run tests, covers one language, and
+simulates edit application at oracle-resolved positions rather than letting
+the agent write the patch. The recall-to-build-breakage conversion is
+measured; conversion to end-to-end task success is not.
 \item \textbf{One graph implementation} and a soft tool gate (arms can decline
 their tools; we exclude violating runs, but the offer-vs-enforce distinction is
 unmodeled).
