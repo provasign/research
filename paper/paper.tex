@@ -67,20 +67,6 @@ comparison of context paradigms that fixes the interface silently conflates
 two independent variables.
 \end{abstract}
 
-\paragraph{Honesty note.}
-An earlier version of this study reported a \emph{negative} result (``code graphs
-don't beat text search''). That conclusion was too broad: it was drawn from Go
-tasks that were, in hindsight, almost all small and name-greppable. Extending the
-study to a larger, polymorphism-heavy Java framework
-(\code{jackson-databind})---with a precise type-resolution oracle and a
-size-graded task set---surfaced the boundary the Go data had missed, and a
-subsequent extension surfaced a second, independent condition: the interface
-altitude at which the graph is offered. The honest result is \emph{conditional
-twice over}: the graph's value is real but bounded to large-blast-radius
-change-impact tasks, and \emph{who can realize it} is gated by whether the tool
-demands orchestration the model cannot reliably supply. We report exactly where
-it helps, where it does not, and the mechanism that predicts which is which.
-
 \section{Introduction}
 \label{sec:intro}
 
@@ -93,7 +79,7 @@ produces more complete, better-calibrated behavior on change-impact tasks, where
 a missed call site is a broken build.
 
 We set out to confirm this in Go and \emph{could not}---graph tied text on
-completeness and calibration. The honest reading at the time was a negative
+completeness and calibration, and we initially read this as a negative
 result. But our Go tasks, after outcome-blind auditing, were almost all
 \emph{small} (1--22 change-sites) and \emph{name-greppable}. The question the Go
 data could not answer was whether the graph earns its keep where text search
@@ -263,7 +249,7 @@ operation is deterministic, so per-cell variance in \gstar{} can arise only from
 the agent's query formulation and answer relay; we replicate the small tier
 ($n{=}3$) and observe the determinism directly (\cref{sec:altitude}).
 
-\paragraph{Engine repair between experiments (a result in itself).}
+\paragraph{Engine repair between experiments.}
 Implementing \code{change\_impact} \emph{inside} the graph engine---and scoring
 its raw output against the independent oracle with no LLM in the loop---exposed
 five latent Java resolution defects in the engine's indexer that Experiment~1's
@@ -321,7 +307,7 @@ because their change-sets are small and the call sites are name-matched. Grep
 ambiguity does not explain the advantage---it runs opposite to the effect,
 since the most ambiguous targets are the smallest.
 
-\paragraph{The one small-task exception is mechanistically informative.}
+\paragraph{A small-task exception, and what it isolates.}
 On \code{jsonnode-get} (8 sites) the mid model's \emph{text} arm drops to 0.78,
 and the graph recovers it ($+0.15$). The sites text consistently missed are
 \code{JsonNode.has}, \code{JsonNode.hasNonNull}, and \code{ArrayNode.\_at}---methods
@@ -524,16 +510,15 @@ $0.948$ across the six tasks (per-task recall $\ge 0.974$; the misses are three
 call sites behind chained receivers and one multi-line call-site argument-count
 extraction). Agent-mediated \gstar{} runs reproduce this ceiling ($0.997$; the
 small difference reflects task-scope judgments such as including supertype
-declarations). This decomposition---engine ceiling measured deterministically,
-agent overhead measured separately---is only possible \emph{because} the
-traversal is a tool, and we propose it as the right way to evaluate structural
-code tools: report the tool's oracle score and the agent's realization of it,
-not a single conflated number. Precision at task altitude is high but not
+declarations). This decomposition---the engine ceiling measured
+deterministically, the agent's realization of it measured separately---is only
+possible \emph{because} the traversal is a tool; a primitives arm yields a
+single conflated number. We report the two components separately throughout. Precision at task altitude is high but not
 perfect ($0.80$ on the overload-ambiguous 8-site task, where callers of other
 \code{get} overloads are included absent literal-argument evidence;
 $0.97$--$1.00$ elsewhere).
 
-\subsection{What building the operation revealed: LLM arms absorb engine defects}
+\subsection{LLM-orchestrated arms absorb engine defects}
 \label{sec:bugs}
 The deterministic operation initially scored recall \emph{0.05} on the 108-site
 task. Tracing every oracle miss to a mechanism exposed five latent defects in the
@@ -680,10 +665,9 @@ jackson corpus, while Haiku~T collapses to $0.171$ (or times out). This is
 the capability-equalizer result, reproduced in a third corpus at $1/21$st
 the frontier-text cost.
 
-Sonnet~T and Opus~T tie recall here, which is itself informative.
-\code{delegate()} is a globally unique, literally greppable name, so
-the change-set, though huge, never exceeds what text search reliably
-enumerates. This sharpens the boundary variable: the graph's recall
+Sonnet~T and Opus~T tie recall here because \code{delegate()} is a
+globally unique, literally greppable name: the change-set, though huge,
+never exceeds what text search reliably enumerates. This sharpens the boundary variable: the graph's recall
 advantage is gated by text-enumerability rather than raw site count
 (jackson's \code{serialize} callers required type-level disambiguation
 among same-named methods; \code{delegate()} does not). The economics still
@@ -789,7 +773,7 @@ and reported those callers too ($1.000/0.256$ at 6 turns); with the
 text-search escape removed it scores $1.000/0.865$, the engine ceiling
 (\cref{sec:external}).
 
-\section{Why---the mechanism}
+\section{Mechanism}
 \label{sec:mechanism}
 
 A change to a method's signature forces every declaration/override and
