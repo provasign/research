@@ -27,6 +27,17 @@ Validity notes baked into the design:
 Protocol validation: --validate applies the full oracle GT as the found set;
 the build must pass, or the task is excluded from Mode B.
 
+Claim framing (post-review): the empirical half of the result is
+missed>0 -> build FAILS (compiler-audited, 81 runs). The recall=1.0 -> PASS
+half is true by construction: `found` stores GT site strings (score.py
+credits by appending the GT site), so a recall-1.0 run replays --validate.
+Weak-match credited sites (agent named the symbol but not the right file)
+make the simulated edit MORE accurate than the agent's literal answer;
+bias direction favors PASS, and the missed>0 runs all failed despite it.
+A degenerate all-miss answer or a fully-missed closed subgraph
+(declaration + all its callers missed together) would trivially compile;
+neither occurred (min recall 0.433) but the metric does not guard it.
+
 Usage:
   python mode_b.py --validate                      # all tasks, GT as answer
   python mode_b.py                                 # all validated tasks x all runs
@@ -118,15 +129,17 @@ def apply_rename(found: list[str], target: str,
 
 
 def compile_worktree() -> tuple[bool, int, list[str]]:
-    """test-compile the worktree. Returns (ok, error_count, sample_errors)."""
+    """Compile main sources. Returns (ok, distinct_error_count, samples)."""
     r = subprocess.run(
         ["mvn", "-q", "-DskipTests", "compile"],
         cwd=WORKTREE, capture_output=True, text=True, timeout=600,
     )
-    errs = [
-        ln for ln in (r.stdout + r.stderr).splitlines()
+    # Maven prints every compiler error twice (compiler-plugin section and
+    # reactor failure summary) — deduplicate, or every count is exactly 2x.
+    errs = sorted({
+        ln.strip() for ln in (r.stdout + r.stderr).splitlines()
         if "ERROR" in ln and ".java:[" in ln
-    ]
+    })
     return r.returncode == 0, len(errs), errs[:5]
 
 
