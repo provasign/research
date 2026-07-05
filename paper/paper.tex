@@ -61,10 +61,10 @@ $0.993$ recall / $0.948$ precision against the oracle with no LLM in the loop.
 Building the deterministic operation also surfaced five latent resolution defects
 that every LLM-orchestrated arm had silently absorbed; a traversal that lives in
 a tool can be regression-tested in a way that a traversal buried in an agent
-loop cannot. We give the mechanism and the boundary it predicts, and argue that
-structural code tools should ship task-shaped operations rather than primitive
-kits, and be evaluated on completeness and consistency at fixed cost,
-conditioned on blast radius and interface altitude.
+loop cannot. We give the mechanism and the boundary it predicts: task-shaped operations
+outperform primitive kits on completeness-critical traversals, and any
+comparison of context paradigms that fixes the interface silently conflates
+two independent variables.
 \end{abstract}
 
 \paragraph{Honesty note.}
@@ -828,38 +828,39 @@ ambiguity is a red herring at every altitude: a capable agent disambiguates
 \section{Discussion}
 \label{sec:discussion}
 
-\paragraph{Ship task-shaped operations, not primitive kits.} The largest gains
-in this study came not from adding structure but from moving a traversal across
-the tool boundary. For agent tool builders (MCP servers, IDE integrations) the
-design rule that falls out is to identify the traversals agents repeatedly
-orchestrate---change-impact, dead-code reachability, test-coverage closure---and
-expose each as one deterministic operation returning the completed answer.
-Primitives remain useful for ad-hoc exploration; they are the wrong primary
-interface for completeness-critical tasks.
+\paragraph{Task altitude versus primitive kits.} The largest gains in this
+study came not from adding structure but from moving a traversal across the tool
+boundary. The data suggest a design implication for structural code tools:
+traversals that agents repeatedly orchestrate---change-impact, dead-code
+reachability, test-coverage closure---are candidates for elevation into single
+deterministic operations. Primitives remain useful for ad-hoc exploration; they
+proved to be the wrong primary interface for completeness-critical tasks in this
+study.
 
 \paragraph{The economics of completeness invert.} At primitive altitude,
-completeness is purchased with model capability: the recall ladder tracks the
-price ladder. At task altitude the cheapest model matches the frontier, so the
-marginal dollar should go to the engine, not the model. This bears directly on
-deployment---a \$0.11 small-model configuration strictly dominated a \$2.14
-frontier-text configuration in our study---and it extends to local
-open-weights models: a 30B model (qwen3-coder:30b, Ollama) running at task
-altitude scores 0.997 mean recall across the six Java tasks, identical to
-Haiku, Sonnet, and Opus, at zero API cost and in a single agent turn. The same
-model fails entirely on primitives, where multi-turn orchestration collapses.
-Tier invariance at task altitude reaches below the commercial API floor.
+completeness tracks model capability: the recall ladder tracks the price ladder.
+At task altitude the cheapest model matches the frontier, so cost shifts from
+model capability to engine quality. In our study a \$0.11 small-model
+configuration strictly dominated a \$2.14 frontier-text configuration on recall,
+and the result extends below the commercial API floor: a local 30B model
+(qwen3-coder:30b, Ollama) running at task altitude scores 0.997 mean recall
+across the six Java tasks, identical to Haiku, Sonnet, and Opus, at zero API
+cost and in a single agent turn. The same model fails on primitives, where
+multi-turn orchestration collapses.
 
-\paragraph{Evaluate context tools conditioned on blast radius and altitude.}
+\paragraph{Blast radius and altitude as evaluation conditions.}
 ``Graphs help'' and ``graphs don't'' are both wrong, and so is any comparison
-that fixes the interface silently. The figure of merit we propose is
-completeness and consistency at fixed cost, as a function of change-set size,
-with the tool's oracle ceiling and the agent's realization of it reported
+that fixes the interface silently. The figure of merit that follows from this
+study is completeness and consistency at fixed cost, as a function of change-set
+size, with the tool's oracle ceiling and the agent's realization of it reported
 separately (\cref{sec:ceiling}).
 
-\paragraph{Deterministic operations make agent systems testable.} The
-five-defect arc (\cref{sec:bugs}) generalizes: any capability buried in an LLM
+\paragraph{Deterministic operations and testability.} The five-defect arc
+(\cref{sec:bugs}) illustrates a broader point: a capability buried in an LLM
 orchestration loop is shielded from regression testing by the model's adaptive
-error-masking. Moving it into a scorable tool is how it becomes engineering.
+error-masking. The same capability expressed as a deterministic, oracle-scorable
+operation is directly testable. In this study, that distinction was the
+difference between five silent bugs and five bugs with regression tests.
 
 \paragraph{Language matters only through task size.} Java surfaced the effect
 not because Java is harder to grep but because framework interface methods
