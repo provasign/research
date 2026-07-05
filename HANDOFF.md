@@ -2,12 +2,13 @@
 
 Single, self-contained restart point. Last updated 2026-07-05.
 
-**Research:** done — 4 languages (Go/Java/TypeScript/Python), paper arXiv-ready
-(`paper/paper.tex`; 3 TODOs: affiliation, citation check, artifact URL confirm).
-**Product:** released — grove v0.15.0, prism v0.17.1, fuse v0.13.3; homebrew-shale
-tap current; steering streamlined to three layers (task ops / reads / query).
-Sibling ops (missing_implementations, untested_surface, dead_code) shipped in
-grove v0.15.0 / prism v0.17.0.
+**Research:** done — 4 languages (Go/Java/TypeScript/Python) + Mode B compile
+experiment (§5.5, measured). Paper arXiv-ready (`paper/paper.tex`; TODOs:
+affiliation, citation check, artifact URL confirm).
+**Product:** released — grove v0.17.5, prism v0.19.4, fuse v0.13.3; tap current.
+All five task-shaped ops shipped (change_impact, missing_implementations,
+untested_surface, dead_code, rename_plan); steering three-layer; builds
+bit-perfect deterministic; full-sweep review done, no known residuals.
 
 ---
 
@@ -30,11 +31,9 @@ shipped (grove v0.17.x / prism v0.19.x).
 Cross-family data point for the paper. `harness/java-oracle/CODEX.md` has the
 setup. Adds a row to Table 4 (T vs G* at a fixed task, across model families).
 
-**4. `rename_plan` (4th sibling op)**
-`change_impact` + new name applied to each site as a structured edit plan. First
-"do" operation (not just "find"). Explicitly deferred pending Mode B validation —
-if the completeness win converts to task success, the rename_plan edit-production
-architecture follows the same pattern.
+**4. rename_plan — DONE.** Shipped as the fifth task-shaped op (edits +
+ambiguous + unresolved buckets; review-hardened: delegating-override calls,
+string-contamination, $-escape, identifier validation).
 
 ---
 
@@ -64,7 +63,7 @@ architecture follows the same pattern.
 
 - **Corpus:** `~/gvg-corpus/jackson-databind` @ tag `jackson-databind-2.18.8` (`0b422144`), Prism-indexed
 - **Local models (Ollama):** `qwen3-coder:30b`, `qwen2.5-coder:14b`, `qwen2.5-coder:1.5b-base`
-- **Binaries:** `~/bin/prism` (v0.17.1), `~/bin/grove` (v0.15.0); `codex` CLI; JDK 26 via Homebrew; `tectonic`
+- **Binaries:** `~/bin/prism` (v0.19.4), `~/bin/grove` (v0.17.5); `codex` CLI; JDK 26 via Homebrew; `tectonic`
 
 ---
 
