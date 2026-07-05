@@ -1,0 +1,36 @@
+Now I have a complete picture. Let me produce the JSON result.
+
+The two interface method changes are:
+1. `SearchBackend.GetIndex(ctx context.Context, key NamespacedResource)` — `ctx` is unused (explicitly marked `_` in `bleveBackend.GetIndex`)
+2. `ResourceIndex.UpdateIndex(ctx context.Context, reason string)` — `reason` is unused in the bleve implementation (never referenced in the function body)
+
+```json
+{
+  "sites": [
+    "pkg/storage/unified/resource/search.go:GetIndex",
+    "pkg/storage/unified/resource/search.go:UpdateIndex",
+    "pkg/storage/unified/search/bleve.go:GetIndex",
+    "pkg/storage/unified/search/bleve.go:UpdateIndex",
+    "pkg/storage/unified/resource/search_test.go:GetIndex",
+    "pkg/storage/unified/resource/search_test.go:UpdateIndex",
+    "pkg/storage/unified/resource/search.go:findIndexesToRebuild",
+    "pkg/storage/unified/resource/search.go:rebuildIndex",
+    "pkg/storage/unified/resource/search.go:getOrCreateIndex",
+    "pkg/storage/unified/testing/search_backend.go:runTestSearchBackendBuildIndex",
+    "pkg/storage/unified/search/bleve_test.go:TestBuildIndexExpiration",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdate",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndBuildIndex",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateSearchAndRebuild",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearch",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearchWithIndexMinUpdateInterval",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdateWithErrors",
+    "pkg/storage/unified/resource/search_test.go:TestSearchGetOrCreateIndexWithCancellation",
+    "pkg/storage/unified/resource/search_test.go:checkRebuildIndex"
+  ],
+  "complete": true,
+  "unresolved": [
+    "pkg/storage/unified/resource/search_test.go:GetIndex appears twice — both mockSearchBackend.GetIndex (line 147) and slowSearchBackendWithCache.GetIndex (line 350) must update their signatures; listed once because receivers are omitted per the format but both need changing.",
+    "pkg/registry/apis/dashboard/search_test.go — MockClient embeds resource.ResourceIndex and defines its own UpdateIndex(ctx, reason) error (different return type from the interface). Removing reason from the interface does not force a compile error here because the shadow method's return type already diverges; excluded from sites but may need a consistency cleanup."
+  ]
+}
+```

@@ -1,0 +1,17 @@
+The analysis is complete. Here is the finding:
+
+**The panic site is `client.go:Trace` line 266:**
+```go
+frames := utils.TransformTraceResponse(response.Data[0], refID)
+```
+This unconditionally indexes `response.Data[0]` without checking if the slice is empty. When Jaeger returns `{"data": [], ...}` for a trace query, it panics with `index out of range [0] with length 0`.
+
+**The callers** (`querydata.go:queryData`) already handle the error path properly — if `Trace` returns a downstream error or an empty frame, no changes are needed there. `TransformTraceResponse` itself also handles an empty `Spans` slice safely (range loop). The gRPC path (`GrpcTrace`) is safe because `response.Result.ResourceSpans` is a value type that decodes to an empty slice when absent, and `TransformGrpcTraceResponse` iterates with range.
+
+```json
+{
+  "sites": ["pkg/tsdb/jaeger/client.go:Trace"],
+  "complete": true,
+  "unresolved": []
+}
+```

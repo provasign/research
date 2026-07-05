@@ -1,0 +1,13 @@
+The panic is at `client.go:266` — `utils.TransformTraceResponse(response.Data[0], refID)` accesses `response.Data[0]` when the decoded `response.Data` slice has length 0. This is inside `JaegerClient.Trace`.
+
+Let me confirm there are no other unguarded index accesses on the trace response and that the gRPC path differs.
+
+The gRPC path (`GrpcTrace`) passes `response.Result.ResourceSpans` (a slice) to `TransformGrpcTraceResponse`, which iterates — no indexing, so no panic. `Search` passes the whole `result.Data` slice to `TransformSearchResponse` (no `[0]`). The only out-of-range index access matching the error (`[0] with length 0`) is `response.Data[0]` in `Trace`.
+
+The fix belongs entirely in `Trace`: guard `len(response.Data) == 0` before indexing and return an empty frame gracefully. `TransformTraceResponse` takes a single `types.TraceResponse` (not the slice), so it cannot address the empty-slice case and does not need to change — the caller decides whether to index.
+
+{
+  "sites": ["pkg/tsdb/jaeger/client.go:Trace"],
+  "complete": true,
+  "unresolved": []
+}

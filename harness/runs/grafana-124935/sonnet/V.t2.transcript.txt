@@ -1,0 +1,17 @@
+I've confirmed the exact fix from git history. The issue is in two functions in `pkg/services/ngalert/store/alert_rule.go`:
+
+1. **`UpdateAlertRules`** (line 608): `sess.ID(r.Existing.ID).AllCols().Omit("rule_guid").Update(converted)` — needs `.Table(alertRule{})` added (and `Omit("rule_guid")` corrected to `Omit("guid")` to match the struct's xorm tag).
+2. **`preventIntermediateUniqueConstraintViolations`** (line 710): `sess.ID(r.ID).Cols("title").Update(&alertRule{...})` — needs `.Table(alertRule{})` added.
+
+The prism call-graph confirms these are the only two sites: `preventIntermediateUniqueConstraintViolations` is called only from `UpdateAlertRules`, and no other functions in the store have unguarded `Update()` calls for `alertRule` structs.
+
+```json
+{
+  "sites": [
+    "pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules",
+    "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

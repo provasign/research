@@ -1,0 +1,163 @@
+{
+  "status": "ok",
+  "model": "opus",
+  "task_id": "gin-render-impact",
+  "arm": "G",
+  "trial": 3,
+  "recall": 1.0,
+  "precision": 1.0,
+  "f1": 1.0,
+  "found": [
+    "context.go:Render",
+    "render/bson.go:Render",
+    "render/data.go:Render",
+    "render/html.go:Render",
+    "render/json.go:Render",
+    "render/pdf.go:Render",
+    "render/protobuf.go:Render",
+    "render/reader.go:Render",
+    "render/redirect.go:Render",
+    "render/text.go:Render",
+    "render/toml.go:Render",
+    "render/xml.go:Render",
+    "render/yaml.go:Render"
+  ],
+  "missed": [],
+  "extra": [],
+  "weak_matches": [],
+  "claimed_complete": true,
+  "overconfident": false,
+  "surfaced_gap": true,
+  "cost": {
+    "wall_s": 88.11,
+    "duration_ms": 87425,
+    "num_turns": 12,
+    "usage": {
+      "input_tokens": 2440,
+      "cache_creation_input_tokens": 6008,
+      "cache_read_input_tokens": 208310,
+      "output_tokens": 5416,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 6008,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 2989,
+          "cache_read_input_tokens": 20514,
+          "cache_creation_input_tokens": 114,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 114
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "total_cost_usd": 0.313041
+  },
+  "tools_used": [
+    "Grep",
+    "Read",
+    "cat",
+    "grep",
+    "ls",
+    "prism"
+  ],
+  "graph_used": true,
+  "violation": null,
+  "tool_trace": [
+    {
+      "tool": "Bash",
+      "bin": "ls",
+      "detail": "ls render/ && echo \"---\" && /Users/tapabratapal/bin/prism lookup render.Render --format text 2>/dev/null | head -40"
+    },
+    {
+      "tool": "Bash",
+      "bin": "prism",
+      "detail": "/Users/tapabratapal/bin/prism references Render --format text 2>/dev/null | head -80"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "\\) Render\\("
+    },
+    {
+      "tool": "Read",
+      "bin": "",
+      "detail": "/private/tmp/gvg-corpus/gin-render-impact/context.go"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "\\.Render\\("
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "\\.Render\\("
+    },
+    {
+      "tool": "Bash",
+      "bin": "grep",
+      "detail": "grep -rn \") Render(\" --include=\"*.go\" . | grep -v \"_test.go\""
+    },
+    {
+      "tool": "Bash",
+      "bin": "cat",
+      "detail": "cat context.go | sed -n '1340,1360p'; echo \"===\"; find . -path ./vendor -prune -o -name \"*.go\" -print | xargs grep -ln \"package sse\" 2>/dev/null"
+    },
+    {
+      "tool": "Bash",
+      "bin": "grep",
+      "detail": "grep -rn \"gin-contrib/sse\\|codec/sse\\|/sse\" go.mod context.go | head; echo \"===\"; find / -name \"sse.go\" -path \"*sse*\" 2>/dev/null | head; echo \"===\"; grep -rn \"Event) Render\\|func.*Event.*Render\" $(go"
+    },
+    {
+      "tool": "Bash",
+      "bin": "grep",
+      "detail": "grep -n \"sse\" go.mod; echo \"===\"; ls $(go env GOMODCACHE)/github.com/gin-contrib/ 2>/dev/null"
+    },
+    {
+      "tool": "Bash",
+      "bin": "grep",
+      "detail": "grep -n \"sse\" go.mod"
+    }
+  ],
+  "answer": {
+    "sites": [
+      "render/render.go:Render",
+      "render/bson.go:Render",
+      "render/msgpack.go:Render",
+      "render/pdf.go:Render",
+      "render/xml.go:Render",
+      "render/html.go:Render",
+      "render/redirect.go:Render",
+      "render/text.go:Render",
+      "render/reader.go:Render",
+      "render/yaml.go:Render",
+      "render/toml.go:Render",
+      "render/data.go:Render",
+      "render/json.go:Render",
+      "render/json.go:Render",
+      "render/json.go:Render",
+      "render/json.go:Render",
+      "render/json.go:Render",
+      "render/json.go:Render",
+      "render/protobuf.go:Render",
+      "context.go:Render"
+    ],
+    "complete": true,
+    "unresolved": [
+      "sse.Event also implements render.Render (passed via c.Render at context.go:1347 SSEvent) but its Render method is defined in the external module github.com/gin-contrib/sse v1.1.0 \u2014 it must be updated there for compilation, but it is outside this repository and cannot be changed here.",
+      "Test files (e.g. render/render_test.go, context_test.go) directly call .Render(w) and define mock render types; they would also need updating to compile, but were excluded as the task targets non-test production sites."
+    ]
+  }
+}

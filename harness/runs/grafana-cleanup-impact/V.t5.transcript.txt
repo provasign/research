@@ -1,0 +1,26 @@
+I have enough to determine the complete set. Let me verify the boundary once more — confirming no external callers and that the gRPC server side exists only as a test mock (already confirmed). The annotation package is self-contained.
+
+Summary of findings:
+- **Interface**: `LifecycleManager.Cleanup` in `storage.go`
+- **Implementations**: `sqlAdapter.Cleanup`, `PostgreSQLStore.Cleanup`, `storeGRPC.Cleanup`
+- **Callers**: `runCleanup` (direct call), `startCleanup` (must thread retentionTTL/cutoff into `runCleanup`)
+- **Test gRPC server**: `mockGRPCServer.Cleanup` calls `s.lifecycle.Cleanup(ctx)`
+
+The compile-time assertion `var _ LifecycleManager = (*PostgreSQLStore)(nil)` (postgres_partitioned.go:49) and the generated `store_grpc.pb.go` / proto are not hand-edited Go functions.
+
+{
+  "sites": [
+    "pkg/registry/apps/annotation/storage.go:LifecycleManager.Cleanup",
+    "pkg/registry/apps/annotation/sql_adapter.go:sqlAdapter.Cleanup",
+    "pkg/registry/apps/annotation/postgres_lifecycle.go:PostgreSQLStore.Cleanup",
+    "pkg/registry/apps/annotation/grpc_store.go:storeGRPC.Cleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:runCleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:startCleanup",
+    "pkg/registry/apps/annotation/grpc_store_test.go:mockGRPCServer.Cleanup"
+  ],
+  "complete": true,
+  "unresolved": [
+    "startCleanup is included because runCleanup needs retentionTTL to compute the cutoff; an alternative design could instead store retentionTTL on AppInstaller (changing register.go/struct) rather than threading it through startCleanup — but in every design at least one of these must change, and startCleanup is the natural site since it already holds retentionTTL.",
+    "Carrying the cutoff across the gRPC boundary requires a new field on proto CleanupRequest (proto/store.proto + regenerated storepb/v1/*.pb.go); these are generated/proto artifacts, not hand-edited Go functions, so excluded from the sites list."
+  ]
+}

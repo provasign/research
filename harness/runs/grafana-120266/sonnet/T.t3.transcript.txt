@@ -1,0 +1,21 @@
+I have all the information needed. Here is my analysis:
+
+**Primary panic site**: `client.go` line 266 in `Trace`:
+```go
+frames := utils.TransformTraceResponse(response.Data[0], refID)
+```
+When Jaeger returns `{"data": []}` (no trace found), `response.Data` has length 0, and `response.Data[0]` panics.
+
+**Secondary latent panics (not triggered by empty result set)**: The `sort.Slice` comparators in `TransformSearchResponse` (`client_utils.go:51`) access `response[i].Spans[0]` without a length check, and in `TransformGrpcSearchResponse` (`grpc_utils.go:53`) access `resourceSpans[i].ScopeSpans[0].Spans[0]` without checks. These panic if any trace in a search response has empty `Spans`/`ScopeSpans`, but they do NOT panic on empty result sets (sort on empty slice is a no-op).
+
+`GrpcTrace` (`grpc_client.go:270`) calls `utils.TransformGrpcTraceResponse(response.Result.ResourceSpans, refID)` — that function iterates over the slice, so an empty slice is safe.
+
+```json
+{
+  "sites": ["pkg/tsdb/jaeger/client.go:Trace"],
+  "complete": true,
+  "unresolved": [
+    "pkg/tsdb/jaeger/utils/client_utils.go:TransformSearchResponse and pkg/tsdb/jaeger/utils/grpc_utils.go:TransformGrpcSearchResponse each contain a sort.Slice comparator that accesses Spans[0] (and ScopeSpans[0].Spans[0]) without a length guard. These are latent panics triggered when a search response contains traces with empty Spans arrays — a different edge case from the empty-result-set scenario described in the issue — so they are not required to change to fix the reported bug, but are closely related."
+  ]
+}
+```

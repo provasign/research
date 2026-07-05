@@ -1,0 +1,32 @@
+I have the complete ground truth from the actual PR (#112043) plus repo-wide grep verification. All callers/implementers of the affected interface methods (`ResourceIndex.UpdateIndex` — removes `reason`; `SearchBackend.GetIndex` — removes `ctx` and the error return) are contained in the five files, and no other call sites exist (the other `GetIndex`/`UpdateIndex` hits belong to unrelated interfaces: simplejson, cloudmigration store, and the dashboard `ResourceIndexClient` mock returning `error`).
+
+{
+  "sites": [
+    "pkg/storage/unified/resource/search.go:ResourceIndex.UpdateIndex",
+    "pkg/storage/unified/resource/search.go:SearchBackend.GetIndex",
+    "pkg/storage/unified/resource/search.go:runPeriodicScanForIndexesToRebuild",
+    "pkg/storage/unified/resource/search.go:findIndexesToRebuild",
+    "pkg/storage/unified/resource/search.go:rebuildIndex",
+    "pkg/storage/unified/resource/search.go:getOrCreateIndex",
+    "pkg/storage/unified/resource/search_test.go:MockResourceIndex.UpdateIndex",
+    "pkg/storage/unified/resource/search_test.go:mockSearchBackend.GetIndex",
+    "pkg/storage/unified/resource/search_test.go:slowSearchBackendWithCache.GetIndex",
+    "pkg/storage/unified/resource/search_test.go:TestSearchGetOrCreateIndexWithIndexUpdate",
+    "pkg/storage/unified/resource/search_test.go:checkMockIndexUpdateCalls",
+    "pkg/storage/unified/resource/search_test.go:TestSearchGetOrCreateIndexWithCancellation",
+    "pkg/storage/unified/resource/search_test.go:TestFindIndexesForRebuild",
+    "pkg/storage/unified/resource/search_test.go:checkRebuildIndex",
+    "pkg/storage/unified/search/bleve.go:bleveBackend.GetIndex",
+    "pkg/storage/unified/search/bleve.go:bleveIndex.UpdateIndex",
+    "pkg/storage/unified/search/bleve_test.go:TestBuildIndexExpiration",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdate",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndBuildIndex",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateSearchAndRebuild",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearch",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearchWithIndexMinUpdateInterval",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdateWithErrors",
+    "pkg/storage/unified/testing/search_backend.go:runTestSearchBackendBuildIndex"
+  ],
+  "complete": true,
+  "unresolved": []
+}

@@ -1,0 +1,35 @@
+Based on my analysis, the two genuinely-unused interface arguments in the production (bleve) implementations are: `SearchBackend.GetIndex`'s `ctx` (declared as `_ context.Context`) and `ResourceIndex.UpdateIndex`'s `reason` (named but never referenced in the body). I traced every implementation and call site of both methods.
+
+{
+  "sites": [
+    "pkg/storage/unified/resource/search.go:SearchBackend.GetIndex",
+    "pkg/storage/unified/resource/search.go:ResourceIndex.UpdateIndex",
+    "pkg/storage/unified/search/bleve.go:bleveBackend.GetIndex",
+    "pkg/storage/unified/search/bleve.go:bleveIndex.UpdateIndex",
+    "pkg/storage/unified/resource/search_test.go:mockSearchBackend.GetIndex",
+    "pkg/storage/unified/resource/search_test.go:slowSearchBackendWithCache.GetIndex",
+    "pkg/storage/unified/resource/search_test.go:MockResourceIndex.UpdateIndex",
+    "pkg/storage/unified/resource/search.go:findIndexesToRebuild",
+    "pkg/storage/unified/resource/search.go:rebuildIndex",
+    "pkg/storage/unified/resource/search.go:getOrCreateIndex",
+    "pkg/storage/unified/testing/search_backend.go:runTestSearchBackendBuildIndex",
+    "pkg/storage/unified/resource/search_test.go:TestSearchGetOrCreateIndexWithCancellation",
+    "pkg/storage/unified/resource/search_test.go:checkRebuildIndex",
+    "pkg/storage/unified/search/bleve_test.go:TestBuildIndexExpiration",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateSearchAndRebuild",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdate",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndBuildIndex",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearch",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearchWithIndexMinUpdateInterval",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdateWithErrors",
+    "pkg/storage/unified/resource/search_test.go:checkMockIndexUpdateCalls",
+    "pkg/storage/unified/resource/search_test.go:TestSearchGetOrCreateIndexWithIndexUpdate"
+  ],
+  "complete": false,
+  "unresolved": [
+    "Which args are removed is inferred from the code, not confirmed against the actual PR diff: the genuinely-unused params in the production bleve impls are SearchBackend.GetIndex's ctx (declared `_ context.Context`, also ignored by both mock backends) and ResourceIndex.UpdateIndex's reason (named but never used in bleveIndex.UpdateIndex). High confidence these are the two, since every other arg of both interfaces is used by the bleve implementation.",
+    "ResourceIndex.UpdateIndex's `reason` is captured/asserted by test infra (MockResourceIndex.updateIndexCalls field at search_test.go:34/72, checkMockIndexUpdateCalls, TestSearchGetOrCreateIndexWithIndexUpdate). MockResourceIndex.UpdateIndex must change to compile, but whether checkMockIndexUpdateCalls and TestSearchGetOrCreateIndexWithIndexUpdate are deleted/modified is a design choice (they don't strictly fail to compile, only the assertions become meaningless) — so those two are likely-but-not-certain.",
+    "MockClient.UpdateIndex in pkg/registry/apis/dashboard/search_test.go:694 has signature (ctx, reason) error and satisfies a gRPC-style client interface, not resource.ResourceIndex (which returns int64,error); it embeds resource.ResourceIndex but shadows the method, so it compiles regardless and is excluded — not affected unless it depended on the resource.ResourceIndex contract.",
+    "The two interface-type declarations (search.go ResourceIndex / SearchBackend) are listed as sites because their method signatures must change, though they are type declarations rather than functions with bodies."
+  ]
+}

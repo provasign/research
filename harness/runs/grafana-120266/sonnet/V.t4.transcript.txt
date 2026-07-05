@@ -1,0 +1,17 @@
+I have a complete picture of all panic sites. Here's my analysis:
+
+- **`client.go:Trace` (line 266)**: `response.Data[0]` — direct panic when `Data` is empty (the issue's primary crash site).
+- **`client_utils.go:TransformSearchResponse` (lines 51–52)**: sort comparator accesses `response[i].Spans[0]` / `response[j].Spans[0]` without a length guard (panics if any trace has empty Spans). Note: lines 71–73 guard the later `trace.Spans[0]` on line 76, but the sort comparator is unguarded.
+- **`grpc_utils.go:TransformGrpcSearchResponse` (lines 53–54)**: sort comparator accesses `resourceSpans[i].ScopeSpans[0].Spans[0]` without length guards (panics if ScopeSpans or Spans is empty). The later access on line 87 is guarded by `len(scopeSpan.Spans) == 0` on line 82, but the sort comparator is not.
+
+```json
+{
+  "sites": [
+    "pkg/tsdb/jaeger/client.go:Trace",
+    "pkg/tsdb/jaeger/utils/client_utils.go:TransformSearchResponse",
+    "pkg/tsdb/jaeger/utils/grpc_utils.go:TransformGrpcSearchResponse"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

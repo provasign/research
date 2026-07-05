@@ -1,0 +1,7 @@
+The investigation is complete. The `LifecycleManager.Cleanup` interface method is package-internal to `pkg/registry/apps/annotation`. Its implementers are `PostgreSQLStore`, `storeGRPC`, and `sqlAdapter` (the latter satisfies it implicitly via the type assertion in `register.go`). The interface method is only invoked at two call sites: `runCleanup` (production) and `mockGRPCServer.Cleanup` (test gRPC server, which calls `s.lifecycle.Cleanup`). `runCleanup` in turn needs the cutoff/TTL passed from `startCleanup`.
+
+{
+  "sites": ["pkg/registry/apps/annotation/storage.go:Cleanup", "pkg/registry/apps/annotation/postgres_lifecycle.go:Cleanup", "pkg/registry/apps/annotation/sql_adapter.go:Cleanup", "pkg/registry/apps/annotation/grpc_store.go:Cleanup", "pkg/registry/apps/annotation/lifecycle.go:runCleanup", "pkg/registry/apps/annotation/lifecycle.go:startCleanup", "pkg/registry/apps/annotation/grpc_store_test.go:Cleanup"],
+  "complete": true,
+  "unresolved": ["Not function/method sites, but for the cutoff to traverse the gRPC boundary the proto message CleanupRequest (proto/store.proto) and its generated code (storepb/v1/store.pb.go, store_grpc.pb.go) must add a field and be regenerated; these are generated, not hand-edited functions, so excluded from the sites list."]
+}

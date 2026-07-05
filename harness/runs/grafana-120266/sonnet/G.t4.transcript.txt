@@ -1,0 +1,23 @@
+The analysis is complete. The crash site is clear.
+
+In `pkg/tsdb/jaeger/client.go`, the `Trace` function does:
+
+```go
+frames := utils.TransformTraceResponse(response.Data[0], refID)
+```
+
+When Jaeger returns an empty result (`{"data": []}`), `response.Data` has length 0, so `response.Data[0]` panics with the exact error described. The fix is to guard this with a length check before the index access.
+
+No other function in the call chain needs to change:
+- `querydata.go:queryData` already handles errors returned from `Trace()` gracefully
+- `utils.TransformTraceResponse` itself is safe — it just iterates spans and returns an empty frame if there are none
+- `utils.TransformSearchResponse` has a related but separate potential panic at `Spans[0]` inside the sort comparator, but that is a *different* code path (the `Search` function, not `Trace`) and the stack trace doesn't point there
+- `GrpcTrace` uses `response.Result.ResourceSpans` without a `[0]` index — no equivalent bug
+
+```json
+{
+  "sites": ["pkg/tsdb/jaeger/client.go:Trace"],
+  "complete": true,
+  "unresolved": []
+}
+```

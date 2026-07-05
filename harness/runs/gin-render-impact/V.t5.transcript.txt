@@ -1,0 +1,39 @@
+Based on my investigation, I've identified the `render.Render` interface, its implementations, and invocation sites.
+
+**Interface** (`render/render.go`): `Render(http.ResponseWriter) error`
+
+**Production invoker**: Only `Context.Render` (context.go:1188) actually calls the interface method `r.Render(c.Writer)`. The wrapper methods (`Context.JSON`, `Context.XML`, etc.) call `Context.Render`, whose signature is unchanged, so they don't need edits.
+
+**Implementations**: 18 concrete types across `render/*.go`, plus the external `sse.Event` (passed to `Context.Render` in `SSEvent`) and the test type `TestRender`.
+
+```json
+{
+  "sites": [
+    "context.go:Context.Render",
+    "render/json.go:JSON.Render",
+    "render/json.go:IndentedJSON.Render",
+    "render/json.go:SecureJSON.Render",
+    "render/json.go:JsonpJSON.Render",
+    "render/json.go:AsciiJSON.Render",
+    "render/json.go:PureJSON.Render",
+    "render/xml.go:XML.Render",
+    "render/text.go:String.Render",
+    "render/data.go:Data.Render",
+    "render/html.go:HTML.Render",
+    "render/redirect.go:Redirect.Render",
+    "render/reader.go:Reader.Render",
+    "render/yaml.go:YAML.Render",
+    "render/toml.go:TOML.Render",
+    "render/protobuf.go:ProtoBuf.Render",
+    "render/msgpack.go:MsgPack.Render",
+    "render/bson.go:BSON.Render",
+    "render/pdf.go:PDF.Render",
+    "context_test.go:TestRender.Render"
+  ],
+  "complete": false,
+  "unresolved": [
+    "sse.Event.Render (github.com/gin-contrib/sse, external dependency) is a dispatch target — passed to Context.Render in context.go:SSEvent (line 1347). Its signature must also change for gin to compile/work, but it lives outside this repo and cannot be edited here.",
+    "Numerous test functions invoke concrete .Render(w) directly and would need updating to compile: render/render_test.go (~40 calls in TestRenderJSON/TestRenderYAML/TestRenderTOML/TestRenderProtoBuf/TestRenderBSON/TestRenderXML/TestRenderReader/TestRenderHTML* etc.), render/render_msgpack_test.go (TestRenderMsgPack, TestRenderMsgPackFail), render/reader_test.go (TestReaderRenderNoHeaders), and binding/json_test.go (TestCustomJsonCodec). These were not enumerated individually; they are real but test-only compile sites. Test calls to c.Render(...) (Context.Render) do NOT change since that signature is unchanged."
+  ]
+}
+```

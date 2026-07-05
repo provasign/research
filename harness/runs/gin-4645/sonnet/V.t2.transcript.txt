@@ -1,0 +1,19 @@
+The analysis is complete. Here's what I found:
+
+- **`responseWriter.Hijack()`** at `response_writer.go:111` uses `w.ResponseWriter.(http.Hijacker).Hijack()` — a bare type assertion that panics when the underlying writer doesn't implement `http.Hijacker`.
+- **`responseWriter.CloseNotify()`** at `response_writer.go:124` uses `w.ResponseWriter.(http.CloseNotifier).CloseNotify()` — same problem.
+- **`Flush()`** at line 129 already uses the comma-ok pattern `if f, ok := w.ResponseWriter.(http.Flusher); ok { ... }` — this is the model for the fix.
+- **`Context.Stream()`** in `context.go:1355` calls `w.CloseNotify()`, but if `CloseNotify()` is fixed to return `nil` for non-supporting writers, the `select case <-clientGone:` on a nil channel simply never fires — correct graceful degradation with no change needed in `Stream()`.
+- The `ResponseWriter` interface (lines 23-47) embeds both `http.Hijacker` and `http.CloseNotifier` alongside `http.Flusher`. Since `Flush` keeps `http.Flusher` in the interface while degrading gracefully, the fix by analogy does **not** require removing these from the interface — only the implementation methods change.
+- Prism confirms no other callers of these methods exist in the non-test production code.
+
+```json
+{
+  "sites": [
+    "response_writer.go:Hijack",
+    "response_writer.go:CloseNotify"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

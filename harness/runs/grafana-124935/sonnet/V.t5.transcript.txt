@@ -1,0 +1,17 @@
+The picture is clear. The two XORM `Update` calls on the `alertRule` table that lack an explicit `.Table()` specification are both in `alert_rule.go`:
+
+- **Line 608** — inside `UpdateAlertRules`, the main bulk update loop
+- **Line 710** — inside `preventIntermediateUniqueConstraintViolations`, the temporary-title update used to break unique-constraint cycles
+
+`admin_configuration.go:95` already has `.Table("ngalert_configuration")`. `image.go:135` is for `models.Image`, not alert rules. The callers (`RenameReceiverInNotificationSettings`, `RenameTimeIntervalInNotificationSettings`) only delegate through `UpdateAlertRules` and don't issue their own XORM updates.
+
+```json
+{
+  "sites": [
+    "pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules",
+    "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

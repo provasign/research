@@ -1,0 +1,15 @@
+Based on my investigation, the `LifecycleManager` interface is defined in `storage.go` with `Cleanup(ctx context.Context) (int64, error)`. I traced its three implementations (`sqlAdapter`, `PostgreSQLStore`, `storeGRPC`), the production caller chain (`startCleanup` → `runCleanup` → `lifecycleMgr.Cleanup`), and the gRPC server-side caller in the test mock. The `instrumentedStore` does not wrap `Cleanup`, and no other implementations exist outside this package.
+
+{
+  "sites": [
+    "pkg/registry/apps/annotation/storage.go:LifecycleManager.Cleanup",
+    "pkg/registry/apps/annotation/sql_adapter.go:Cleanup",
+    "pkg/registry/apps/annotation/postgres_lifecycle.go:Cleanup",
+    "pkg/registry/apps/annotation/grpc_store.go:Cleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:runCleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:startCleanup",
+    "pkg/registry/apps/annotation/grpc_store_test.go:Cleanup"
+  ],
+  "complete": true,
+  "unresolved": ["For the gRPC path to actually transmit the cutoff, the proto message storev1.CleanupRequest (proto/store.proto and generated store.pb.go/store_grpc.pb.go) must gain a cutoff field; these are message/generated-code changes rather than hand-written functions, so they are excluded from the function-site list but are a required prerequisite for storeGRPC.Cleanup and mockGRPCServer.Cleanup."]
+}

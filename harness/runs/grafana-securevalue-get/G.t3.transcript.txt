@@ -1,0 +1,15 @@
+Based on my analysis:
+
+- `secureValueClient.Get` (concrete method at `secure_value_client.go:107`) is called internally by its own `Update` method (`c.Get` at line 132).
+- External callers reach it only through the `dynamic.ResourceInterface` returned by `Client()`/`Namespace()`. The `contracts.SecureValueClient` interface itself only exposes `Client()`. Searching the whole repo, the only consumers are the two test functions; the DI provider (`ProvideSecureValueClient` in `wireexts_oss.go`) is registered but not consumed by any OSS production code (likely consumed by the enterprise repo, which I cannot inspect).
+
+Call sites that invoke `secureValueClient.Get`:
+- `secure_value_client.go:Update` (internal self-call)
+- `secure_value_client_test.go:TestIntegration_SecureValueClient_CRUD` (lines 70, 95, 114)
+- `secure_value_client_test.go:Test_SecureValueClient_CRUD_NoPermissions` (line 170, inside a `t.Run` closure)
+
+{
+  "sites": ["pkg/registry/apis/secret/secure_value_client.go:Update", "pkg/registry/apis/secret/secure_value_client_test.go:TestIntegration_SecureValueClient_CRUD", "pkg/registry/apis/secret/secure_value_client_test.go:Test_SecureValueClient_CRUD_NoPermissions"],
+  "complete": false,
+  "unresolved": ["secureValueClient.Get is invoked via the dynamic.ResourceInterface returned by Client()/Namespace(); callers are interface-dispatched, so any external consumer reached through that interface cannot be statically confirmed. The DI provider ProvideSecureValueClient is registered in wireexts_oss.go but unused in OSS production code — it is likely consumed by the Grafana enterprise repository, which is not available for analysis and may contain additional call sites."]
+}

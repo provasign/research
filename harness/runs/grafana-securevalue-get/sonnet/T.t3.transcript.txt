@@ -1,0 +1,19 @@
+I now have a clear picture. The `secureValueClient.Get` method at line 107 of `secure_value_client.go` has exactly three call sites:
+
+1. **`Update` in `secure_value_client.go`** (line 137): calls `c.Get(ctx, obj.GetName(), metav1.GetOptions{})` directly on the same receiver.
+2. **`TestIntegration_SecureValueClient_CRUD` in `secure_value_client_test.go`** (lines 70, 95, 114): calls `nsClient.Get(...)` where `nsClient` is `dynamic.ResourceInterface` backed by the `*secureValueClient` returned from `client.Client(ctx, ns)`.
+3. **`Test_SecureValueClient_CRUD_NoPermissions` in `secure_value_client_test.go`** (line 170): same pattern via `nsClient.Get(...)` inside the `t.Run` closure.
+
+All other `.Get(...)` calls in the package are on unrelated types: testify mock `args.Get(0)`, `EncryptedValueStorage.Get(...)`, and `s.store.Get(...)`.
+
+```json
+{
+  "sites": [
+    "pkg/registry/apis/secret/secure_value_client.go:Update",
+    "pkg/registry/apis/secret/secure_value_client_test.go:TestIntegration_SecureValueClient_CRUD",
+    "pkg/registry/apis/secret/secure_value_client_test.go:Test_SecureValueClient_CRUD_NoPermissions"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

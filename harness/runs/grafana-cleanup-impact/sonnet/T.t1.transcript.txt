@@ -1,0 +1,29 @@
+I have enough information to produce the complete answer.
+
+The change is: `LifecycleManager.Cleanup(ctx context.Context) (int64, error)` → `Cleanup(ctx context.Context, retentionCutoff time.Time) (int64, error)`.
+
+Sites involved:
+- **Interface definition** in `storage.go`
+- **Three concrete implementations**: `PostgreSQLStore.Cleanup`, `storeGRPC.Cleanup`, `sqlAdapter.Cleanup`
+- **Direct caller** in `lifecycle.go:runCleanup` (calls `lifecycleMgr.Cleanup(ctx)` at line 49)
+- **`startCleanup`** in `lifecycle.go` (holds `retentionTTL`, must make it available to `runCleanup` for computing the cutoff — either by passing it as a parameter to `runCleanup`, or by storing it on the struct)
+- **Test server handler** `mockGRPCServer.Cleanup` in `grpc_store_test.go` (calls `s.lifecycle.Cleanup(ctx)`)
+
+```json
+{
+  "sites": [
+    "pkg/registry/apps/annotation/storage.go:Cleanup",
+    "pkg/registry/apps/annotation/postgres_lifecycle.go:PostgreSQLStore.Cleanup",
+    "pkg/registry/apps/annotation/grpc_store.go:storeGRPC.Cleanup",
+    "pkg/registry/apps/annotation/sql_adapter.go:sqlAdapter.Cleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:AppInstaller.runCleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:AppInstaller.startCleanup",
+    "pkg/registry/apps/annotation/grpc_store_test.go:mockGRPCServer.Cleanup"
+  ],
+  "complete": false,
+  "unresolved": [
+    "storeGRPC.Cleanup forwards the call over gRPC to a remote AnnotationStoreServer. If the cutoff must be sent over the wire, the protobuf CleanupRequest message and generated store_grpc.pb.go will also need updating, but those are auto-generated and their production server-side handler lives in a separate service not present in this repository.",
+    "AppInstaller.startCleanup: whether its signature must change depends on the chosen implementation strategy. If retentionTTL is passed as a new parameter to runCleanup, startCleanup's call-site changes; if retentionTTL is instead stored on AppInstaller, startCleanup's signature stays the same but its body still changes to store the value."
+  ]
+}
+```

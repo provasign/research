@@ -1,0 +1,7 @@
+Confirmed. The only out-of-range index is `response.Data[0]` at `client.go:266`, inside the `Trace` method. The fix is a guard there (return an empty/early frame when `len(response.Data) == 0`). The gRPC `GrpcTrace` doesn't index into a slice, `TransformTraceResponse` already iterates safely over empty spans, and the caller `queryData` works with whatever non-nil frame `Trace` returns. No other site needs to change.
+
+{
+  "sites": ["pkg/tsdb/jaeger/client.go:Trace"],
+  "complete": true,
+  "unresolved": []
+}

@@ -1,0 +1,36 @@
+Based on my comprehensive investigation, I have identified the exact locations that need to change.
+
+The issue is that `Hijack()` and `CloseNotify()` in gin's response writer use unsafe type assertions that panic when the underlying `http.ResponseWriter` doesn't implement the respective interfaces. This differs from `Flush()`, which gracefully degrades by checking if the interface is implemented before calling it.
+
+**Key findings:**
+
+1. **Lines 120 and 125 in response_writer.go** contain the problematic unsafe type assertions:
+   - Line 120: `return w.ResponseWriter.(http.Hijacker).Hijack()`
+   - Line 125: `return w.ResponseWriter.(http.CloseNotifier).CloseNotify()`
+
+2. **Comparison to Flush()** (lines 129-134):
+   ```go
+   func (w *responseWriter) Flush() {
+       w.WriteHeaderNow()
+       if f, ok := w.ResponseWriter.(http.Flusher); ok {
+           f.Flush()
+       }
+   }
+   ```
+   This pattern shows the correct approach: check the interface with a type assertion guard before calling.
+
+3. **Verification via prism and grep** confirms:
+   - Only the `responseWriter` struct implements these methods (no other implementations)
+   - These methods are only called from `context.go:Stream()` and tests
+   - No other dynamic dispatch patterns exist
+
+```json
+{
+  "sites": [
+    "response_writer.go:Hijack",
+    "response_writer.go:CloseNotify"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

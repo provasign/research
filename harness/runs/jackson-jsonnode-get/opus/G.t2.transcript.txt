@@ -1,0 +1,33 @@
+I now have an authoritative picture. The declaration/override/implementation set is fully confirmed by return-type grep (the two extra `get(int)` hits — `TokenBuffer` returning `Object` and `GenericTypeSerializationTest` returning `T` — are unrelated non-JsonNode types). Production call sites are confirmed via the call graph. The test call-site set, however, cannot be exhaustively/precisely enumerated with the available tooling: `get` is overloaded (`get(int)` vs `get(String)`), many results are stored in intermediate variables, and `List<JsonNode>.get(int)` is indistinguishable from `JsonNode.get(int)` by name — my narrowed regex alone surfaced 21 candidate test files vs. the 6 the sweep confirmed, so I cannot claim completeness for tests.
+
+{
+  "sites": [
+    "src/main/java/com/fasterxml/jackson/databind/JsonNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ContainerNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ArrayNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ValueNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ObjectNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/JsonNode.java:has",
+    "src/main/java/com/fasterxml/jackson/databind/JsonNode.java:hasNonNull",
+    "src/main/java/com/fasterxml/jackson/databind/node/ArrayNode.java:_at",
+    "src/test/java/com/fasterxml/jackson/databind/ObjectReaderTest.java:CustomObjectNode.get",
+    "src/test/java/com/fasterxml/jackson/databind/ObjectReaderTest.java:DelegatingArrayNode.get",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testDirectCreation",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testDirectCreation2",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testArraySet",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testArrayViaMapper",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testAddAllWithNullInCollection",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testSimpleArray",
+    "src/test/java/com/fasterxml/jackson/databind/node/MissingNodeTest.java:testMissingViaMapper",
+    "src/test/java/com/fasterxml/jackson/databind/node/RequiredAccessorTest.java:testSimpleRequireOk",
+    "src/test/java/com/fasterxml/jackson/databind/node/ObjectNodeTest.java:testBasics",
+    "src/test/java/com/fasterxml/jackson/databind/deser/merge/NodeMergeTest.java:testObjectDeepUpdate",
+    "src/test/java/com/fasterxml/jackson/databind/deser/merge/NodeMergeTest.java:testArrayNodeMerge",
+    "src/test/java/com/fasterxml/jackson/databind/node/TreeReadViaMapperTest.java:testSimple"
+  ],
+  "complete": false,
+  "unresolved": [
+    "Test-directory call sites are NOT exhaustively enumerated. `get` is overloaded (`get(int)` vs `get(String)`) and many call results are stored in intermediate variables, so name-based search cannot reliably separate `JsonNode.get(int)` from `java.util.List<JsonNode>.get(int)`, `Map.get`, or POJO field/method name collisions. A narrowed regex (`.get(<int>)` immediately chained to a JsonNode method) surfaced 21+ candidate test files (e.g. JsonNodeFindMethodsTest, TypedArrayDeserTest, NullSkipForCollections4309Test, CustomDeserializersTest, Issue3913DeserTest, and others), but only the 12 method-level call sites above were individually verified as JsonNode receivers. Additional unverified JsonNode.get(int) call sites almost certainly exist in those remaining test files.",
+    "The prism call graph does not disambiguate the `get(int)`/`get(String)` overloads (its `get` reference set is ambiguous across 29 definitions), so callers had to be confirmed by reading source rather than by authoritative graph edges — completeness for call sites cannot be machine-guaranteed."
+  ]
+}

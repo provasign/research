@@ -1,0 +1,27 @@
+## Analysis
+
+There are **two** distinct `QueryData` interfaces in this repo:
+
+1. **`backend.QueryDataHandler`** — signature `QueryData(ctx, *backend.QueryDataRequest)`. This is the plugin-SDK interface implemented by ~40 datasource backends + middleware. **It is defined in an external module dependency, so its signature cannot be "changed" from within this repo.**
+
+2. **`clientapi.QueryDataClient`** — signature `QueryData(ctx, data.QueryDataRequest)`, **defined in this repo** at `pkg/registry/apis/query/clientapi/clientapi.go:19`. This is the datasource query-service client handler whose signature the repo owns and can change. "A field added to the query request path" maps to threading a new field through this datasource query path.
+
+Interpretation #2 is the only coherent in-repo signature change, so I localize against `clientapi.QueryDataClient`. Its implementations and call sites are fully enumerable:
+
+- **Interface decl:** `clientapi.go:QueryDataClient`
+- **Implementations:** `pluginClient` (production), plus two test mocks (`testClient`, `mockClient`)
+- **Call sites:** `handleQuerySingleDatasource` (query.go), `executeDSNodesGrouped` and `DSNode.Execute` (nodes.go) — all reached via `qsDatasourceClientBuilder.BuildClient(...).QueryData(ctx, *k8sReq)`. The builder itself returns the interface type unchanged, so it needs no signature change.
+
+{
+  "sites": [
+    "pkg/registry/apis/query/clientapi/clientapi.go:QueryDataClient.QueryData",
+    "pkg/registry/apis/query/client/plugin.go:pluginClient.QueryData",
+    "pkg/services/query/query_test.go:testClient.QueryData",
+    "pkg/registry/apis/query/query_test.go:mockClient.QueryData",
+    "pkg/services/query/query.go:ServiceImpl.handleQuerySingleDatasource",
+    "pkg/expr/nodes.go:executeDSNodesGrouped",
+    "pkg/expr/nodes.go:DSNode.Execute"
+  ],
+  "complete": true,
+  "unresolved": ["Interpretation ambiguity: 'datasource QueryData handler' could instead mean the plugin-SDK `backend.QueryDataHandler` interface (signature `*backend.QueryDataRequest`). I ruled it out because that interface is defined in an external module and its signature cannot be changed from this repo; if that were the intended target instead, the set would expand to ~50 sites (every tsdb datasource QueryData impl, all clientmiddleware wrappers, plugins.Client/Service/Plugin/corePlugin/grpcPlugin impls, all fakes/mocks, and call sites in plugins/manager/client/client.go, aggregator/apiserver/plugin/query.go, registry/apis/datasource/querier.go & sub_query.go, tsdb/loki/healthcheck.go, plus expr/nodes.go & services/query/query.go's `dataService.QueryData`/`pluginClient.QueryData` calls)."]
+}

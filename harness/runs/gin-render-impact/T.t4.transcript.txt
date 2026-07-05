@@ -1,0 +1,33 @@
+I have a complete picture. Let me verify there are no other production invokers and confirm the interface premise.
+
+The only production dynamic-dispatch invoker is `Context.Render` at `context.go:1188`. All other `c.Render(code, ...)` calls go through that method (its signature is unchanged since `*Context` can supply the context). External `sse.Event` is dispatched through the same point. Test files contain a real implementation (`TestRender`) and many direct `.Render(w)` calls.
+
+{
+  "sites": [
+    "render/render.go:Render",
+    "render/json.go:JSON.Render",
+    "render/json.go:IndentedJSON.Render",
+    "render/json.go:SecureJSON.Render",
+    "render/json.go:JsonpJSON.Render",
+    "render/json.go:AsciiJSON.Render",
+    "render/json.go:PureJSON.Render",
+    "render/xml.go:XML.Render",
+    "render/text.go:String.Render",
+    "render/yaml.go:YAML.Render",
+    "render/toml.go:TOML.Render",
+    "render/protobuf.go:ProtoBuf.Render",
+    "render/bson.go:BSON.Render",
+    "render/msgpack.go:MsgPack.Render",
+    "render/html.go:HTML.Render",
+    "render/redirect.go:Redirect.Render",
+    "render/pdf.go:PDF.Render",
+    "render/data.go:Data.Render",
+    "render/reader.go:Reader.Render",
+    "context.go:Render"
+  ],
+  "complete": true,
+  "unresolved": [
+    "External module github.com/gin-contrib/sse: Event implements render.Render and is dispatched via Context.Render (context.go:1347, context.go:1433, middleware_test.go:243). Its Render method must also gain the ctx parameter, but it lives outside this repo and cannot be changed here.",
+    "Test code requires matching changes to compile but is excluded from the production fix-set above: context_test.go TestRender.Render (line 1044) implements the interface, and direct .Render(w) calls in render/render_test.go, render/render_msgpack_test.go, render/reader_test.go, and binding/json_test.go invoke implementations directly."
+  ]
+}

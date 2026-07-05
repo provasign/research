@@ -1,0 +1,23 @@
+Now I have a complete picture. Let me summarize the findings:
+
+**Primary panic** (`client.go:266`): `utils.TransformTraceResponse(response.Data[0], refID)` panics when `response.Data` is an empty slice — the exact described bug.
+
+**Sort comparator panics** (same class, different code path):
+- `client_utils.go:51-52`: `response[i].Spans[0]` / `response[j].Spans[0]` in `TransformSearchResponse`'s sort callback — panics if any trace in a search response has empty `Spans`
+- `grpc_utils.go:53-54`: `resourceSpans[i].ScopeSpans[0].Spans[0]` in `TransformGrpcSearchResponse`'s sort callback — same issue for gRPC search path
+
+Note: `client_utils.go:76` and `grpc_utils.go:87` are *already guarded* by `len(...) == 0` checks just above them, so they are safe.
+
+`querydata.go:queryData` does not need to change — if `Trace` is fixed to return an error (or empty frame) instead of panicking, the existing error-handling at lines 73–76 already handles that path correctly.
+
+```json
+{
+  "sites": [
+    "pkg/tsdb/jaeger/client.go:Trace",
+    "pkg/tsdb/jaeger/utils/client_utils.go:TransformSearchResponse",
+    "pkg/tsdb/jaeger/utils/grpc_utils.go:TransformGrpcSearchResponse"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

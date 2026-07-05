@@ -1,0 +1,27 @@
+Based on my thorough analysis of the codebase, I have identified the exact locations where the panic occurs. Let me provide my findings:
+
+## Analysis Summary
+
+The panic "runtime error: index out of range [0] with length 0" occurs when querying traces that return empty result sets. I traced the code flow from the query handler through the client methods to the utility functions.
+
+**Critical Issues Found:**
+
+1. **client.go:Trace()** (line 266) - Directly accesses `response.Data[0]` without checking if the slice is empty. When Jaeger returns no traces for a query, this causes the panic.
+
+2. **utils/client_utils.go:TransformSearchResponse()** (lines 51-52) - The sort.Slice callback accesses `response[i].Spans[0]` without checking if the Spans slice is empty. Any trace with zero spans will cause a panic during sorting.
+
+3. **utils/grpc_utils.go:TransformGrpcSearchResponse()** (lines 53-54) - The sort.Slice callback accesses `resourceSpans[i].ScopeSpans[0].Spans[0]` without checking if either ScopeSpans or Spans are empty, causing the panic for empty gRPC responses.
+
+All other array accesses like `trace.Spans[0]` (line 76 in client_utils.go) and `scopeSpan.Spans[0]` (line 87 in grpc_utils.go) are already protected by preceding length checks on lines 71 and 82 respectively.
+
+```json
+{
+  "sites": [
+    "pkg/tsdb/jaeger/client.go:Trace",
+    "pkg/tsdb/jaeger/utils/client_utils.go:TransformSearchResponse",
+    "pkg/tsdb/jaeger/utils/grpc_utils.go:TransformGrpcSearchResponse"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

@@ -1,0 +1,39 @@
+Based on my analysis, here's the complete list of all sites that must change when the `appendDetail` method signature is modified:
+
+```json
+{
+  "sites": [
+    "src/main/java/org/apache/commons/lang3/builder/ToStringStyle.java:appendDetail",
+    "src/main/java/org/apache/commons/lang3/builder/ToStringStyle.java:JsonToStringStyle.appendDetail",
+    "src/main/java/org/apache/commons/lang3/builder/ToStringStyle.java:appendInternal",
+    "src/main/java/org/apache/commons/lang3/builder/ToStringStyle.java:reflectionAppendArrayDetail",
+    "src/main/java/org/apache/commons/lang3/builder/RecursiveToStringStyle.java:appendDetail",
+    "src/main/java/org/apache/commons/lang3/builder/MultilineRecursiveToStringStyle.java:appendDetail",
+    "src/main/java/org/apache/commons/lang3/AnnotationUtils.java:appendDetail"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```
+
+**Explanation:**
+
+The ToStringStyle class has 21 distinct overloads of `appendDetail` (for primitive types, primitive arrays, Collections, Maps, and Objects). These are at:
+- Basic types: boolean, byte, char, double, float, int, long, short (8 methods)
+- Array types: boolean[], byte[], char[], double[], float[], int[], long[], short[], Object[] (9 methods)  
+- Special types: Collection, Map, Object (3 methods)
+- Index variant: appendDetail(StringBuffer, String, int, Object) (1 method with array index)
+
+All these overloads must have the parameter added.
+
+The JsonToStringStyle inner class overrides 4 of these methods (char, Collection, Map, Object).
+
+The appendInternal method calls appendDetail multiple times internally and must be updated to pass the new parameter.
+
+The reflectionAppendArrayDetail method calls appendDetail and needs updating.
+
+RecursiveToStringStyle overrides 2 appendDetail methods (Collection, Object).
+
+MultilineRecursiveToStringStyle overrides 9 appendDetail methods (9 array types + Object).
+
+AnnotationUtils contains an anonymous inner class that overrides appendDetail(StringBuffer, String, Object).

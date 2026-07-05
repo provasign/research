@@ -1,0 +1,39 @@
+I now have all the information needed. Let me compile the complete picture:
+
+- **Interface definition**: `render/render.go` (the `Render` interface method)
+- **All internal implementations**: 18 types across the render package
+- **Dispatch site**: `context.go:Context.Render` (the only non-test caller of `r.Render(c.Writer)`)
+- **Test implementation**: `context_test.go:TestRender.Render`
+- **External dependency**: `sse.Event` from `github.com/gin-contrib/sse` is passed as a `render.Render` to `c.Render()` in `Context.SSEvent`, so it also implements the interface — but it's outside this repo
+
+```json
+{
+  "sites": [
+    "render/render.go:Render",
+    "context.go:Context.Render",
+    "render/bson.go:BSON.Render",
+    "render/data.go:Data.Render",
+    "render/html.go:HTML.Render",
+    "render/json.go:JSON.Render",
+    "render/json.go:IndentedJSON.Render",
+    "render/json.go:SecureJSON.Render",
+    "render/json.go:JsonpJSON.Render",
+    "render/json.go:AsciiJSON.Render",
+    "render/json.go:PureJSON.Render",
+    "render/msgpack.go:MsgPack.Render",
+    "render/pdf.go:PDF.Render",
+    "render/protobuf.go:ProtoBuf.Render",
+    "render/reader.go:Reader.Render",
+    "render/redirect.go:Redirect.Render",
+    "render/text.go:String.Render",
+    "render/toml.go:TOML.Render",
+    "render/xml.go:XML.Render",
+    "render/yaml.go:YAML.Render",
+    "context_test.go:TestRender.Render"
+  ],
+  "complete": false,
+  "unresolved": [
+    "github.com/gin-contrib/sse Event.Render: sse.Event is passed as render.Render in context.go:SSEvent, so it must implement the new interface signature. Its Render method lives in the external github.com/gin-contrib/sse module (v1.1.0) which is outside this repository and could not be traversed via prism."
+  ]
+}
+```

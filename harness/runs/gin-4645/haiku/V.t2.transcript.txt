@@ -1,0 +1,25 @@
+Perfect. Based on my comprehensive analysis, I have identified all functions that must change to fix the issue.
+
+The problem is clear: `responseWriter.Hijack()` (line 120) and `responseWriter.CloseNotify()` (line 125) use direct type assertions that panic when the underlying `http.ResponseWriter` doesn't implement `http.Hijacker` or `http.CloseNotifier`, respectively.
+
+The solution follows the same pattern as `Flush()` (lines 129-134), which gracefully handles the absence of `http.Flusher` using a type assertion with an `ok` check.
+
+**Functions requiring changes:**
+
+1. **response_writer.go:Hijack** - Add type assertion check; return error if underlying writer doesn't implement `http.Hijacker`
+2. **response_writer.go:CloseNotify** - Add type assertion check; return a never-closing channel if underlying writer doesn't implement `http.CloseNotifier`
+
+**Why Context.Stream() doesn't need to change:**
+- Stream() calls CloseNotify() at line 1357
+- After the fix, CloseNotify() will return a valid channel even when unsupported (a channel that never closes)
+- The select statement with default will always take the default case when the channel doesn't send, so Stream() works correctly without modification
+
+The prism graph confirms that CloseNotify is called by Stream(), but Stream() is listed as a "dependency" of CloseNotify, not something that needs to change. Graceful degradation at the method level is sufficient.
+
+```json
+{
+  "sites": ["response_writer.go:Hijack", "response_writer.go:CloseNotify"],
+  "complete": true,
+  "unresolved": []
+}
+```

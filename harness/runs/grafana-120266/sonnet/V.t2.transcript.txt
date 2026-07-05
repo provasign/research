@@ -1,0 +1,17 @@
+The analysis is complete. Here's what I found:
+
+**Direct panic site:** `client.go:Trace` at line 266 — `utils.TransformTraceResponse(response.Data[0], refID)` — panics with `index out of range [0] with length 0` when Jaeger returns a 200 OK with `{"data": [], ...}` for an unknown trace ID.
+
+**Related potential panics (different code paths, different conditions):**
+- `utils/client_utils.go:TransformSearchResponse` — `sort.Slice` at line 51 accesses `response[i].Spans[0]` without checking if `Spans` is empty. But this is the Search flow (not Trace), and only triggers on non-empty responses where individual traces have zero spans — not the "empty result set" described.
+- `utils/grpc_utils.go:TransformGrpcSearchResponse` — same pattern at lines 53–54. Same reasoning.
+
+The prism graph confirms `TransformTraceResponse` is called only from `client.go:Trace`, and `queryData` in `querydata.go` properly error-wraps whatever `Trace` returns — it doesn't need to change.
+
+```json
+{
+  "sites": ["pkg/tsdb/jaeger/client.go:Trace"],
+  "complete": true,
+  "unresolved": []
+}
+```

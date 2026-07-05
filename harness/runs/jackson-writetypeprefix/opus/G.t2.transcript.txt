@@ -1,0 +1,49 @@
+I now have a complete picture. Let me verify there are no other `TypeSerializerBase` subclasses overriding `writeTypePrefix` (the prism references reported exactly 4 definitions: the abstract decl + 3 overrides).
+
+The references command confirmed only 4 definitions of the 2-arg `writeTypePrefix` exist (TypeSerializer abstract, TypeSerializerBase, AsDeductionTypeSerializer, TypeSerializerRerouter). The `g.writeTypePrefix(idMetadata)` calls (TypeSerializerBase:52, AsDeductionTypeSerializer:56) are the 1-arg `JsonGenerator.writeTypePrefix` from jackson-core — out of scope. `ReferenceTypeSerializer:412` calls the deprecated `writeTypePrefixForScalar`, not the 2-arg method — unaffected. The JsonSerializable/JsonSerializer hits are javadoc only.
+
+{
+  "sites": [
+    "src/main/java/com/fasterxml/jackson/databind/jsontype/TypeSerializer.java:writeTypePrefix",
+    "src/main/java/com/fasterxml/jackson/databind/jsontype/impl/TypeSerializerBase.java:writeTypePrefix",
+    "src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsDeductionTypeSerializer.java:writeTypePrefix",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/JsonValueSerializer.java:TypeSerializerRerouter.writeTypePrefix",
+    "src/main/java/com/fasterxml/jackson/databind/jsontype/TypeSerializer.java:writeTypePrefixForScalar",
+    "src/main/java/com/fasterxml/jackson/databind/jsontype/TypeSerializer.java:writeTypePrefixForObject",
+    "src/main/java/com/fasterxml/jackson/databind/jsontype/TypeSerializer.java:writeTypePrefixForArray",
+    "src/main/java/com/fasterxml/jackson/databind/jsontype/TypeSerializer.java:writeCustomTypePrefixForScalar",
+    "src/main/java/com/fasterxml/jackson/databind/jsontype/TypeSerializer.java:writeCustomTypePrefixForObject",
+    "src/main/java/com/fasterxml/jackson/databind/jsontype/TypeSerializer.java:writeCustomTypePrefixForArray",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/StdArraySerializers.java:CharArraySerializer.serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/ToEmptyObjectSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/node/ArrayNode.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/TokenBufferSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/node/ValueNode.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/ArraySerializerBase.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/TimeZoneSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ext/NioPathSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ext/CoreXMLSerializers.java:XMLGregorianCalendarSerializer.serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/InetAddressSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/node/ObjectNode.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ext/SqlBlobSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/RawSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/MapSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/BeanSerializerBase.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/BeanSerializerBase.java:_serializeObjectId",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/StdScalarSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/AsArraySerializerBase.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/impl/IndexedStringListSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/NumberSerializers.java:DoubleSerializer.serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/impl/BeanAsArraySerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/ToStringSerializerBase.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/InetSocketAddressSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/JsonValueSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/impl/MapEntrySerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/impl/StringCollectionSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/ByteArraySerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/type/TypeBase.java:serializeWithType",
+    "src/test/java/com/fasterxml/jackson/databind/node/JsonNodeConversionsTest.java:CustomSerializedPojo.serializeWithType"
+  ],
+  "complete": true,
+  "unresolved": []
+}

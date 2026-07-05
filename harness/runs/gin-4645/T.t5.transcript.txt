@@ -1,0 +1,9 @@
+The two panic sites are `Hijack` and `CloseNotify` in `response_writer.go`, both using unchecked type assertions (`w.ResponseWriter.(http.Hijacker)` / `.(http.CloseNotifier)`) that panic when the assertion fails. `Flush` already uses the safe `, ok` form as the model.
+
+Let me confirm `Stream` (the only consumer of `CloseNotify`) doesn't strictly need a change — with a graceful `nil` return, a `select` over a nil channel simply never fires that case, so no panic and no required edit there.
+
+{
+  "sites": ["response_writer.go:Hijack", "response_writer.go:CloseNotify"],
+  "complete": true,
+  "unresolved": []
+}

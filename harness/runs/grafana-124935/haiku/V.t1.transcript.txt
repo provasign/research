@@ -1,0 +1,30 @@
+Perfect! I've completed my analysis. Let me summarize my findings:
+
+Based on my comprehensive search, I found exactly **2 functions** that contain XORM Update calls without explicit table specification for alert rules:
+
+1. **Line 608** in `UpdateAlertRules` function:
+   ```go
+   sess.ID(r.Existing.ID).AllCols().Omit("rule_guid").Update(converted)
+   ```
+
+2. **Line 710** in `preventIntermediateUniqueConstraintViolations` function:
+   ```go
+   sess.ID(r.ID).Cols("title").Update(&alertRule{Title: uniqueTempTitle, Version: r.Version})
+   ```
+
+Both need to be fixed by adding `.Table(alertRule{})` or `.Table("alert_rule")` before `.ID()`.
+
+All other XORM operations in the file explicitly specify the table using `.Table()`, as do the Update calls in other files (e.g., admin_configuration.go line 95 has `.Table("ngalert_configuration")`).
+
+The issue is that when `.ID()` is called without first explicitly specifying the table, XORM may fail to properly infer the table name on PostgreSQL, leading to queries using the wrong table.
+
+```json
+{
+  "sites": [
+    "pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules",
+    "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

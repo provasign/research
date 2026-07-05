@@ -1,0 +1,38 @@
+Verification via prism confirms my analysis. Both names are ambiguous, but the relevant definitions are clear:
+- **`UpdateIndex`** (3 defs): `ResourceIndex` (interface), `bleveIndex`, `MockResourceIndex`. The 3rd def `MockClient.UpdateIndex` (dashboard) returns `error` only — it's a gRPC client interface, **not** `ResourceIndex`, so excluded.
+- **`GetIndex`** (5 defs): only `bleveBackend`, `mockSearchBackend`, `slowSearchBackendWithCache` are `SearchBackend`. The simplejson/cloudmigration/elasticsearch ones are unrelated types.
+
+The two unused args being removed:
+- `ResourceIndex.UpdateIndex(ctx, reason)` → `reason` (never referenced in `bleveIndex.UpdateIndex`)
+- `SearchBackend.GetIndex(ctx, key)` → `ctx` (it's `_` in `bleveBackend.GetIndex`)
+
+All implementations, callers, and the reason-tracking test helpers are accounted for.
+
+{
+  "sites": [
+    "pkg/storage/unified/resource/search.go:ResourceIndex.UpdateIndex",
+    "pkg/storage/unified/resource/search.go:SearchBackend.GetIndex",
+    "pkg/storage/unified/search/bleve.go:bleveIndex.UpdateIndex",
+    "pkg/storage/unified/search/bleve.go:bleveBackend.GetIndex",
+    "pkg/storage/unified/resource/search.go:searchSupport.getOrCreateIndex",
+    "pkg/storage/unified/resource/search.go:searchSupport.findIndexesToRebuild",
+    "pkg/storage/unified/resource/search.go:searchSupport.rebuildIndex",
+    "pkg/storage/unified/resource/search_test.go:MockResourceIndex.UpdateIndex",
+    "pkg/storage/unified/resource/search_test.go:mockSearchBackend.GetIndex",
+    "pkg/storage/unified/resource/search_test.go:slowSearchBackendWithCache.GetIndex",
+    "pkg/storage/unified/resource/search_test.go:checkMockIndexUpdateCalls",
+    "pkg/storage/unified/resource/search_test.go:TestSearchGetOrCreateIndexWithIndexUpdate",
+    "pkg/storage/unified/resource/search_test.go:TestSearchGetOrCreateIndexWithCancellation",
+    "pkg/storage/unified/resource/search_test.go:checkRebuildIndex",
+    "pkg/storage/unified/testing/search_backend.go:runTestSearchBackendBuildIndex",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdate",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndBuildIndex",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateSearchAndRebuild",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearch",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearchWithIndexMinUpdateInterval",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdateWithErrors",
+    "pkg/storage/unified/search/bleve_test.go:TestBuildIndexExpiration"
+  ],
+  "complete": true,
+  "unresolved": ["checkMockIndexUpdateCalls and TestSearchGetOrCreateIndexWithIndexUpdate must change because MockResourceIndex.UpdateIndex can no longer record the now-removed `reason`; the exact rewrite (e.g. switching updateIndexCalls from recording reasons to counting calls) depends on the author's chosen approach, but both sites are forced to change."]
+}

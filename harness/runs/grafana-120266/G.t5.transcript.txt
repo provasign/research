@@ -1,0 +1,14 @@
+The panic is at `client.go:266`: `response.Data[0]` in `JaegerClient.Trace`. When the Jaeger API returns an empty `Data` array (no matching trace), indexing `[0]` panics with exactly the reported error.
+
+I verified:
+- `utils.TransformTraceResponse` already handles an empty trace gracefully (it ranges over `trace.Spans`, producing zero rows) — no change needed there.
+- The caller `queryData` (querydata.go) just wraps the returned frame, so it handles an empty/graceful frame fine — no change needed.
+- The other `[0]` accesses in the package (`grpc_utils.go`, `client_utils.go`) are on different code paths (gRPC / search), and the issue's stack trace points specifically at `client.go`.
+
+The only site that must change is the `Trace` method, which needs a guard for `len(response.Data) == 0` before indexing.
+
+{
+  "sites": ["pkg/tsdb/jaeger/client.go:Trace"],
+  "complete": true,
+  "unresolved": []
+}

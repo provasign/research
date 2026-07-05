@@ -1,0 +1,34 @@
+I've completed my analysis. Two unused arguments are removed: `ctx` from `SearchBackend.GetIndex` (it's already `_ context.Context` in the bleve impl and ignored in all mocks) and `reason` from `ResourceIndex.UpdateIndex` (never referenced in `bleveIndex.UpdateIndex`; only the caller's local `reason` is used for metrics/logging). This matches the issue naming both interfaces. I traced every implementation and every call site.
+
+{
+  "sites": [
+    "pkg/storage/unified/resource/search.go:SearchBackend.GetIndex",
+    "pkg/storage/unified/resource/search.go:ResourceIndex.UpdateIndex",
+    "pkg/storage/unified/search/bleve.go:bleveBackend.GetIndex",
+    "pkg/storage/unified/search/bleve.go:bleveIndex.UpdateIndex",
+    "pkg/storage/unified/resource/search.go:searchSupport.findIndexesToRebuild",
+    "pkg/storage/unified/resource/search.go:searchSupport.rebuildIndex",
+    "pkg/storage/unified/resource/search.go:searchSupport.getOrCreateIndex",
+    "pkg/storage/unified/resource/search_test.go:mockSearchBackend.GetIndex",
+    "pkg/storage/unified/resource/search_test.go:slowSearchBackendWithCache.GetIndex",
+    "pkg/storage/unified/resource/search_test.go:MockResourceIndex.UpdateIndex",
+    "pkg/storage/unified/resource/search_test.go:TestSearchGetOrCreateIndexWithCancellation",
+    "pkg/storage/unified/resource/search_test.go:checkRebuildIndex",
+    "pkg/storage/unified/resource/search_test.go:TestSearchGetOrCreateIndexWithIndexUpdate",
+    "pkg/storage/unified/resource/search_test.go:checkMockIndexUpdateCalls",
+    "pkg/storage/unified/testing/search_backend.go:runTestSearchBackendBuildIndex",
+    "pkg/storage/unified/search/bleve_test.go:TestBuildIndexExpiration",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdate",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndBuildIndex",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateSearchAndRebuild",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearch",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearchWithIndexMinUpdateInterval",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdateWithErrors"
+  ],
+  "complete": false,
+  "unresolved": [
+    "Interpretive: I inferred the two removed args as GetIndex's ctx (SearchBackend) and UpdateIndex's reason (ResourceIndex) because those are the only genuinely-unused args in the production bleve implementation and they match the issue naming both interfaces. If the actual PR targets a different ResourceIndex arg, the UpdateIndex-related sites would be wrong.",
+    "MockResourceIndex tracks 'reason' via updateIndexCalls, which checkMockIndexUpdateCalls and TestSearchGetOrCreateIndexWithIndexUpdate assert on. Removing 'reason' forces these to change, but the exact reshaping (and whether the updateIndexCalls struct field is dropped) is implementation-dependent.",
+    "pkg/registry/apis/dashboard/search_test.go:MockClient.UpdateIndex has signature UpdateIndex(ctx, reason) error — a DIFFERENT interface (returns error, not (int64,error)), not ResourceIndex/SearchBackend. Excluded as out of scope, but it also carries an unused 'reason' and could be touched by a broader cleanup."
+  ]
+}

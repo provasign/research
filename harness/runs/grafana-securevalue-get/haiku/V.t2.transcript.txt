@@ -1,0 +1,29 @@
+Based on my comprehensive analysis of the codebase, I've identified all call sites that invoke `secureValueClient.Get`:
+
+**Search methodology:**
+1. Located the `secureValueClient.Get` method definition in `pkg/registry/apis/secret/secure_value_client.go`
+2. Grepped for all `.Get(` calls within the secret package
+3. Verified that `secureValueClient` is a private type only referenced in its own file
+4. Confirmed the `SecureValueClient` interface only exposes `Client()`, which returns `dynamic.ResourceInterface`
+5. Searched for all calls to `.Client()` and verified they are only in test files
+6. Cross-verified with the entire repository for any indirect dispatch patterns
+
+**Results:**
+
+The `secureValueClient.Get` method is called in exactly three functions:
+
+1. **Within `secureValueClient.Update`** (line 137): The Update method itself calls `c.Get()` to fetch the old value
+2. **Test function `TestIntegration_SecureValueClient_CRUD`** (lines 70, 95, 114): Calls `.Get()` on the `nsClient` which is a `dynamic.ResourceInterface` returned from `Client()`
+3. **Test function `Test_SecureValueClient_CRUD_NoPermissions`** (line 170): Calls `.Get()` on the `nsClient`
+
+```json
+{
+  "sites": [
+    "pkg/registry/apis/secret/secure_value_client.go:Update",
+    "pkg/registry/apis/secret/secure_value_client_test.go:TestIntegration_SecureValueClient_CRUD",
+    "pkg/registry/apis/secret/secure_value_client_test.go:Test_SecureValueClient_CRUD_NoPermissions"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

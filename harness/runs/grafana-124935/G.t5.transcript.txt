@@ -1,0 +1,13 @@
+Both `Rename*` functions simply delegate to `UpdateAlertRules`; they perform no separate XORM update. Line 2050 (`sess.Table(alertRule{}).Select(...)`) confirms the codebase's pattern of explicitly specifying the table — which the two buggy `Update` calls omit.
+
+My analysis:
+
+- The only real XORM `.Update()` calls writing to the `alert_rule` table are at `alert_rule.go:608` (inside `UpdateAlertRules`) and `alert_rule.go:710` (inside `preventIntermediateUniqueConstraintViolations`). Both do `sess.ID(...).AllCols()/Cols().Update(<alertRule bean>)` without a `.Table(...)` clause, so the table is inferred from the shared transactional session — which is how a prior op (e.g. on `user`) bleeds through and produces `... FROM user`.
+- All other callers (`RenameReceiverInNotificationSettings`, `RenameTimeIntervalInNotificationSettings`, the provisioning service, the API ruler) route through `DBstore.UpdateAlertRules`, so they're covered transitively.
+- Other `.Update()` calls in the store (`admin_configuration.go`, `image.go`) target different tables and already set `.Table(...)` where needed.
+
+{
+  "sites": ["pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules", "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"],
+  "complete": true,
+  "unresolved": []
+}

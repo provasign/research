@@ -1,0 +1,18 @@
+I can see the fix commit directly. The diff confirms exactly which two functions needed to change. Both functions are in `pkg/services/ngalert/store/alert_rule.go`:
+
+1. **`UpdateAlertRules`** (line 608) — The XORM session's `AltTableName` (set by a prior `.Table(...)` call in the same transaction) was not being overridden because `Update(bean)` only sets `statement.tableName` via `setRefBean`, but `statement.TableName()` returns `AltTableName` with priority. Adding `.Table(alertRule{})` forces `AltTableName = "alert_rule"` before the UPDATE.
+
+2. **`preventIntermediateUniqueConstraintViolations`** (line 710) — Same root cause; the same omission in the temporary-title Update call within the same transaction.
+
+The fix also corrected `Omit("rule_guid")` → `Omit("guid")` (using the actual column tag name instead of a non-existent field name), but that's a secondary correctness fix, not the table-routing bug.
+
+```json
+{
+  "sites": [
+    "pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules",
+    "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

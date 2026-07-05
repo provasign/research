@@ -1,0 +1,11 @@
+The panic is at `client.go:266`: `response.Data[0]` when the trace response `Data` slice is empty. The `Trace` method indexes the first element unconditionally with only a comment ("We only support one trace at a time") and no length guard.
+
+The caller `queryData` (querydata.go) just wraps the returned frame and handles errors — it doesn't index anything, so it needs no change. `TransformTraceResponse` takes a single `types.TraceResponse` value and iterates `trace.Spans`, which is safe for empty input. The only place that panics is the unguarded `response.Data[0]` index inside `Trace`.
+
+The fix is contained entirely in `JaegerClient.Trace`: guard `len(response.Data) == 0` before indexing (returning an empty/graceful frame instead).
+
+{
+  "sites": ["pkg/tsdb/jaeger/client.go:Trace"],
+  "complete": true,
+  "unresolved": []
+}

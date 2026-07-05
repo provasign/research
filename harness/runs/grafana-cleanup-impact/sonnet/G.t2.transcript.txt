@@ -1,0 +1,22 @@
+I now have a complete picture of all the call sites. Let me compile the final answer:
+
+- **Interface**: `storage.go` — `LifecycleManager` (the `Cleanup` method signature in the interface)
+- **Implementations**: `postgres_lifecycle.go:Cleanup`, `grpc_store.go:Cleanup`, `sql_adapter.go:Cleanup`
+- **Callers**: `lifecycle.go:runCleanup` (directly calls `lifecycleMgr.Cleanup(ctx)`), `lifecycle.go:startCleanup` (calls `runCleanup` and must propagate the TTL)
+- **Test mock**: `grpc_store_test.go:Cleanup` (`mockGRPCServer.Cleanup` calls `s.lifecycle.Cleanup(ctx)`)
+
+```json
+{
+  "sites": [
+    "pkg/registry/apps/annotation/storage.go:LifecycleManager",
+    "pkg/registry/apps/annotation/postgres_lifecycle.go:Cleanup",
+    "pkg/registry/apps/annotation/grpc_store.go:Cleanup",
+    "pkg/registry/apps/annotation/sql_adapter.go:Cleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:runCleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:startCleanup",
+    "pkg/registry/apps/annotation/grpc_store_test.go:Cleanup"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

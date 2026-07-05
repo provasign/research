@@ -1,0 +1,22 @@
+The analysis is complete. The prism output confirms the test file even explicitly documents the current broken behavior with `assert.Panics` for both methods.
+
+Here are the two sites:
+
+1. **`response_writer.go:Hijack`** (line 120): `w.ResponseWriter.(http.Hijacker).Hijack()` — bare type assertion panics when the underlying writer doesn't implement `http.Hijacker`.
+
+2. **`response_writer.go:CloseNotify`** (line 125): `w.ResponseWriter.(http.CloseNotifier).CloseNotify()` — bare type assertion panics when the underlying writer doesn't implement `http.CloseNotifier`.
+
+`Flush()` (line 129) shows the correct pattern: `if f, ok := w.ResponseWriter.(http.Flusher); ok { f.Flush() }`.
+
+`context.go:Stream` calls `w.CloseNotify()` through the interface, not via a raw type assertion — once `responseWriter.CloseNotify()` is fixed to return a never-closing channel on non-support, `Stream` stops panicking without any change of its own.
+
+```json
+{
+  "sites": [
+    "response_writer.go:Hijack",
+    "response_writer.go:CloseNotify"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

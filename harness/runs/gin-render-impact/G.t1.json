@@ -1,0 +1,168 @@
+{
+  "status": "ok",
+  "model": "opus",
+  "task_id": "gin-render-impact",
+  "arm": "G",
+  "trial": 1,
+  "recall": 1.0,
+  "precision": 1.0,
+  "f1": 1.0,
+  "found": [
+    "context.go:Render",
+    "render/bson.go:Render",
+    "render/data.go:Render",
+    "render/html.go:Render",
+    "render/json.go:Render",
+    "render/pdf.go:Render",
+    "render/protobuf.go:Render",
+    "render/reader.go:Render",
+    "render/redirect.go:Render",
+    "render/text.go:Render",
+    "render/toml.go:Render",
+    "render/xml.go:Render",
+    "render/yaml.go:Render"
+  ],
+  "missed": [],
+  "extra": [],
+  "weak_matches": [],
+  "claimed_complete": false,
+  "overconfident": false,
+  "surfaced_gap": true,
+  "cost": {
+    "wall_s": 138.95,
+    "duration_ms": 115962,
+    "num_turns": 13,
+    "usage": {
+      "input_tokens": 2436,
+      "cache_creation_input_tokens": 20169,
+      "cache_read_input_tokens": 202978,
+      "output_tokens": 7850,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 20169,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 836,
+          "cache_read_input_tokens": 29193,
+          "cache_creation_input_tokens": 266,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 266
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "total_cost_usd": 0.5128149999999999
+  },
+  "tools_used": [
+    "Grep",
+    "Read",
+    "cd",
+    "grep",
+    "ls",
+    "prism"
+  ],
+  "graph_used": true,
+  "violation": null,
+  "tool_trace": [
+    {
+      "tool": "Bash",
+      "bin": "ls",
+      "detail": "ls render/"
+    },
+    {
+      "tool": "Bash",
+      "bin": "prism",
+      "detail": "/Users/tapabratapal/bin/prism references Render --format text 2>&1 | head -80"
+    },
+    {
+      "tool": "Read",
+      "bin": "",
+      "detail": "/private/tmp/gvg-corpus/gin-render-impact/render/render.go"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "func \\(.*\\) Render\\("
+    },
+    {
+      "tool": "Read",
+      "bin": "",
+      "detail": "/private/tmp/gvg-corpus/gin-render-impact/context.go"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "\\.Render\\("
+    },
+    {
+      "tool": "Bash",
+      "bin": "grep",
+      "detail": "grep -rn \"gin-contrib/sse\\|codec/sse\\|\\\"github.com.*sse\" context.go go.mod; echo \"---\"; grep -rn \"sse\" go.mod"
+    },
+    {
+      "tool": "Read",
+      "bin": "",
+      "detail": "/private/tmp/gvg-corpus/gin-render-impact/context.go"
+    },
+    {
+      "tool": "Bash",
+      "bin": "cd",
+      "detail": "cd /private/tmp/gvg-corpus/gin-render-impact; head -20 render/msgpack.go; echo \"=== usages of MsgPack ===\"; grep -rn \"MsgPack\" --include=*.go . | grep -v _test.go"
+    },
+    {
+      "tool": "Bash",
+      "bin": "cd",
+      "detail": "cd /private/tmp/gvg-corpus/gin-render-impact; grep -rn \"MsgPack\\|render.Render\\b\" --include=\"*.go\" . | grep -v \"_test.go\" | grep -v \"render/\""
+    },
+    {
+      "tool": "Bash",
+      "bin": "cd",
+      "detail": "cd /private/tmp/gvg-corpus/gin-render-impact; for f in render/html.go render/reader.go render/data.go render/text.go; do echo \"== $f ==\"; grep -n \"Render\\|\\.Instance\\|WriteString\\|Write(\" $f; done"
+    },
+    {
+      "tool": "Bash",
+      "bin": "cd",
+      "detail": "cd /private/tmp/gvg-corpus/gin-render-impact; grep -rn \"Render(\" render/html.go render/reader.go render/data.go render/text.go"
+    }
+  ],
+  "answer": {
+    "sites": [
+      "render/render.go:Render",
+      "render/json.go:Render",
+      "render/json.go:Render",
+      "render/json.go:Render",
+      "render/json.go:Render",
+      "render/json.go:Render",
+      "render/json.go:Render",
+      "render/xml.go:Render",
+      "render/text.go:Render",
+      "render/redirect.go:Render",
+      "render/data.go:Render",
+      "render/html.go:Render",
+      "render/yaml.go:Render",
+      "render/reader.go:Render",
+      "render/protobuf.go:Render",
+      "render/toml.go:Render",
+      "render/pdf.go:Render",
+      "render/bson.go:Render",
+      "render/msgpack.go:Render",
+      "context.go:Render"
+    ],
+    "complete": false,
+    "unresolved": [
+      "context.go:Context.SSEvent passes github.com/gin-contrib/sse v1.1.0's sse.Event{} into Context.Render, so sse.Event satisfies render.Render structurally. After the signature change, sse.Event.Render(w) no longer matches the interface and context.go will not compile. sse.Event is an external dependency that cannot be edited in this repo (requires a dependency bump or an in-repo wrapper), so this site is unresolved.",
+      "Test code must also change to compile under `go test`: context_test.go:TestRender.Render (a test type implementing render.Render, passed to c.Render in TestContextRenderIfErr) plus direct .Render(w) invocations in render/render_test.go, render/render_msgpack_test.go, render/reader_test.go, and binding/json_test.go. These are test-only and were excluded from the production sites list; include them if the test build must compile."
+    ]
+  }
+}

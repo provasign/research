@@ -1,0 +1,16 @@
+Based on my investigation, I traced the bug mechanism and located the affected call sites.
+
+**Mechanism:** Grafana's vendored XORM `(*Session).Update` (`pkg/util/xorm/session_update.go`) does **not** call `resetStatement()` at the end (unlike `Get`/`Find`/`Insert`/`Exec`). Sessions can be reused across operations via `startSessionOrUseExisting` (`pkg/services/sqlstore/session.go:38`). When a struct-based `Update` runs, `setRefBean` resets `statement.tableName` to the bean's table ("alert_rule"), but `TableName()` returns `AltTableName` first if it's set — and `AltTableName` (set by a prior `.Table(...)` call, e.g. on the `user` table) is **not** cleared. So an alert-rule `Update` that doesn't call `.Table(...)` itself can inherit a stale table name, producing `... FROM user`.
+
+The fix is to make the alert-rule `Update` calls specify the table explicitly. The only two alert-rule update call sites lacking an explicit `.Table(...)`:
+
+- `pkg/services/ngalert/store/alert_rule.go:608` — `UpdateAlertRules` (`sess.ID(...).AllCols().Omit("rule_guid").Update(converted)`)
+- `pkg/services/ngalert/store/alert_rule.go:710` — `preventIntermediateUniqueConstraintViolations` (`sess.ID(...).Cols("title").Update(&alertRule{...})`)
+
+Other `Update` calls in the alert store (`UpdateFolderFullpathsForFolders:225`, `admin_configuration.go:95`) already pass `.Table(...)`; `image.go:135` targets the image table, not alert_rule.
+
+{
+  "sites": ["pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules", "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"],
+  "complete": true,
+  "unresolved": ["An alternative fix could be made in pkg/util/xorm/session_update.go:(*Session).Update (clearing AltTableName on setRefBean or resetting the statement), which would be a single different site; the issue's framing ('Update calls don't specify the table explicitly') indicates the call-site fix instead."]
+}

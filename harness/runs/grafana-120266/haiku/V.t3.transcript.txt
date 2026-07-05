@@ -1,0 +1,28 @@
+Based on my analysis of the code, I've identified all the functions that must be changed to fix the Jaeger datasource panic issue. The problem occurs when trace queries or search queries return empty result sets.
+
+## Summary of Findings:
+
+**Primary Panic Sites:**
+1. `pkg/tsdb/jaeger/client.go:266` in the `Trace` method - accesses `response.Data[0]` without checking if the array is empty
+2. `pkg/tsdb/jaeger/utils/client_utils.go:50-52` in `TransformSearchResponse` - the sort callback accesses `response[i].Spans[0]` and `response[j].Spans[0]` without checking if Spans arrays are empty
+3. `pkg/tsdb/jaeger/utils/grpc_utils.go:52-54` in `TransformGrpcSearchResponse` - the sort callback accesses `resourceSpans[i].ScopeSpans[0].Spans[0]` without checking if either array is empty
+
+**Safe Accesses (already guarded):**
+- `pkg/tsdb/jaeger/utils/client_utils.go:76` - guarded by line 71 check
+- `pkg/tsdb/jaeger/utils/grpc_utils.go:87` - guarded by line 82 check
+
+**Call Flow:**
+- `querydata.go:queryData` → calls either `Search()` (for search queries) or `Trace()`/`GrpcTrace()` (for trace ID queries)
+- These call the transform utility functions which contain the panic-prone code
+
+```json
+{
+  "sites": [
+    "pkg/tsdb/jaeger/client.go:Trace",
+    "pkg/tsdb/jaeger/utils/client_utils.go:TransformSearchResponse",
+    "pkg/tsdb/jaeger/utils/grpc_utils.go:TransformGrpcSearchResponse"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

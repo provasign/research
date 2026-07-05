@@ -1,0 +1,31 @@
+Based on my comprehensive analysis of the codebase, here's what I found:
+
+**Methods that directly cast and will panic:**
+- `response_writer.go:Hijack()` (line 120) - directly casts to `http.Hijacker` without checking
+- `response_writer.go:CloseNotify()` (line 125) - directly casts to `http.CloseNotifier` without checking
+
+**Code that uses these methods:**
+- `context.go:Stream()` (line 1357) - calls `CloseNotify()`, but will work correctly after fixing CloseNotify() to return nil gracefully (Go's select treats nil channels as never-ready)
+- Tests in `response_writer_test.go` - currently expect panics (lines 116-124 in TestResponseWriterHijack)
+
+**Call site analysis:**
+The only method calls are:
+1. Direct casts in the methods themselves (response_writer.go lines 120, 125)
+2. In context.go Stream method (which relies on CloseNotify returning a usable channel)
+3. In test file (which currently expects panics)
+
+**Test analysis:**
+- `TestResponseWriterHijack` (lines 110-127) currently expects panics with `assert.Panics()` - this test **must be changed** to test graceful degradation instead
+- `TestResponseWriterHijackAfterWrite` and `TestResponseWriterHijackAfterWriteHeaderNow` use a mock that **does** implement Hijacker, so they won't be affected
+
+```json
+{
+  "sites": [
+    "response_writer.go:Hijack",
+    "response_writer.go:CloseNotify",
+    "response_writer_test.go:TestResponseWriterHijack"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

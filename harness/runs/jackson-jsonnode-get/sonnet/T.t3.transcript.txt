@@ -1,0 +1,37 @@
+I now have enough information to compile the final answer. Here is the complete picture:
+
+**Declarations** (the `@Override` on `JsonNode.java:191` means it implements `TreeNode.get(int)` from jackson-core):
+- `JsonNode.java:191` — abstract declaration
+- `ContainerNode.java:53` — abstract re-declaration (forces sub-classes to implement)
+
+**Implementations/Overrides:**
+- `ArrayNode.java:262` — concrete impl
+- `ObjectNode.java:278` — concrete impl (returns null)
+- `ValueNode.java:68` — concrete impl (returns null)
+- `ObjectReaderTest.java:657` — `CustomObjectNode.get` (extends `BaseJsonNode` directly)
+- `ObjectReaderTest.java:778` — `DelegatingArrayNode.get` (extends `BaseJsonNode` directly; also calls `_delegate.get(index)`)
+
+**Production call sites** (where `get(int)` is called on a JsonNode-typed receiver):
+- `ArrayNode.java:53` — `_at()` calls `get(ptr.getMatchingIndex())` (implicit `this`)
+
+(All other `_children.get(index)` or `l1.get(i)` calls in ArrayNode are `List.get(int)`, not `JsonNode.get(int)`.)
+
+```json
+{
+  "sites": [
+    "src/main/java/com/fasterxml/jackson/databind/JsonNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ContainerNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ArrayNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ObjectNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ValueNode.java:get",
+    "src/test/java/com/fasterxml/jackson/databind/ObjectReaderTest.java:CustomObjectNode.get",
+    "src/test/java/com/fasterxml/jackson/databind/ObjectReaderTest.java:DelegatingArrayNode.get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ArrayNode.java:_at"
+  ],
+  "complete": false,
+  "unresolved": [
+    "Test call sites not individually enumerated: many test methods in ArrayNodeTest.java, MissingNodeTest.java, ObjectNodeTest.java, RequiredAccessorTest.java, and other test classes invoke .get(int) on JsonNode/ArrayNode instances; if the parameter type or return type changes these methods may also need updating, but they were not individually resolved here.",
+    "JsonNode.get(int) carries @Override, indicating it implements TreeNode.get(int) from jackson-core (a sibling library outside this repository); that interface declaration is not in scope but any change to it drives all sites listed here."
+  ]
+}
+```

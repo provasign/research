@@ -1,0 +1,23 @@
+Based on my analysis of the code, I've identified all functions that must be changed to properly handle empty trace responses and prevent the panic.
+
+**Summary of findings:**
+
+The panic occurs at three locations where array indices are accessed without length checks:
+
+1. **client.go:266** - Direct panic: `response.Data[0]` accessed without checking if response.Data is empty
+2. **client_utils.go:51-52** - Panic in sort comparator: `response[i].Spans[0]` accessed without checking if any trace has empty spans
+3. **grpc_utils.go:53-54** - Panic in sort comparator: `resourceSpans[i].ScopeSpans[0].Spans[0]` accessed without checking if ScopeSpans or Spans are empty
+
+The other index accesses at client_utils.go:76 and grpc_utils.go:87 are safe because they're protected by earlier length checks (continue statements).
+
+```json
+{
+  "sites": [
+    "pkg/tsdb/jaeger/client.go:Trace",
+    "pkg/tsdb/jaeger/utils/client_utils.go:TransformSearchResponse",
+    "pkg/tsdb/jaeger/utils/grpc_utils.go:TransformGrpcSearchResponse"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

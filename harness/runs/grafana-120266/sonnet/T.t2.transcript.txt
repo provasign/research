@@ -1,0 +1,22 @@
+I have all the information needed. Here's my analysis:
+
+**Primary panic (the described issue):**
+- `client.go:266`: `frames := utils.TransformTraceResponse(response.Data[0], refID)` — accesses index 0 without checking `len(response.Data)`. When a Jaeger trace query returns `{"data": [], ...}`, this panics.
+
+**Secondary/related unguarded `[0]` accesses (different trigger scenario — non-empty response with empty-span traces, not empty result set):**
+- `client_utils.go:51-52`: `sort.Slice` comparator accesses `response[i].Spans[0]` / `response[j].Spans[0]` without a length guard. However, `sort.Slice` on an empty slice is a no-op, so this does NOT trigger for empty result sets — only for result sets where a trace has zero spans. The for loop body below it is already guarded with `if len(trace.Spans) == 0 { continue }`.
+- `grpc_utils.go:53-54`: Same pattern — `resourceSpans[i].ScopeSpans[0].Spans[0]` in a sort comparator, same trigger conditions.
+
+**`GrpcTrace` path:** Safe — it passes `response.Result.ResourceSpans` (a slice value) to `TransformGrpcTraceResponse`, which iterates over it. Empty slice → empty frame, no panic.
+
+**`querydata.go:queryData`:** Correctly propagates errors from `Trace` via `if err != nil { ... continue }`. No change needed.
+
+```json
+{
+  "sites": ["pkg/tsdb/jaeger/client.go:Trace"],
+  "complete": true,
+  "unresolved": [
+    "pkg/tsdb/jaeger/utils/client_utils.go:TransformSearchResponse and pkg/tsdb/jaeger/utils/grpc_utils.go:TransformGrpcSearchResponse both have unguarded [0] accesses in their sort.Slice comparators (lines 51-52 and 53-54 respectively), but these are triggered by non-empty responses containing traces with zero spans — a distinct input scenario from the empty result set described in the issue. They may warrant a follow-up fix but are not required to fix the described panic."
+  ]
+}
+```

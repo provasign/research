@@ -1,0 +1,22 @@
+Now I have a complete picture. The panic is at `client.go:266`:
+
+```go
+frames := utils.TransformTraceResponse(response.Data[0], refID)
+```
+
+`response.Data[0]` is accessed without a length guard. When Jaeger returns an empty `data` array (trace not found), this panics with `index out of range [0] with length 0`.
+
+Let me verify no other code paths lead to the same unguarded access:
+- `Search` → `TransformSearchResponse(result.Data, ...)`: the sort comparator accesses `Spans[0]` but `sort.Slice` on an empty slice never invokes the comparator, so an empty result is safe.
+- `GrpcTrace` → `TransformGrpcTraceResponse(response.Result.ResourceSpans, ...)`: iterates over the slice with range loops, so an empty slice is safe.
+- `TransformGrpcSearchResponse` sort closure accesses `ScopeSpans[0].Spans[0]` — same latent bug as `TransformSearchResponse` for non-empty but malformed traces, but not triggered by empty result sets.
+
+The fix is localized: add a `len(response.Data) == 0` guard in `Trace` before the unsafe index.
+
+```json
+{
+  "sites": ["pkg/tsdb/jaeger/client.go:Trace"],
+  "complete": true,
+  "unresolved": []
+}
+```

@@ -1,0 +1,21 @@
+Based on my analysis of the Jaeger datasource code and the panic issue with empty result sets, I have identified the complete set of functions that must be changed.
+
+The panic "index out of range [0] with length 0" occurs in three places:
+
+1. **`pkg/tsdb/jaeger/client.go:Trace` (line 266)** - Directly accesses `response.Data[0]` without checking if the slice is empty. When querying a trace that returns no results, this causes an immediate panic.
+
+2. **`pkg/tsdb/jaeger/utils/client_utils.go:TransformSearchResponse` (lines 51-52)** - The sort comparator accesses `response[i].Spans[0]` and `response[j].Spans[0]` without checking if any trace has an empty Spans slice. This sorting happens before the later check that skips empty traces (line 71), so a trace with no spans causes a panic during sort.
+
+3. **`pkg/tsdb/jaeger/utils/grpc_utils.go:TransformGrpcSearchResponse` (lines 53-54)** - The sort comparator accesses `resourceSpans[i].ScopeSpans[0].Spans[0]` without checking if either ScopeSpans or Spans are empty. Like the non-gRPC version, this runs before the skip check at line 82.
+
+```json
+{
+  "sites": [
+    "pkg/tsdb/jaeger/client.go:Trace",
+    "pkg/tsdb/jaeger/utils/client_utils.go:TransformSearchResponse",
+    "pkg/tsdb/jaeger/utils/grpc_utils.go:TransformGrpcSearchResponse"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

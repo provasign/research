@@ -1,0 +1,24 @@
+Now I have a complete picture of all the sites. Let me compile the final analysis:
+
+The `LifecycleManager` interface is defined in `storage.go` with `Cleanup(ctx context.Context) (int64, error)`. The concrete implementations are `PostgreSQLStore.Cleanup`, `storeGRPC.Cleanup`, and `sqlAdapter.Cleanup`. The caller chain is `startCleanup` → `runCleanup` → `lifecycleMgr.Cleanup(ctx)`. The test mock `mockGRPCServer.Cleanup` also calls `s.lifecycle.Cleanup(ctx)` as the gRPC server side.
+
+The gRPC path is notable: `storeGRPC.Cleanup` (client) sends an empty `CleanupRequest` via gRPC; if the cutoff time must propagate through gRPC, the proto `CleanupRequest` message and the generated files would also need updating (proto → regeneration of `store.pb.go`/`store_grpc.pb.go`).
+
+```json
+{
+  "sites": [
+    "pkg/registry/apps/annotation/storage.go:Cleanup",
+    "pkg/registry/apps/annotation/postgres_lifecycle.go:Cleanup",
+    "pkg/registry/apps/annotation/grpc_store.go:Cleanup",
+    "pkg/registry/apps/annotation/sql_adapter.go:Cleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:runCleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:startCleanup",
+    "pkg/registry/apps/annotation/grpc_store_test.go:Cleanup"
+  ],
+  "complete": false,
+  "unresolved": [
+    "pkg/registry/apps/annotation/proto/store.proto: the CleanupRequest message is currently empty. If the retention cutoff must be transmitted to a remote gRPC server (i.e. when StoreBackend=grpc), a timestamp field must be added and the generated store.pb.go / store_grpc.pb.go regenerated. Whether this is required depends on the architectural decision about where cutoff is computed — if the remote server computes it independently, the proto need not change.",
+    "Any remote gRPC server process that implements AnnotationStoreServer.Cleanup (outside this repository) would need to change if the CleanupRequest carries the cutoff."
+  ]
+}
+```

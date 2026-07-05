@@ -1,0 +1,108 @@
+Based on my investigation, I've identified all sites where the `SettableBeanProperty.set()` method signature change would impact. Let me compile the final comprehensive list:
+
+**Declaration:**
+- `SettableBeanProperty.java:set` (abstract method, line 508)
+- `SettableBeanProperty.java:setAndReturn` (abstract method, line 519)
+
+**Implementations/Overrides:**
+1. `SettableBeanProperty.Delegating:set` (line 793)
+2. `SettableBeanProperty.Delegating:setAndReturn` (line 798)
+3. `SetterlessProperty.java:set` (line 146)
+4. `SetterlessProperty.java:setAndReturn` (line 151)
+5. `ObjectIdValueProperty.java:set` (line 111)
+6. `ObjectIdValueProperty.java:setAndReturn` (line 116)
+7. `ObjectIdReferenceProperty.java:set` (line 106)
+8. `ObjectIdReferenceProperty.java:setAndReturn` (line 111)
+9. `MethodProperty.java:set` (line 179)
+10. `MethodProperty.java:setAndReturn` (line 195)
+11. `MergingSettableBeanProperty.java:set` (line 116)
+12. `MergingSettableBeanProperty.java:setAndReturn` (line 125)
+13. `ManagedReferenceProperty.java:set` (line 72)
+14. `ManagedReferenceProperty.java:setAndReturn` (line 77)
+15. `FieldProperty.java:set` (line 187)
+16. `FieldProperty.java:setAndReturn` (line 203)
+17. `CreatorProperty.java:set` (line 283)
+18. `CreatorProperty.java:setAndReturn` (line 290)
+
+**Call Sites:**
+19. `SettableBeanProperty.Delegating:set` (calls delegate.set at line 794)
+20. `SettableBeanProperty.Delegating:setAndReturn` (calls delegate.setAndReturn at line 799)
+21. `SetterlessProperty:setAndReturn` (calls set at line 153)
+22. `ObjectIdValueProperty:set` (calls setAndReturn at line 112)
+23. `ObjectIdReferenceProperty:set` (calls _forward.set at line 107)
+24. `ObjectIdReferenceProperty:setAndReturn` (calls _forward.setAndReturn at line 112)
+25. `MergingSettableBeanProperty:deserializeAndSet` (calls delegate.set at line 85)
+26. `MergingSettableBeanProperty:deserializeSetAndReturn` (calls delegate.setAndReturn at line 109)
+27. `MergingSettableBeanProperty:set` (calls delegate.set at line 120)
+28. `MergingSettableBeanProperty:setAndReturn` (calls delegate.setAndReturn at line 129)
+29. `ManagedReferenceProperty:deserializeAndSet` (calls set at line 62)
+30. `ManagedReferenceProperty:setAndReturn` (calls _backProperty.set at lines 86, 90, 94, 101)
+31. `ManagedReferenceProperty:setAndReturn` (calls delegate.setAndReturn at line 105)
+32. `ObjectIdValueProperty:deserializeSetAndReturn` (calls idProp.setAndReturn at line 105)
+33. `ObjectIdValueProperty:setAndReturn` (calls idProp.setAndReturn at line 123)
+34. `CreatorProperty:deserializeAndSet` (calls _fallbackSetter.set at line 271)
+35. `CreatorProperty:deserializeSetAndReturn` (calls _fallbackSetter.setAndReturn at line 279)
+36. `CreatorProperty:set` (calls _fallbackSetter.set at line 286)
+37. `CreatorProperty:setAndReturn` (calls _fallbackSetter.setAndReturn at line 293)
+38. `BeanDeserializer.BeanReferring:handleResolvedForwardReference` (calls _prop.set at line 1186)
+39. `BeanDeserializerBase:_bindObjectId` (calls idProp.setAndReturn at line 1413)
+40. `PropertyValueBuffer:handleIdValue` (calls idProp.setAndReturn at line 339)
+41. `PropertyValue.Regular:assign` (calls _property.set at line 72)
+42. `ThrowableDeserializer:deserialize` (calls prop.set at line 200)
+43. `ExternalTypeHandler:complete` (calls prop.set at line 223)
+44. `ExternalTypeHandler:complete` (calls prop.set at line 334)
+45. `ExternalTypeHandler:_deserializeAndSet` (calls property.set at line 393)
+
+```json
+{
+  "sites": [
+    "src/main/java/com/fasterxml/jackson/databind/deser/SettableBeanProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/SettableBeanProperty.java:setAndReturn",
+    "src/main/java/com/fasterxml/jackson/databind/deser/SettableBeanProperty.java:Delegating:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/SettableBeanProperty.java:Delegating:setAndReturn",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/SetterlessProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/SetterlessProperty.java:setAndReturn",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ObjectIdValueProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ObjectIdValueProperty.java:setAndReturn",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ObjectIdReferenceProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ObjectIdReferenceProperty.java:setAndReturn",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/MethodProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/MethodProperty.java:setAndReturn",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/MergingSettableBeanProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/MergingSettableBeanProperty.java:setAndReturn",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ManagedReferenceProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ManagedReferenceProperty.java:setAndReturn",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/FieldProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/FieldProperty.java:setAndReturn",
+    "src/main/java/com/fasterxml/jackson/databind/deser/CreatorProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/CreatorProperty.java:setAndReturn",
+    "src/main/java/com/fasterxml/jackson/databind/deser/SettableBeanProperty.java:Delegating:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/SettableBeanProperty.java:Delegating:setAndReturn",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/SetterlessProperty.java:setAndReturn",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ObjectIdValueProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ObjectIdReferenceProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ObjectIdReferenceProperty.java:setAndReturn",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/MergingSettableBeanProperty.java:deserializeAndSet",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/MergingSettableBeanProperty.java:deserializeSetAndReturn",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/MergingSettableBeanProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/MergingSettableBeanProperty.java:setAndReturn",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ManagedReferenceProperty.java:deserializeAndSet",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ManagedReferenceProperty.java:setAndReturn",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ObjectIdValueProperty.java:deserializeSetAndReturn",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ObjectIdValueProperty.java:setAndReturn",
+    "src/main/java/com/fasterxml/jackson/databind/deser/CreatorProperty.java:deserializeAndSet",
+    "src/main/java/com/fasterxml/jackson/databind/deser/CreatorProperty.java:deserializeSetAndReturn",
+    "src/main/java/com/fasterxml/jackson/databind/deser/CreatorProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/CreatorProperty.java:setAndReturn",
+    "src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializer.java:BeanReferring:handleResolvedForwardReference",
+    "src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java:_bindObjectId",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/PropertyValueBuffer.java:handleIdValue",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/PropertyValue.java:Regular:assign",
+    "src/main/java/com/fasterxml/jackson/databind/deser/std/ThrowableDeserializer.java:deserialize",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ExternalTypeHandler.java:complete",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ExternalTypeHandler.java:_deserializeAndSet"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

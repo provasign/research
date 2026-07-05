@@ -1,0 +1,12 @@
+Both alert-rule DB `Update` calls live in `pkg/services/ngalert/store/alert_rule.go`. The bug is that XORM's `Statement.TableName()` returns a leaked `AltTableName` (set by a prior `.Table(...)` on the reused transactional session, e.g. a `user` lookup) in preference to the bean-derived `tableName`. Since neither alert-rule `Update` call sets `.Table("alert_rule")` explicitly, they inherit the stale table. The two call sites:
+
+- `alert_rule.go:608` → `UpdateAlertRules` (`sess.ID(...).AllCols().Omit("rule_guid").Update(converted)`)
+- `alert_rule.go:710` → `preventIntermediateUniqueConstraintViolations` (`sess.ID(...).Cols("title").Update(&alertRule{...})`)
+
+These are the only runtime alert-rule DB updates (other `.Update(` calls in ngalert target `ngalert_configuration`, the image table, or are in-memory scheduler updates; the migration site touches a one-off migration struct). The fix is a direct method-chain change on a concrete `*db.Session`, so there is no dynamic dispatch to trace.
+
+{
+  "sites": ["pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules", "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"],
+  "complete": true,
+  "unresolved": []
+}

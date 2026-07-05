@@ -1,0 +1,12 @@
+The two unsafe type assertions are exclusively in `response_writer.go`. The `Flush()` method (line 131) already uses the safe `if f, ok := ...; ok` pattern — `Hijack` and `CloseNotify` do not. The `context.go:Stream` method calls `w.CloseNotify()` through the interface, but won't panic once `CloseNotify` itself is fixed to degrade gracefully (returning a never-closing channel).
+
+```json
+{
+  "sites": [
+    "response_writer.go:Hijack",
+    "response_writer.go:CloseNotify"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

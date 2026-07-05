@@ -1,0 +1,18 @@
+Based on my investigation:
+
+The `secureValueClient.Get` method (concrete type in `pkg/registry/apis/secret/secure_value_client.go`) is reached two ways:
+1. **Directly** via `c.Get(...)` inside its own `Update` method (line 137).
+2. **Via the `dynamic.ResourceInterface`** returned by `Client()`/`Namespace()` — but the only code in the repo that obtains this concrete client and calls `Get` on it is the test file (the contract `SecureValueClient` interface itself only exposes `Client`, and a full repo grep shows no other consumer of the client type outside the wire provider).
+
+Call sites of `secureValueClient.Get`:
+- `secure_value_client.go:Update` — direct `c.Get` call.
+- `secure_value_client_test.go:TestIntegration_SecureValueClient_CRUD` — three `nsClient.Get` calls (lines 70, 95, 114).
+- `secure_value_client_test.go:Test_SecureValueClient_CRUD_NoPermissions` — one `nsClient.Get` call (line 170).
+
+No external (non-test) consumers of the client exist in OSS, so no other functions invoke this `Get`.
+
+{
+  "sites": ["pkg/registry/apis/secret/secure_value_client.go:Update", "pkg/registry/apis/secret/secure_value_client_test.go:TestIntegration_SecureValueClient_CRUD", "pkg/registry/apis/secret/secure_value_client_test.go:Test_SecureValueClient_CRUD_NoPermissions"],
+  "complete": true,
+  "unresolved": []
+}

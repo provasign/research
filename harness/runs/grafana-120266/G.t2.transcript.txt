@@ -1,0 +1,14 @@
+The panic is at `pkg/tsdb/jaeger/client.go:266` — `response.Data[0]` is accessed unconditionally after decoding. When the Jaeger API returns an empty result set (`response.Data` length 0), this indexes out of range.
+
+The fix is confined to `JaegerClient.Trace`: it must guard for `len(response.Data) == 0` before accessing `response.Data[0]` (returning an empty/gracefully-handled frame). 
+
+I verified:
+- `TransformTraceResponse` already handles an empty trace gracefully (it ranges over `trace.Spans`), so it needs no change — `Trace` can simply pass an empty `TraceResponse` or return an empty frame.
+- The caller `queryData` (querydata.go:71) just wraps the returned frame and is unaffected as long as `Trace` returns a valid frame instead of panicking.
+- The gRPC path (`GrpcTrace`) is a separate code path; the stack trace points specifically at `client.go`.
+
+{
+  "sites": ["pkg/tsdb/jaeger/client.go:Trace"],
+  "complete": true,
+  "unresolved": []
+}

@@ -1,0 +1,19 @@
+I now have a complete picture of all sites. Let me compile the final analysis:
+
+The `LifecycleManager.Cleanup` interface in `storage.go` is the root. There are three concrete implementations (`PostgreSQLStore`, `sqlAdapter`, `storeGRPC`), two callers (`runCleanup` calls the interface, `mockGRPCServer.Cleanup` dispatches to it), and `startCleanup` which holds the `retentionTTL` and calls `runCleanup` — it must propagate the TTL to `runCleanup` after that function's signature expands to compute/receive the cutoff.
+
+```json
+{
+  "sites": [
+    "pkg/registry/apps/annotation/storage.go:LifecycleManager",
+    "pkg/registry/apps/annotation/postgres_lifecycle.go:Cleanup",
+    "pkg/registry/apps/annotation/sql_adapter.go:Cleanup",
+    "pkg/registry/apps/annotation/grpc_store.go:Cleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:runCleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:startCleanup",
+    "pkg/registry/apps/annotation/grpc_store_test.go:Cleanup"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

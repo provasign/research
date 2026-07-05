@@ -1,0 +1,14 @@
+Based on my analysis, the `LifecycleManager.Cleanup(ctx)` interface method is gaining a retention-cutoff `time.Time` parameter. I traced the interface, every implementation, every caller, and the propagation path for the cutoff value.
+
+- **Interface decl** (`storage.go`) — the signature itself.
+- **3 implementations**: `sqlAdapter`, `PostgreSQLStore`, `storeGRPC` (all assert `LifecycleManager`).
+- **Caller** `runCleanup` calls `lifecycleMgr.Cleanup(ctx)` — must pass the cutoff, which it currently has no access to, so its parent `startCleanup` (which holds `retentionTTL`) must propagate it.
+- **Test gRPC server** `mockGRPCServer.Cleanup` calls `s.lifecycle.Cleanup(ctx)`.
+
+`register.go:NewAppInstaller` and `postgres_partitioned.go` only reference the interface type / compile-time assertion and don't need to change. The instrumented store doesn't wrap `Cleanup`. The only thing outside "functions" is the proto `CleanupRequest` (needs a cutoff field + regenerated pb) for the cutoff to traverse the gRPC boundary used by `storeGRPC.Cleanup` and `mockGRPCServer.Cleanup`.
+
+{
+  "sites": ["pkg/registry/apps/annotation/storage.go:LifecycleManager.Cleanup", "pkg/registry/apps/annotation/sql_adapter.go:sqlAdapter.Cleanup", "pkg/registry/apps/annotation/postgres_lifecycle.go:PostgreSQLStore.Cleanup", "pkg/registry/apps/annotation/grpc_store.go:storeGRPC.Cleanup", "pkg/registry/apps/annotation/lifecycle.go:AppInstaller.runCleanup", "pkg/registry/apps/annotation/lifecycle.go:AppInstaller.startCleanup", "pkg/registry/apps/annotation/grpc_store_test.go:mockGRPCServer.Cleanup"],
+  "complete": true,
+  "unresolved": ["Non-function dependency: the generated proto CleanupRequest message (proto/store.proto + storepb/v1/*.pb.go) needs a cutoff field for the value to traverse gRPC between storeGRPC.Cleanup and mockGRPCServer.Cleanup; this is regenerated code, not a hand-edited function, so excluded from the sites list."]
+}

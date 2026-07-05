@@ -1,0 +1,21 @@
+Based on my comprehensive analysis of the codebase, I can now provide the answer.
+
+The issue is that two XORM `Update()` calls in `alert_rule.go` don't call `.Table()` explicitly before `.Update()`. While XORM normally derives the table name from the bean's `TableName()` method, there's a known PostgreSQL-specific XORM bug where the ORM can lose its table context and fall back to a wrong table (the Grafana `user` table, which maps to the `User` struct via XORM's snake_case mapper). The fix is to add `.Table(alertRule{})` to both Update chains.
+
+The two functions that contain the bare XORM Update calls on `alertRule` structs without explicit table specification:
+
+1. **`UpdateAlertRules`** (line 608): `sess.ID(r.Existing.ID).AllCols().Omit("rule_guid").Update(converted)` — no `.Table()` call
+2. **`preventIntermediateUniqueConstraintViolations`** (line 710): `sess.ID(r.ID).Cols("title").Update(&alertRule{Title: uniqueTempTitle, Version: r.Version})` — no `.Table()` call
+
+All other `Update` calls in the ngalert store either already use explicit `.Table()` (e.g., `UpdateFolderFullpathsForFolders` at line 225, `admin_configuration.go` at line 95) or target different tables (`image.go` targets the image table, not alert_rule).
+
+```json
+{
+  "sites": [
+    "pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules",
+    "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

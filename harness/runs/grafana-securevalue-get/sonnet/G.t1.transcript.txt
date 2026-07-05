@@ -1,0 +1,18 @@
+The `prepare.go` call uses a generic `dynamic.Interface` (folder client), not a `secureValueClient`. The analysis is complete.
+
+Summary of findings:
+- `secureValueClient.Update` calls `c.Get(...)` directly on the receiver at line 137
+- Both test functions call `nsClient.Get(...)` via the `dynamic.ResourceInterface` returned by `client.Client(ctx, ns)`
+- No other production code calls `secureValueClient.Client()`, and `secureValueClient.Namespace()` is only called from `Client()`
+
+```json
+{
+  "sites": [
+    "pkg/registry/apis/secret/secure_value_client.go:Update",
+    "pkg/registry/apis/secret/secure_value_client_test.go:TestIntegration_SecureValueClient_CRUD",
+    "pkg/registry/apis/secret/secure_value_client_test.go:Test_SecureValueClient_CRUD_NoPermissions"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

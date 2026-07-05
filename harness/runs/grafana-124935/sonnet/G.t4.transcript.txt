@@ -1,0 +1,18 @@
+I've identified the exact root cause and fix. The commit `7bf0e7644b` ("alerting: fix ORM table mapping bug causing SELECT alert_rule columns FROM user on PostgreSQL") shows exactly two XORM `Update` calls that lacked `.Table(alertRule{})` before `.ID()`, causing XORM to inherit the wrong table context on PostgreSQL when the session had been used for a prior query (the `user` table).
+
+Both problematic sites are in `pkg/services/ngalert/store/alert_rule.go`:
+- Line 608 (inside `UpdateAlertRules`): `sess.ID(r.Existing.ID).AllCols().Omit("rule_guid").Update(converted)` 
+- Line 710 (inside `preventIntermediateUniqueConstraintViolations`): `sess.ID(r.ID).Cols("title").Update(&alertRule{...})`
+
+All other `Update` calls in the ngalert store either already use `.Table()` explicitly or target unrelated models.
+
+```json
+{
+  "sites": [
+    "pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules",
+    "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

@@ -1,0 +1,35 @@
+I now have a fully verified picture. Summary of what I traced:
+
+- **Declaration & overrides** (found via exact `get(int` grep over the whole repo — these are all implementations, so dynamic dispatch is fully covered): `JsonNode.get` (abstract decl), `ContainerNode.get` (abstract redecl), `ArrayNode.get`, `ObjectNode.get`, `ValueNode.get` (final), plus two test subclass overrides in `ObjectReaderTest` (`CustomObjectNode.get`, `DelegatingArrayNode.get`).
+- **Main call sites**: `JsonNode.has(int)`, `JsonNode.hasNonNull(int)`, `ArrayNode._at` (`get(ptr.getMatchingIndex())`). No other main-code site indexes a JsonNode.
+- **Test call sites**: verified receiver types by reading each candidate (excluding the many `List`/`Map`/bean `get(int)` false positives the sub-agents initially surfaced). Swept every test subdirectory with broad + chained-method greps.
+
+{
+  "sites": [
+    "src/main/java/com/fasterxml/jackson/databind/JsonNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ContainerNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ArrayNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ObjectNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ValueNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/JsonNode.java:has",
+    "src/main/java/com/fasterxml/jackson/databind/JsonNode.java:hasNonNull",
+    "src/main/java/com/fasterxml/jackson/databind/node/ArrayNode.java:_at",
+    "src/test/java/com/fasterxml/jackson/databind/ObjectReaderTest.java:CustomObjectNode.get",
+    "src/test/java/com/fasterxml/jackson/databind/ObjectReaderTest.java:DelegatingArrayNode.get",
+    "src/test/java/com/fasterxml/jackson/databind/node/ObjectNodeTest.java:testBasics",
+    "src/test/java/com/fasterxml/jackson/databind/node/RequiredAccessorTest.java:testSimpleRequireOk",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testDirectCreation",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testDirectCreation2",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testArraySet",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testArrayViaMapper",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testAddAllWithNullInCollection",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testSimpleArray",
+    "src/test/java/com/fasterxml/jackson/databind/node/MissingNodeTest.java:testMissingViaMapper",
+    "src/test/java/com/fasterxml/jackson/databind/node/TreeReadViaMapperTest.java:testSimple",
+    "src/test/java/com/fasterxml/jackson/databind/deser/merge/NodeMergeTest.java:testObjectDeepUpdate",
+    "src/test/java/com/fasterxml/jackson/databind/deser/merge/NodeMergeTest.java:testArrayNodeMerge",
+    "src/test/java/com/fasterxml/jackson/databind/deser/CustomDeserializersTest.java:testCustomDeserializerWithReadTree"
+  ],
+  "complete": true,
+  "unresolved": []
+}

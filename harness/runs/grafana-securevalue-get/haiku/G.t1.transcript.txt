@@ -1,0 +1,21 @@
+Based on my comprehensive analysis using grep and prism to trace all call sites, I've identified every function that calls `secureValueClient.Get`.
+
+## Summary of Findings
+
+I found exactly **one** non-test function that calls `secureValueClient.Get`:
+
+1. **Line 137 in `pkg/registry/apis/secret/secure_value_client.go`** - The `Update` method calls `c.Get(ctx, obj.GetName(), metav1.GetOptions{})` to fetch the old secure value before updating it.
+
+I verified this is the complete list by:
+- Grepping all `.Get(` calls in the secure_value_client package
+- Checking all imports and uses of `SecureValueClient`
+- Searching the entire codebase for any other potential callers
+- Confirming that other Get methods throughout the codebase (on different types like stores, mocks, etc.) are unrelated
+
+```json
+{
+  "sites": ["pkg/registry/apis/secret/secure_value_client.go:Update"],
+  "complete": true,
+  "unresolved": []
+}
+```

@@ -1,0 +1,41 @@
+I now have a complete picture. Summary of verification:
+
+- **Declaration/overrides** (5 main + 2 test): `JsonNode`, `ContainerNode`, `ArrayNode`, `ValueNode`, `ObjectNode`, plus two test custom-node overrides in `ObjectReaderTest`. `ValueNode.get(int)` is `final`, so its subclasses (TextNode, NumericNode, etc.) don't override it.
+- **Main call sites** (3): `JsonNode.has(int)`, `JsonNode.hasNonNull(int)`, `ArrayNode._at`. I confirmed `required(int)` overrides use `_children.get` (List), not `JsonNode.get(int)`, so they're excluded.
+- **Test call sites**: 58 invocations collapsed into 15 enclosing test methods.
+
+{
+  "sites": [
+    "src/main/java/com/fasterxml/jackson/databind/JsonNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ContainerNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ArrayNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ValueNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ObjectNode.java:get",
+    "src/test/java/com/fasterxml/jackson/databind/ObjectReaderTest.java:CustomObjectNode.get",
+    "src/test/java/com/fasterxml/jackson/databind/ObjectReaderTest.java:DelegatingArrayNode.get",
+    "src/main/java/com/fasterxml/jackson/databind/JsonNode.java:has",
+    "src/main/java/com/fasterxml/jackson/databind/JsonNode.java:hasNonNull",
+    "src/main/java/com/fasterxml/jackson/databind/node/ArrayNode.java:_at",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testDirectCreation",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testDirectCreation2",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testArraySet",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testArrayViaMapper",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testAdds",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testInsertFromCollection",
+    "src/test/java/com/fasterxml/jackson/databind/node/ObjectNodeTest.java:testBasics",
+    "src/test/java/com/fasterxml/jackson/databind/node/MissingNodeTest.java:testMissingNodeBehavior",
+    "src/test/java/com/fasterxml/jackson/databind/node/MissingNodeTest.java:testMissingArrayBehavior",
+    "src/test/java/com/fasterxml/jackson/databind/node/JsonNodeConversionsTest.java:testCustomObjectFromArray",
+    "src/test/java/com/fasterxml/jackson/databind/node/JsonNodeFindMethodsTest.java:testFindValues",
+    "src/test/java/com/fasterxml/jackson/databind/node/RequiredAccessorTest.java:testSimpleRequireOk",
+    "src/test/java/com/fasterxml/jackson/databind/node/TreeReadViaMapperTest.java:testSimple",
+    "src/test/java/com/fasterxml/jackson/databind/deser/merge/NodeMergeTest.java:testObjectDeepUpdate",
+    "src/test/java/com/fasterxml/jackson/databind/deser/CustomDeserializersTest.java:testCustomDeserializerWithReadTree"
+  ],
+  "complete": false,
+  "unresolved": [
+    "The exact new signature is unspecified. If the change is a covariant return-type narrowing, most read-only call sites (especially tests reading via a JsonNode-typed reference) would still compile and may NOT need edits; if it is a parameter-type change, all listed call sites need edits. The call-site list assumes a source-incompatible change.",
+    "JsonNode.get(int) is declared with @Override of TreeNode.get(int), which lives in jackson-core (outside this repo). A parameter-type change would break that override relationship and the abstract get(int) in ContainerNode/the override contract across modules; that cross-module impact cannot be resolved within this repository.",
+    "Test call sites were enumerated by grep plus receiver-type analysis over a large test tree; despite high confidence I cannot guarantee 100% completeness of every test method that calls JsonNode.get(int)."
+  ]
+}

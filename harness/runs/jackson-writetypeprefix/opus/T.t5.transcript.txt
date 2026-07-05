@@ -1,0 +1,54 @@
+I now have a complete picture. Let me compile the findings.
+
+**Declaration & overrides** (4): the abstract `writeTypePrefix(JsonGenerator, WritableTypeId)` in `TypeSerializer`, plus the three overriders: `TypeSerializerBase`, `AsDeductionTypeSerializer`, and the `TypeSerializerRerouter` inner class in `JsonValueSerializer`. The other `TypeSerializerBase` subclasses (AsWrapper/AsExternal/AsArray/AsProperty) inherit it and don't override.
+
+**Call sites**: every `<typeSer>.writeTypePrefix(g, WritableTypeId)` invocation (mostly inside `serializeWithType`), plus the internal calls inside the deprecated wrapper methods in `TypeSerializer.java`. Note: `g.writeTypePrefix(...)` calls on the `JsonGenerator` (in `TypeSerializerBase`/`AsDeductionTypeSerializer`) are a *different* method and excluded; calls to the deprecated `writeTypePrefixForScalar(...)` wrappers (ReferenceTypeSerializer, ByteArraySerializer:65, the rerouter legacy methods) are excluded since those wrapper signatures don't change.
+
+{
+  "sites": [
+    "src/main/java/com/fasterxml/jackson/databind/jsontype/TypeSerializer.java:writeTypePrefix",
+    "src/main/java/com/fasterxml/jackson/databind/jsontype/impl/TypeSerializerBase.java:writeTypePrefix",
+    "src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsDeductionTypeSerializer.java:writeTypePrefix",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/JsonValueSerializer.java:TypeSerializerRerouter.writeTypePrefix",
+    "src/main/java/com/fasterxml/jackson/databind/jsontype/TypeSerializer.java:writeTypePrefixForScalar",
+    "src/main/java/com/fasterxml/jackson/databind/jsontype/TypeSerializer.java:writeTypePrefixForObject",
+    "src/main/java/com/fasterxml/jackson/databind/jsontype/TypeSerializer.java:writeTypePrefixForArray",
+    "src/main/java/com/fasterxml/jackson/databind/jsontype/TypeSerializer.java:writeCustomTypePrefixForScalar",
+    "src/main/java/com/fasterxml/jackson/databind/jsontype/TypeSerializer.java:writeCustomTypePrefixForObject",
+    "src/main/java/com/fasterxml/jackson/databind/jsontype/TypeSerializer.java:writeCustomTypePrefixForArray",
+    "src/main/java/com/fasterxml/jackson/databind/ext/NioPathSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ext/CoreXMLSerializers.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ext/SqlBlobSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/StdArraySerializers.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/ToEmptyObjectSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/impl/IndexedStringListSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/TokenBufferSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/impl/BeanAsArraySerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/type/TypeBase.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/impl/StringCollectionSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/ArraySerializerBase.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/node/ArrayNode.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/impl/MapEntrySerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/TimeZoneSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/node/ValueNode.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/StdScalarSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/InetAddressSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/InetSocketAddressSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/JsonValueSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/BeanSerializerBase.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/BeanSerializerBase.java:_serializeObjectId",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/ByteArraySerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/NumberSerializers.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/AsArraySerializerBase.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/RawSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/node/ObjectNode.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/MapSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/ToStringSerializerBase.java:serializeWithType",
+    "src/test/java/com/fasterxml/jackson/databind/node/JsonNodeConversionsTest.java:serializeWithType"
+  ],
+  "complete": true,
+  "unresolved": [
+    "Whether the 6 deprecated wrapper methods in TypeSerializer.java (writeTypePrefixForScalar/Object/Array and writeCustomTypePrefixForScalar/Object/Array) actually need editing depends on the exact nature of the signature change: if a parameter is added/removed/retyped in-place, their internal writeTypePrefix(g, ...) calls must change; if the change is introduced as a new overload keeping the old 2-arg form, they would not. They are listed because they are genuine call sites of the changing method.",
+    "NumberSerializers.java:serializeWithType refers to the override inside the inner DoubleSerializer class (one of several inner serializer classes in that file); only that one calls writeTypePrefix."
+  ]
+}

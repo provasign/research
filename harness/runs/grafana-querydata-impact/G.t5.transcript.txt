@@ -1,0 +1,13 @@
+I've traced the full picture. The "datasource QueryData handler" whose signature can actually change in this repo is the internal `clientapi.QueryDataClient` interface (`QueryData(ctx, data.QueryDataRequest)`) — the datasource client obtained via `GetDataSourceClient`/`BuildClient` on the query-service path, through which a new request field would be threaded. (The SDK `backend.QueryDataHandler` with its ~67 datasource implementations is an external dependency type — a field added there would not textually change in-repo signatures.)
+
+Dispatch is fully interface-bound: the only concrete implementers are `pluginClient` (prod) and the two test mocks; every invocation passes a `data.QueryDataRequest` value (`*k8sReq`). The complete set:
+
+- **Interface decl:** `clientapi.go:QueryDataClient.QueryData`
+- **Implementations:** `pluginClient.QueryData`, `mockClient.QueryData`, `testClient.QueryData`
+- **Call sites:** `executeDSNodesGrouped`, `DSNode.Execute`, `handleQuerySingleDatasource`
+
+{
+  "sites": ["pkg/registry/apis/query/clientapi/clientapi.go:QueryDataClient.QueryData", "pkg/registry/apis/query/client/plugin.go:pluginClient.QueryData", "pkg/registry/apis/query/query_test.go:mockClient.QueryData", "pkg/services/query/query_test.go:testClient.QueryData", "pkg/expr/nodes.go:executeDSNodesGrouped", "pkg/expr/nodes.go:DSNode.Execute", "pkg/services/query/query.go:handleQuerySingleDatasource"],
+  "complete": true,
+  "unresolved": ["Interpretation ambiguity: I read 'datasource QueryData handler' as the in-repo clientapi.QueryDataClient interface (request type data.QueryDataRequest threaded through the query-service path). If the issue instead means the SDK backend.QueryDataHandler.QueryData(ctx, *backend.QueryDataRequest), the set is vastly larger (~67 implementations across pkg/tsdb/*, pkg/plugins/*, all clientmiddleware/*, plus hundreds of prod and _test.go call sites) — that type is defined in an external module so its signature cannot be changed from this repo.", "Cross-repo: enterprise/multi-tenant builds may provide additional clientapi.Instance/QueryDataClient implementations not present in this OSS tree; within this repository the list is exhaustive."]
+}

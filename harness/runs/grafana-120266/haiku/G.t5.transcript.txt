@@ -1,0 +1,21 @@
+Based on my comprehensive analysis of the Jaeger datasource code and call graphs, I've identified all functions that must be changed to fix the panic when querying traces with empty result sets.
+
+The panic "index out of range [0] with length 0" occurs at three sites where slices are accessed without bounds checking:
+
+1. **pkg/tsdb/jaeger/client.go:Trace** (line 266) - Directly accesses `response.Data[0]` when the API returns an empty trace list
+2. **pkg/tsdb/jaeger/utils/client_utils.go:TransformSearchResponse** (lines 51-52) - The sort comparator accesses `response[i].Spans[0]` for traces that may have empty Spans
+3. **pkg/tsdb/jaeger/utils/grpc_utils.go:TransformGrpcSearchResponse** (lines 53-54) - The sort comparator accesses `resourceSpans[i].ScopeSpans[0].Spans[0]` when nested slices may be empty
+
+All other slice accesses in the codebase are protected by length checks or safe iterations.
+
+```json
+{
+  "sites": [
+    "pkg/tsdb/jaeger/client.go:Trace",
+    "pkg/tsdb/jaeger/utils/client_utils.go:TransformSearchResponse",
+    "pkg/tsdb/jaeger/utils/grpc_utils.go:TransformGrpcSearchResponse"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

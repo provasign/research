@@ -1,0 +1,19 @@
+The analysis is complete. Here are the findings:
+
+**Panic sites**: Both `Hijack()` (line 120) and `CloseNotify()` (line 125) use unsafe type assertions (`.(http.Hijacker)` and `.(http.CloseNotifier)`) that panic when the underlying `http.ResponseWriter` doesn't implement those interfaces. `Flush()` already uses the safe `if f, ok := ...(http.Flusher); ok` pattern.
+
+**Test that must change**: `TestResponseWriterHijack` explicitly asserts panics via `assert.Panics` for both calls — after the fix, those assertions would fail.
+
+**Secondary concern**: `context.go:Stream` calls `w.CloseNotify()` directly. Once `CloseNotify` is fixed to return `nil` instead of panicking, a nil channel in the `select` is safe (it blocks forever, so the disconnect-detection branch never fires), meaning `Stream` degrades gracefully without needing code changes to avoid a panic.
+
+```json
+{
+  "sites": [
+    "response_writer.go:Hijack",
+    "response_writer.go:CloseNotify",
+    "response_writer_test.go:TestResponseWriterHijack"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

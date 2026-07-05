@@ -1,0 +1,35 @@
+Based on my investigation of the Grafana repository, I've identified the XORM Update calls that are missing explicit table specifications for alert rule updates on PostgreSQL.
+
+## Analysis Summary
+
+I found **2 functions** that contain problematic XORM Update operations missing `.Table()` calls:
+
+1. **Line 608** in `UpdateAlertRules`:
+   ```go
+   sess.ID(r.Existing.ID).AllCols().Omit("rule_guid").Update(converted)
+   ```
+   This updates an alert rule without explicitly specifying the table.
+
+2. **Line 710** in `preventIntermediateUniqueConstraintViolations`:
+   ```go
+   sess.ID(r.ID).Cols("title").Update(&alertRule{Title: uniqueTempTitle, Version: r.Version})
+   ```
+   This also updates without explicitly specifying the table.
+
+In contrast, the working implementation at line 225 in `UpdateFolderFullpathsForFolders` correctly calls:
+```go
+sess.Table(alertRule{}).Where(...).MustCols("folder_fullpath").Update(...)
+```
+
+Both problematic calls need to add `.Table(alertRule{})` before the `.Update()` call to fix the PostgreSQL ORM table inference issue.
+
+```json
+{
+  "sites": [
+    "pkg/services/ngalert/store/alert_rule.go:DBstore.UpdateAlertRules",
+    "pkg/services/ngalert/store/alert_rule.go:DBstore.preventIntermediateUniqueConstraintViolations"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

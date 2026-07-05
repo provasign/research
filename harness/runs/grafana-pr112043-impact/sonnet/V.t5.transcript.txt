@@ -1,0 +1,38 @@
+Now I have a complete picture. Let me compile the final answer.
+
+The two unused arguments identified:
+1. `ctx context.Context` in `SearchBackend.GetIndex` — explicitly blanked (`_ context.Context`) in the only concrete implementation (`bleveBackend`)
+2. `reason string` in `ResourceIndex.UpdateIndex` — never referenced in `bleveIndex.UpdateIndex`'s body
+
+All sites that must change:
+
+```json
+{
+  "sites": [
+    "pkg/storage/unified/resource/search.go:GetIndex",
+    "pkg/storage/unified/resource/search.go:UpdateIndex",
+    "pkg/storage/unified/search/bleve.go:bleveBackend.GetIndex",
+    "pkg/storage/unified/search/bleve.go:bleveIndex.UpdateIndex",
+    "pkg/storage/unified/resource/search.go:findIndexesToRebuild",
+    "pkg/storage/unified/resource/search.go:rebuildIndex",
+    "pkg/storage/unified/resource/search.go:getOrCreateIndex",
+    "pkg/storage/unified/resource/search_test.go:mockSearchBackend.GetIndex",
+    "pkg/storage/unified/resource/search_test.go:slowSearchBackendWithCache.GetIndex",
+    "pkg/storage/unified/resource/search_test.go:MockResourceIndex.UpdateIndex",
+    "pkg/storage/unified/resource/search_test.go:TestSearchGetOrCreateIndexWithCancellation",
+    "pkg/storage/unified/resource/search_test.go:checkRebuildIndex",
+    "pkg/storage/unified/resource/search_test.go:TestSearchGetOrCreateIndexWithIndexUpdate",
+    "pkg/storage/unified/resource/search_test.go:checkMockIndexUpdateCalls",
+    "pkg/storage/unified/search/bleve_test.go:TestBuildIndexExpiration",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateSearchAndRebuild",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdate",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndBuildIndex",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearch",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearchWithIndexMinUpdateInterval",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdateWithErrors",
+    "pkg/storage/unified/testing/search_backend.go:runTestSearchBackendBuildIndex"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

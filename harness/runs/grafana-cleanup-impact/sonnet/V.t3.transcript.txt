@@ -1,0 +1,31 @@
+I now have a complete picture. Let me compile the findings:
+
+**Interface definition** (`storage.go:LifecycleManager`) — the interface itself must add the cutoff parameter.
+
+**Implementations** (3 types implement `LifecycleManager`):
+- `postgres_lifecycle.go:Cleanup` (`*PostgreSQLStore`)
+- `grpc_store.go:Cleanup` (`*storeGRPC`)
+- `sql_adapter.go:Cleanup` (`*sqlAdapter`)
+
+**Call site** — `lifecycle.go:runCleanup` calls `lifecycleMgr.Cleanup(ctx)` and must pass the cutoff time.
+
+**Test implementation** — `grpc_store_test.go:Cleanup` on `mockGRPCServer` calls `s.lifecycle.Cleanup(ctx)`.
+
+**`startCleanup`** — already receives `retentionTTL time.Duration`, which is the source for computing the cutoff; it may need to pass the cutoff down to `runCleanup` depending on refactoring approach.
+
+```json
+{
+  "sites": [
+    "pkg/registry/apps/annotation/storage.go:LifecycleManager",
+    "pkg/registry/apps/annotation/postgres_lifecycle.go:Cleanup",
+    "pkg/registry/apps/annotation/grpc_store.go:Cleanup",
+    "pkg/registry/apps/annotation/sql_adapter.go:Cleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:runCleanup",
+    "pkg/registry/apps/annotation/grpc_store_test.go:Cleanup"
+  ],
+  "complete": false,
+  "unresolved": [
+    "pkg/registry/apps/annotation/lifecycle.go:startCleanup — currently the only holder of retentionTTL, which is needed to compute the cutoff passed to Cleanup. Whether startCleanup must change depends on how runCleanup is adapted: if runCleanup gains a TTL/cutoff parameter (requiring startCleanup to pass it), startCleanup changes; if runCleanup instead reads a TTL field on AppInstaller, startCleanup only changes indirectly via struct initialization. The approach is not yet determined."
+  ]
+}
+```

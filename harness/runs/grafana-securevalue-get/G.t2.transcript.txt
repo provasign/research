@@ -1,0 +1,18 @@
+Based on my analysis:
+
+- `secureValueClient.Get` (pkg/registry/apis/secret/secure_value_client.go:107) is the concrete method whose signature changes.
+- It is invoked internally by `Update` (same file, line 137) via `c.Get(...)`.
+- Externally it is only reachable through the `dynamic.ResourceInterface` returned by `Client()`/`Namespace()`. The only callers of `.Client(ctx, ns)` followed by `.Get(...)` are the two test functions in `secure_value_client_test.go`. A repo-wide search confirms no production code consumes `contracts.SecureValueClient` to obtain the resource interface — only `ProvideSecureValueClient` (wire) and the tests reference it.
+
+Call sites that runtime-dispatch to `secureValueClient.Get`:
+- `Update` (internal, direct on `*secureValueClient`)
+- `TestIntegration_SecureValueClient_CRUD` (lines 70, 95, 114)
+- `Test_SecureValueClient_CRUD_NoPermissions` (line 170, inside its subtest closure)
+
+The `apps/.../securevalue_client_gen.go` `SecureValueClient.Get` is a different type (takes `resource.Identifier`) and is excluded.
+
+{
+  "sites": ["pkg/registry/apis/secret/secure_value_client.go:Update", "pkg/registry/apis/secret/secure_value_client_test.go:TestIntegration_SecureValueClient_CRUD", "pkg/registry/apis/secret/secure_value_client_test.go:Test_SecureValueClient_CRUD_NoPermissions"],
+  "complete": true,
+  "unresolved": []
+}

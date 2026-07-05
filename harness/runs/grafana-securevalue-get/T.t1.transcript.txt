@@ -1,0 +1,13 @@
+Based on my investigation:
+
+The `secureValueClient.Get` method (pkg/registry/apis/secret/secure_value_client.go:107) is reached in exactly these ways:
+- **Internally**, by its own `Update` method (line 137: `c.Get(...)`).
+- **Externally**, only via the `dynamic.ResourceInterface` returned by `Client()` / `Namespace()`. The `contracts.SecureValueClient` interface only exposes `Client()`, and `Client()` is called solely in the two test functions, where `nsClient.Get(...)` is invoked (lines 70, 95, 114, 170).
+
+No production consumer of `contracts.SecureValueClient` exists (only the wire provider registration), and there are no mocks/fakes of it.
+
+{
+  "sites": ["pkg/registry/apis/secret/secure_value_client.go:Update", "pkg/registry/apis/secret/secure_value_client_test.go:TestIntegration_SecureValueClient_CRUD", "pkg/registry/apis/secret/secure_value_client_test.go:Test_SecureValueClient_CRUD_NoPermissions"],
+  "complete": true,
+  "unresolved": []
+}

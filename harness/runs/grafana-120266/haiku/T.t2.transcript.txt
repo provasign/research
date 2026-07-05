@@ -1,0 +1,23 @@
+Based on my analysis of the codebase, I've identified all the array access sites that cause panics when handling empty trace results.
+
+**Primary Issue:** Line 266 in `client.go:Trace()` attempts to access `response.Data[0]` without checking if the slice is empty.
+
+**Secondary Issues:** Similar unsafe array accesses in the transformation utility functions:
+- Lines 51-52 in `client_utils.go:TransformSearchResponse()` - sort comparison accesses `response[i].Spans[0]` without bounds check
+- Line 76 in `client_utils.go:TransformSearchResponse()` - accesses `trace.Spans[0]` without bounds check  
+- Lines 53-54 in `grpc_utils.go:TransformGrpcSearchResponse()` - sort comparison accesses `resourceSpans[i].ScopeSpans[0].Spans[0]` without bounds check
+- Line 87 in `grpc_utils.go:TransformGrpcSearchResponse()` - accesses `scopeSpan.Spans[0]` without bounds check
+
+All these problematic accesses occur in three distinct functions:
+
+```json
+{
+  "sites": [
+    "pkg/tsdb/jaeger/client.go:Trace",
+    "pkg/tsdb/jaeger/utils/client_utils.go:TransformSearchResponse",
+    "pkg/tsdb/jaeger/utils/grpc_utils.go:TransformGrpcSearchResponse"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

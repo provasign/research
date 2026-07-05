@@ -1,0 +1,40 @@
+I have all the information needed. Let me compile the final answer.
+
+The evidence for which arguments are unused:
+1. `SearchBackend.GetIndex` — `ctx` is explicitly `_`-marked in `bleveBackend.GetIndex` (the only concrete implementation)
+2. `ResourceIndex.UpdateIndex` — `reason string` is never referenced in `bleveIndex.UpdateIndex`'s body
+
+```json
+{
+  "sites": [
+    "pkg/storage/unified/resource/search.go:GetIndex",
+    "pkg/storage/unified/resource/search.go:UpdateIndex",
+    "pkg/storage/unified/resource/search.go:findIndexesToRebuild",
+    "pkg/storage/unified/resource/search.go:rebuildIndex",
+    "pkg/storage/unified/resource/search.go:getOrCreateIndex",
+    "pkg/storage/unified/search/bleve.go:GetIndex",
+    "pkg/storage/unified/search/bleve.go:UpdateIndex",
+    "pkg/storage/unified/resource/search_test.go:mockSearchBackend.GetIndex",
+    "pkg/storage/unified/resource/search_test.go:slowSearchBackendWithCache.GetIndex",
+    "pkg/storage/unified/resource/search_test.go:MockResourceIndex.UpdateIndex",
+    "pkg/storage/unified/resource/search_test.go:TestSearchGetOrCreateIndexWithCancellation",
+    "pkg/storage/unified/resource/search_test.go:TestSearchGetOrCreateIndexWithIndexUpdate",
+    "pkg/storage/unified/resource/search_test.go:checkMockIndexUpdateCalls",
+    "pkg/storage/unified/resource/search_test.go:checkRebuildIndex",
+    "pkg/storage/unified/testing/search_backend.go:runTestSearchBackendBuildIndex",
+    "pkg/storage/unified/search/bleve_test.go:TestBuildIndexExpiration",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdate",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndBuildIndex",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateSearchAndRebuild",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearch",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearchWithIndexMinUpdateInterval",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdateWithErrors"
+  ],
+  "complete": false,
+  "unresolved": [
+    "The specific arguments being removed are inferred from code patterns (ctx marked _ in bleveBackend.GetIndex; reason unused in bleveIndex.UpdateIndex body), not from an actual PR diff — if additional arguments are also targeted (e.g. BuildIndex params), the list would grow.",
+    "pkg/registry/apis/dashboard/search_test.go:MockClient has an UpdateIndex(ctx, reason) error method (different return type from ResourceIndex.UpdateIndex) — it embeds resource.ResourceIndex as a nil field and the UpdateIndex override has the wrong return type, so its relationship to the interface change is ambiguous.",
+    "MockResourceIndex.updateIndexCalls field and any other struct-level fields that track 'reason' will need updating, but struct field changes are not listed as function/method sites here."
+  ]
+}
+```

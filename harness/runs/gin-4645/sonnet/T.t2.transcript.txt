@@ -1,0 +1,22 @@
+I have a clear picture of the issue. Let me verify the complete set of sites.
+
+The panic sites are in `response_writer.go`:
+- Line 120: `w.ResponseWriter.(http.Hijacker).Hijack()` — bare type assertion, panics if underlying writer doesn't implement `http.Hijacker`
+- Line 125: `w.ResponseWriter.(http.CloseNotifier).CloseNotify()` — bare type assertion, panics if underlying writer doesn't implement `http.CloseNotifier`
+
+Contrast with `Flush()` (lines 129–133), which already uses the comma-ok pattern `if f, ok := w.ResponseWriter.(http.Flusher); ok { f.Flush() }`.
+
+`context.go:Stream` calls `w.CloseNotify()` through the interface — it doesn't do a type assertion itself, so it won't panic independently. However, if `CloseNotify` is fixed to return a nil channel when the interface isn't supported, `Stream`'s `select` will never receive on that nil channel, silently losing disconnect detection. That's a behavioral concern, not a panic.
+
+The `ResponseWriter` interface definition (embedding `http.Hijacker` and `http.CloseNotifier`) does not need to change — the fix is only in the concrete implementations.
+
+```json
+{
+  "sites": [
+    "response_writer.go:Hijack",
+    "response_writer.go:CloseNotify"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

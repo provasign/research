@@ -1,0 +1,34 @@
+I now have enough verified evidence to produce the final impact set.
+
+```json
+{
+  "sites": [
+    "src/main/java/com/fasterxml/jackson/databind/JsonNode.java:JsonNode#get(int)",
+    "src/main/java/com/fasterxml/jackson/databind/node/ContainerNode.java:ContainerNode#get(int)",
+    "src/main/java/com/fasterxml/jackson/databind/node/ArrayNode.java:ArrayNode#get(int)",
+    "src/main/java/com/fasterxml/jackson/databind/node/ObjectNode.java:ObjectNode#get(int)",
+    "src/main/java/com/fasterxml/jackson/databind/node/ValueNode.java:ValueNode#get(int)",
+    "src/main/java/com/fasterxml/jackson/databind/JsonNode.java:JsonNode#has(int)",
+    "src/main/java/com/fasterxml/jackson/databind/JsonNode.java:JsonNode#hasNonNull(int)",
+    "src/main/java/com/fasterxml/jackson/databind/node/ArrayNode.java:ArrayNode#_at(JsonPointer)",
+    "src/test/java/com/fasterxml/jackson/databind/ObjectReaderTest.java:CustomObjectNode#get(int)",
+    "src/test/java/com/fasterxml/jackson/databind/ObjectReaderTest.java:DelegatingArrayNode#get(int)",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testDirectCreation",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testDirectCreation2",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testArraySet",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testArrayViaMapper",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testAddAllWithNullInCollection",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testSimpleArray",
+    "src/test/java/com/fasterxml/jackson/databind/deser/CustomDeserializersTest.java:testCustomDeserializerWithReadTree",
+    "src/test/java/com/fasterxml/jackson/databind/deser/merge/NodeMergeTest.java:testObjectDeepUpdate",
+    "src/test/java/com/fasterxml/jackson/databind/deser/merge/NodeMergeTest.java:testArrayNodeMerge",
+    "src/test/java/com/fasterxml/jackson/databind/node/MissingNodeTest.java:testMissingViaMapper"
+  ],
+  "complete": false,
+  "unresolved": [
+    "prism change-impact's resolved caller list for JsonNode.get(int) is confirmed non-exhaustive on test sources: a manual grep of node/ArrayNodeTest.java alone found 6 test methods calling get(int) (testDirectCreation, testDirectCreation2, testArraySet, testAddAllWithNullInCollection, testSimpleArray, plus testArrayViaMapper) while prism's tool only surfaced testArrayViaMapper.",
+    "A raw grep for `.get(<int-like-arg>)` across src/test/java found ~340 occurrences in 90+ files, but the vast majority are unrelated overloads (java.util.List#get, java.util.Map#get, java.util.concurrent.atomic.AtomicReference#get, java.util.BitSet#get, etc.) resolved to the same method name; disambiguating every occurrence by hand was not completed, so additional genuine JsonNode/ArrayNode/ObjectNode#get(int) call sites almost certainly exist beyond what is listed here. Likely-affected files not individually verified: node/ObjectNodeTest.java, node/JsonNodeConversionsTest.java, node/JsonNodeFindMethodsTest.java, node/TreeTraversingParserTest.java, node/RequiredAccessorTest.java, node/TreeReadViaMapperTest.java, jsontype/deftyping/TestDefaultForLists.java, jsontype/TestGenericListSerialization.java, and several deser/* tests reading array/list JSON into JsonNode trees.",
+    "The following prism-reported candidates were checked and confirmed to be false positives (different overload/method entirely), so they are excluded from the site list: ExternalTypeHandler.Builder#build (calls List#get(int), not JsonNode), JsonNodeDeserializer.BaseNodeDeserializer#updateObject (calls JsonNode#get(String)), ObjectNode#_at (calls JsonNode#get(String) via getMatchingProperty()), JDKAtomicTypesDeserTest#testNullWithinNested (calls AtomicReference#get(), no args), and JSOGDeserialize622Test.JSOGRefDeserializer#deserialize (calls JsonNode#get(String) via REF_KEY constant)."
+  ]
+}
+```

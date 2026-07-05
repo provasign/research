@@ -1,0 +1,34 @@
+Based on my comprehensive investigation of the codebase, I have identified all functions that must be changed to fix the XORM Update table specification issue.
+
+## Summary of Findings
+
+I found exactly **2 locations** where alert rule Update calls are missing explicit table specifications in the ngalert store package:
+
+1. **Line 608 in alert_rule.go** (UpdateAlertRules method):
+   ```go
+   if updated, err := sess.ID(r.Existing.ID).AllCols().Omit("rule_guid").Update(converted); err != nil || updated == 0
+   ```
+   This Update call doesn't specify `.Table()` before calling Update.
+
+2. **Line 710 in alert_rule.go** (preventIntermediateUniqueConstraintViolations method):
+   ```go
+   if updated, err := sess.ID(r.ID).Cols("title").Update(&alertRule{Title: uniqueTempTitle, Version: r.Version}); err != nil || updated == 0
+   ```
+   This Update call also doesn't specify `.Table()` before calling Update.
+
+I verified that:
+- The alertRule struct has a `TableName()` method returning "alert_rule" (models.go line 38-40)
+- No other implementations of UpdateAlertRules exist besides DBstore
+- The preventIntermediateUniqueConstraintViolations is a private helper only called from UpdateAlertRules
+- All other Update calls in the store either specify the table explicitly (like admin_configuration.go line 95) or are for unrelated entities (like images)
+
+```json
+{
+  "sites": [
+    "pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules",
+    "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

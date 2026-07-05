@@ -1,0 +1,21 @@
+Based on my investigation of the gin codebase, I've identified all the functions that must change to fix the Hijack() and CloseNotify() panic issue.
+
+The problem is clear: looking at response_writer.go lines 120 and 125, these methods perform unsafe type assertions without checking if the underlying http.ResponseWriter actually implements the required interfaces. By contrast, the Flush() method (lines 129-134) gracefully checks with `if f, ok := w.ResponseWriter.(http.Flusher); ok` before calling.
+
+The Stream() method in context.go:1357 uses CloseNotify(), but if we modify CloseNotify() to return a never-closing channel when the interface isn't implemented, the select statement will work correctly without changes - that case simply won't trigger.
+
+I verified using ripgrep and the prism call graph tool that:
+- No other code directly calls these methods
+- No dynamic dispatch or reflection is used
+- These are the only two locations needing fixes
+
+```json
+{
+  "sites": [
+    "response_writer.go:Hijack",
+    "response_writer.go:CloseNotify"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

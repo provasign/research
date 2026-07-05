@@ -1,0 +1,33 @@
+Perfect. Now I have all the information I need. Let me compile the final list:
+
+## Summary of Findings
+
+The issue is that Grafana's Jaeger datasource panics with an index out of range error when queries return empty result sets. I've identified three functions that access array elements without checking bounds:
+
+**Critical Fix Points:**
+
+1. **pkg/tsdb/jaeger/client.go:Trace** (line 266)
+   - Directly accesses `response.Data[0]` without checking if the slice is empty
+   - When Jaeger returns no traces, this causes: `runtime error: index out of range [0] with length 0`
+
+2. **pkg/tsdb/jaeger/utils/client_utils.go:TransformSearchResponse** (lines 51-52)
+   - Sort comparator accesses `response[i].Spans[0]` without bounds checking
+   - Panics if any trace in the response has an empty Spans array
+
+3. **pkg/tsdb/jaeger/utils/grpc_utils.go:TransformGrpcSearchResponse** (lines 53-54)
+   - Sort comparator accesses `resourceSpans[i].ScopeSpans[0].Spans[0]` without bounds checking
+   - Panics if any resource has empty ScopeSpans or any scope has empty Spans array
+
+These three functions represent all the places where the fix must be applied. The other similar accesses (e.g., at lines 76 in client_utils.go and line 87 in grpc_utils.go) are already protected by bounds checks in the loop bodies.
+
+```json
+{
+  "sites": [
+    "pkg/tsdb/jaeger/client.go:Trace",
+    "pkg/tsdb/jaeger/utils/client_utils.go:TransformSearchResponse",
+    "pkg/tsdb/jaeger/utils/grpc_utils.go:TransformGrpcSearchResponse"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

@@ -1,0 +1,27 @@
+Based on my thorough investigation of the gin repository, I've identified all functions that need to be changed to fix the panic issue with Hijack() and CloseNotify().
+
+**Summary of findings:**
+
+1. **Current problematic code in response_writer.go:**
+   - Line 111: `Hijack()` uses a bare type assertion `w.ResponseWriter.(http.Hijacker).Hijack()` that panics when the interface isn't implemented
+   - Line 124: `CloseNotify()` uses a bare type assertion `w.ResponseWriter.(http.CloseNotifier).CloseNotify()` that panics when the interface isn't implemented
+
+2. **Comparison with existing safe pattern:**
+   - Lines 131-134: `Flush()` already handles this gracefully with a type assertion + comma-ok check: `if f, ok := w.ResponseWriter.(http.Flusher); ok { f.Flush() }`
+   - Lines 137-140: `Pusher()` also uses the safe pattern for `http.Pusher`
+
+3. **Usage context:**
+   - `context.go:Stream()` (line 1357) calls `CloseNotify()` but doesn't need code changes—it just needs CloseNotify() to return a valid channel
+   - Only test code calls `Hijack()` directly
+
+4. **Structure verification:**
+   - Only one `responseWriter` struct implementation exists in production code
+   - No other wrapper types or response writer implementations found
+
+```json
+{
+  "sites": ["response_writer.go:Hijack", "response_writer.go:CloseNotify"],
+  "complete": true,
+  "unresolved": []
+}
+```

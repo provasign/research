@@ -1,0 +1,16 @@
+The git history confirms commit `7bf0e7644b` is the exact fix, which is ahead of the current HEAD. The bug occurs because when called within an outer transaction (from callers like `UpdateRuleGroup`), the shared XORM session's table state can be set to a different model (the `user` table from a prior query in the same transaction context). Without `.Table(alertRule{})`, XORM inherits that stale table state.
+
+The fix touches exactly two functions in `pkg/services/ngalert/store/alert_rule.go`:
+1. **`UpdateAlertRules`** (line 608): add `.Table(alertRule{})` and also fix wrong omit column name `"rule_guid"` → `"guid"`
+2. **`preventIntermediateUniqueConstraintViolations`** (line 710): add `.Table(alertRule{})` to the temporary title update call
+
+```json
+{
+  "sites": [
+    "pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules",
+    "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

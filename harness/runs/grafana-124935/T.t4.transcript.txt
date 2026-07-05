@@ -1,0 +1,7 @@
+Both alert-rule update calls live in `alert_rule.go` and neither specifies `.Table(...)` (unlike `admin_configuration.go:95` which correctly does). The `Update` at line 608 passes a value `alertRule` (`converted`) inside `UpdateAlertRules`, and line 710 passes a `*alertRule` inside `preventIntermediateUniqueConstraintViolations`. When the transactional XORM session has previously executed a query against another table (e.g. `user`), the statement's table reference leaks into these Update calls because the table isn't pinned explicitly — producing `SELECT alert_rule columns FROM user`. The other `.Update` sites in ngalert (`image.go` updates the image table; `schedule.go` is an unrelated cron routine) are not alert-rule update paths.
+
+{
+  "sites": ["pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules", "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"],
+  "complete": true,
+  "unresolved": []
+}

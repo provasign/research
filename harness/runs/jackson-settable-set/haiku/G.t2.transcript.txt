@@ -1,0 +1,60 @@
+Based on my comprehensive analysis of the Jackson Databind repository, I've identified all sites that must change if the `SettableBeanProperty.set` method signature is modified.
+
+The `set` method is declared as `public abstract void set(Object instance, Object value) throws IOException;` at line 508, and must be changed at:
+
+1. **The declaration itself** - SettableBeanProperty.java:508
+2. **All implementations** (9 total):
+   - SettableBeanProperty.java:793 (Delegating inner class)
+   - FieldProperty.java:187
+   - MethodProperty.java:179
+   - ManagedReferenceProperty.java:72
+   - MergingSettableBeanProperty.java:116
+   - SetterlessProperty.java:146
+   - ObjectIdReferenceProperty.java:106
+   - ObjectIdValueProperty.java:111
+   - CreatorProperty.java:283
+
+3. **All call sites** (18 total):
+   - PropertyValue.java:72
+   - ExternalTypeHandler.java:223, 334, 393
+   - ObjectIdReferenceProperty.java:107, 134
+   - ManagedReferenceProperty.java:86, 90, 94, 101
+   - MergingSettableBeanProperty.java:85, 120
+   - CreatorProperty.java:271, 286
+   - SettableBeanProperty.java:794 (Delegating.set calling delegate)
+   - InnerClassProperty.java:92
+
+```json
+{
+  "sites": [
+    "src/main/java/com/fasterxml/jackson/databind/deser/SettableBeanProperty.java:508:SettableBeanProperty.set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/SettableBeanProperty.java:793:Delegating.set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/FieldProperty.java:187:FieldProperty.set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/MethodProperty.java:179:MethodProperty.set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ManagedReferenceProperty.java:72:ManagedReferenceProperty.set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/MergingSettableBeanProperty.java:116:MergingSettableBeanProperty.set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/SetterlessProperty.java:146:SetterlessProperty.set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ObjectIdReferenceProperty.java:106:ObjectIdReferenceProperty.set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ObjectIdValueProperty.java:111:ObjectIdValueProperty.set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/CreatorProperty.java:283:CreatorProperty.set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/PropertyValue.java:72:Regular.assign",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ExternalTypeHandler.java:223:ExternalTypeHandler.complete",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ExternalTypeHandler.java:334:ExternalTypeHandler.complete",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ExternalTypeHandler.java:393:ExternalTypeHandler._deserializeAndSet",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ObjectIdReferenceProperty.java:107:ObjectIdReferenceProperty.set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ObjectIdReferenceProperty.java:134:PropertyReferring.handleResolvedForwardReference",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ManagedReferenceProperty.java:86:ManagedReferenceProperty.setAndReturn",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ManagedReferenceProperty.java:90:ManagedReferenceProperty.setAndReturn",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ManagedReferenceProperty.java:94:ManagedReferenceProperty.setAndReturn",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ManagedReferenceProperty.java:101:ManagedReferenceProperty.setAndReturn",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/MergingSettableBeanProperty.java:85:MergingSettableBeanProperty.deserializeAndSet",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/MergingSettableBeanProperty.java:120:MergingSettableBeanProperty.set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/CreatorProperty.java:271:CreatorProperty.deserializeAndSet",
+    "src/main/java/com/fasterxml/jackson/databind/deser/CreatorProperty.java:286:CreatorProperty.set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/SettableBeanProperty.java:794:Delegating.set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/InnerClassProperty.java:92:InnerClassProperty.deserializeAndSet"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

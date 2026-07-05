@@ -1,0 +1,21 @@
+The analysis is complete. Here's what I found:
+
+**Root cause:** `pkg/tsdb/jaeger/client.go`, line 266 inside `JaegerClient.Trace`:
+```go
+frames := utils.TransformTraceResponse(response.Data[0], refID)
+```
+When Jaeger returns an empty `data` array (no trace found for the given traceID), `response.Data[0]` panics with `index out of range [0] with length 0`.
+
+**Why only one function needs to change:**
+- `TransformTraceResponse` in `utils/client_utils.go` takes a single `types.TraceResponse` (not a slice) and iterates over `trace.Spans` — it's safe on empty spans.
+- `querydata.go:queryData` already handles errors from `Trace` correctly via `backend.ErrorResponseWithErrorSource(err)` — no change needed there.
+- `GrpcTrace` in `grpc_client.go` calls `TransformGrpcTraceResponse(response.Result.ResourceSpans, refID)` which also just iterates — safe on empty.
+- The fix is entirely contained: add a `len(response.Data) == 0` guard before the index access, returning a downstream error for not-found.
+
+```json
+{
+  "sites": ["pkg/tsdb/jaeger/client.go:Trace"],
+  "complete": true,
+  "unresolved": []
+}
+```

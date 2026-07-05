@@ -1,0 +1,11 @@
+The two methods using unchecked type assertions are `Hijack` and `CloseNotify` in `response_writer.go`. `Flush` and `Pusher` already use the comma-ok pattern. Let me verify nothing else needs to change — particularly the consumer of `CloseNotify` (`Context.Stream`).
+
+`Context.Stream` reads `clientGone` inside a `select` with a `default` case. If `CloseNotify` is changed to return `nil` when the underlying writer isn't a `CloseNotifier`, a receive on a nil channel never fires but is harmless in a select-with-default — so `Stream` does not need to change for the fix to be correct.
+
+Only `responseWriter` implements these methods (the other matches are test mocks and the interface declaration). No dynamic-dispatch site beyond the single concrete implementation requires changing.
+
+{
+  "sites": ["response_writer.go:Hijack", "response_writer.go:CloseNotify"],
+  "complete": true,
+  "unresolved": []
+}

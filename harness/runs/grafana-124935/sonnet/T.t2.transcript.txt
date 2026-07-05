@@ -1,0 +1,17 @@
+Based on my investigation, I can now produce the final answer. The two XORM `.Update()` calls in the ngalert store that target the `alert_rule` table without explicitly specifying the table are:
+
+1. **Line 608 in `UpdateAlertRules`**: `sess.ID(r.Existing.ID).AllCols().Omit("rule_guid").Update(converted)` — no `.Table(...)` call before `.Update()`
+2. **Line 710 in `preventIntermediateUniqueConstraintViolations`**: `sess.ID(r.ID).Cols("title").Update(&alertRule{...})` — no `.Table(...)` call before `.Update()`
+
+All other `.Update()` calls in the ngalert store either already specify `.Table(...)` explicitly (like `admin_configuration.go:95`) or target non-alert-rule structs (like `image.go:135`). `preventIntermediateUniqueConstraintViolations` is only called from `UpdateAlertRules`, making those two the complete set.
+
+```json
+{
+  "sites": [
+    "pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules",
+    "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

@@ -1,0 +1,170 @@
+{
+  "status": "ok",
+  "model": "sonnet",
+  "task_id": "grafana-cleanup-impact",
+  "arm": "V",
+  "trial": 3,
+  "recall": 0.8333,
+  "precision": 1.0,
+  "f1": 0.9091,
+  "found": [
+    "pkg/registry/apps/annotation/grpc_store.go:Cleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:runCleanup",
+    "pkg/registry/apps/annotation/postgres_lifecycle.go:Cleanup",
+    "pkg/registry/apps/annotation/sql_adapter.go:Cleanup",
+    "pkg/registry/apps/annotation/storage.go:LifecycleManager"
+  ],
+  "missed": [
+    "pkg/registry/apps/annotation/lifecycle.go:startCleanup"
+  ],
+  "extra": [],
+  "weak_matches": [],
+  "claimed_complete": false,
+  "overconfident": false,
+  "surfaced_gap": true,
+  "cost": {
+    "wall_s": 109.12,
+    "duration_ms": 108513,
+    "num_turns": 18,
+    "usage": {
+      "input_tokens": 15,
+      "cache_creation_input_tokens": 23231,
+      "cache_read_input_tokens": 420138,
+      "output_tokens": 5249,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 23231,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 1,
+          "output_tokens": 1733,
+          "cache_read_input_tokens": 44120,
+          "cache_creation_input_tokens": 706,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 706
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "total_cost_usd": 0.3453044
+  },
+  "tools_used": [
+    "Glob",
+    "Grep",
+    "Read",
+    "prism"
+  ],
+  "graph_used": true,
+  "violation": null,
+  "tool_trace": [
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "LifecycleManager"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "annotation.*LifecycleManager|LifecycleManager.*annotation"
+    },
+    {
+      "tool": "Read",
+      "bin": "",
+      "detail": "/Users/tapabratapal/gvg-corpus/wt-cleanup/pkg/registry/apps/annotation/lifecycle.go"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "LifecycleManager"
+    },
+    {
+      "tool": "Read",
+      "bin": "",
+      "detail": "/Users/tapabratapal/gvg-corpus/wt-cleanup/pkg/registry/apps/annotation/storage.go"
+    },
+    {
+      "tool": "Read",
+      "bin": "",
+      "detail": "/Users/tapabratapal/gvg-corpus/wt-cleanup/pkg/registry/apps/annotation/postgres_lifecycle.go"
+    },
+    {
+      "tool": "Read",
+      "bin": "",
+      "detail": "/Users/tapabratapal/gvg-corpus/wt-cleanup/pkg/registry/apps/annotation/grpc_store.go"
+    },
+    {
+      "tool": "Read",
+      "bin": "",
+      "detail": "/Users/tapabratapal/gvg-corpus/wt-cleanup/pkg/registry/apps/annotation/grpc_store_test.go"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "func.*Cleanup"
+    },
+    {
+      "tool": "Read",
+      "bin": "",
+      "detail": "/Users/tapabratapal/gvg-corpus/wt-cleanup/pkg/registry/apps/annotation/register.go"
+    },
+    {
+      "tool": "Read",
+      "bin": "",
+      "detail": "/Users/tapabratapal/gvg-corpus/wt-cleanup/pkg/registry/apps/annotation/sql_adapter.go"
+    },
+    {
+      "tool": "Bash",
+      "bin": "prism",
+      "detail": "/Users/tapabratapal/bin/prism references Cleanup --format text 2>/dev/null | head -80"
+    },
+    {
+      "tool": "Bash",
+      "bin": "prism",
+      "detail": "/Users/tapabratapal/bin/prism query \"annotation LifecycleManager Cleanup method callers\" --terms \"LifecycleManager,annotation,Cleanup\" --include graph,tests --format text 2>/dev/null | head -100"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "func.*Cleanup"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "LifecycleManager|\\.Cleanup\\(ctx"
+    },
+    {
+      "tool": "Glob",
+      "bin": "",
+      "detail": "pkg/registry/apps/annotation/*_test.go"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "Cleanup"
+    }
+  ],
+  "answer": {
+    "sites": [
+      "pkg/registry/apps/annotation/storage.go:LifecycleManager",
+      "pkg/registry/apps/annotation/postgres_lifecycle.go:Cleanup",
+      "pkg/registry/apps/annotation/grpc_store.go:Cleanup",
+      "pkg/registry/apps/annotation/sql_adapter.go:Cleanup",
+      "pkg/registry/apps/annotation/lifecycle.go:runCleanup",
+      "pkg/registry/apps/annotation/grpc_store_test.go:Cleanup"
+    ],
+    "complete": false,
+    "unresolved": [
+      "pkg/registry/apps/annotation/lifecycle.go:startCleanup \u2014 currently the only holder of retentionTTL, which is needed to compute the cutoff passed to Cleanup. Whether startCleanup must change depends on how runCleanup is adapted: if runCleanup gains a TTL/cutoff parameter (requiring startCleanup to pass it), startCleanup changes; if runCleanup instead reads a TTL field on AppInstaller, startCleanup only changes indirectly via struct initialization. The approach is not yet determined."
+    ]
+  }
+}

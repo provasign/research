@@ -1,0 +1,9 @@
+I've traced the bug mechanism. In Grafana's xorm fork, `Session.Update` builds its SQL from `statement.TableName()` (session_update.go:215), which returns `AltTableName` if set (statement.go:523-528). `setRefBean` (called during `Update`) only resets `statement.tableName`, **not** `AltTableName` — so a leaked `AltTableName` (e.g. `"user"` from a prior `.Table("user")` query on a reused session) wins, producing `UPDATE/SELECT ... <alert_rule columns> ... user`. The `alertRule.TableName()` method does not protect against this; only an explicit `.Table(...)` on the call sets `AltTableName` correctly.
+
+The runtime alert-rule update calls that lack an explicit table are both in `alert_rule.go` (lines 608 and 710). Other `.Update` calls in the store (`image.go`, `admin_configuration.go`) either target other tables or already pass `.Table(...)`. The migration site (`rule_group_index_migration.go:75`) shares the pattern but is a separate one-time code path, not the reported runtime failure.
+
+{
+  "sites": ["pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules", "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"],
+  "complete": false,
+  "unresolved": ["pkg/services/sqlstore/migrations/ualert/rule_group_index_migration.go:UpdateRuleGroupIndexMigration (rule_group_index_migration.go:75) uses the same table-less .Update(*alertRule) pattern; whether it must change depends on whether the AltTableName leak can occur on the migrator session — likely out of scope for the runtime issue but not confirmed", "Alternative fix location: the root cause is in the xorm fork (resetStatement/Update not clearing statement.AltTableName in pkg/util/xorm/statement.go / session_update.go). If the maintainers chose to fix it centrally there instead of per call site, the change set would differ from the two listed call sites"]
+}

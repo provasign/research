@@ -1,0 +1,21 @@
+Based on my thorough analysis, here is the complete picture:
+
+- `secureValueClient.Get` (line 107 of `secure_value_client.go`) implements `dynamic.ResourceInterface.Get` from `k8s.io/client-go/dynamic`.
+- The only direct call with a `*secureValueClient` receiver is inside `secureValueClient.Update` at line 137: `c.Get(ctx, obj.GetName(), metav1.GetOptions{})`.
+- The test file obtains `nsClient` as `dynamic.ResourceInterface` (via `client.Client(ctx, ns)` which returns `c.Namespace(namespace)` — itself a `*secureValueClient` under the hood) and calls `nsClient.Get(...)` four times across two test functions.
+- The `apps/secret/pkg/apis/secret/v1beta1/securevalue_client_gen.go` `SecureValueClient.Get` is a completely different, unrelated type with a different signature (`resource.Identifier` parameter) — excluded per the question's constraint.
+- `pkg/server/wireexts_oss.go` only registers `ProvideSecureValueClient` via Wire DI and never calls `.Get()`.
+
+```json
+{
+  "sites": [
+    "pkg/registry/apis/secret/secure_value_client.go:Update",
+    "pkg/registry/apis/secret/secure_value_client_test.go:TestIntegration_SecureValueClient_CRUD",
+    "pkg/registry/apis/secret/secure_value_client_test.go:Test_SecureValueClient_CRUD_NoPermissions"
+  ],
+  "complete": true,
+  "unresolved": [
+    "TestIntegration_SecureValueClient_CRUD and Test_SecureValueClient_CRUD_NoPermissions call secureValueClient.Get via dynamic.ResourceInterface dispatch (nsClient is statically typed as dynamic.ResourceInterface, backed at runtime by *secureValueClient). Whether those call sites must change depends on whether dynamic.ResourceInterface.Get itself also has its signature updated; if secureValueClient adopts a bridge/adapter pattern to preserve the old interface, those test call sites may not need updating."
+  ]
+}
+```

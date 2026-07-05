@@ -1,0 +1,17 @@
+I've traced the complete picture. Let me confirm my findings:
+
+- `secureValueClient.Get` (concrete method at `secure_value_client.go:107`) is reached two ways: directly via `c.Get` inside `Update`, and via the `dynamic.ResourceInterface` returned by `Client()`/`Namespace()`.
+- The `contracts.SecureValueClient` interface only exposes `Client()`; the only places that obtain the resource interface and call `.Get` are the two test functions. No other OSS production code references the type (whole-repo grep confirms only the wire provider, which merely registers the constructor and never calls `Get`).
+
+Call sites that must change:
+1. `Update` (direct `c.Get`).
+2. `TestIntegration_SecureValueClient_CRUD` (3 calls via `nsClient.Get`).
+3. `Test_SecureValueClient_CRUD_NoPermissions` (1 call via `nsClient.Get`).
+
+The wire provider in `wireexts_oss.go` only registers `ProvideSecureValueClient` and does not call `Get`, so it doesn't change.
+
+{
+  "sites": ["pkg/registry/apis/secret/secure_value_client.go:Update", "pkg/registry/apis/secret/secure_value_client_test.go:TestIntegration_SecureValueClient_CRUD", "pkg/registry/apis/secret/secure_value_client_test.go:Test_SecureValueClient_CRUD_NoPermissions"],
+  "complete": true,
+  "unresolved": []
+}

@@ -1,0 +1,14 @@
+Based on my investigation, the alert-rule update path is in `pkg/services/ngalert/store/alert_rule.go`. The `alertRule` struct has a `TableName()` method, and the working pattern in the same file (line 225) explicitly calls `.Table(alertRule{})` before `.Update(...)` — notably required when the bean alone doesn't reliably anchor the table on a reused transactional session (XORM's optimistic-lock/version path on Postgres mis-resolves to `user`).
+
+The two XORM `Update` calls that operate on the `alert_rule` table *without* an explicit `.Table(...)` are:
+
+- **Line 608** in `UpdateAlertRules` — `sess.ID(r.Existing.ID).AllCols().Omit("rule_guid").Update(converted)` (where `converted` is `*alertRule`, which has a `version` column triggering the optimistic-lock query).
+- **Line 710** in `preventIntermediateUniqueConstraintViolations` — `sess.ID(r.ID).Cols("title").Update(&alertRule{...})` (called from `UpdateAlertRules`, same session/transaction).
+
+All other `Update` calls in the ngalert store either target a different table (`image.go`) or already specify the table explicitly (`admin_configuration.go` line 95, `alert_rule.go` line 225). No dynamic dispatch is involved — both are direct method-chain calls.
+
+{
+  "sites": ["pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules", "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"],
+  "complete": true,
+  "unresolved": []
+}

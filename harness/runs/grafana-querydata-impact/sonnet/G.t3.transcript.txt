@@ -1,0 +1,28 @@
+Now I have a comprehensive picture. Let me compile the complete analysis.
+
+The key interface is `clientapi.QueryDataClient.QueryData` — this is the internal "datasource QueryData handler" used by the new query-service path. All sites where this interface is defined, implemented, or invoked must change.
+
+```json
+{
+  "sites": [
+    "pkg/registry/apis/query/clientapi/clientapi.go:QueryDataClient",
+    "pkg/registry/apis/query/client/plugin.go:QueryData",
+    "pkg/registry/apis/query/query_test.go:QueryData",
+    "pkg/services/query/query_test.go:QueryData",
+    "pkg/services/query/query.go:handleQuerySingleDatasource",
+    "pkg/expr/nodes.go:executeDSNodesGrouped",
+    "pkg/expr/nodes.go:DSNode.Execute",
+    "pkg/expr/query_convert.go:ConvertBackendRequestToDataRequest",
+    "pkg/registry/apis/datasource/sub_query.go:Connect",
+    "pkg/aggregator/apiserver/plugin/handler.go:registerRoutes",
+    "pkg/aggregator/apiserver/plugin/query.go:QueryDataHandler"
+  ],
+  "complete": false,
+  "unresolved": [
+    "Ambiguity in which interface is 'the datasource QueryData handler': clientapi.QueryDataClient.QueryData (pkg/registry/apis/query/clientapi/clientapi.go) takes data.QueryDataRequest and is the new query-service adapter; backend.QueryDataHandler.QueryData (SDK) takes *backend.QueryDataRequest and is implemented by every plugin. If the change is to backend.QueryDataHandler, dozens of plugin-level QueryData implementations in pkg/tsdb/ (loki, cloudwatch, prometheus, tempo, jaeger, zipkin, parca, grafana-pyroscope-datasource, grafana-testdata-datasource, graphite, azuremonitor, cloud-monitoring, influxdb, opentsdb, grafanads, mssql/mysql sqleng, etc.) and the gRPC client chain (pkg/plugins/backendplugin/grpcplugin/client_v2.go:ClientV2.QueryData, pkg/plugins/backendplugin/grpcplugin/grpc_plugin.go:grpcPlugin.QueryData, pkg/plugins/backendplugin/coreplugin/core_plugin.go:corePlugin.QueryData, pkg/plugins/plugins.go:Plugin.QueryData) would all need to change — those are excluded from the list above under the assumption that clientapi.QueryDataClient is the target interface.",
+    "Whether ConvertBackendRequestToDataRequest (pkg/expr/query_convert.go) must change depends on whether the new path field can be derived from backend.QueryDataRequest or must be supplied as a separate out-of-band argument at the three call sites (nodes.go:339, nodes.go:435, query.go:328).",
+    "Whether sub_query.go:Connect and the aggregator handlers (handler.go:registerRoutes, query.go:QueryDataHandler) are in scope depends on whether the 'field added to the query request path' is a URL path segment change (affecting route registration and HTTP handler URL reading) or purely a programmatic parameter addition to the QueryData function.",
+    "pkg/registry/apis/datasource/sub_query.go:NewConnectOptions currently returns (nil, false, '') — if path variables are being enabled for the query subresource URL, this function also needs to change, but it was not listed as it is infrastructure rather than the handler itself."
+  ]
+}
+```

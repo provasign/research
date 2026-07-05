@@ -1,0 +1,19 @@
+I have traced the full picture. The `LifecycleManager` interface (`storage.go:49`) declares `Cleanup(ctx)`, and I've found all implementers and callers through the call graph.
+
+**Implementers** (satisfy `LifecycleManager`):
+- `PostgreSQLStore.Cleanup` (postgres_lifecycle.go) — currently computes cutoff internally from `s.config.RetentionTTL`
+- `storeGRPC.Cleanup` (grpc_store.go) — gRPC client, must send cutoff in request
+- `sqlAdapter.Cleanup` (sql_adapter.go) — legacy-SQL backend
+
+**Callers** of the interface method:
+- `AppInstaller.runCleanup` (lifecycle.go:49) — must compute/pass cutoff
+- `AppInstaller.startCleanup` (lifecycle.go) — calls `runCleanup`; must forward `retentionTTL` so cutoff can be computed per tick
+- `mockGRPCServer.Cleanup` (grpc_store_test.go:116) — server handler forwarding to `lifecycle.Cleanup`
+
+`MemoryStore` has no `Cleanup` (not a `LifecycleManager`); `instrumentedStore` doesn't wrap it; `register.go:NewAppInstaller` calls `startCleanup` with an unchanged signature so it stays put. The proto `CleanupRequest` would need a field (regenerated, not hand-edited) for the cutoff to cross the gRPC boundary.
+
+{
+  "sites": ["pkg/registry/apps/annotation/storage.go:LifecycleManager.Cleanup", "pkg/registry/apps/annotation/postgres_lifecycle.go:PostgreSQLStore.Cleanup", "pkg/registry/apps/annotation/grpc_store.go:storeGRPC.Cleanup", "pkg/registry/apps/annotation/sql_adapter.go:sqlAdapter.Cleanup", "pkg/registry/apps/annotation/lifecycle.go:AppInstaller.runCleanup", "pkg/registry/apps/annotation/lifecycle.go:AppInstaller.startCleanup", "pkg/registry/apps/annotation/grpc_store_test.go:mockGRPCServer.Cleanup"],
+  "complete": true,
+  "unresolved": ["The gRPC wire transport needs CleanupRequest to carry the cutoff: proto/store.proto + generated store.pb.go/store_grpc.pb.go would be regenerated (not hand-edited functions), so not listed as sites.", "The production AnnotationStoreServer that handles CleanupRequest (when StoreBackend=grpc) is not in this repo; only the test mockGRPCServer is, so any real server-side cutoff wiring lives externally."]
+}

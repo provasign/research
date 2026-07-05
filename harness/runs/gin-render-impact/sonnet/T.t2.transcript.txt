@@ -1,0 +1,40 @@
+I have all the information needed. Let me compile the complete list.
+
+The analysis shows:
+- **Interface definition**: `render/render.go` (the `Render` interface)
+- **13 concrete type implementations** in the `render/` package  
+- **1 dispatcher call site**: `context.go`'s `(c *Context).Render` method calls `r.Render(c.Writer)` at line 1188
+- **1 test implementation**: `context_test.go`'s `(*TestRender).Render`
+- **External**: `sse.Event` from `github.com/gin-contrib/sse` is used as `render.Render` in `context.go:1347` but is in an external package
+
+```json
+{
+  "sites": [
+    "render/render.go:Render",
+    "render/json.go:JSON.Render",
+    "render/json.go:IndentedJSON.Render",
+    "render/json.go:SecureJSON.Render",
+    "render/json.go:JsonpJSON.Render",
+    "render/json.go:AsciiJSON.Render",
+    "render/json.go:PureJSON.Render",
+    "render/xml.go:XML.Render",
+    "render/html.go:HTML.Render",
+    "render/text.go:String.Render",
+    "render/redirect.go:Redirect.Render",
+    "render/data.go:Data.Render",
+    "render/reader.go:Reader.Render",
+    "render/yaml.go:YAML.Render",
+    "render/toml.go:TOML.Render",
+    "render/protobuf.go:ProtoBuf.Render",
+    "render/bson.go:BSON.Render",
+    "render/pdf.go:PDF.Render",
+    "render/msgpack.go:MsgPack.Render",
+    "context.go:Render",
+    "context_test.go:TestRender.Render"
+  ],
+  "complete": false,
+  "unresolved": [
+    "sse.Event (github.com/gin-contrib/sse v1.1.0) is passed as render.Render in context.go:1347 (SSEvent method). Its Render(w http.ResponseWriter) error method must also adopt the new signature, but it lives in an external module not present in this repository's source tree."
+  ]
+}
+```

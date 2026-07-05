@@ -1,0 +1,25 @@
+Based on my analysis of the codebase, I've identified all the functions that need to be changed to fix the PostgreSQL alert rule update issue. The problem is that XORM Update calls without explicit `.Table()` specification may fail to infer the correct table on PostgreSQL when the session doesn't have a clear table context.
+
+Here are my findings:
+
+**Sites that must change:**
+
+1. **Line 608** in `pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules` - needs `.Table(alertRule{})` before `.Update(converted)`
+2. **Line 710** in `pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations` - needs `.Table(alertRule{})` before the `.Update(&alertRule{...})`
+
+Both of these are the only two Update calls in the ngalert store that operate on alert rules without explicitly specifying the table. I verified this by:
+- Searching all Update calls in ngalert/store
+- Checking that other Update calls (admin_configuration.go) already have `.Table()` specified
+- Verifying that the preventIntermediateUniqueConstraintViolations is only called from UpdateAlertRules
+- Confirming that the alertRule struct has a proper TableName() method
+
+```json
+{
+  "sites": [
+    "pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules",
+    "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

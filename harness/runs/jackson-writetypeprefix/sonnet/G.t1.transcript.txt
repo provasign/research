@@ -1,0 +1,56 @@
+Confirmed — this is a single-module repo (jackson-databind only), so jackson-core's `JsonGenerator.writeTypePrefix` is external and out of scope.
+
+```json
+{
+  "sites": [
+    "src/main/java/com/fasterxml/jackson/databind/jsontype/TypeSerializer.java:writeTypePrefix",
+    "src/main/java/com/fasterxml/jackson/databind/jsontype/impl/TypeSerializerBase.java:writeTypePrefix",
+    "src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsDeductionTypeSerializer.java:writeTypePrefix",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/JsonValueSerializer.java:TypeSerializerRerouter.writeTypePrefix",
+    "src/main/java/com/fasterxml/jackson/databind/jsontype/TypeSerializer.java:writeTypePrefixForScalar(Object,JsonGenerator)",
+    "src/main/java/com/fasterxml/jackson/databind/jsontype/TypeSerializer.java:writeTypePrefixForObject(Object,JsonGenerator)",
+    "src/main/java/com/fasterxml/jackson/databind/jsontype/TypeSerializer.java:writeTypePrefixForArray(Object,JsonGenerator)",
+    "src/main/java/com/fasterxml/jackson/databind/jsontype/TypeSerializer.java:writeTypePrefixForScalar(Object,JsonGenerator,Class)",
+    "src/main/java/com/fasterxml/jackson/databind/jsontype/TypeSerializer.java:writeTypePrefixForObject(Object,JsonGenerator,Class)",
+    "src/main/java/com/fasterxml/jackson/databind/jsontype/TypeSerializer.java:writeTypePrefixForArray(Object,JsonGenerator,Class)",
+    "src/main/java/com/fasterxml/jackson/databind/jsontype/TypeSerializer.java:writeCustomTypePrefixForScalar",
+    "src/main/java/com/fasterxml/jackson/databind/jsontype/TypeSerializer.java:writeCustomTypePrefixForObject",
+    "src/main/java/com/fasterxml/jackson/databind/jsontype/TypeSerializer.java:writeCustomTypePrefixForArray",
+    "src/main/java/com/fasterxml/jackson/databind/ext/SqlBlobSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ext/CoreXMLSerializers.java:XMLGregorianCalendarSerializer.serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ext/NioPathSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/type/TypeBase.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/impl/MapEntrySerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/impl/StringCollectionSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/impl/BeanAsArraySerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/impl/IndexedStringListSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/BeanSerializerBase.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/BeanSerializerBase.java:_serializeObjectId",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/JsonValueSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/InetSocketAddressSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/ToStringSerializerBase.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/NumberSerializers.java:DoubleSerializer.serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/AsArraySerializerBase.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/StdScalarSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/MapSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/RawSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/InetAddressSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/TimeZoneSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/ArraySerializerBase.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/TokenBufferSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/ToEmptyObjectSerializer.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/StdArraySerializers.java:CharArraySerializer.serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/node/ObjectNode.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/node/ValueNode.java:serializeWithType",
+    "src/main/java/com/fasterxml/jackson/databind/node/ArrayNode.java:serializeWithType",
+    "src/test/java/com/fasterxml/jackson/databind/node/JsonNodeConversionsTest.java:CustomSerializedPojo.serializeWithType"
+  ],
+  "complete": false,
+  "unresolved": [
+    "src/main/java/com/fasterxml/jackson/databind/jsontype/impl/TypeSerializerBase.java:_writeTypePrefixForNull is called from within writeTypePrefix and shares its parameters; whether it needs to change depends on the exact nature of the new signature (not specified in the issue), so it is not listed as a definite site",
+    "Excluded src/main/java/com/fasterxml/jackson/databind/jsontype/impl/TypeSerializerBase.java:52 and src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsDeductionTypeSerializer.java:56 — these call `g.writeTypePrefix(idMetadata)` where `g` is a jackson-core JsonGenerator, a different method on a different class in a different repo; not affected unless jackson-core's API is also changing, which is outside this repo's scope",
+    "Excluded src/main/java/com/fasterxml/jackson/databind/ser/std/ByteArraySerializer.java:65 and src/main/java/com/fasterxml/jackson/databind/ser/std/ReferenceTypeSerializer.java:412 — both occurrences are inside block comments (dead/old code), not live call sites",
+    "Downstream consumers outside this repository (third-party modules like jackson-dataformat-*, jackson-modules-*, or jackson-jr, or any external code with custom TypeSerializer subclasses / TypeSerializer#writeTypePrefix callers) cannot be enumerated from this repo alone and would also need updating; this analysis only covers jackson-databind's own source tree"
+  ]
+}
+```

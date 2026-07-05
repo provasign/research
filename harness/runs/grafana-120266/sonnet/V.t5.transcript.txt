@@ -1,0 +1,13 @@
+The analysis is complete. The panic is unambiguous:
+
+**`client.go:266`**: `utils.TransformTraceResponse(response.Data[0], refID)` — when the Jaeger API returns an empty `data` array (valid HTTP 200 with `{"data": [], "total": 0}`), `response.Data[0]` panics with index out of range.
+
+The fix requires only `JaegerClient.Trace` to guard the slice before indexing. `TransformTraceResponse` itself receives a single `types.TraceResponse` value (not a slice), so it doesn't need to change. `queryData` already handles the error path correctly.
+
+```json
+{
+  "sites": ["pkg/tsdb/jaeger/client.go:Trace"],
+  "complete": true,
+  "unresolved": []
+}
+```

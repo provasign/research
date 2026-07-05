@@ -1,0 +1,26 @@
+Based on my investigation of the codebase, I've identified all XORM Update calls related to alert rules that don't specify the table explicitly.
+
+## Summary of Findings
+
+I searched through the ngalert package for XORM Update operations and found:
+
+**Update calls without `.Table()` (in alert_rule.go):**
+1. **Line 608** - in `UpdateAlertRules`: `sess.ID(r.Existing.ID).AllCols().Omit("rule_guid").Update(converted)`
+   - Updates an `alertRule` object
+
+2. **Line 710** - in `preventIntermediateUniqueConstraintViolations`: `sess.ID(r.ID).Cols("title").Update(&alertRule{Title: uniqueTempTitle, Version: r.Version})`
+   - Updates an `alertRule` object to temporarily rename rules before the actual update
+
+**Update calls with `.Table()` (correctly specified):**
+- admin_configuration.go:95 - uses `.Table("ngalert_configuration")`
+- Other operations in the store use `.Table()` consistently
+
+**Key observation:** The pattern in the codebase shows that most database operations explicitly specify the table via `.Table()`. The two Update calls above are exceptions and don't specify the table, which can cause XORM to incorrectly infer the table context, especially on PostgreSQL where the session state might carry over from previous operations.
+
+```json
+{
+  "sites": ["pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules", "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"],
+  "complete": true,
+  "unresolved": []
+}
+```

@@ -1,0 +1,22 @@
+I now have a complete picture. Here's what I found:
+
+- **Interface**: `storage.go` defines `LifecycleManager` with `Cleanup(ctx context.Context) (int64, error)`
+- **3 concrete implementations**: `PostgreSQLStore.Cleanup` (postgres_lifecycle.go), `storeGRPC.Cleanup` (grpc_store.go), `sqlAdapter.Cleanup` (sql_adapter.go)
+- **2 call sites**: `lifecycle.go:runCleanup` (line 49: `lifecycleMgr.Cleanup(ctx)`) and `grpc_store_test.go:mockGRPCServer.Cleanup` (line 116: `s.lifecycle.Cleanup(ctx)`)
+- `startCleanup` also must change because it already receives `retentionTTL time.Duration` but doesn't forward it to `runCleanup`; after the change, `runCleanup` needs that value to compute the cutoff
+
+```json
+{
+  "sites": [
+    "pkg/registry/apps/annotation/storage.go:LifecycleManager",
+    "pkg/registry/apps/annotation/postgres_lifecycle.go:Cleanup",
+    "pkg/registry/apps/annotation/grpc_store.go:Cleanup",
+    "pkg/registry/apps/annotation/sql_adapter.go:Cleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:runCleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:startCleanup",
+    "pkg/registry/apps/annotation/grpc_store_test.go:Cleanup"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

@@ -1,0 +1,36 @@
+I have completed the analysis. Two unused arguments are removed:
+- `ResourceIndex.UpdateIndex(ctx, reason)` → drop `reason` (ignored in the bleve impl)
+- `SearchBackend.GetIndex(ctx, key)` → drop `ctx` (bleve impl uses `_ context.Context`)
+
+I traced both interfaces, all implementations (2 ResourceIndex impls, 3 SearchBackend impls), and every call site via repo-wide grep. Unrelated `GetIndex` (cloudmigration, simplejson) and the dashboard `MockClient.UpdateIndex` (a different gRPC client interface returning only `error`) are excluded.
+
+{
+  "sites": [
+    "pkg/storage/unified/resource/search.go:ResourceIndex.UpdateIndex",
+    "pkg/storage/unified/resource/search.go:SearchBackend.GetIndex",
+    "pkg/storage/unified/resource/search.go:getOrCreateIndex",
+    "pkg/storage/unified/resource/search.go:findIndexesToRebuild",
+    "pkg/storage/unified/resource/search.go:rebuildIndex",
+    "pkg/storage/unified/search/bleve.go:bleveIndex.UpdateIndex",
+    "pkg/storage/unified/search/bleve.go:bleveBackend.GetIndex",
+    "pkg/storage/unified/resource/search_test.go:MockResourceIndex.UpdateIndex",
+    "pkg/storage/unified/resource/search_test.go:mockSearchBackend.GetIndex",
+    "pkg/storage/unified/resource/search_test.go:slowSearchBackendWithCache.GetIndex",
+    "pkg/storage/unified/resource/search_test.go:TestSearchGetOrCreateIndexWithCancellation",
+    "pkg/storage/unified/resource/search_test.go:checkRebuildIndex",
+    "pkg/storage/unified/resource/search_test.go:TestSearchGetOrCreateIndexWithIndexUpdate",
+    "pkg/storage/unified/resource/search_test.go:checkMockIndexUpdateCalls",
+    "pkg/storage/unified/testing/search_backend.go:runTestSearchBackendBuildIndex",
+    "pkg/storage/unified/search/bleve_test.go:TestBuildIndexExpiration",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateSearchAndRebuild",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdate",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndBuildIndex",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearch",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearchWithIndexMinUpdateInterval",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdateWithErrors"
+  ],
+  "complete": true,
+  "unresolved": [
+    "checkMockIndexUpdateCalls and TestSearchGetOrCreateIndexWithIndexUpdate (plus the MockResourceIndex.updateIndexCalls field) exist solely to assert the 'reason' passed to UpdateIndex; they must change to compile once 'reason' is dropped, but whether the PR rewrites them to count calls or deletes them entirely is implementation-dependent."
+  ]
+}

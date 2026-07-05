@@ -1,0 +1,16 @@
+I have enough to determine the complete set. Let me verify there's no production gRPC server implementation (only the test mock) and confirm `sqlAdapter` is treated as a `LifecycleManager`.
+
+The analysis is conclusive. The `LifecycleManager.Cleanup` interface signature changes from `Cleanup(ctx) (int64, error)` to take a retention cutoff time. The affected sites:
+
+- **Interface declaration**: `storage.go:LifecycleManager.Cleanup`
+- **Three implementers**: `PostgreSQLStore.Cleanup` (currently computes cutoff internally from `RetentionTTL` — now takes it as a param), `sqlAdapter.Cleanup`, `storeGRPC.Cleanup` (must put cutoff in `CleanupRequest`)
+- **Callers**: `runCleanup` (must compute/receive cutoff and pass it) and `startCleanup` (must thread `retentionTTL` down to `runCleanup`, which currently doesn't receive it)
+- **Test gRPC server mock**: `mockGRPCServer.Cleanup` (extracts cutoff from request, passes to `lifecycle.Cleanup`)
+
+`register.go` is unchanged since `startCleanup` keeps its `retentionTTL` param. The only gRPC server is the test mock; the proto `CleanupRequest` needs a cutoff field (generated code, not a hand-edited function).
+
+{
+  "sites": ["pkg/registry/apps/annotation/storage.go:LifecycleManager.Cleanup", "pkg/registry/apps/annotation/postgres_lifecycle.go:PostgreSQLStore.Cleanup", "pkg/registry/apps/annotation/sql_adapter.go:sqlAdapter.Cleanup", "pkg/registry/apps/annotation/grpc_store.go:storeGRPC.Cleanup", "pkg/registry/apps/annotation/lifecycle.go:AppInstaller.runCleanup", "pkg/registry/apps/annotation/lifecycle.go:AppInstaller.startCleanup", "pkg/registry/apps/annotation/grpc_store_test.go:mockGRPCServer.Cleanup"],
+  "complete": true,
+  "unresolved": ["Transport dependency (not a function): storepb/v1 CleanupRequest must gain a cutoff field and the generated *.pb.go (annotationStoreClient.Cleanup / handler) regenerated for storeGRPC.Cleanup and mockGRPCServer.Cleanup to carry the value over gRPC — generated code, no hand-edited function site.", "No production AnnotationStoreServer.Cleanup implementation exists in this repo (only the test mock); any out-of-repo/enterprise server impl is out of scope."]
+}

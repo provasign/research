@@ -1,0 +1,15 @@
+I've traced the complete dependency graph. `LifecycleManager` is an exported interface but is used only within the `pkg/registry/apps/annotation` package. I found the interface declaration, all three implementations, and all callers.
+
+The change `Cleanup(ctx)` → `Cleanup(ctx, cutoff time.Time)` propagates to:
+
+- **Interface decl** (`storage.go`)
+- **Implementations**: `PostgreSQLStore.Cleanup` (computes cutoff internally today → must use the param), `sqlAdapter.Cleanup`, `storeGRPC.Cleanup`
+- **Callers**: `runCleanup` (calls `lifecycleMgr.Cleanup(ctx)`, must compute/forward cutoff → needs the retention TTL it currently lacks), `startCleanup` (sole caller of `runCleanup`, already holds `retentionTTL` and must pass it down), and the test `mockGRPCServer.Cleanup` (delegates to `s.lifecycle.Cleanup(ctx)`).
+
+The proto `CleanupRequest` message (and regenerated `storepb` code) would need a cutoff field for `storeGRPC` to actually transport the value over the wire, but that is a proto/codegen change, not a hand-written function/method site.
+
+{
+  "sites": ["pkg/registry/apps/annotation/storage.go:LifecycleManager.Cleanup", "pkg/registry/apps/annotation/postgres_lifecycle.go:PostgreSQLStore.Cleanup", "pkg/registry/apps/annotation/sql_adapter.go:sqlAdapter.Cleanup", "pkg/registry/apps/annotation/grpc_store.go:storeGRPC.Cleanup", "pkg/registry/apps/annotation/lifecycle.go:runCleanup", "pkg/registry/apps/annotation/lifecycle.go:startCleanup", "pkg/registry/apps/annotation/grpc_store_test.go:mockGRPCServer.Cleanup"],
+  "complete": true,
+  "unresolved": ["Transporting the cutoff over gRPC would require adding a field to the CleanupRequest proto message and regenerating pkg/registry/apps/annotation/storepb (and updating proto/store.proto); these are codegen/proto changes, not hand-edited function/method bodies, so they are excluded from the sites list."]
+}

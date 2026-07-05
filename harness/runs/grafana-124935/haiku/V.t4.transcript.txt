@@ -1,0 +1,25 @@
+Based on my thorough investigation of the codebase, I've identified all the functions that must change to fix the XORM Update table specification issue for alert rules.
+
+I found exactly two locations where `sess.ID(...).Update()` calls are made on alert rule objects without explicitly specifying the table:
+
+1. **Line 608** in `UpdateAlertRules`: Updates the converted alert rule object
+2. **Line 710** in `preventIntermediateUniqueConstraintViolations`: Updates the temporary title during intermediate constraint violation prevention
+
+Both need `.Table(alertRule{})` added before the `.Update()` call to match the pattern used elsewhere in the code (e.g., line 225-228 in `UpdateFolderFullpathsForFolders` and line 95 in `admin_configuration.go`).
+
+I verified completeness by:
+- Searching all `*.go` files in the ngalert directory for `.Update(` calls
+- Checking each one to see if `.Table()` is specified
+- Using the prism call graph to trace all references to `UpdateAlertRules` and `preventIntermediateUniqueConstraintViolations`
+- Confirming these are the only database Update operations on alert rules without explicit table specification
+
+```json
+{
+  "sites": [
+    "pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules",
+    "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

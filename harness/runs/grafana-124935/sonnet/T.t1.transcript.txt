@@ -1,0 +1,17 @@
+I have enough information to answer. The two XORM Update calls in `alert_rule.go` that target `alertRule` struct data without specifying the table explicitly are:
+
+1. **Line 608** inside `UpdateAlertRules`: `sess.ID(r.Existing.ID).AllCols().Omit("rule_guid").Update(converted)`
+2. **Line 710** inside `preventIntermediateUniqueConstraintViolations`: `sess.ID(r.ID).Cols("title").Update(&alertRule{...})`
+
+All other `.Update()` calls in the ngalert store either already use `.Table(...)` explicitly (e.g., `admin_configuration.go` at line 95: `sess.Table("ngalert_configuration").ID(...).Update(...)`) or operate on a different entity type (`image.go`). The `schedule` package's `.Update()` calls are in-memory scheduling operations, not database calls.
+
+```json
+{
+  "sites": [
+    "pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules",
+    "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

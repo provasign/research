@@ -1,0 +1,23 @@
+Based on my thorough analysis of the codebase, I have identified all the functions that must change to fix the Jaeger datasource panic on empty trace results. The issue occurs at three specific locations where slices are accessed without checking for empty conditions:
+
+1. **client.go:Trace** (line 266) - directly accesses `response.Data[0]` without checking if the slice is empty
+2. **utils/client_utils.go:TransformSearchResponse** (lines 51-52) - accesses `response[i].Spans[0]` in the sort comparison function without checking
+3. **utils/grpc_utils.go:TransformGrpcSearchResponse** (lines 53-54) - accesses `resourceSpans[i].ScopeSpans[0].Spans[0]` in the sort comparison function without checking
+
+I verified this is complete by:
+- Tracing all code paths from querydata.go that handle trace queries
+- Checking all transform functions and their callers
+- Examining all direct slice accesses throughout the jaeger package
+- Confirming with the call graph that these are the only sites where unsafe indexing occurs
+
+```json
+{
+  "sites": [
+    "pkg/tsdb/jaeger/client.go:Trace",
+    "pkg/tsdb/jaeger/utils/client_utils.go:TransformSearchResponse",
+    "pkg/tsdb/jaeger/utils/grpc_utils.go:TransformGrpcSearchResponse"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

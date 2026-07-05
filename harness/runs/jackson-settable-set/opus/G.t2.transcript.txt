@@ -1,0 +1,36 @@
+Based on my analysis tracing the class hierarchy and all call sites, here is the complete set.
+
+The `set(Object, Object)` method is declared abstract in `SettableBeanProperty`, overridden across the property-class hierarchy (direct subclasses + `SettableBeanProperty.Delegating` subclasses), and invoked at numerous call sites. I cross-checked prism's reference graph against the comprehensive `.set(` grep, carefully excluding unrelated 2-arg `set` collisions (`java.lang.reflect.Field.set`, `BitSet.set`, `ObjectNode.set`, `AtomicReference.set`) and the unrelated 3-arg `SettableAnyProperty.set`.
+
+{
+  "sites": [
+    "src/main/java/com/fasterxml/jackson/databind/deser/SettableBeanProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/SettableBeanProperty.java:Delegating.set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/CreatorProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/FieldProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/MethodProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/SetterlessProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ObjectIdValueProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ObjectIdReferenceProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ManagedReferenceProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/MergingSettableBeanProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/CreatorProperty.java:inject",
+    "src/main/java/com/fasterxml/jackson/databind/deser/CreatorProperty.java:deserializeAndSet",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ManagedReferenceProperty.java:deserializeAndSet",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ManagedReferenceProperty.java:setAndReturn",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/SetterlessProperty.java:setAndReturn",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ObjectIdReferenceProperty.java:PropertyReferring.handleResolvedForwardReference",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/InnerClassProperty.java:deserializeAndSet",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/MergingSettableBeanProperty.java:deserializeAndSet",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ExternalTypeHandler.java:complete",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ExternalTypeHandler.java:_deserializeAndSet",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/PropertyValue.java:Regular.assign",
+    "src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializer.java:BeanReferring.handleResolvedForwardReference",
+    "src/main/java/com/fasterxml/jackson/databind/deser/std/ThrowableDeserializer.java:deserializeFromObject"
+  ],
+  "complete": true,
+  "unresolved": [
+    "ExternalTypeHandler.java:complete has TWO overloads that each contain a set() call site (complete(p,ctxt,bean) at line 223 and complete(p,ctxt,PropertyValueBuffer,PropertyBasedCreator) at line 334); both must change though they share the name 'complete'.",
+    "SettableBeanProperty.set is public API; subclasses/callers in OTHER modules or downstream code outside this repository cannot be enumerated here. Within this repo the hierarchy is fully traced."
+  ]
+}

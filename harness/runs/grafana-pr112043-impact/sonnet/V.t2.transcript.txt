@@ -1,0 +1,39 @@
+I have a complete picture now. Let me compile the final answer.
+
+**Summary of findings:**
+
+Two unused arguments were identified:
+1. `SearchBackend.GetIndex`'s `ctx context.Context` — already marked `_` in the only production implementation (`bleveBackend.GetIndex`)
+2. `ResourceIndex.UpdateIndex`'s `reason string` — never referenced in the bleve production implementation body
+
+Prism confirmed the same call sites that grep found, plus flagged `MockClient.UpdateIndex` in dashboard tests (different return type — see unresolved).
+
+```json
+{
+  "sites": [
+    "pkg/storage/unified/resource/search.go:GetIndex",
+    "pkg/storage/unified/resource/search.go:UpdateIndex",
+    "pkg/storage/unified/resource/search.go:findIndexesToRebuild",
+    "pkg/storage/unified/resource/search.go:rebuildIndex",
+    "pkg/storage/unified/resource/search.go:getOrCreateIndex",
+    "pkg/storage/unified/search/bleve.go:GetIndex",
+    "pkg/storage/unified/search/bleve.go:UpdateIndex",
+    "pkg/storage/unified/resource/search_test.go:GetIndex",
+    "pkg/storage/unified/resource/search_test.go:UpdateIndex",
+    "pkg/storage/unified/resource/search_test.go:TestSearchGetOrCreateIndexWithCancellation",
+    "pkg/storage/unified/resource/search_test.go:checkRebuildIndex",
+    "pkg/storage/unified/testing/search_backend.go:runTestSearchBackendBuildIndex",
+    "pkg/storage/unified/search/bleve_test.go:TestBuildIndexExpiration",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateSearchAndRebuild",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdate",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndBuildIndex",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearch",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearchWithIndexMinUpdateInterval",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdateWithErrors"
+  ],
+  "complete": true,
+  "unresolved": [
+    "pkg/registry/apis/dashboard/search_test.go:MockClient.UpdateIndex has return type `error` (not `(int64, error)`) so it does not currently satisfy resource.ResourceIndex.UpdateIndex. It shadows the promoted method from the embedded resource.ResourceIndex field, but with a mismatched signature. Whether it needs to change when `reason` is removed from the interface depends on intent: if it was supposed to implement resource.ResourceIndex.UpdateIndex it was already broken; if it is dead/orphaned code it can be left or deleted independently."
+  ]
+}
+```

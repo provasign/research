@@ -1,0 +1,17 @@
+The analysis is complete. The two XORM `Update` calls for alert rules without explicit `.Table()` specification are both in `pkg/services/ngalert/store/alert_rule.go`:
+
+- **Line 608** (`UpdateAlertRules`): `sess.ID(r.Existing.ID).AllCols().Omit("rule_guid").Update(converted)` — `converted` is an `alertRule` value, whose `Version` field has `xorm:"version"` triggering optimistic locking and the PostgreSQL wrong-table SELECT bug.
+- **Line 710** (`preventIntermediateUniqueConstraintViolations`): `sess.ID(r.ID).Cols("title").Update(&alertRule{...})` — same issue, same struct type.
+
+All other Update calls in the ngalert package either already use explicit `.Table(...)` (e.g., `admin_configuration.go`) or operate on different structs (`image.go`). The migration file's `alertRule.Version` has no `xorm:"version"` tag so optimistic locking doesn't apply there.
+
+```json
+{
+  "sites": [
+    "pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules",
+    "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

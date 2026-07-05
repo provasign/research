@@ -1,0 +1,30 @@
+Based on my investigation of the codebase, I've traced all callers and implementations of the LifecycleManager.Cleanup method. Here are my findings:
+
+**Changes required when Cleanup takes an additional retention cutoff time parameter:**
+
+```json
+{
+  "sites": [
+    "pkg/registry/apps/annotation/storage.go:LifecycleManager",
+    "pkg/registry/apps/annotation/postgres_lifecycle.go:PostgreSQLStore.Cleanup",
+    "pkg/registry/apps/annotation/grpc_store.go:storeGRPC.Cleanup",
+    "pkg/registry/apps/annotation/sql_adapter.go:sqlAdapter.Cleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:AppInstaller.runCleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:AppInstaller.startCleanup",
+    "pkg/registry/apps/annotation/grpc_store_test.go:mockGRPCServer.Cleanup",
+    "pkg/registry/apps/annotation/proto/store.proto:CleanupRequest"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```
+
+**Rationale:**
+1. **storage.go:LifecycleManager** - The interface definition itself must change signature
+2. **postgres_lifecycle.go, grpc_store.go, sql_adapter.go** - All three implementations of LifecycleManager must update their Cleanup methods
+3. **lifecycle.go:AppInstaller.runCleanup** - Calls `lifecycleMgr.Cleanup(ctx)` at line 49; must pass the cutoff time
+4. **lifecycle.go:AppInstaller.startCleanup** - Receives `retentionTTL` but doesn't pass it to `runCleanup`; must be updated to pass it so `runCleanup` can calculate and pass the cutoff time
+5. **grpc_store_test.go:mockGRPCServer.Cleanup** - Test implementation that calls `s.lifecycle.Cleanup(ctx)` at line 116; must pass the cutoff time
+6. **proto/store.proto:CleanupRequest** - The gRPC message must be updated to carry the cutoff time parameter from client to server
+
+Human review gates in CLAUDE.md require explicit approval before pushing; this analysis identifies all sites that require code changes to fix the issue completely.

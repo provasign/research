@@ -1,0 +1,12 @@
+Both alert-rule XORM `Update` calls confirmed — they're the only ones in the codebase that target the `alert_rule` table without an explicit `.Table(...)`:
+
+- `UpdateAlertRules` (alert_rule.go:608) — `sess.ID(...).AllCols().Omit("rule_guid").Update(converted)`
+- `preventIntermediateUniqueConstraintViolations` (alert_rule.go:710) — `sess.ID(...).Cols("title").Update(&alertRule{...})`
+
+The only other `.Update(` calls in `pkg/services/ngalert/store` are `image.go` (updates the image table) and `admin_configuration.go` (already specifies `.Table("ngalert_configuration")`), so they're unaffected. The fix must add an explicit table reference (e.g. `.Table(&alertRule{})`) to the two alert-rule update sites so XORM doesn't pick up a stale table name (`user`) from the shared transactional session.
+
+{
+  "sites": ["pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules", "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"],
+  "complete": true,
+  "unresolved": []
+}

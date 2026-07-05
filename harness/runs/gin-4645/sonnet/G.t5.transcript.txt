@@ -1,0 +1,18 @@
+The analysis is complete. The code shows exactly the problem:
+
+- `Hijack()` (line 120): `w.ResponseWriter.(http.Hijacker).Hijack()` — direct type assertion, panics if not supported
+- `CloseNotify()` (line 125): `w.ResponseWriter.(http.CloseNotifier).CloseNotify()` — direct type assertion, panics if not supported
+- `Flush()` (line 129-134): uses `if f, ok := w.ResponseWriter.(http.Flusher); ok { f.Flush() }` — the safe pattern to follow
+
+`Context.Stream` calls `w.CloseNotify()` through the `ResponseWriter` interface but does not need to change — if the implementation returns a nil channel, the `select` case simply never fires, which is correct graceful-degradation behavior. The `ResponseWriter` interface itself also does not need to change (same as `http.Flusher` stays in the interface while degrading gracefully).
+
+```json
+{
+  "sites": [
+    "response_writer.go:Hijack",
+    "response_writer.go:CloseNotify"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

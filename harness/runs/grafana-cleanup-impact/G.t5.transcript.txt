@@ -1,0 +1,18 @@
+I have traced the full dispatch graph. The `LifecycleManager` interface (`storage.go:49`) has exactly three implementations — `PostgreSQLStore.Cleanup`, `storeGRPC.Cleanup`, `sqlAdapter.Cleanup` — plus the production caller `AppInstaller.runCleanup` and the test gRPC server `mockGRPCServer.Cleanup`. `runCleanup` must compute/forward the cutoff, which requires `startCleanup` (the only holder of `retentionTTL`) to thread it through.
+
+{
+  "sites": [
+    "pkg/registry/apps/annotation/storage.go:LifecycleManager.Cleanup",
+    "pkg/registry/apps/annotation/postgres_lifecycle.go:Cleanup",
+    "pkg/registry/apps/annotation/grpc_store.go:Cleanup",
+    "pkg/registry/apps/annotation/sql_adapter.go:Cleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:runCleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:startCleanup",
+    "pkg/registry/apps/annotation/grpc_store_test.go:Cleanup"
+  ],
+  "complete": true,
+  "unresolved": [
+    "storeGRPC.Cleanup and mockGRPCServer.Cleanup transmit cutoff over gRPC, so storev1.CleanupRequest needs a new field; that requires editing proto/store.proto and regenerating storepb/v1/store.pb.go (+store_grpc.pb.go). These are generated artifacts, not hand-edited functions, so not listed as sites.",
+    "startCleanup is included because retentionTTL lives only as its local parameter; an implementer could instead store the cutoff on AppInstaller or compute it in register.go:NewAppInstaller, shifting which site changes — but some caller above runCleanup must change regardless."
+  ]
+}

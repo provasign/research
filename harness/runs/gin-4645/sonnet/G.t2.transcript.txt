@@ -1,0 +1,19 @@
+The analysis is complete. Here's what I found:
+
+- **`response_writer.go:Hijack`** (line 120): Uses `w.ResponseWriter.(http.Hijacker).Hijack()` — a bare type assertion that panics if the underlying writer doesn't implement `http.Hijacker`.
+- **`response_writer.go:CloseNotify`** (line 125): Uses `w.ResponseWriter.(http.CloseNotifier).CloseNotify()` — same problem, panics if the underlying writer doesn't implement `http.CloseNotifier`.
+- **`response_writer_test.go:TestResponseWriterHijack`** (line 110): Currently asserts both call sites panic (`assert.Panics`). After the fix, this test will fail because the panics are gone — it must be updated to test graceful error/nil-channel returns instead.
+
+`context.go:Stream` calls `w.CloseNotify()` but doesn't need to change: once `CloseNotify` returns a nil channel instead of panicking, a nil channel in a `select` simply never fires, which is graceful degradation. The `ResponseWriter` interface doesn't need to change either — `responseWriter` already satisfies it; the fix only changes the delegation behavior inside the two methods.
+
+```json
+{
+  "sites": [
+    "response_writer.go:Hijack",
+    "response_writer.go:CloseNotify",
+    "response_writer_test.go:TestResponseWriterHijack"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

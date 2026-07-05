@@ -1,0 +1,32 @@
+Based on my analysis, the PR removes two genuinely-unused arguments from these interfaces:
+- `ResourceIndex.UpdateIndex(ctx, reason)` → `reason` is ignored by the only real impl (`bleveIndex` discards it; `searchSupport` still uses its local `reason` for metrics/logging but passes nothing to the method).
+- `SearchBackend.GetIndex(ctx, key)` → `ctx` is unused (bleve's impl literally declares it as `_ context.Context`; it's a pure cache lookup). This is the SearchBackend-side change the issue references.
+
+I traced every implementation (all impls found via exact signatures: `bleveIndex`/`MockResourceIndex` for ResourceIndex; `bleveBackend`/`mockSearchBackend`/`slowSearchBackendWithCache` for SearchBackend) and every call site through the graph.
+
+{
+  "sites": [
+    "pkg/storage/unified/resource/search.go:ResourceIndex.UpdateIndex",
+    "pkg/storage/unified/resource/search.go:SearchBackend.GetIndex",
+    "pkg/storage/unified/search/bleve.go:bleveIndex.UpdateIndex",
+    "pkg/storage/unified/search/bleve.go:bleveBackend.GetIndex",
+    "pkg/storage/unified/resource/search_test.go:MockResourceIndex.UpdateIndex",
+    "pkg/storage/unified/resource/search_test.go:mockSearchBackend.GetIndex",
+    "pkg/storage/unified/resource/search_test.go:slowSearchBackendWithCache.GetIndex",
+    "pkg/storage/unified/resource/search.go:getOrCreateIndex",
+    "pkg/storage/unified/resource/search.go:findIndexesToRebuild",
+    "pkg/storage/unified/resource/search.go:rebuildIndex",
+    "pkg/storage/unified/testing/search_backend.go:runTestSearchBackendBuildIndex",
+    "pkg/storage/unified/resource/search_test.go:TestSearchGetOrCreateIndexWithCancellation",
+    "pkg/storage/unified/resource/search_test.go:TestRebuildIndexes",
+    "pkg/storage/unified/search/bleve_test.go:TestBuildIndexExpiration",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdate",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndBuildIndex",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateSearchAndRebuild",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearch",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearchWithIndexMinUpdateInterval",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdateWithErrors"
+  ],
+  "complete": true,
+  "unresolved": ["Could not fetch the actual PR #112043 diff (network/gh blocked), so the exact arg-set is inferred from code: 'reason' on UpdateIndex (clearly unused in impl) and 'ctx' on GetIndex (declared as '_ context.Context', the only unused SearchBackend arg). If the PR removed only 'reason', the GetIndex sites (SearchBackend.GetIndex impls/callers: findIndexesToRebuild, rebuildIndex, runTestSearchBackendBuildIndex, TestSearchGetOrCreateIndexWithCancellation, TestRebuildIndexes, TestBuildIndexExpiration, and the GetIndex calls in getOrCreateIndex/TestConcurrentIndexUpdateSearchAndRebuild) would be out of scope.", "dashboard MockClient.UpdateIndex (pkg/registry/apis/dashboard/search_test.go) is a different interface (returns error only) and is excluded."]
+}

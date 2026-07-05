@@ -1,0 +1,30 @@
+Perfect! I've completed my investigation. Here's my analysis:
+
+## Summary
+
+The issue is that gin's response writer panics when calling `Hijack()` or `CloseNotify()` on an underlying `http.ResponseWriter` that doesn't implement `http.Hijacker` or `http.CloseNotifier`. The fix should degrade gracefully like `Flush()` already does.
+
+**Current problematic code:**
+- Line 120 in `response_writer.go`: `return w.ResponseWriter.(http.Hijacker).Hijack()` - unsafe type assertion
+- Line 125 in `response_writer.go`: `return w.ResponseWriter.(http.CloseNotifier).CloseNotify()` - unsafe type assertion
+
+**Model methods that degrade gracefully (for reference):**
+- Lines 131-133: `Flush()` uses safe type assertion with `ok` check
+- Lines 137-140: `Pusher()` uses safe type assertion with `ok` check
+
+**Functions that must change:**
+1. `response_writer.go:Hijack()` - replace unsafe assertion with safe type check
+2. `response_writer.go:CloseNotify()` - replace unsafe assertion with safe type check
+
+No other functions need changes. The `Stream()` function in `context.go` will work correctly as long as `CloseNotify()` returns a channel that doesn't signal (e.g., a never-closed channel).
+
+```json
+{
+  "sites": [
+    "response_writer.go:Hijack",
+    "response_writer.go:CloseNotify"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

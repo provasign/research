@@ -1,0 +1,19 @@
+I have all the information I need. Here's my analysis:
+
+- `response_writer.go:Hijack` (line 120): panics via unchecked type assertion `w.ResponseWriter.(http.Hijacker).Hijack()`
+- `response_writer.go:CloseNotify` (line 125): panics via unchecked type assertion `w.ResponseWriter.(http.CloseNotifier).CloseNotify()`
+- `response_writer_test.go:TestResponseWriterHijack` (lines 116–124): explicitly asserts both calls panic — this test must change when the behavior is fixed
+- `context.go:Stream` calls `w.CloseNotify()` through the interface, but if `CloseNotify()` returns a nil channel on fallback, the select statement handles it correctly (nil channel blocks forever in select, meaning "no disconnect detection" — no change required)
+- The `ResponseWriter` interface embeds `http.Hijacker` and `http.CloseNotifier`, but the interface itself doesn't need to change for the panic fix
+
+```json
+{
+  "sites": [
+    "response_writer.go:Hijack",
+    "response_writer.go:CloseNotify",
+    "response_writer_test.go:TestResponseWriterHijack"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

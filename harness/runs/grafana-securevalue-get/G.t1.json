@@ -1,0 +1,167 @@
+{
+  "status": "ok",
+  "model": "opus",
+  "task_id": "grafana-securevalue-get",
+  "arm": "G",
+  "trial": 1,
+  "recall": 0.0385,
+  "precision": 1.0,
+  "f1": 0.0741,
+  "found": [
+    "pkg/registry/apis/secret/secure_value_client.go:Update"
+  ],
+  "missed": [
+    "pkg/api/dashboard.go:saveDashboardViaK8s",
+    "pkg/api/datasources_k8s.go:getK8sDataSource",
+    "pkg/api/playlist.go:getPlaylist",
+    "pkg/api/playlist.go:getPlaylistItems",
+    "pkg/api/playlist.go:updatePlaylist",
+    "pkg/api/short_url.go:getKubernetesShortURLsHandler",
+    "pkg/registry/apis/dashboard/register.go:setDefaultDashboardPermissions",
+    "pkg/registry/apis/folders/register.go:setDefaultFolderPermissions",
+    "pkg/registry/apis/iam/authorizer/parent_provider.go:GetParent",
+    "pkg/registry/apis/iam/authorizer/role_permission_validator.go:fetchRoleSpec",
+    "pkg/registry/apis/provisioning/resources/retry_client.go:Get",
+    "pkg/registry/apis/secret/secure_value_client.go:Get",
+    "pkg/services/accesscontrol/ossaccesscontrol/dashboard.go:ProvideDashboardPermissions",
+    "pkg/services/accesscontrol/resourcepermissions/api_adapter.go:createOrDeleteTeamBinding",
+    "pkg/services/accesscontrol/resourcepermissions/api_adapter.go:getExistingResourcePermission",
+    "pkg/services/accesscontrol/resourcepermissions/api_adapter.go:getFolderHierarchyPermissions",
+    "pkg/services/accesscontrol/resourcepermissions/api_adapter.go:getResourcePermissionsFromK8s",
+    "pkg/services/apiserver/client/client.go:Get",
+    "pkg/services/libraryelements/api.go:getK8sLibraryElement",
+    "pkg/services/star/api/client.go:GetStars",
+    "pkg/services/team/teamk8s/team.go:GetTeamByID",
+    "pkg/services/team/teamk8s/team.go:UpdateTeam",
+    "pkg/storage/unified/apistore/prepare.go:getParentFolder",
+    "pkg/storage/unified/migrations/testcases/stars.go:Verify",
+    "pkg/storage/unified/migrations/testcases/testcases.go:verifyResource"
+  ],
+  "extra": [],
+  "weak_matches": [],
+  "claimed_complete": true,
+  "overconfident": true,
+  "surfaced_gap": true,
+  "cost": {
+    "wall_s": 160.66,
+    "duration_ms": 159840,
+    "num_turns": 14,
+    "usage": {
+      "input_tokens": 2442,
+      "cache_creation_input_tokens": 19323,
+      "cache_read_input_tokens": 281225,
+      "output_tokens": 6701,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 19323,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 1508,
+          "cache_read_input_tokens": 28754,
+          "cache_creation_input_tokens": 646,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 646
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "total_cost_usd": 0.5422335
+  },
+  "tools_used": [
+    "Grep",
+    "grep",
+    "prism",
+    "sed"
+  ],
+  "graph_used": true,
+  "violation": null,
+  "tool_trace": [
+    {
+      "tool": "Bash",
+      "bin": "prism",
+      "detail": "/Users/tapabratapal/bin/prism read pkg/registry/apis/secret/secure_value_client.go --format text 2>&1 | head -100"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "func \\(c \\*secureValueClient\\) Get"
+    },
+    {
+      "tool": "Bash",
+      "bin": "prism",
+      "detail": "/Users/tapabratapal/bin/prism lookup \"secret.secureValueClient.Get\" --format text 2>&1 | head -40"
+    },
+    {
+      "tool": "Bash",
+      "bin": "prism",
+      "detail": "/Users/tapabratapal/bin/prism references \"secureValueClient\" --format text 2>&1 | head -40; echo \"---CONTRACT---\"; grep -rn \"SecureValueClient\" pkg/registry/apis/secret/contracts/ 2>&1 | head -20"
+    },
+    {
+      "tool": "Bash",
+      "bin": "sed",
+      "detail": "sed -n '50,80p' pkg/registry/apis/secret/contracts/secure_value.go"
+    },
+    {
+      "tool": "Bash",
+      "bin": "prism",
+      "detail": "/Users/tapabratapal/bin/prism references \"contracts.SecureValueClient\" --format text 2>&1 | head -60"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "SecureValueClient"
+    },
+    {
+      "tool": "Bash",
+      "bin": "grep",
+      "detail": "grep -n \"SecureValueClient\" pkg/server/wireexts_oss.go; echo \"---TEST---\"; grep -n \"\\.Get(\" pkg/registry/apis/secret/secure_value_client_test.go"
+    },
+    {
+      "tool": "Bash",
+      "bin": "sed",
+      "detail": "sed -n '40,180p' pkg/registry/apis/secret/secure_value_client_test.go"
+    },
+    {
+      "tool": "Bash",
+      "bin": "grep",
+      "detail": "grep -n \"^func \" pkg/registry/apis/secret/secure_value_client_test.go"
+    },
+    {
+      "tool": "Bash",
+      "bin": "prism",
+      "detail": "/Users/tapabratapal/bin/prism query \"callers of secureValueClient Get method\" --terms secureValueClient,Get --include graph,tests --format text 2>&1 | head -40"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "Get\\("
+    },
+    {
+      "tool": "Bash",
+      "bin": "sed",
+      "detail": "sed -n '128,140p' pkg/registry/apis/secret/secure_value_client.go"
+    }
+  ],
+  "answer": {
+    "sites": [
+      "pkg/registry/apis/secret/secure_value_client.go:Update",
+      "pkg/registry/apis/secret/secure_value_client_test.go:TestIntegration_SecureValueClient_CRUD",
+      "pkg/registry/apis/secret/secure_value_client_test.go:Test_SecureValueClient_CRUD_NoPermissions"
+    ],
+    "complete": true,
+    "unresolved": [
+      "Test call sites invoke Get through the k8s dynamic.ResourceInterface returned by Client(); the concrete target is secureValueClient, but if the fix kept the external interface signature it could not dispatch the new param \u2014 no production consumer of contracts.SecureValueClient exists, so no other call sites were found."
+    ]
+  }
+}

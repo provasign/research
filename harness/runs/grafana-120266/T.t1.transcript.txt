@@ -1,0 +1,9 @@
+The gRPC path uses `response.Result.ResourceSpans` with no slice indexing, so it handles empty results safely — out of scope. The only place that panics is `client.go:266`, `response.Data[0]`, inside the `Trace` method.
+
+The fix is a guard in `Trace`: when `len(response.Data) == 0`, return an empty frame (e.g. via `TransformTraceResponse(types.TraceResponse{}, refID)`) instead of indexing `[0]`. `TransformTraceResponse` already handles an empty/zero `TraceResponse` correctly (its span loop simply doesn't execute), so it needs no change. The caller `queryData` likewise needs no change since `Trace` continues to return a valid `*data.Frame`.
+
+{
+  "sites": ["pkg/tsdb/jaeger/client.go:Trace"],
+  "complete": true,
+  "unresolved": []
+}

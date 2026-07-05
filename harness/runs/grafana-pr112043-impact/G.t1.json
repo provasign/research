@@ -1,0 +1,287 @@
+{
+  "status": "ok",
+  "model": "opus",
+  "task_id": "grafana-pr112043-impact",
+  "arm": "G",
+  "trial": 1,
+  "recall": 0.6667,
+  "precision": 1.0,
+  "f1": 0.8,
+  "found": [
+    "pkg/storage/unified/resource/search.go:findIndexesToRebuild",
+    "pkg/storage/unified/resource/search.go:getOrCreateIndex",
+    "pkg/storage/unified/resource/search.go:rebuildIndex",
+    "pkg/storage/unified/search/bleve.go:GetIndex",
+    "pkg/storage/unified/search/bleve.go:UpdateIndex",
+    "pkg/storage/unified/testing/search_backend.go:runTestSearchBackendBuildIndex"
+  ],
+  "missed": [
+    "pkg/storage/unified/resource/search.go:ResourceIndex",
+    "pkg/storage/unified/resource/search.go:SearchBackend",
+    "pkg/storage/unified/resource/search.go:runPeriodicScanForIndexesToRebuild"
+  ],
+  "extra": [],
+  "weak_matches": [],
+  "claimed_complete": true,
+  "overconfident": true,
+  "surfaced_gap": true,
+  "cost": {
+    "wall_s": 396.52,
+    "duration_ms": 395919,
+    "num_turns": 37,
+    "usage": {
+      "input_tokens": 2740,
+      "cache_creation_input_tokens": 96455,
+      "cache_read_input_tokens": 1183744,
+      "output_tokens": 27319,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 96455,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 4915,
+          "cache_read_input_tokens": 57320,
+          "cache_creation_input_tokens": 2213,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 2213
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "total_cost_usd": 2.254205
+  },
+  "tools_used": [
+    "Grep",
+    "ToolSearch",
+    "WebFetch",
+    "echo",
+    "gh",
+    "git",
+    "prism",
+    "sed"
+  ],
+  "graph_used": true,
+  "violation": null,
+  "tool_trace": [
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "type ResourceIndex interface"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "type SearchBackend interface"
+    },
+    {
+      "tool": "Bash",
+      "bin": "prism",
+      "detail": "/Users/tapabratapal/bin/prism read pkg/storage/unified/resource/search.go --format text 2>/dev/null | sed -n '1,200p'"
+    },
+    {
+      "tool": "Bash",
+      "bin": "git",
+      "detail": "git log --oneline -5; echo \"---\"; git log -1 --format='%H %s'"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "func.*DocCount\\(ctx context.Context, folder string\\)"
+    },
+    {
+      "tool": "Bash",
+      "bin": "prism",
+      "detail": "/Users/tapabratapal/bin/prism lookup search.bleveIndex.DocCount --format text 2>/dev/null; echo \"===UpdateIndex===\"; /Users/tapabratapal/bin/prism lookup search.bleveIndex.UpdateIndex --format text 2>"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "reason|indexBuildReason"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "func.*UpdateIndex\\(ctx context\\.Context, reason string\\)"
+    },
+    {
+      "tool": "Bash",
+      "bin": "prism",
+      "detail": "/Users/tapabratapal/bin/prism references UpdateIndex --format text 2>/dev/null | sed -n '1,80p'"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "func .*\\) (BulkIndex|Search|ListManagedObjects|CountManagedObjects|DocCount|UpdateIndex|BuildInfo|GetIndex|BuildIndex|TotalDocs|GetOpenIndexes)\\("
+    },
+    {
+      "tool": "Bash",
+      "bin": "prism",
+      "detail": "/Users/tapabratapal/bin/prism lookup search.bleveBackend.BuildIndex --format text 2>/dev/null | head -60; echo \"=====SEARCH=====\"; /Users/tapabratapal/bin/prism lookup search.bleveIndex.Search --forma"
+    },
+    {
+      "tool": "Bash",
+      "bin": "gh",
+      "detail": "gh pr view 112043 --json title,body,files 2>/dev/null | head -100"
+    },
+    {
+      "tool": "Bash",
+      "bin": "gh",
+      "detail": "gh pr view 112043 --json title,body,files"
+    },
+    {
+      "tool": "Bash",
+      "bin": "prism",
+      "detail": "/Users/tapabratapal/bin/prism lookup search.bleveBackend.GetIndex --format text 2>/dev/null; echo \"===MOCK getIndex (resource pkg)===\"; sed -n '147,200p' pkg/storage/unified/resource/search_test.go"
+    },
+    {
+      "tool": "Bash",
+      "bin": "git",
+      "detail": "git fetch origin pull/112043/head:pr112043 2>&1 | tail -5"
+    },
+    {
+      "tool": "Bash",
+      "bin": "git",
+      "detail": "git fetch origin pull/112043/head:pr112043"
+    },
+    {
+      "tool": "Bash",
+      "bin": "git",
+      "detail": "git log --oneline -8 -- pkg/storage/unified/search/bleve.go; echo \"=== blame reason in UpdateIndex ===\"; git log -S'reason string' --oneline -5 -- pkg/storage/unified/resource/search.go"
+    },
+    {
+      "tool": "Bash",
+      "bin": "git",
+      "detail": "git log --oneline -8 -- pkg/storage/unified/search/bleve.go"
+    },
+    {
+      "tool": "Bash",
+      "bin": "git",
+      "detail": "git show a44af810822 --stat | head -40; echo \"===check reason addition===\"; git show a44af810822 -- pkg/storage/unified/resource/search.go | grep -n \"reason\\|UpdateIndex\\|func \" | head -40"
+    },
+    {
+      "tool": "Bash",
+      "bin": "git",
+      "detail": "git log -S'UpdateIndex(ctx context.Context, reason string)' --oneline -5 -- pkg/storage/unified/search/bleve.go"
+    },
+    {
+      "tool": "Bash",
+      "bin": "git",
+      "detail": "git log -S\"reason string\" --oneline -6 -- pkg/storage/unified/search/bleve.go 2>&1 | head"
+    },
+    {
+      "tool": "Bash",
+      "bin": "git",
+      "detail": "git log -S\"reason string\" --oneline -6 -- pkg/storage/unified/search/bleve.go"
+    },
+    {
+      "tool": "Bash",
+      "bin": "prism",
+      "detail": "/Users/tapabratapal/bin/prism lookup resource.searchSupport.getOrCreateIndex --format text 2>/dev/null"
+    },
+    {
+      "tool": "Bash",
+      "bin": "sed",
+      "detail": "sed -n '361,614p' pkg/storage/unified/search/bleve.go | grep -n \"rebuild\\|updater\\|builder\\|fields\\|size\" | head -40"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "\\.GetIndex\\("
+    },
+    {
+      "tool": "ToolSearch",
+      "bin": "",
+      "detail": ""
+    },
+    {
+      "tool": "WebFetch",
+      "bin": "",
+      "detail": ""
+    },
+    {
+      "tool": "WebFetch",
+      "bin": "",
+      "detail": ""
+    },
+    {
+      "tool": "Bash",
+      "bin": "echo",
+      "detail": "echo \"=== search.go context for GetIndex/UpdateIndex callers ===\"; for ln in 554 621 719 733 776; do echo \"--- line $ln ---\"; sed -n \"${ln}p\" pkg/storage/unified/resource/search.go; done; echo; echo \""
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "^func "
+    },
+    {
+      "tool": "Bash",
+      "bin": "prism",
+      "detail": "/Users/tapabratapal/bin/prism read pkg/storage/unified/testing/search_backend.go --format text 2>/dev/null | grep -nE \"^func |GetIndex\\(\" "
+    },
+    {
+      "tool": "Bash",
+      "bin": "prism",
+      "detail": "/Users/tapabratapal/bin/prism read pkg/storage/unified/resource/search_test.go --format text 2>/dev/null | grep -nE \"^func Test|^func \\(\" | head -60"
+    },
+    {
+      "tool": "Bash",
+      "bin": "prism",
+      "detail": "/Users/tapabratapal/bin/prism read pkg/storage/unified/resource/search_test.go --format text 2>/dev/null | grep -nE \"^func Test|^func Benchmark\" | awk -F: '$1>600'"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "^func (Test|Benchmark)"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "^func (Test|Benchmark)"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "\\.UpdateIndex\\("
+    }
+  ],
+  "answer": {
+    "sites": [
+      "pkg/storage/unified/resource/search.go:UpdateIndex",
+      "pkg/storage/unified/resource/search.go:GetIndex",
+      "pkg/storage/unified/search/bleve.go:UpdateIndex",
+      "pkg/storage/unified/search/bleve.go:GetIndex",
+      "pkg/storage/unified/resource/search_test.go:UpdateIndex",
+      "pkg/storage/unified/resource/search_test.go:GetIndex",
+      "pkg/storage/unified/resource/search_test.go:GetIndex",
+      "pkg/storage/unified/resource/search.go:getOrCreateIndex",
+      "pkg/storage/unified/resource/search.go:findIndexesToRebuild",
+      "pkg/storage/unified/resource/search.go:rebuildIndex",
+      "pkg/storage/unified/testing/search_backend.go:runTestSearchBackendBuildIndex",
+      "pkg/storage/unified/resource/search_test.go:TestSearchGetOrCreateIndexWithCancellation",
+      "pkg/storage/unified/resource/search_test.go:TestRebuildIndexes",
+      "pkg/storage/unified/search/bleve_test.go:TestBuildIndexExpiration",
+      "pkg/storage/unified/search/bleve_test.go:TestIndexUpdate",
+      "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndBuildIndex",
+      "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateSearchAndRebuild",
+      "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearch",
+      "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearchWithIndexMinUpdateInterval",
+      "pkg/storage/unified/search/bleve_test.go:TestIndexUpdateWithErrors"
+    ],
+    "complete": true,
+    "unresolved": [
+      "Could not fetch the actual PR #112043 diff (network/gh blocked), so the exact arg-set is inferred from code: 'reason' on UpdateIndex (clearly unused in impl) and 'ctx' on GetIndex (declared as '_ context.Context', the only unused SearchBackend arg). If the PR removed only 'reason', the GetIndex sites (SearchBackend.GetIndex impls/callers: findIndexesToRebuild, rebuildIndex, runTestSearchBackendBuildIndex, TestSearchGetOrCreateIndexWithCancellation, TestRebuildIndexes, TestBuildIndexExpiration, and the GetIndex calls in getOrCreateIndex/TestConcurrentIndexUpdateSearchAndRebuild) would be out of scope.",
+      "dashboard MockClient.UpdateIndex (pkg/registry/apis/dashboard/search_test.go) is a different interface (returns error only) and is excluded."
+    ]
+  }
+}

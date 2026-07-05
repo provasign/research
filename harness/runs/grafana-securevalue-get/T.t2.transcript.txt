@@ -1,0 +1,13 @@
+I've traced all callers of `secureValueClient.Get`. Key findings:
+
+- The `secureValueClient` type's `Get` matches `dynamic.ResourceInterface.Get` and is exposed only via the `contracts.SecureValueClient` interface (`Client()` returns a `dynamic.ResourceInterface`).
+- The interface `contracts.SecureValueClient` has **no production consumer** — it's only registered in wire (`wireexts_oss.go:161`) but nothing injects/uses it, so there is no generic dynamic-dispatch call path in production code.
+- The only direct internal caller is `Update`, which calls `c.Get`.
+- The dedicated test file calls `nsClient.Get` (where `nsClient` is concretely this client).
+- The `apps/.../securevalue_client_gen.go` `SecureValueClient` and `EncryptedValueStorage.Get` are unrelated types with same-named methods — excluded.
+
+{
+  "sites": ["pkg/registry/apis/secret/secure_value_client.go:Update", "pkg/registry/apis/secret/secure_value_client_test.go:TestIntegration_SecureValueClient_CRUD", "pkg/registry/apis/secret/secure_value_client_test.go:Test_SecureValueClient_CRUD_NoPermissions"],
+  "complete": true,
+  "unresolved": []
+}

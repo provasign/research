@@ -1,0 +1,39 @@
+Looking at all the code paths, I now have a complete picture. Let me compile my findings:
+
+**Sites that must change:**
+
+1. **Interface definition**: `pkg/registry/apps/annotation/storage.go:LifecycleManager` - The method signature changes from `Cleanup(ctx context.Context)` to `Cleanup(ctx context.Context, cutoff time.Time)`
+
+2. **Implementations of LifecycleManager**:
+   - `pkg/registry/apps/annotation/postgres_lifecycle.go:PostgreSQLStore.Cleanup`
+   - `pkg/registry/apps/annotation/sql_adapter.go:sqlAdapter.Cleanup`
+   - `pkg/registry/apps/annotation/grpc_store.go:storeGRPC.Cleanup`
+
+3. **Callers of Cleanup**:
+   - `pkg/registry/apps/annotation/lifecycle.go:AppInstaller.runCleanup` - calls `lifecycleMgr.Cleanup(ctx)` on line 49
+   - `pkg/registry/apps/annotation/lifecycle.go:AppInstaller.startCleanup` - will need to pass `retentionTTL` to `runCleanup` calls (lines 25, 30)
+   - `pkg/registry/apps/annotation/grpc_store_test.go:mockGRPCServer.Cleanup` - calls `s.lifecycle.Cleanup(ctx)` on line 116
+
+4. **Protobuf changes**:
+   - `pkg/registry/apps/annotation/proto/store.proto` - `CleanupRequest` message needs a field for retention cutoff time
+   - `pkg/registry/apps/annotation/storepb/v1/store.pb.go` - will be regenerated
+   - `pkg/registry/apps/annotation/storepb/v1/store_grpc.pb.go` - will be regenerated
+
+```json
+{
+  "sites": [
+    "pkg/registry/apps/annotation/storage.go:LifecycleManager",
+    "pkg/registry/apps/annotation/postgres_lifecycle.go:PostgreSQLStore.Cleanup",
+    "pkg/registry/apps/annotation/sql_adapter.go:sqlAdapter.Cleanup",
+    "pkg/registry/apps/annotation/grpc_store.go:storeGRPC.Cleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:AppInstaller.startCleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:AppInstaller.runCleanup",
+    "pkg/registry/apps/annotation/grpc_store_test.go:mockGRPCServer.Cleanup",
+    "pkg/registry/apps/annotation/proto/store.proto",
+    "pkg/registry/apps/annotation/storepb/v1/store.pb.go",
+    "pkg/registry/apps/annotation/storepb/v1/store_grpc.pb.go"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

@@ -1,0 +1,12 @@
+I've identified the change sites. The two XORM `Update` calls against the `alert_rule` table that don't set the table explicitly are both in `pkg/services/ngalert/store/alert_rule.go`:
+
+- Line 608 in `UpdateAlertRules` — `sess.ID(...).AllCols().Omit("rule_guid").Update(converted)`
+- Line 710 in `preventIntermediateUniqueConstraintViolations` — `sess.ID(...).Cols("title").Update(&alertRule{...})`
+
+Both rely on the bean's `TableName()` for table resolution and lack an explicit `.Table(alertRule{})`, which on PostgreSQL can resolve to the wrong table (e.g. `user`) due to the optimistic-lock version column / session statement state. Other alert-rule mutators (`RenameReceiverInNotificationSettings`, `RenameTimeIntervalInNotificationSettings`, the rename functions, and all higher-level callers) delegate to `UpdateAlertRules` and issue no independent Update. The only structurally-similar site is a one-time startup migration (`updateRulesOrderInGroup.Exec`) in a different package with its own struct — not the runtime "updating alert rules" path the issue describes.
+
+{
+  "sites": ["pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules", "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"],
+  "complete": true,
+  "unresolved": ["pkg/services/sqlstore/migrations/ualert/rule_group_index_migration.go:updateRulesOrderInGroup.Exec issues a structurally identical XORM Update on alert_rule without an explicit .Table(); judged out of scope because it is a one-time startup migration in a separate package with its own struct, not the runtime alert-rule update flow described by the issue"]
+}

@@ -1,0 +1,40 @@
+I have verified all dispatch sites via prism. Let me finalize.
+
+The two unused arguments being removed are the only ones provably unused in the real (bleve) implementations and the only combination touching *both* named interfaces:
+- `reason string` from **ResourceIndex.UpdateIndex** (ignored in `bleveIndex.UpdateIndex`)
+- `ctx context.Context` from **SearchBackend.GetIndex** (declared `_` / unused in `bleveBackend.GetIndex`)
+
+Every implementation, caller, mock, and test referencing these (confirmed exhaustive via `prism references`) must change. The `reason`-tracking test infrastructure (`MockResourceIndex.UpdateIndex` body, `checkMockIndexUpdateCalls`, `TestSearchGetOrCreateIndexWithIndexUpdate`) is tied to the removed `reason` and must change too. The dashboard `MockClient.UpdateIndex` returns `error` (a different search-client interface, not `ResourceIndex`), so it's excluded.
+
+{
+  "sites": [
+    "pkg/storage/unified/resource/search.go:ResourceIndex.UpdateIndex",
+    "pkg/storage/unified/resource/search.go:SearchBackend.GetIndex",
+    "pkg/storage/unified/resource/search.go:searchSupport.getOrCreateIndex",
+    "pkg/storage/unified/resource/search.go:searchSupport.findIndexesToRebuild",
+    "pkg/storage/unified/resource/search.go:searchSupport.rebuildIndex",
+    "pkg/storage/unified/search/bleve.go:bleveIndex.UpdateIndex",
+    "pkg/storage/unified/search/bleve.go:bleveBackend.GetIndex",
+    "pkg/storage/unified/resource/search_test.go:MockResourceIndex.UpdateIndex",
+    "pkg/storage/unified/resource/search_test.go:mockSearchBackend.GetIndex",
+    "pkg/storage/unified/resource/search_test.go:slowSearchBackendWithCache.GetIndex",
+    "pkg/storage/unified/resource/search_test.go:TestSearchGetOrCreateIndexWithCancellation",
+    "pkg/storage/unified/resource/search_test.go:checkRebuildIndex",
+    "pkg/storage/unified/resource/search_test.go:TestSearchGetOrCreateIndexWithIndexUpdate",
+    "pkg/storage/unified/resource/search_test.go:checkMockIndexUpdateCalls",
+    "pkg/storage/unified/testing/search_backend.go:runTestSearchBackendBuildIndex",
+    "pkg/storage/unified/search/bleve_test.go:TestBuildIndexExpiration",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateSearchAndRebuild",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdate",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndBuildIndex",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearch",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearchWithIndexMinUpdateInterval",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdateWithErrors"
+  ],
+  "complete": true,
+  "unresolved": [
+    "Which args are removed was inferred (PR diff not fetchable: gh/WebFetch denied). Inference is strongly constrained: reason(UpdateIndex) and ctx(GetIndex) are the only unused-in-real-impl args, and the only pair spanning both named interfaces. Dispatch completeness was confirmed via prism references.",
+    "checkMockIndexUpdateCalls and TestSearchGetOrCreateIndexWithIndexUpdate exist solely to assert the reason passed to UpdateIndex; they must change but exact treatment (rewrite vs delete the reason-tracking) is undetermined without the diff.",
+    "pkg/registry/apis/dashboard/search_test.go:MockClient.UpdateIndex(ctx, reason) returns only error — a different search-client interface, not ResourceIndex/SearchBackend — so excluded; if the PR also trims that interface it would be out of the stated scope."
+  ]
+}

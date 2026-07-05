@@ -1,0 +1,21 @@
+The analysis is complete. The panic is definitively located at `client.go:266`:
+
+```go
+frames := utils.TransformTraceResponse(response.Data[0], refID)
+```
+
+When the Jaeger HTTP API returns `{"data":[], ...}`, `response.Data` has length 0 and `[0]` panics. The fix is a bounds check in `Trace()` before accessing `response.Data[0]`.
+
+Key observations:
+- `TransformTraceResponse` (in `client_utils.go`) takes a value `types.TraceResponse`, not a pointer — if passed an empty struct it safely returns an empty frame (iterates over nil `Spans`). No change needed there.
+- `GrpcTrace()` in `grpc_client.go` calls `TransformGrpcTraceResponse(response.Result.ResourceSpans, refID)` — that function iterates over a slice, so nil/empty is handled safely. No change needed.
+- `querydata.go:queryData` dispatches to `Trace()` and already handles the error return path; once `Trace()` returns an error (or an empty frame) instead of panicking, `queryData` needs no changes.
+- `TransformSearchResponse` sort.Slice accesses `Spans[0]` without a guard, but that's a separate panic only triggered when individual search-result traces have zero spans — a different scenario from an "empty result set" and a different stack trace (`client_utils.go`, not `client.go`).
+
+```json
+{
+  "sites": ["pkg/tsdb/jaeger/client.go:Trace"],
+  "complete": true,
+  "unresolved": []
+}
+```

@@ -1,0 +1,9 @@
+Both runtime Update calls that pass an `alertRule` struct without an explicit `.Table()` are in `store/alert_rule.go`: `UpdateAlertRules` (line 608) and its helper `preventIntermediateUniqueConstraintViolations` (line 710). These are the alert-rule update queries that can target the wrong table. The other `.Update()` calls in the ngalert store either already chain `.Table(...)` (admin_configuration) or operate on a different table (image → alert_image). The `alertRule` struct is unexported, so no out-of-package code can update it.
+
+I also checked the one-time migration `rule_group_index_migration.go:75`, which updates a *different* `alertRule` struct (package `ualert`) without a table — but that's a historical migration in a separate package, outside the runtime "updating alert rules" path the issue describes.
+
+{
+  "sites": ["pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules", "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"],
+  "complete": true,
+  "unresolved": ["pkg/services/sqlstore/migrations/ualert/rule_group_index_migration.go:migrateAlertRuleGroupIndex has a similar table-less .Update(rule) on a separate ualert.alertRule struct (no TableName method); excluded as a historical migration outside the runtime alert-rule update path the issue describes, but it shares the latent pattern"]
+}

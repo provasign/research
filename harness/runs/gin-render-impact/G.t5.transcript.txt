@@ -1,0 +1,13 @@
+I have enough to answer. Let me summarize my findings.
+
+**Interface implementations (production):** 18 types in `render/` implement `Render(http.ResponseWriter) error`. None of them internally delegate to another render's `Render` (the only intra-`render/` `.Render(` calls are in test files), so each is an independent leaf.
+
+**Dispatcher:** `context.go:1188` inside `(*Context).Render` is the sole production caller of the interface method (`r.Render(c.Writer)`). All the other `c.Render(code, …)` calls invoke `Context.Render`, whose external signature is unchanged.
+
+**Out-of-scope edges (why complete=false):** `sse.Event` (passed to `c.Render` in `SSEvent`) satisfies `render.Render` but lives in the external `github.com/gin-contrib/sse` module — its `Render` method must change too, but it's not in this repo. Additionally, test files contain a `TestRender` implementation plus dozens of direct `.Render(w)` call sites that must be updated to compile.
+
+{
+  "sites": ["render/bson.go:BSON.Render", "render/msgpack.go:MsgPack.Render", "render/pdf.go:PDF.Render", "render/xml.go:XML.Render", "render/html.go:HTML.Render", "render/redirect.go:Redirect.Render", "render/text.go:String.Render", "render/reader.go:Reader.Render", "render/yaml.go:YAML.Render", "render/toml.go:TOML.Render", "render/data.go:Data.Render", "render/json.go:JSON.Render", "render/json.go:IndentedJSON.Render", "render/json.go:SecureJSON.Render", "render/json.go:JsonpJSON.Render", "render/json.go:AsciiJSON.Render", "render/json.go:PureJSON.Render", "render/protobuf.go:ProtoBuf.Render", "context.go:Context.Render"],
+  "complete": false,
+  "unresolved": ["External dependency github.com/gin-contrib/sse: sse.Event implements render.Render and is dispatched via Context.Render (SSEvent), so its Render method must also change, but it lives outside this repo.", "Test code must change to compile: context_test.go:TestRender (an interface implementation) plus ~60 direct (Type{}).Render(w) call sites across render/render_test.go, render/render_msgpack_test.go, render/reader_test.go, binding/json_test.go; these were excluded from sites as non-production but are part of the compile impact."]
+}

@@ -1,0 +1,24 @@
+Based on my thorough analysis of the codebase, I've identified all functions containing XORM Update calls that don't explicitly specify the table for alert rules. Here's what I found:
+
+**Problematic Update calls:**
+1. **Line 608** in `UpdateAlertRules`: `sess.ID(r.Existing.ID).AllCols().Omit("rule_guid").Update(converted)` 
+2. **Line 710** in `preventIntermediateUniqueConstraintViolations`: `sess.ID(r.ID).Cols("title").Update(&alertRule{...})`
+
+Both are missing `.Table(alertRule{})` before the `.ID()` call, which causes XORM to infer the table from context—leading to the wrong table being used on PostgreSQL.
+
+**Verification:**
+- Searched entire `pkg/services/ngalert/store/` and found exactly 2 Update calls without explicit table specification in alert rule code
+- Compared to the correct pattern on line 225: `sess.Table(alertRule{}).Where(...).Update(...)`
+- Confirmed via prism that `preventIntermediateUniqueConstraintViolations` is only called from `UpdateAlertRules`
+- No other indirect paths exist
+
+```json
+{
+  "sites": [
+    "pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules",
+    "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

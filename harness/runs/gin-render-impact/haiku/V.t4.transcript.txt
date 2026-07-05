@@ -1,0 +1,38 @@
+Based on my comprehensive analysis using ripgrep and prism, I have identified all functions that must change for the `render.Render` interface signature change. Here are my findings:
+
+**All implementations of the render.Render.Render() method (19 total):**
+- 6 in render/json.go (JSON, IndentedJSON, SecureJSON, JsonpJSON, AsciiJSON, PureJSON)
+- 1 each in: xml.go, protobuf.go, pdf.go, msgpack.go, bson.go, toml.go, text.go, redirect.go, html.go, reader.go, data.go, yaml.go
+- 1 in context_test.go (TestRender)
+
+**The critical caller:**
+- context.go:Context.Render (line 1188) - this is the production code that invokes r.Render(c.Writer) through the interface
+
+```json
+{
+  "sites": [
+    "render/json.go:JSON.Render",
+    "render/json.go:IndentedJSON.Render",
+    "render/json.go:SecureJSON.Render",
+    "render/json.go:JsonpJSON.Render",
+    "render/json.go:AsciiJSON.Render",
+    "render/json.go:PureJSON.Render",
+    "render/xml.go:XML.Render",
+    "render/protobuf.go:ProtoBuf.Render",
+    "render/pdf.go:PDF.Render",
+    "render/msgpack.go:MsgPack.Render",
+    "render/bson.go:BSON.Render",
+    "render/toml.go:TOML.Render",
+    "render/text.go:String.Render",
+    "render/redirect.go:Redirect.Render",
+    "render/html.go:HTML.Render",
+    "render/reader.go:Reader.Render",
+    "render/data.go:Data.Render",
+    "render/yaml.go:YAML.Render",
+    "context_test.go:TestRender.Render",
+    "context.go:Context.Render"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

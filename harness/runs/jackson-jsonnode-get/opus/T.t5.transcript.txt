@@ -1,0 +1,36 @@
+Only Javadoc references in main — no call sites. My investigation is complete. Here's my analysis:
+
+**Declaration & overrides** (definitely must change — same method, signature change is binding):
+- `JsonNode.get(int)` abstract declaration; re-declared abstract in `ContainerNode`; overridden in `ArrayNode`, `ObjectNode`, `ValueNode`; plus two test subclasses of `BaseJsonNode` in `ObjectReaderTest` (`CustomObjectNode`, `DelegatingArrayNode`).
+
+**Call sites** (in this repo, all in tests — main source only calls `List.get`, never `JsonNode.get(int)`): verified receiver types are genuine JsonNode/ArrayNode/ObjectNode/MissingNode, excluding `List<JsonNode>`/POJO-list `.get(int)` calls.
+
+{
+  "sites": [
+    "src/main/java/com/fasterxml/jackson/databind/JsonNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ContainerNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ArrayNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ObjectNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ValueNode.java:get",
+    "src/test/java/com/fasterxml/jackson/databind/ObjectReaderTest.java:CustomObjectNode.get",
+    "src/test/java/com/fasterxml/jackson/databind/ObjectReaderTest.java:DelegatingArrayNode.get",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testDirectCreation",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testDirectCreation2",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testArraySet",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testArrayViaMapper",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testAddAllWithNullInCollection",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testSimpleArray",
+    "src/test/java/com/fasterxml/jackson/databind/node/ObjectNodeTest.java:testBasics",
+    "src/test/java/com/fasterxml/jackson/databind/node/RequiredAccessorTest.java:testSimpleRequireOk",
+    "src/test/java/com/fasterxml/jackson/databind/node/MissingNodeTest.java:testMissingViaMapper",
+    "src/test/java/com/fasterxml/jackson/databind/node/TreeReadViaMapperTest.java:testSimple",
+    "src/test/java/com/fasterxml/jackson/databind/deser/merge/NodeMergeTest.java:testObjectDeepUpdate",
+    "src/test/java/com/fasterxml/jackson/databind/deser/merge/NodeMergeTest.java:testArrayNodeMerge",
+    "src/test/java/com/fasterxml/jackson/databind/deser/CustomDeserializersTest.java:testCustomDeserializerWithReadTree"
+  ],
+  "complete": true,
+  "unresolved": [
+    "JsonNode.get(int) is declared with @Override, overriding TreeNode.get(int) from the separate jackson-core artifact; if the binding signature change must stay compatible with TreeNode, that base method (out of this repo) would also need to change — cross-repo, not resolvable here.",
+    "Whether each call site literally needs editing depends on the unspecified nature of the change: a binary/source-compatible change (e.g. widening return type) may leave call sites compiling unchanged, while a parameter-type change would break all of them. They are listed as the complete set of call sites that reference the method."
+  ]
+}

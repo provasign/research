@@ -1,0 +1,14 @@
+Based on my analysis, the `LifecycleManager.Cleanup(ctx)` signature gains a cutoff time parameter. Here's what must change:
+
+- **Interface**: `storage.go` — `LifecycleManager.Cleanup` declaration.
+- **Implementations**: `PostgreSQLStore.Cleanup`, `sqlAdapter.Cleanup`, `storeGRPC.Cleanup`.
+- **Caller**: `runCleanup` (calls `lifecycleMgr.Cleanup(ctx)`), which needs the cutoff; and `startCleanup` (holds `retentionTTL` and invokes `runCleanup` twice), whose calls must pass it through.
+- **gRPC server handler (test)**: `mockGRPCServer.Cleanup` delegates to `s.lifecycle.Cleanup(ctx)` and must supply the cutoff from the request.
+
+The gRPC path additionally needs the cutoff serialized over the wire (proto `CleanupRequest` field + regenerated code), but those are message/proto definitions, not functions. No production `AnnotationStoreServer` implementation exists in-repo (only the test mock); `MemoryStore` does not implement `LifecycleManager`.
+
+{
+  "sites": ["pkg/registry/apps/annotation/storage.go:LifecycleManager.Cleanup", "pkg/registry/apps/annotation/postgres_lifecycle.go:PostgreSQLStore.Cleanup", "pkg/registry/apps/annotation/sql_adapter.go:sqlAdapter.Cleanup", "pkg/registry/apps/annotation/grpc_store.go:storeGRPC.Cleanup", "pkg/registry/apps/annotation/lifecycle.go:runCleanup", "pkg/registry/apps/annotation/lifecycle.go:startCleanup", "pkg/registry/apps/annotation/grpc_store_test.go:mockGRPCServer.Cleanup"],
+  "complete": true,
+  "unresolved": ["gRPC wire transport: CleanupRequest in proto/store.proto and generated storepb/v1/store.pb.go must gain a cutoff field for storeGRPC<->server to carry the value; these are proto/message definitions, not functions, so excluded from sites", "No production AnnotationStoreServer.Cleanup implementation found in this repo (real gRPC server likely lives elsewhere/enterprise); only the test mock handler is present here"]
+}

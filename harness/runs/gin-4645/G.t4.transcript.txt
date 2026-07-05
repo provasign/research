@@ -1,0 +1,9 @@
+Both panic sites are type assertions in `response_writer.go`: `Hijack()` (line 120, `w.ResponseWriter.(http.Hijacker).Hijack()`) and `CloseNotify()` (line 125, `w.ResponseWriter.(http.CloseNotifier).CloseNotify()`). These are the only two methods using unchecked type assertions; `Flush` and `Pusher` already use the comma-ok pattern.
+
+The sole caller of `CloseNotify` (`context.go:Stream`) degrades safely with a nil channel (the `select` falls through to `default`), so it needs no change. There's only one `ResponseWriter` implementation (`responseWriter`).
+
+{
+  "sites": ["response_writer.go:Hijack", "response_writer.go:CloseNotify"],
+  "complete": true,
+  "unresolved": []
+}

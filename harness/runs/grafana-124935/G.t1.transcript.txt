@@ -1,0 +1,9 @@
+Both Update calls at lines 608 and 710 pass an `alertRule` struct but never call `.Table()`, so they rely on the bean's implicit table name — which the xorm fork's `TableName()` overrides whenever a stale `AltTableName` (from a prior `.Table()` in a never-reset session) is present, yielding the wrong `FROM user` table. The map-based update at line 228 (in `UpdateFolderFullpathsForFolders`) already specifies `.Table(alertRule{})`, so it's the correct pattern and needs no change.
+
+The two functions that must change are `UpdateAlertRules` and `preventIntermediateUniqueConstraintViolations`, both in `pkg/services/ngalert/store/alert_rule.go`.
+
+{
+  "sites": ["pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules", "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"],
+  "complete": true,
+  "unresolved": []
+}

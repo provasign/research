@@ -1,0 +1,16 @@
+The analysis is complete. The commit `7bf0e7644b` confirms exactly two functions need to change, both in `pkg/services/ngalert/store/alert_rule.go`:
+
+1. **`UpdateAlertRules`** (line 608): Missing `.Table(alertRule{})` before `.ID(...)`, and also uses wrong column name `"rule_guid"` in `Omit()` — should be `"guid"` (the XORM column tag on the `GUID` field of `alertRule`, not the `alert_rule_version` column name).
+
+2. **`preventIntermediateUniqueConstraintViolations`** (line 710): Missing `.Table(alertRule{})` before `.ID(...)`.
+
+```json
+{
+  "sites": [
+    "pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules",
+    "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

@@ -1,0 +1,31 @@
+I have fully traced the class hierarchy and all call sites. Let me confirm the final details are consistent.
+
+All overrides come from the complete set of `SettableBeanProperty` subclasses (including the three `Delegating` subclasses, of which `InnerClassProperty` does not override `set` and inherits `Delegating.set`). All call sites are confined to the `deser` package; every other `.set(` in the repo resolves to `ObjectNode`, `java.lang.reflect.Field`, `AtomicReference`, `BitSet`, `Calendar`, `List`, or the distinct 3-arg `SettableAnyProperty.set`. Receivers at call sites are statically typed `SettableBeanProperty`, so dispatch is fully resolved.
+
+{
+  "sites": [
+    "src/main/java/com/fasterxml/jackson/databind/deser/SettableBeanProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/SettableBeanProperty.java:Delegating.set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/CreatorProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/CreatorProperty.java:deserializeAndSet",
+    "src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializer.java:BeanReferring.handleResolvedForwardReference",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/SetterlessProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/MethodProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/FieldProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ObjectIdValueProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ObjectIdReferenceProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ObjectIdReferenceProperty.java:PropertyReferring.handleResolvedForwardReference",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/MergingSettableBeanProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/MergingSettableBeanProperty.java:deserializeAndSet",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ManagedReferenceProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ManagedReferenceProperty.java:setAndReturn",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ExternalTypeHandler.java:complete",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ExternalTypeHandler.java:_deserializeAndSet",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/PropertyValue.java:Regular.assign",
+    "src/main/java/com/fasterxml/jackson/databind/deser/std/ThrowableDeserializer.java:deserializeFromObject"
+  ],
+  "complete": true,
+  "unresolved": [
+    "ExternalTypeHandler.java has two overloads both named 'complete' (lines 223 and 334) that each call prop.set; both must change but they collapse to a single name-based entry"
+  ]
+}

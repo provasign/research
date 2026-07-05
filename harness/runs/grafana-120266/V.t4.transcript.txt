@@ -1,0 +1,7 @@
+The panic is at `pkg/tsdb/jaeger/client.go:266` — `response.Data[0]` where `response.Data` is an empty slice. The `Trace` method directly indexes element `[0]` without checking length. `TransformTraceResponse` itself loops over spans and handles an empty trace fine, so the guard belongs solely in `Trace` (e.g., return an empty frame when `len(response.Data) == 0`). The only index access in the package is this single site.
+
+{
+  "sites": ["pkg/tsdb/jaeger/client.go:Trace"],
+  "complete": true,
+  "unresolved": []
+}

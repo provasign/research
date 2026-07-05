@@ -1,0 +1,22 @@
+I now have a clear picture. Here are the findings:
+
+**Primary panic (the described issue):**
+- `client.go:Trace` line 266: `response.Data[0]` — when the Jaeger API returns an empty `Data` array (empty result set), this index panics.
+
+**Related latent panics in sort closures (same "index out of range" class):**
+- `utils/client_utils.go:TransformSearchResponse` line 51–52: `response[i].Spans[0]` — panics when a trace in the search result has zero spans (safe when the whole response is empty, but unsafe when any individual trace has an empty Spans slice).
+- `utils/grpc_utils.go:TransformGrpcSearchResponse` line 53–54: `resourceSpans[i].ScopeSpans[0].Spans[0]` — panics when a resource span has empty `ScopeSpans` or when `ScopeSpans[i].Spans` is empty.
+
+`GrpcTrace` (`grpc_client.go`) passes `response.Result.ResourceSpans` (a slice) directly to `TransformGrpcTraceResponse`, which range-iterates over it — no index-zero access, so no change needed there.
+
+```json
+{
+  "sites": [
+    "pkg/tsdb/jaeger/client.go:Trace",
+    "pkg/tsdb/jaeger/utils/client_utils.go:TransformSearchResponse",
+    "pkg/tsdb/jaeger/utils/grpc_utils.go:TransformGrpcSearchResponse"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

@@ -1,0 +1,22 @@
+I've traced the full picture. Summary of what I found:
+
+**Declaration / overrides** (`get(int)` in the `JsonNode` hierarchy):
+- `JsonNode.get` (abstract declaration, JsonNode.java:191)
+- `ContainerNode.get` (abstract re-declaration, line 53)
+- `ArrayNode.get` (line 262), `ValueNode.get` (final, line 68), `ObjectNode.get` (line 278)
+- Two test subclasses in `ObjectReaderTest`: `CustomObjectNode.get` (657) and `DelegatingArrayNode.get` (778)
+
+**Production call sites of `get(int)`** (verified receiver is a `JsonNode`):
+- `JsonNode.has(int)` (963), `JsonNode.hasNonNull(int)` (994)
+- `ArrayNode._at` (53 → `get(ptr.getMatchingIndex())`)
+- `DelegatingArrayNode.get` body also calls `_delegate.get(index)` (same method, already listed)
+
+Note: `ObjectNode._at` calls `get(getMatchingProperty())` = `get(String)`, not affected. All the `_children.get(i)` / `l1.get(i)` calls in ArrayNode are `List.get`, not `JsonNode.get`.
+
+The unresolvable part: test-suite call sites like `arrayNode.get(0)`. prism cannot disambiguate the `get` overload (it lumps all 29 `get` definitions, including `Map`/`List.get`), and grep cannot resolve receiver types, so I cannot exhaustively enumerate every test call passing an int to a `JsonNode`.
+
+{
+  "sites": ["src/main/java/com/fasterxml/jackson/databind/JsonNode.java:get", "src/main/java/com/fasterxml/jackson/databind/node/ContainerNode.java:get", "src/main/java/com/fasterxml/jackson/databind/node/ArrayNode.java:get", "src/main/java/com/fasterxml/jackson/databind/node/ValueNode.java:get", "src/main/java/com/fasterxml/jackson/databind/node/ObjectNode.java:get", "src/test/java/com/fasterxml/jackson/databind/ObjectReaderTest.java:CustomObjectNode.get", "src/test/java/com/fasterxml/jackson/databind/ObjectReaderTest.java:DelegatingArrayNode.get", "src/main/java/com/fasterxml/jackson/databind/JsonNode.java:has", "src/main/java/com/fasterxml/jackson/databind/JsonNode.java:hasNonNull", "src/main/java/com/fasterxml/jackson/databind/node/ArrayNode.java:_at"],
+  "complete": false,
+  "unresolved": ["Test-suite call sites invoking get(int) on a JsonNode (e.g. arrayNode.get(0)) could not be exhaustively enumerated: prism does not disambiguate the overloaded `get` (29 definitions incl. Map/List.get) and grep cannot resolve receiver static types, so an unknown number of test methods calling JsonNode.get(int) remain unconfirmed.", "If the signature change is source-compatible (e.g. covariant return narrowing or int->Integer autoboxing), the listed call sites (has, hasNonNull, _at, and test calls) may not strictly require edits; the HOW of the signature change is unspecified."]
+}

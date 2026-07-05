@@ -1,0 +1,19 @@
+The analysis is complete. Here's what I found:
+
+- **`response_writer.go:Hijack`** (line 120): Uses direct type assertion `w.ResponseWriter.(http.Hijacker).Hijack()` — panics if not implemented. Must use comma-ok like `Flush()` does, returning an error instead.
+- **`response_writer.go:CloseNotify`** (line 125): Uses direct type assertion `w.ResponseWriter.(http.CloseNotifier).CloseNotify()` — panics if not implemented. Must use comma-ok, returning a nil channel (which blocks forever, equivalent to "no notification support") for graceful degradation.
+- **`response_writer_test.go:TestResponseWriterHijack`**: Currently asserts both methods panic via `assert.Panics(...)`. After the fix these will not panic, so the test must be updated to assert graceful error/nil-channel returns.
+- The `ResponseWriter` interface embedding `http.Hijacker` and `http.CloseNotifier` does **not** need to change — the methods still exist on `responseWriter`, they just degrade gracefully like `Flush()` already does.
+- `Context.Stream` (context.go:1357) does **not** need to change — a nil channel from `CloseNotify()` simply never fires, which is the correct graceful behavior.
+
+```json
+{
+  "sites": [
+    "response_writer.go:Hijack",
+    "response_writer.go:CloseNotify",
+    "response_writer_test.go:TestResponseWriterHijack"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

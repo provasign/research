@@ -1,0 +1,25 @@
+Based on my comprehensive analysis of the codebase, I've identified all functions that call `secureValueClient.Get`. Let me compile the findings:
+
+**Direct callers of `secureValueClient.Get`:**
+
+1. Line 137 in `secure_value_client.go` - the `Update` method calls `c.Get(ctx, obj.GetName(), metav1.GetOptions{})`
+2. Lines 70, 95, 114 in `secure_value_client_test.go` - within `TestIntegration_SecureValueClient_CRUD`
+3. Line 170 in `secure_value_client_test.go` - within `Test_SecureValueClient_CRUD_NoPermissions`
+
+I verified this by:
+- Searching for all `.Get(` patterns in the secret package
+- Confirming these match the `dynamic.ResourceInterface.Get` signature
+- Verifying no other packages create or use `secureValueClient` instances
+- Checking all imports and Wire DI registrations
+
+```json
+{
+  "sites": [
+    "pkg/registry/apis/secret/secure_value_client.go:Update",
+    "pkg/registry/apis/secret/secure_value_client_test.go:TestIntegration_SecureValueClient_CRUD",
+    "pkg/registry/apis/secret/secure_value_client_test.go:Test_SecureValueClient_CRUD_NoPermissions"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

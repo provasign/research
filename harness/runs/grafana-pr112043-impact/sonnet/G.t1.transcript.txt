@@ -1,0 +1,39 @@
+Now I have all the information needed. Let me compile the complete impact list.
+
+The two unused arguments being removed are:
+1. `reason string` from `ResourceIndex.UpdateIndex` (unused in `bleveIndex.UpdateIndex`)
+2. `ctx context.Context` from `SearchBackend.GetIndex` (unused in `bleveBackend.GetIndex`, already marked `_`)
+
+```json
+{
+  "sites": [
+    "pkg/storage/unified/resource/search.go:ResourceIndex",
+    "pkg/storage/unified/resource/search.go:SearchBackend",
+    "pkg/storage/unified/search/bleve.go:UpdateIndex",
+    "pkg/storage/unified/search/bleve.go:GetIndex",
+    "pkg/storage/unified/resource/search_test.go:UpdateIndex",
+    "pkg/storage/unified/resource/search_test.go:GetIndex",
+    "pkg/storage/unified/resource/search.go:getOrCreateIndex",
+    "pkg/storage/unified/resource/search.go:findIndexesToRebuild",
+    "pkg/storage/unified/resource/search.go:rebuildIndex",
+    "pkg/storage/unified/resource/search_test.go:TestSearchGetOrCreateIndexWithCancellation",
+    "pkg/storage/unified/resource/search_test.go:checkRebuildIndex",
+    "pkg/storage/unified/resource/search_test.go:checkMockIndexUpdateCalls",
+    "pkg/storage/unified/resource/search_test.go:TestSearchGetOrCreateIndexWithIndexUpdate",
+    "pkg/storage/unified/testing/search_backend.go:runTestSearchBackendBuildIndex",
+    "pkg/storage/unified/search/bleve_test.go:TestBuildIndexExpiration",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateSearchAndRebuild",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdate",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndBuildIndex",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearch",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearchWithIndexMinUpdateInterval",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdateWithErrors"
+  ],
+  "complete": false,
+  "unresolved": [
+    "slowSearchBackendWithCache.GetIndex in pkg/storage/unified/resource/search_test.go has the same method name as mockSearchBackend.GetIndex; both must change but the site list merges them under one relpath:GetIndex entry — confirmed two distinct receivers at lines 350 and 147.",
+    "MockClient.UpdateIndex in pkg/registry/apis/dashboard/search_test.go has signature (ctx, reason) error (different return type from ResourceIndex.UpdateIndex); it appears to be a standalone extra method not satisfying resource.ResourceIndex, so it is excluded — but if it is found to implement a separate interface with the same args, it would also need to change.",
+    "checkMockIndexUpdateCalls and TestSearchGetOrCreateIndexWithIndexUpdate are second-order effects (they track reasons recorded by MockResourceIndex.UpdateIndex), included as must-change for test correctness but not compile-time breakage."
+  ]
+}
+```

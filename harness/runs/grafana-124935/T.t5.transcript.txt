@@ -1,0 +1,13 @@
+I've traced the mechanism. The bug is an XORM session-state leak: `Statement.Table()` sets `AltTableName`, and `Statement.TableName()` returns `AltTableName` if non-empty — but `setRefBean()` (called by `Update`) only sets `tableName`, never clearing `AltTableName`. So when the alerting transaction reuses a session whose statement previously had `.Table("user")` set, an alert-rule `Update` that doesn't explicitly set its own table will emit SQL targeting `user` instead of `alert_rule`.
+
+The only alert-rule `Update` calls (the ones lacking an explicit `.Table(...)`, unlike e.g. `admin_configuration.go:95`) are both in `alert_rule.go`:
+- line 608 in `UpdateAlertRules`
+- line 710 in `preventIntermediateUniqueConstraintViolations`
+
+Both run on the shared transaction session and so both must explicitly specify the `alert_rule` table.
+
+{
+  "sites": ["pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules", "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"],
+  "complete": true,
+  "unresolved": ["The leaked table name could alternatively be fixed inside the vendored XORM by having setRefBean clear AltTableName (pkg/util/xorm/statement.go:setRefBean); the issue frames the fix as adding explicit .Table(...) at the alert-rule Update call sites, so that XORM-level change is out of scope here."]
+}

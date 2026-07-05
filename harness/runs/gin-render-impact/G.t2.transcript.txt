@@ -1,0 +1,84 @@
+I now have the complete picture. Let me verify there are no other production interface dispatch sites beyond `Context.Render` and confirm the concrete implementation set is repo-wide complete (the earlier grep was repo-wide).
+
+The analysis:
+- **Interface declaration**: `render/render.go:Render` (the signature source).
+- **All concrete implementations** of the interface method (must change signature).
+- **Production invoker**: only `Context.Render` (context.go:1188) calls `r.Render()` via the interface. All `c.JSON`/`c.XML`/etc. call `c.Render(code, r)` — whose signature is unchanged — so they don't change.
+- **Test interface impl**: `context_test.go:TestRender.Render`.
+- **Test direct-call sites**: test functions calling concrete `.Render(w)` directly must change to compile. Tests calling `c.Render(...)` (e.g. `TestContextRenderSSE`) do NOT change since `Context.Render`'s signature is stable.
+- **External**: `sse.Event` (gin-contrib/sse) implements the interface and is passed to `c.Render`; it cannot be changed in this repo.
+
+{
+  "sites": [
+    "render/render.go:Render",
+    "render/text.go:String.Render",
+    "render/protobuf.go:ProtoBuf.Render",
+    "render/pdf.go:PDF.Render",
+    "render/toml.go:TOML.Render",
+    "render/bson.go:BSON.Render",
+    "render/redirect.go:Redirect.Render",
+    "render/msgpack.go:MsgPack.Render",
+    "render/html.go:HTML.Render",
+    "render/json.go:JSON.Render",
+    "render/json.go:IndentedJSON.Render",
+    "render/json.go:SecureJSON.Render",
+    "render/json.go:JsonpJSON.Render",
+    "render/json.go:AsciiJSON.Render",
+    "render/json.go:PureJSON.Render",
+    "render/xml.go:XML.Render",
+    "render/yaml.go:YAML.Render",
+    "render/reader.go:Reader.Render",
+    "render/data.go:Data.Render",
+    "context.go:Context.Render",
+    "context_test.go:TestRender.Render",
+    "render/render_test.go:TestRenderJSON",
+    "render/render_test.go:TestRenderJSONError",
+    "render/render_test.go:TestRenderIndentedJSON",
+    "render/render_test.go:TestRenderIndentedJSONPanics",
+    "render/render_test.go:TestRenderSecureJSON",
+    "render/render_test.go:TestRenderSecureJSONFail",
+    "render/render_test.go:TestRenderJsonpJSON",
+    "render/render_test.go:TestRenderJsonpJSONError",
+    "render/render_test.go:TestRenderJsonpJSONError2",
+    "render/render_test.go:TestRenderJsonpJSONFail",
+    "render/render_test.go:TestRenderAsciiJSON",
+    "render/render_test.go:TestRenderAsciiJSONFail",
+    "render/render_test.go:TestRenderPureJSON",
+    "render/render_test.go:TestRenderYAML",
+    "render/render_test.go:TestRenderYAMLFail",
+    "render/render_test.go:TestRenderTOML",
+    "render/render_test.go:TestRenderTOMLFail",
+    "render/render_test.go:TestRenderProtoBuf",
+    "render/render_test.go:TestRenderProtoBufFail",
+    "render/render_test.go:TestRenderBSON",
+    "render/render_test.go:TestRenderBSONError",
+    "render/render_test.go:TestRenderBSONWriteError",
+    "render/render_test.go:TestRenderXML",
+    "render/render_test.go:TestRenderXMLError",
+    "render/render_test.go:TestRenderPDF",
+    "render/render_test.go:TestRenderRedirect",
+    "render/render_test.go:TestRenderData",
+    "render/render_test.go:TestRenderDataContentLength",
+    "render/render_test.go:TestRenderDataError",
+    "render/render_test.go:TestRenderString",
+    "render/render_test.go:TestRenderStringLenZero",
+    "render/render_test.go:TestRenderHTMLTemplate",
+    "render/render_test.go:TestRenderHTMLTemplateEmptyName",
+    "render/render_test.go:TestRenderHTMLDebugFiles",
+    "render/render_test.go:TestRenderHTMLDebugGlob",
+    "render/render_test.go:TestRenderHTMLDebugFS",
+    "render/render_test.go:TestRenderHTMLTemplateError",
+    "render/render_test.go:TestRenderHTMLTemplateExecuteError",
+    "render/render_test.go:TestRenderReader",
+    "render/render_test.go:TestRenderReaderNoContentLength",
+    "render/render_test.go:TestRenderWriteError",
+    "render/render_msgpack_test.go:TestRenderMsgPack",
+    "render/render_msgpack_test.go:TestRenderMsgPackError",
+    "render/reader_test.go:TestReaderRenderNoHeaders",
+    "binding/json_test.go:TestCustomJsonCodec"
+  ],
+  "complete": true,
+  "unresolved": [
+    "sse.Event (external module github.com/gin-contrib/sse) implements render.Render and is passed to Context.Render (context.go:1347, and test sites context_test.go:TestContextRenderSSE, middleware_test.go:TestMiddlewareWrite). Its Render method must adopt the new signature too, but it lives outside this repo and cannot be changed here; without an upstream update gin will not compile. The in-repo callers of c.Render(sse.Event{...}) need no change since Context.Render's own signature is unchanged."
+  ]
+}

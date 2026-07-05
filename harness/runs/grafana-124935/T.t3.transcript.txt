@@ -1,0 +1,7 @@
+Both alert-rule struct `Update` calls that omit an explicit table are confirmed: line 608 in `UpdateAlertRules` and line 710 in `preventIntermediateUniqueConstraintViolations`. Both pass an `alertRule` struct, which (via `setRefBean`) only sets `tableName`, not `AltTableName` — and the forked xorm's `Statement.TableName()` prefers a leaked `AltTableName` (e.g. from a prior `.Table("user")`), since `Update` never calls `resetStatement()`. Adding an explicit `.Table(alertRule{})` to each pins the correct table. No other alert-rule update site exists (every other `alert_rule` query already uses `.Table(...)`; `image.go:135` and `admin_configuration.go:95` target different tables), and there's no dynamic dispatch involved.
+
+{
+  "sites": ["pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules", "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"],
+  "complete": true,
+  "unresolved": []
+}

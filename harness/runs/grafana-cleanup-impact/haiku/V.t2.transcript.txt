@@ -1,0 +1,32 @@
+Based on my comprehensive analysis of the codebase, here are all the sites that must change:
+
+```json
+{
+  "sites": [
+    "pkg/registry/apps/annotation/storage.go:LifecycleManager",
+    "pkg/registry/apps/annotation/postgres_lifecycle.go:PostgreSQLStore.Cleanup",
+    "pkg/registry/apps/annotation/sql_adapter.go:sqlAdapter.Cleanup",
+    "pkg/registry/apps/annotation/grpc_store.go:storeGRPC.Cleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:AppInstaller.runCleanup",
+    "pkg/registry/apps/annotation/grpc_store_test.go:mockGRPCServer.Cleanup",
+    "pkg/registry/apps/annotation/proto/store.proto:CleanupRequest"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```
+
+**Summary:**
+
+1. **Interface definition** (`storage.go:LifecycleManager`) - The interface method signature must change from `Cleanup(ctx context.Context)` to `Cleanup(ctx context.Context, retentionCutoff time.Time)` or similar
+
+2. **Three implementations** of LifecycleManager.Cleanup:
+   - `postgres_lifecycle.go:PostgreSQLStore.Cleanup` - Currently calculates cutoff internally; will receive it as parameter
+   - `sql_adapter.go:sqlAdapter.Cleanup` - Must accept and handle the new parameter
+   - `grpc_store.go:storeGRPC.Cleanup` - gRPC client implementation; must accept and pass parameter through proto
+
+3. **Function signature** (`lifecycle.go:AppInstaller.runCleanup`) - Must be updated to receive the retention cutoff time parameter and pass it to `lifecycleMgr.Cleanup()`
+
+4. **Test server** (`grpc_store_test.go:mockGRPCServer.Cleanup`) - The gRPC server mock implementation must extract the cutoff time and pass it to `s.lifecycle.Cleanup()`
+
+5. **Proto definition** (`proto/store.proto`) - The `CleanupRequest` message must be updated to include a field for the retention cutoff time (required for gRPC client/server communication)

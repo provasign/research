@@ -1,0 +1,12 @@
+Both alert-rule XORM `Update` calls live in `pkg/services/ngalert/store/alert_rule.go` and neither specifies the table explicitly:
+
+- Line 608, inside `UpdateAlertRules` — `sess.ID(...).AllCols().Omit("rule_guid").Update(converted)`
+- Line 710, inside `preventIntermediateUniqueConstraintViolations` — `sess.ID(...).Cols("title").Update(&alertRule{...})`
+
+Both rely on XORM inferring the table from the bean (`alertRule.TableName()`), which is the inference that breaks when the shared transactional session's statement state leaks a prior table (e.g. `user`). Every other `.Update(` in the ngalert store either operates on a different entity (`image.go`, `admin_configuration.go` which already pins `.Table("ngalert_configuration")`) or uses raw SQL with an explicit table. These are the only two alert-rule update sites lacking an explicit table.
+
+{
+  "sites": ["pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules", "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"],
+  "complete": true,
+  "unresolved": []
+}

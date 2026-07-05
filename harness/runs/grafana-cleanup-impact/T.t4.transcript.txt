@@ -1,0 +1,11 @@
+All paths confirmed. The relevant `.Cleanup(` LifecycleManager calls are confined to the annotation package; the broad matches are unrelated (`t.Cleanup`, `CleanupSettings`, the legacy `cleaner.Run`).
+
+Reasoning summary: The `LifecycleManager` interface declares `Cleanup(ctx) (int64, error)`. Changing it to `Cleanup(ctx, cutoff)` forces every implementation and caller to change:
+- The interface decl, its three implementations (PostgreSQL partition store, SQL adapter, gRPC client), and the test mock server (which implements `AnnotationStoreServer` and forwards to `lifecycle.Cleanup`).
+- The only caller `runCleanup` (which currently has no access to the TTL) must compute/receive the cutoff, so `startCleanup` (which holds `retentionTTL`) must pass it through. `register.go` already passes `cfg.RetentionTTL` to `startCleanup`, so its signature is unaffected.
+
+{
+  "sites": ["pkg/registry/apps/annotation/storage.go:LifecycleManager.Cleanup", "pkg/registry/apps/annotation/postgres_lifecycle.go:PostgreSQLStore.Cleanup", "pkg/registry/apps/annotation/sql_adapter.go:sqlAdapter.Cleanup", "pkg/registry/apps/annotation/grpc_store.go:storeGRPC.Cleanup", "pkg/registry/apps/annotation/lifecycle.go:runCleanup", "pkg/registry/apps/annotation/lifecycle.go:startCleanup", "pkg/registry/apps/annotation/grpc_store_test.go:mockGRPCServer.Cleanup"],
+  "complete": true,
+  "unresolved": ["proto/generated code (proto/store.proto CleanupRequest message and regenerated storepb/v1/store.pb.go, store_grpc.pb.go) must gain a cutoff field for the value to cross the gRPC boundary, but these are generated, not hand-edited functions", "No production AnnotationStoreServer (server-side Cleanup handler) exists in this repo — only the test mock; an enterprise/out-of-repo gRPC server implementation, if any, would also need to read the new cutoff field but is not visible here"]
+}

@@ -1,0 +1,35 @@
+Based on my investigation, I've identified all functions in the Grafana alert rule store that must be changed to fix the PostgreSQL XORM Update issue. The problem is that certain Update calls don't explicitly specify the table with `.Table()`, causing PostgreSQL to use the wrong table when executing the query.
+
+I found exactly 3 Update calls that need fixing:
+
+1. **Line 608 in `alert_rule.go`** - In the `UpdateAlertRules` method:
+   ```go
+   sess.ID(r.Existing.ID).AllCols().Omit("rule_guid").Update(converted)
+   ```
+   Needs: `sess.Table(...).ID(r.Existing.ID).AllCols().Omit("rule_guid").Update(converted)`
+
+2. **Line 710 in `alert_rule.go`** - In the `preventIntermediateUniqueConstraintViolations` method:
+   ```go
+   sess.ID(r.ID).Cols("title").Update(&alertRule{...})
+   ```
+   Needs explicit table specification before `.ID()`
+
+3. **Line 135 in `image.go`** - In the `SaveImage` method:
+   ```go
+   sess.ID(img.ID).Update(img)
+   ```
+   Needs explicit table specification before `.ID()`
+
+All other Update calls in the ngalert store already have explicit `.Table()` specifications (verified by checking admin_configuration.go line 95 which correctly uses `.Table("ngalert_configuration")`).
+
+```json
+{
+  "sites": [
+    "pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules",
+    "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations",
+    "pkg/services/ngalert/store/image.go:SaveImage"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

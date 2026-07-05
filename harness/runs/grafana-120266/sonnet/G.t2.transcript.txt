@@ -1,0 +1,20 @@
+Now I have a clear picture. Let me also check the sort comparator issue in `TransformSearchResponse` more closely.
+
+The root cause is clear:
+- **`client.go:Trace` line 266**: `utils.TransformTraceResponse(response.Data[0], refID)` — panics with `index out of range [0] with length 0` when the Jaeger API returns an empty `data` array (valid for traces that don't exist).
+
+Let me verify there are no similar unchecked indexing patterns in the GRPC path for trace queries:
+
+The `GrpcTrace()` function calls `utils.TransformGrpcTraceResponse(response.Result.ResourceSpans, refID)` where `ResourceSpans` is a slice passed by value — `TransformGrpcTraceResponse` iterates it with `for _, resource := range trace`, which is safe when empty.
+
+The `TransformSearchResponse` sort comparator at lines 51–52 accesses `response[i].Spans[0]` without a bounds check, but `sort.Slice` with an empty slice never calls the comparator, so an **empty** search result doesn't trigger it (only traces-with-no-spans would).
+
+The single required change is:
+
+```json
+{
+  "sites": ["pkg/tsdb/jaeger/client.go:Trace"],
+  "complete": true,
+  "unresolved": []
+}
+```

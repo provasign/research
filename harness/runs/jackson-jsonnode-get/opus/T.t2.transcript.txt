@@ -1,0 +1,39 @@
+All partitions corroborated. The remaining/top-level/misc dirs contain no JsonNode.get(int) call sites beyond the `DelegatingArrayNode.get` override body (already counted). Compiling the final result.
+
+Declaration + overrides (main): JsonNode, ContainerNode, ArrayNode, ValueNode, ObjectNode. Override (test): CustomObjectNode, DelegatingArrayNode. Internal call sites (main): JsonNode.has, JsonNode.hasNonNull, ArrayNode._at. Plus the verified test call sites.
+
+I'm setting `complete: false`: exhaustive call-site enumeration across the full test suite relied on per-agent static-type inference (miss-risk for unusually-named JsonNode vars / chained expressions), and whether each *call site* must change depends on the exact nature of the signature change (return-type vs. parameter/name), which the issue does not specify.
+
+{
+  "sites": [
+    "src/main/java/com/fasterxml/jackson/databind/JsonNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ContainerNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ArrayNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ValueNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ObjectNode.java:get",
+    "src/test/java/com/fasterxml/jackson/databind/ObjectReaderTest.java:CustomObjectNode.get",
+    "src/test/java/com/fasterxml/jackson/databind/ObjectReaderTest.java:DelegatingArrayNode.get",
+    "src/main/java/com/fasterxml/jackson/databind/JsonNode.java:has",
+    "src/main/java/com/fasterxml/jackson/databind/JsonNode.java:hasNonNull",
+    "src/main/java/com/fasterxml/jackson/databind/node/ArrayNode.java:_at",
+    "src/test/java/com/fasterxml/jackson/databind/deser/CustomDeserializersTest.java:testCustomDeserializerWithReadTree",
+    "src/test/java/com/fasterxml/jackson/databind/deser/merge/NodeMergeTest.java:testObjectDeepUpdate",
+    "src/test/java/com/fasterxml/jackson/databind/deser/merge/NodeMergeTest.java:testArrayNodeMerge",
+    "src/test/java/com/fasterxml/jackson/databind/node/ObjectNodeTest.java:testBasics",
+    "src/test/java/com/fasterxml/jackson/databind/node/RequiredAccessorTest.java:testSimpleRequireOk",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testDirectCreation",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testDirectCreation2",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testArraySet",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testArrayViaMapper",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testAddAllWithNullInCollection",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testSimpleArray",
+    "src/test/java/com/fasterxml/jackson/databind/node/MissingNodeTest.java:testMissingViaMapper",
+    "src/test/java/com/fasterxml/jackson/databind/node/TreeReadViaMapperTest.java:testSimple"
+  ],
+  "complete": false,
+  "unresolved": [
+    "Whether each CALL SITE must change depends on the exact nature of the 'signature change' (covariant return-type change may leave callers compiling unchanged; a parameter-type or method-name change forces every caller to change). The issue does not specify, so call sites are listed as potentially-affected.",
+    "Exhaustive test-suite call-site enumeration relied on per-agent static-type inference to separate JsonNode receivers from java.util.List/Map.get(int); unusually-named JsonNode variables, deeply chained expressions, or lambda captures could have been missed in the ~250 test files.",
+    "Cross-module impact (other Maven modules / downstream code calling JsonNode.get(int)) is outside this repository and not enumerated."
+  ]
+}

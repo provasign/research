@@ -1,0 +1,31 @@
+Confirmed: the only production invoker of the interface method is at `context.go:1188`, inside `Context.Render`. The render type implementations are the 18 found in the `render/` package. Test files and the external `sse.Event` type also invoke/implement the interface but are outside the core production fix.
+
+{
+  "sites": [
+    "render/json.go:JSON.Render",
+    "render/json.go:IndentedJSON.Render",
+    "render/json.go:SecureJSON.Render",
+    "render/json.go:JsonpJSON.Render",
+    "render/json.go:AsciiJSON.Render",
+    "render/json.go:PureJSON.Render",
+    "render/xml.go:XML.Render",
+    "render/text.go:String.Render",
+    "render/redirect.go:Redirect.Render",
+    "render/data.go:Data.Render",
+    "render/html.go:HTML.Render",
+    "render/yaml.go:YAML.Render",
+    "render/reader.go:Reader.Render",
+    "render/protobuf.go:ProtoBuf.Render",
+    "render/toml.go:TOML.Render",
+    "render/pdf.go:PDF.Render",
+    "render/msgpack.go:MsgPack.Render",
+    "render/bson.go:BSON.Render",
+    "context.go:Context.Render"
+  ],
+  "complete": false,
+  "unresolved": [
+    "context_test.go:TestRender.Render — an in-repo test type that implements render.Render; must change to keep satisfying the interface (excluded from sites as test code, but required for the test build to compile).",
+    "Test functions that directly invoke the interface method and would fail to compile: render/render_test.go (~30 test funcs calling JSON{}.Render(w), XML{}.Render(w), etc.), render/reader_test.go:TestRenderReader, render/render_msgpack_test.go (TestRenderMsgPack and the failWriter test), and binding/json_test.go (PureJSON{}.Render(w)). Not enumerated individually; flagged as mechanical compile-time updates.",
+    "External type github.com/gin-contrib/sse:Event implements render.Render and is passed to Context.Render (context.go:1347) — it would stop satisfying the changed interface, but it lives in a separate module and cannot be changed within this repo."
+  ]
+}

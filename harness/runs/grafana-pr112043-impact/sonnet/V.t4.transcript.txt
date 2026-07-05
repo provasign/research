@@ -1,0 +1,39 @@
+I now have a complete picture. Let me compile the final answer.
+
+The two unused arguments I identified:
+1. `ctx context.Context` in `SearchBackend.GetIndex` — already marked `_` in the bleve implementation, not used in test mocks either.
+2. `reason string` in `ResourceIndex.UpdateIndex` — declared but never referenced inside `bleveIndex.UpdateIndex`.
+
+```json
+{
+  "sites": [
+    "pkg/storage/unified/resource/search.go:SearchBackend",
+    "pkg/storage/unified/resource/search.go:ResourceIndex",
+    "pkg/storage/unified/search/bleve.go:bleveBackend.GetIndex",
+    "pkg/storage/unified/search/bleve.go:bleveIndex.UpdateIndex",
+    "pkg/storage/unified/resource/search_test.go:mockSearchBackend.GetIndex",
+    "pkg/storage/unified/resource/search_test.go:slowSearchBackendWithCache.GetIndex",
+    "pkg/storage/unified/resource/search_test.go:MockResourceIndex.UpdateIndex",
+    "pkg/storage/unified/resource/search.go:searchSupport.findIndexesToRebuild",
+    "pkg/storage/unified/resource/search.go:searchSupport.rebuildIndex",
+    "pkg/storage/unified/resource/search.go:searchSupport.getOrCreateIndex",
+    "pkg/storage/unified/resource/search_test.go:TestSearchGetOrCreateIndexWithCancellation",
+    "pkg/storage/unified/resource/search_test.go:checkRebuildIndex",
+    "pkg/storage/unified/resource/search_test.go:TestSearchGetOrCreateIndexWithIndexUpdate",
+    "pkg/storage/unified/resource/search_test.go:checkMockIndexUpdateCalls",
+    "pkg/storage/unified/search/bleve_test.go:TestBuildIndexExpiration",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdate",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndBuildIndex",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateSearchAndRebuild",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearch",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearchWithIndexMinUpdateInterval",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdateWithErrors",
+    "pkg/storage/unified/testing/search_backend.go:runTestSearchBackendBuildIndex"
+  ],
+  "complete": false,
+  "unresolved": [
+    "PR #112043 diff was not directly accessible (remote fetch blocked), so the exact arguments being removed were inferred from code: `ctx` in SearchBackend.GetIndex (already `_` in bleveBackend.GetIndex) and `reason` in ResourceIndex.UpdateIndex (never referenced in bleveIndex.UpdateIndex body). If a third argument is also being removed this list is incomplete.",
+    "pkg/registry/apis/dashboard/search_test.go:MockClient has UpdateIndex(ctx, reason) error (different return type from resource.ResourceIndex.UpdateIndex) — assessed as not implementing ResourceIndex and excluded, but should be verified against the actual PR."
+  ]
+}
+```

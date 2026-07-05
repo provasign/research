@@ -1,0 +1,37 @@
+Based on my investigation, I've identified the functions that must be changed to fix the graceful degradation issue with `Hijack()` and `CloseNotify()` on gin's response writer.
+
+## Analysis Summary
+
+The issue is that `Hijack()` and `CloseNotify()` panic when the underlying `http.ResponseWriter` doesn't implement the corresponding interfaces (`http.Hijacker` and `http.CloseNotifier`). The fix should follow gin's existing pattern used in `Flush()`, which gracefully checks for interface support.
+
+### Current Implementation Issues:
+1. **`Hijack()`** (response_writer.go:120): Direct type assertion without `ok` check
+   ```go
+   return w.ResponseWriter.(http.Hijacker).Hijack()  // panics if not supported
+   ```
+
+2. **`CloseNotify()`** (response_writer.go:125): Direct type assertion without `ok` check  
+   ```go
+   return w.ResponseWriter.(http.CloseNotifier).CloseNotify()  // panics if not supported
+   ```
+
+### Comparison with Flush (Working Pattern):
+`Flush()` handles missing interface gracefully:
+```go
+if f, ok := w.ResponseWriter.(http.Flusher); ok {
+    f.Flush()
+}
+```
+
+### Verification via Call Graph:
+- Only `responseWriter` struct implements the gin `ResponseWriter` interface
+- `Hijack()` and `CloseNotify()` are only defined in `response_writer.go`
+- All callers (like `Stream()` in context.go) will work correctly once these methods handle missing interfaces gracefully
+
+```json
+{
+  "sites": ["response_writer.go:Hijack", "response_writer.go:CloseNotify"],
+  "complete": true,
+  "unresolved": []
+}
+```

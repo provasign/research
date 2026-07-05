@@ -1,0 +1,21 @@
+I now have a complete picture. Here is the analysis:
+
+- **Interface definition**: `storage.go` — `LifecycleManager` interface body must change
+- **Two concrete implementations** of `LifecycleManager.Cleanup`: `postgres_lifecycle.go` (`PostgreSQLStore`) and `grpc_store.go` (`storeGRPC`)
+- **Two direct call sites** of `lifecycleMgr.Cleanup(ctx)`: `lifecycle.go:runCleanup` and `grpc_store_test.go:mockGRPCServer.Cleanup`
+- **Indirect cascade**: `runCleanup` currently has no access to `retentionTTL` (held by `startCleanup`), so `startCleanup` must also change to propagate the cutoff down to `runCleanup`
+
+```json
+{
+  "sites": [
+    "pkg/registry/apps/annotation/storage.go:LifecycleManager",
+    "pkg/registry/apps/annotation/postgres_lifecycle.go:PostgreSQLStore.Cleanup",
+    "pkg/registry/apps/annotation/grpc_store.go:storeGRPC.Cleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:AppInstaller.runCleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:AppInstaller.startCleanup",
+    "pkg/registry/apps/annotation/grpc_store_test.go:mockGRPCServer.Cleanup"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

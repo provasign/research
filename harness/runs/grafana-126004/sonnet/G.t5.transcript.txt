@@ -1,0 +1,34 @@
+Both prism lookups returned clear results. Let me compile the complete set of sites.
+
+The `prism references` output is authoritative (both marked "unambiguous"), so I have the full picture:
+
+**`toSnowflakeRV` → `ToSnowflakeRV`**
+- Definition: `storage_backend.go` line 769
+- Call sites within the package: `WriteEvent`, `ReadResource`, `ListIterator` (two calls, lines 1285/1319), `ListModifiedSince` (line 1580), `ListHistory` (two calls, 1801/1818) — all in `storage_backend.go`
+- Test caller: `TestToSnowflakeRVIdempotent` in `datastore_test.go`
+
+**`subtractDurationFromSnowflake` → `SubtractDurationFromSnowflake`**
+- Definition: `eventstore.go` line 309
+- Test callers: `TestSubtractDurationFromSnowflake` and `testListKeysSinceWithSnowflakeTime` in `eventstore_test.go`
+- Production caller: `kvStorageBackend.ListModifiedSince` in `storage_backend.go` (already in list above)
+- Test caller: `seedBackend` in `storage_backend_test.go`
+
+```json
+{
+  "sites": [
+    "pkg/storage/unified/resource/storage_backend.go:toSnowflakeRV",
+    "pkg/storage/unified/resource/storage_backend.go:WriteEvent",
+    "pkg/storage/unified/resource/storage_backend.go:ReadResource",
+    "pkg/storage/unified/resource/storage_backend.go:ListIterator",
+    "pkg/storage/unified/resource/storage_backend.go:ListModifiedSince",
+    "pkg/storage/unified/resource/storage_backend.go:ListHistory",
+    "pkg/storage/unified/resource/datastore_test.go:TestToSnowflakeRVIdempotent",
+    "pkg/storage/unified/resource/eventstore.go:subtractDurationFromSnowflake",
+    "pkg/storage/unified/resource/eventstore_test.go:TestSubtractDurationFromSnowflake",
+    "pkg/storage/unified/resource/eventstore_test.go:testListKeysSinceWithSnowflakeTime",
+    "pkg/storage/unified/resource/storage_backend_test.go:seedBackend"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

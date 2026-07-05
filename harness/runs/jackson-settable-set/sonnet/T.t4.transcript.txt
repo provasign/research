@@ -1,0 +1,58 @@
+Now I have all the information needed to compile the comprehensive list. Let me organize the findings:
+
+**Declarations/Implementations (methods that must change their signature):**
+- `SettableBeanProperty.java` - abstract declaration (line 508)
+- `SettableBeanProperty.java` - `Delegating` inner class override (line 793)
+- `CreatorProperty.java` - override (line 283)
+- `FieldProperty.java` - override (line 187)
+- `MethodProperty.java` - override (line 179)
+- `SetterlessProperty.java` - override (line 146)
+- `ManagedReferenceProperty.java` - override (line 72)
+- `MergingSettableBeanProperty.java` - override (line 116)
+- `ObjectIdValueProperty.java` - override (line 111)
+- `ObjectIdReferenceProperty.java` - override (line 106)
+
+**Call sites (methods that call `SettableBeanProperty.set()` and must update their call):**
+- `SettableBeanProperty.java:Delegating.set` → `delegate.set(instance, value)` (line 794)
+- `CreatorProperty.java:deserializeAndSet` → `_fallbackSetter.set(instance, ...)` (line 271)
+- `CreatorProperty.java:set` → `_fallbackSetter.set(instance, value)` (line 286)
+- `ExternalTypeHandler.java:complete` → `prop.set(bean, result)` (line 223), `prop.set(bean, values[i])` (line 334), `getProperty().set(bean, null)` (line 393)
+- `PropertyValue.java:Regular.assign` → `_property.set(bean, value)` (line 72)
+- `MergingSettableBeanProperty.java:deserializeAndSet` → `delegate.set(instance, newValue)` (line 85)
+- `MergingSettableBeanProperty.java:set` → `delegate.set(instance, value)` (line 120)
+- `ManagedReferenceProperty.java:set` → `_backProperty.set(...)` (lines 86, 90, 94, 101)
+- `ObjectIdReferenceProperty.java:set` → `_forward.set(instance, value)` (line 107)
+- `ObjectIdReferenceProperty.java:PropertyReferring.handleResolvedForwardReference` → `_parent.set(_pojo, value)` (line 134)
+- `BeanDeserializer.java:BeanReferring.handleResolvedForwardReference` → `_prop.set(_bean, value)` (line 1186)
+- `ThrowableDeserializer.java:deserialize` → `prop.set(throwable, ...)` (line 200)
+
+```json
+{
+  "sites": [
+    "src/main/java/com/fasterxml/jackson/databind/deser/SettableBeanProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/SettableBeanProperty.java:Delegating.set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/CreatorProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/CreatorProperty.java:deserializeAndSet",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/FieldProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/MethodProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/SetterlessProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ManagedReferenceProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/MergingSettableBeanProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/MergingSettableBeanProperty.java:deserializeAndSet",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ObjectIdValueProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ObjectIdReferenceProperty.java:set",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ObjectIdReferenceProperty.java:PropertyReferring.handleResolvedForwardReference",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ExternalTypeHandler.java:complete",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/ExternalTypeHandler.java:_deserializeAndSet",
+    "src/main/java/com/fasterxml/jackson/databind/deser/impl/PropertyValue.java:Regular.assign",
+    "src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializer.java:BeanReferring.handleResolvedForwardReference",
+    "src/main/java/com/fasterxml/jackson/databind/deser/std/ThrowableDeserializer.java:deserialize"
+  ],
+  "complete": false,
+  "unresolved": [
+    "Dynamic dispatch: any external subclass of SettableBeanProperty (e.g., in third-party modules or tests outside this repo) that overrides set() would also need to change, but cannot be found by searching this repository alone.",
+    "InnerClassProperty.java has a commented-out set() override (line 103) that was intentionally removed; its Delegating superclass set() is already included, so no additional change needed there.",
+    "ExternalTypeHandler.java has two distinct methods calling prop.set() (the overloaded complete() and _deserializeAndSet()); both method names are listed but they share the file — a reviewer should check both call clusters at lines 223/334 and 393 respectively."
+  ]
+}
+```

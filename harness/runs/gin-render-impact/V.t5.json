@@ -1,0 +1,152 @@
+{
+  "status": "ok",
+  "model": "opus",
+  "task_id": "gin-render-impact",
+  "arm": "V",
+  "trial": 5,
+  "recall": 1.0,
+  "precision": 1.0,
+  "f1": 1.0,
+  "found": [
+    "context.go:Render",
+    "render/bson.go:Render",
+    "render/data.go:Render",
+    "render/html.go:Render",
+    "render/json.go:Render",
+    "render/pdf.go:Render",
+    "render/protobuf.go:Render",
+    "render/reader.go:Render",
+    "render/redirect.go:Render",
+    "render/text.go:Render",
+    "render/toml.go:Render",
+    "render/xml.go:Render",
+    "render/yaml.go:Render"
+  ],
+  "missed": [],
+  "extra": [],
+  "weak_matches": [],
+  "claimed_complete": false,
+  "overconfident": false,
+  "surfaced_gap": true,
+  "cost": {
+    "wall_s": 102.41,
+    "duration_ms": 101826,
+    "num_turns": 10,
+    "usage": {
+      "input_tokens": 16,
+      "cache_creation_input_tokens": 11022,
+      "cache_read_input_tokens": 146659,
+      "output_tokens": 6881,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 11022,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 2637,
+          "cache_read_input_tokens": 22151,
+          "cache_creation_input_tokens": 3428,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 3428
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "total_cost_usd": 0.3568055
+  },
+  "tools_used": [
+    "Grep",
+    "Read",
+    "grep",
+    "ls",
+    "prism"
+  ],
+  "graph_used": true,
+  "violation": null,
+  "tool_trace": [
+    {
+      "tool": "Bash",
+      "bin": "ls",
+      "detail": "ls render/"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "func \\([^)]+\\) Render\\("
+    },
+    {
+      "tool": "Read",
+      "bin": "",
+      "detail": "/private/tmp/gvg-corpus/gin-render-impact/render/render.go"
+    },
+    {
+      "tool": "Read",
+      "bin": "",
+      "detail": "/private/tmp/gvg-corpus/gin-render-impact/render/html.go"
+    },
+    {
+      "tool": "Read",
+      "bin": "",
+      "detail": "/private/tmp/gvg-corpus/gin-render-impact/context.go"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "\\.Render\\("
+    },
+    {
+      "tool": "Bash",
+      "bin": "grep",
+      "detail": "grep -rn \"gin-contrib/sse\\|package sse\" --include=*.go go.mod | head; echo \"---\"; ls; echo \"--- sse refs\"; grep -rn \"sse\\.\" context.go | head"
+    },
+    {
+      "tool": "Bash",
+      "bin": "grep",
+      "detail": "grep -n \"sse\" context.go | grep import; grep -rn \"gin-contrib/sse\" go.mod context.go"
+    },
+    {
+      "tool": "Bash",
+      "bin": "prism",
+      "detail": "/Users/tapabratapal/bin/prism references Render --format text 2>&1 | head -60"
+    }
+  ],
+  "answer": {
+    "sites": [
+      "context.go:Render",
+      "render/json.go:Render",
+      "render/json.go:Render",
+      "render/json.go:Render",
+      "render/json.go:Render",
+      "render/json.go:Render",
+      "render/json.go:Render",
+      "render/xml.go:Render",
+      "render/text.go:Render",
+      "render/data.go:Render",
+      "render/html.go:Render",
+      "render/redirect.go:Render",
+      "render/reader.go:Render",
+      "render/yaml.go:Render",
+      "render/toml.go:Render",
+      "render/protobuf.go:Render",
+      "render/msgpack.go:Render",
+      "render/bson.go:Render",
+      "render/pdf.go:Render",
+      "context_test.go:Render"
+    ],
+    "complete": false,
+    "unresolved": [
+      "sse.Event.Render (github.com/gin-contrib/sse, external dependency) is a dispatch target \u2014 passed to Context.Render in context.go:SSEvent (line 1347). Its signature must also change for gin to compile/work, but it lives outside this repo and cannot be edited here.",
+      "Numerous test functions invoke concrete .Render(w) directly and would need updating to compile: render/render_test.go (~40 calls in TestRenderJSON/TestRenderYAML/TestRenderTOML/TestRenderProtoBuf/TestRenderBSON/TestRenderXML/TestRenderReader/TestRenderHTML* etc.), render/render_msgpack_test.go (TestRenderMsgPack, TestRenderMsgPackFail), render/reader_test.go (TestReaderRenderNoHeaders), and binding/json_test.go (TestCustomJsonCodec). These were not enumerated individually; they are real but test-only compile sites. Test calls to c.Render(...) (Context.Render) do NOT change since that signature is unchanged."
+    ]
+  }
+}

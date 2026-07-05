@@ -1,0 +1,19 @@
+The picture is complete. Here's the analysis:
+
+- `response_writer.go:Hijack` (line 120): does `w.ResponseWriter.(http.Hijacker).Hijack()` — a bare type assertion that panics when the underlying writer doesn't implement `http.Hijacker`. Must change to a comma-ok assertion mirroring `Flush()`.
+- `response_writer.go:CloseNotify` (line 125): does `w.ResponseWriter.(http.CloseNotifier).CloseNotify()` — same pattern, same panic risk. Must change to a safe type assertion returning nil (or a never-closing channel) when unsupported.
+- `response_writer_test.go:TestResponseWriterHijack`: currently uses `assert.Panics` for both calls on a plain `httptest.ResponseRecorder`. Once the fix lands those panics become no-panic returns, so this test must be rewritten to assert graceful degradation instead.
+
+`Context.Stream` (context.go:1355) calls `CloseNotify()` but it feeds the result into a `select` with a `default:` branch — a nil channel in that select simply never fires, so the stream continues normally. That is the correct degraded behavior; no change needed there.
+
+```json
+{
+  "sites": [
+    "response_writer.go:Hijack",
+    "response_writer.go:CloseNotify",
+    "response_writer_test.go:TestResponseWriterHijack"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

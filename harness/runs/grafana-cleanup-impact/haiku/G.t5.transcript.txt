@@ -1,0 +1,29 @@
+Based on my thorough investigation of the codebase, I've identified all sites where the Cleanup method signature change will require updates:
+
+**Interface and Implementations:**
+1. The `LifecycleManager` interface definition in storage.go
+2. Three implementations: storeGRPC, PostgreSQLStore, and sqlAdapter
+
+**Call Sites:**
+1. AppInstaller.runCleanup which calls lifecycleMgr.Cleanup(ctx)
+2. mockGRPCServer.Cleanup in tests which calls s.lifecycle.Cleanup(ctx)
+3. storeGRPC.Cleanup's internal call to s.client.Cleanup()
+
+**Protocol Buffer:**
+1. The CleanupRequest message must be updated to carry the retention cutoff time since the gRPC client needs to pass this parameter through the RPC call
+
+```json
+{
+  "sites": [
+    "pkg/registry/apps/annotation/storage.go:Cleanup",
+    "pkg/registry/apps/annotation/grpc_store.go:storeGRPC.Cleanup",
+    "pkg/registry/apps/annotation/postgres_lifecycle.go:PostgreSQLStore.Cleanup",
+    "pkg/registry/apps/annotation/sql_adapter.go:sqlAdapter.Cleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:AppInstaller.runCleanup",
+    "pkg/registry/apps/annotation/grpc_store_test.go:mockGRPCServer.Cleanup",
+    "pkg/registry/apps/annotation/proto/store.proto:CleanupRequest"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

@@ -1,0 +1,33 @@
+Based on my comprehensive analysis of the codebase, I've identified all the sites that must change when the LifecycleManager.Cleanup method changes to take a retention cutoff time parameter.
+
+Here's my final analysis:
+
+**Key findings:**
+- LifecycleManager interface is defined in storage.go and has 3 implementations: PostgreSQLStore, sqlAdapter, and storeGRPC
+- The interface is used in lifecycle.go to manage background cleanup operations
+- All implementations and call sites must be updated
+- The gRPC proto message (CleanupRequest) must be updated to transport the cutoff time
+
+**Sites that need changes:**
+1. **Interface definition** - storage.go:LifecycleManager (method signature)
+2. **Implementations** - PostgreSQLStore.Cleanup, sqlAdapter.Cleanup, storeGRPC.Cleanup
+3. **Call sites** - AppInstaller.runCleanup and AppInstaller.startCleanup
+4. **Test mock** - mockGRPCServer.Cleanup 
+5. **Proto message** - CleanupRequest needs a new field for the cutoff time
+
+```json
+{
+  "sites": [
+    "pkg/registry/apps/annotation/storage.go:LifecycleManager",
+    "pkg/registry/apps/annotation/postgres_lifecycle.go:PostgreSQLStore.Cleanup",
+    "pkg/registry/apps/annotation/sql_adapter.go:sqlAdapter.Cleanup",
+    "pkg/registry/apps/annotation/grpc_store.go:storeGRPC.Cleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:AppInstaller.startCleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:AppInstaller.runCleanup",
+    "pkg/registry/apps/annotation/grpc_store_test.go:mockGRPCServer.Cleanup",
+    "pkg/registry/apps/annotation/proto/store.proto:CleanupRequest"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

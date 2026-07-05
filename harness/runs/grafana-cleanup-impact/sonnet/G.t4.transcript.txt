@@ -1,0 +1,30 @@
+I now have a complete picture. Let me compile the final analysis:
+
+- **Interface**: `storage.go:LifecycleManager` — the `Cleanup` method signature definition
+- **Implementations** (all satisfy the interface):
+  - `postgres_lifecycle.go` — `PostgreSQLStore.Cleanup` 
+  - `sql_adapter.go` — `sqlAdapter.Cleanup`
+  - `grpc_store.go` — `storeGRPC.Cleanup`
+- **Test implementation** that calls `.Cleanup` via the interface:
+  - `grpc_store_test.go:116` — `mockGRPCServer.Cleanup` calls `s.lifecycle.Cleanup(ctx)`
+- **Caller chain**:
+  - `lifecycle.go:runCleanup` — directly calls `lifecycleMgr.Cleanup(ctx)`, must add the cutoff arg
+  - `lifecycle.go:startCleanup` — calls `runCleanup`, which will change signature (already has `retentionTTL` param that must be forwarded)
+
+```json
+{
+  "sites": [
+    "pkg/registry/apps/annotation/storage.go:LifecycleManager",
+    "pkg/registry/apps/annotation/postgres_lifecycle.go:Cleanup",
+    "pkg/registry/apps/annotation/sql_adapter.go:Cleanup",
+    "pkg/registry/apps/annotation/grpc_store.go:Cleanup",
+    "pkg/registry/apps/annotation/grpc_store_test.go:Cleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:runCleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:startCleanup"
+  ],
+  "complete": false,
+  "unresolved": [
+    "pkg/registry/apps/annotation/proto/store.proto and the generated storepb/v1/store_grpc.pb.go: storeGRPC.Cleanup forwards calls over gRPC via s.client.Cleanup(ctx, req). If the retention cutoff must be transported to a remote server, CleanupRequest in the proto definition needs a new field, which regenerates the pb.go file. Whether this is required depends on whether the cutoff is computed client-side or server-side, which is a design decision not determinable from the current code alone."
+  ]
+}
+```

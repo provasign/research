@@ -1,0 +1,7 @@
+The panic is at `client.go:266`: `utils.TransformTraceResponse(response.Data[0], refID)` — when the Jaeger response has an empty `Data` slice, indexing `[0]` panics. The fix is localized to the `Trace` method, which must guard against an empty `response.Data` before indexing. The caller (`querydata.go`) and `TransformTraceResponse` don't require changes — the guard belongs entirely in `Trace`, where the unsafe index occurs.
+
+{
+  "sites": ["pkg/tsdb/jaeger/client.go:Trace"],
+  "complete": true,
+  "unresolved": []
+}

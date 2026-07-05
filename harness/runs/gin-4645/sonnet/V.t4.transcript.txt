@@ -1,0 +1,19 @@
+The analysis is complete. Here is the result:
+
+- **`response_writer.go:Hijack`** — line 120 does `w.ResponseWriter.(http.Hijacker).Hijack()`, a bare type assertion that panics if the underlying writer doesn't implement `http.Hijacker`. Must be changed to an ok-check (like `Flush` does).
+- **`response_writer.go:CloseNotify`** — line 125 does `w.ResponseWriter.(http.CloseNotifier).CloseNotify()`, same problem. Must be changed to an ok-check, returning a nil or never-closing channel on miss.
+- **`response_writer_test.go:TestResponseWriterHijack`** — lines 116–124 explicitly assert `assert.Panics` for both `Hijack()` and `CloseNotify()`. Once the methods no longer panic, these assertions must change.
+
+`Context.Stream` (context.go:1357) calls `w.CloseNotify()` but does not itself need to change: if `CloseNotify()` is fixed to return a nil channel when unsupported, the `select { case <-clientGone: }` branch simply never fires, which is graceful degradation equivalent to what `Flush` already does.
+
+```json
+{
+  "sites": [
+    "response_writer.go:Hijack",
+    "response_writer.go:CloseNotify",
+    "response_writer_test.go:TestResponseWriterHijack"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

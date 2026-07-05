@@ -1,0 +1,24 @@
+Good — the memory store doesn't implement `Cleanup` so it won't need to change. I have all the information I need. Here is the complete impact analysis:
+
+**Chain of changes:**
+- `storage.go` — the `LifecycleManager` interface signature changes (root cause)
+- Three concrete implementations must update their method signatures and bodies
+- `runCleanup` calls `lifecycleMgr.Cleanup(ctx)` and must now pass the cutoff; it currently has no access to the retention TTL, so it also needs the TTL threaded in from `startCleanup`
+- `startCleanup` already holds `retentionTTL` but passes only `lifecycleMgr` to `runCleanup`; it must also pass the TTL (or computed cutoff) so `runCleanup` can forward it
+- The test mock `mockGRPCServer.Cleanup` calls `s.lifecycle.Cleanup(ctx)` and must pass the cutoff as well
+
+```json
+{
+  "sites": [
+    "pkg/registry/apps/annotation/storage.go:LifecycleManager",
+    "pkg/registry/apps/annotation/postgres_lifecycle.go:Cleanup",
+    "pkg/registry/apps/annotation/grpc_store.go:Cleanup",
+    "pkg/registry/apps/annotation/sql_adapter.go:Cleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:runCleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:startCleanup",
+    "pkg/registry/apps/annotation/grpc_store_test.go:Cleanup"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

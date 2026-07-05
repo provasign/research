@@ -1,0 +1,7 @@
+I now have the complete picture. The interface is package-local (only the `annotation` package references `LifecycleManager`), with explicit `var _ LifecycleManager` assertions on `PostgreSQLStore` and `storeGRPC`, plus `sqlAdapter` satisfying it structurally. Callers are the cleanup loop (`runCleanup`/`startCleanup`) and the test gRPC server.
+
+{
+  "sites": ["pkg/registry/apps/annotation/storage.go:LifecycleManager.Cleanup", "pkg/registry/apps/annotation/lifecycle.go:runCleanup", "pkg/registry/apps/annotation/lifecycle.go:startCleanup", "pkg/registry/apps/annotation/postgres_lifecycle.go:PostgreSQLStore.Cleanup", "pkg/registry/apps/annotation/grpc_store.go:storeGRPC.Cleanup", "pkg/registry/apps/annotation/sql_adapter.go:sqlAdapter.Cleanup", "pkg/registry/apps/annotation/grpc_store_test.go:mockGRPCServer.Cleanup"],
+  "complete": true,
+  "unresolved": ["gRPC transport: storeGRPC.Cleanup/mockGRPCServer.Cleanup carry the cutoff via storev1.CleanupRequest, which is currently empty (proto/store.proto 'message CleanupRequest {}'); a cutoff field must be added and store.pb.go/store_grpc.pb.go regenerated — these are proto/codegen artifacts, not hand-edited functions, so not listed as sites.", "The only AnnotationStoreServer implementation in this repo is the test mock; a real (production) server-side Cleanup handler that would unpack the cutoff appears to live outside this repository and could not be located here."]
+}

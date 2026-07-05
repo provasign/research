@@ -1,0 +1,21 @@
+I now have a complete picture. The two panicking sites are both in `response_writer.go`:
+
+- **Line 120**: `return w.ResponseWriter.(http.Hijacker).Hijack()` — bare (panicking) type assertion
+- **Line 125**: `return w.ResponseWriter.(http.CloseNotifier).CloseNotify()` — bare (panicking) type assertion
+
+Compare with how `Flush` already handles this gracefully (lines 131–132): `if f, ok := w.ResponseWriter.(http.Flusher); ok { f.Flush() }`.
+
+No other files need to change:
+- `context.go:Stream` calls `w.CloseNotify()` through the interface, but once `CloseNotify` returns a nil/blocking channel instead of panicking, the `select` in `Stream` will simply always fall through to `default` — correct degraded behavior, no code change needed.
+- The `ResponseWriter` interface definition still embeds `http.Hijacker` and `http.CloseNotifier` (just as it embeds `http.Flusher` even though Flush degrades silently), so the interface itself is not what must change.
+
+```json
+{
+  "sites": [
+    "response_writer.go:Hijack",
+    "response_writer.go:CloseNotify"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

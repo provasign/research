@@ -1,0 +1,7 @@
+The panic is solely `response.Data[0]` at `client.go:266` inside `Trace`, when `response.Data` is empty. The fix is a guard there before indexing. `TransformTraceResponse` already handles an empty `TraceResponse` (zero spans → empty frame), so it needs no change, and the caller `queryData` simply wraps the returned frame and needs no change. The `Search` path passes the whole slice (`TransformSearchResponse(result.Data, …)`), so it has no analogous bug. `GrpcTrace` is a separate method, not in `client.go` and not in the stack trace.
+
+{
+  "sites": ["pkg/tsdb/jaeger/client.go:Trace"],
+  "complete": true,
+  "unresolved": []
+}

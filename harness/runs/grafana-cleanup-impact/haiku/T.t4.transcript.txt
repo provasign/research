@@ -1,0 +1,29 @@
+Based on my analysis of the repository, I've identified all the sites that must change when the `LifecycleManager.Cleanup` method signature changes to include a retention cutoff time parameter.
+
+The sites are:
+
+1. **Interface definition** - `pkg/registry/apps/annotation/storage.go:LifecycleManager.Cleanup`
+
+2. **Implementations of the LifecycleManager interface**:
+   - `pkg/registry/apps/annotation/postgres_lifecycle.go:PostgreSQLStore.Cleanup`
+   - `pkg/registry/apps/annotation/sql_adapter.go:sqlAdapter.Cleanup`
+   - `pkg/registry/apps/annotation/grpc_store.go:storeGRPC.Cleanup`
+
+3. **Call sites that invoke the Cleanup method**:
+   - `pkg/registry/apps/annotation/lifecycle.go:AppInstaller.runCleanup` (calls `lifecycleMgr.Cleanup(ctx)` at line 49)
+   - `pkg/registry/apps/annotation/grpc_store_test.go:mockGRPCServer.Cleanup` (calls `s.lifecycle.Cleanup(ctx)` at line 116)
+
+```json
+{
+  "sites": [
+    "pkg/registry/apps/annotation/storage.go:LifecycleManager.Cleanup",
+    "pkg/registry/apps/annotation/postgres_lifecycle.go:PostgreSQLStore.Cleanup",
+    "pkg/registry/apps/annotation/sql_adapter.go:sqlAdapter.Cleanup",
+    "pkg/registry/apps/annotation/grpc_store.go:storeGRPC.Cleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:AppInstaller.runCleanup",
+    "pkg/registry/apps/annotation/grpc_store_test.go:mockGRPCServer.Cleanup"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

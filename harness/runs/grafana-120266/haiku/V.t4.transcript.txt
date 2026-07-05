@@ -1,0 +1,26 @@
+Based on my investigation, I've identified all functions in the active code path that have unsafe slice accesses that could cause the reported panic when handling empty trace responses.
+
+The call chain is:
+1. `querydata.queryData()` is the main entry point
+2. For trace ID queries: calls `JaegerClient.Trace()` which accesses `response.Data[0]` 
+3. For search queries: calls `JaegerClient.Search()` which calls `TransformSearchResponse()` - this function has unsafe accesses in its sort function
+
+Here are the findings:
+
+**Unsafe accesses found:**
+- `client.go:266` - `response.Data[0]` accessed without checking if Data is empty
+- `client_utils.go:51-52` - `response[i].Spans[0]` and `response[j].Spans[0]` accessed in sort function without checking if Spans is empty  
+- `client_utils.go:76` - `trace.Spans[0]` accessed in main loop without checking if Spans is empty
+
+All three accesses are in two functions that must be fixed.
+
+```json
+{
+  "sites": [
+    "pkg/tsdb/jaeger/client.go:Trace",
+    "pkg/tsdb/jaeger/utils/client_utils.go:TransformSearchResponse"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

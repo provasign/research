@@ -1,0 +1,39 @@
+I've now systematically verified all sites via two independent methods (file-type intersection + chained-call sweep) and manual receiver-type checks, catching sites the agents missed (`CustomDeserializersTest`, `ArrayNodeTest.testAddAllWithNullInCollection`). The remaining candidate files were all List/Map receivers. Here is my final determination.
+
+Summary of what must change:
+- **Declaration + overrides**: `JsonNode.get` (decl), `ContainerNode.get` (abstract re-decl), `ArrayNode.get`, `ObjectNode.get`, `ValueNode.get`, plus two test subclass overrides in `ObjectReaderTest`.
+- **Main call sites**: `JsonNode.has`, `JsonNode.hasNonNull`, `ArrayNode._at`.
+- **Test call sites**: across `ArrayNodeTest`, `ObjectNodeTest`, `RequiredAccessorTest`, `MissingNodeTest`, `TreeReadViaMapperTest`, `NodeMergeTest`, `CustomDeserializersTest`.
+
+{
+  "sites": [
+    "src/main/java/com/fasterxml/jackson/databind/JsonNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ContainerNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ArrayNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ObjectNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ValueNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/JsonNode.java:has",
+    "src/main/java/com/fasterxml/jackson/databind/JsonNode.java:hasNonNull",
+    "src/main/java/com/fasterxml/jackson/databind/node/ArrayNode.java:_at",
+    "src/test/java/com/fasterxml/jackson/databind/ObjectReaderTest.java:CustomObjectNode.get",
+    "src/test/java/com/fasterxml/jackson/databind/ObjectReaderTest.java:DelegatingArrayNode.get",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testDirectCreation",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testDirectCreation2",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testArraySet",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testArrayViaMapper",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testAddAllWithNullInCollection",
+    "src/test/java/com/fasterxml/jackson/databind/node/ArrayNodeTest.java:testSimpleArray",
+    "src/test/java/com/fasterxml/jackson/databind/node/ObjectNodeTest.java:testBasics",
+    "src/test/java/com/fasterxml/jackson/databind/node/RequiredAccessorTest.java:testSimpleRequireOk",
+    "src/test/java/com/fasterxml/jackson/databind/node/MissingNodeTest.java:testMissingViaMapper",
+    "src/test/java/com/fasterxml/jackson/databind/node/TreeReadViaMapperTest.java:testSimple",
+    "src/test/java/com/fasterxml/jackson/databind/deser/merge/NodeMergeTest.java:testObjectDeepUpdate",
+    "src/test/java/com/fasterxml/jackson/databind/deser/merge/NodeMergeTest.java:testArrayNodeMerge",
+    "src/test/java/com/fasterxml/jackson/databind/deser/CustomDeserializersTest.java:testCustomDeserializerWithReadTree"
+  ],
+  "complete": true,
+  "unresolved": [
+    "JsonNode.get(int) carries @Override of com.fasterxml.jackson.core.TreeNode.get(int) (jackson-core, external to this repo). If the signature change is not covariant-compatible, the parent declaration in jackson-core would also need to change; that file is outside this repository and cannot be edited here.",
+    "Call-site receiver typing was resolved by static analysis (variable declarations + chained-expression sweeps). Distinguishing JsonNode.get(int) from List/Map/array .get(int) at repo scale carries minor residual risk for any receiver obtained via an unannotated method chain in a file that never names a JsonNode type, but two independent sweeps found no such case."
+  ]
+}

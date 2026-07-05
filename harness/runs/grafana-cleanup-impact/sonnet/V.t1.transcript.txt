@@ -1,0 +1,36 @@
+I have all the information I need. Here's my comprehensive analysis:
+
+**Interface** (`LifecycleManager` in `storage.go`): current signature `Cleanup(ctx context.Context) (int64, error)`
+
+**Three concrete implementations** of that interface:
+- `PostgreSQLStore.Cleanup` (`postgres_lifecycle.go`)
+- `storeGRPC.Cleanup` (`grpc_store.go`) 
+- `sqlAdapter.Cleanup` (`sql_adapter.go`)
+
+**Two direct call sites** of `.Cleanup(ctx)` on a `LifecycleManager` value:
+- `runCleanup` in `lifecycle.go:49`
+- `mockGRPCServer.Cleanup` in `grpc_store_test.go:116`
+
+**`startCleanup`** in `lifecycle.go:11` already receives `retentionTTL time.Duration` and calls `runCleanup`. Since `runCleanup` has no access to the TTL and must now compute/pass a cutoff to `Cleanup`, `startCleanup` must update its call to `runCleanup` (or the design restructures so the TTL flows through).
+
+The proto source (`proto/store.proto`) has an empty `CleanupRequest{}` — for gRPC to carry the cutoff through the wire, that message needs a field added, but it's not a function/method so it goes in unresolved.
+
+```json
+{
+  "sites": [
+    "pkg/registry/apps/annotation/storage.go:LifecycleManager",
+    "pkg/registry/apps/annotation/postgres_lifecycle.go:PostgreSQLStore.Cleanup",
+    "pkg/registry/apps/annotation/grpc_store.go:storeGRPC.Cleanup",
+    "pkg/registry/apps/annotation/sql_adapter.go:sqlAdapter.Cleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:runCleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:startCleanup",
+    "pkg/registry/apps/annotation/grpc_store_test.go:mockGRPCServer.Cleanup"
+  ],
+  "complete": false,
+  "unresolved": [
+    "pkg/registry/apps/annotation/proto/store.proto: CleanupRequest message must gain a retention-cutoff field for the gRPC path to propagate the cutoff to the remote server — this is a proto source change, not a Go function, and the generated storepb/v1/store.pb.go and store_grpc.pb.go files will change as a result but are not hand-edited.",
+    "startCleanup inclusion is design-dependent: if runCleanup is restructured to accept the cutoff/TTL as a parameter then startCleanup must update its two calls to runCleanup; if instead the TTL is captured via a closure or stored on AppInstaller then startCleanup's body still changes but possibly not its signature. Either way its body must change.",
+    "No production-code gRPC server implementation of AnnotationStoreServer was found outside of the test mock (mockGRPCServer). If a remote gRPC server exists in a deployment-specific or enterprise path not present in this worktree, its Cleanup handler would also need updating."
+  ]
+}
+```

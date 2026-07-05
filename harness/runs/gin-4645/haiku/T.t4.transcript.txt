@@ -1,0 +1,36 @@
+Based on my analysis of the gin codebase, I've identified the functions that must be changed to fix the panic issue with Hijack() and CloseNotify() when the underlying http.ResponseWriter doesn't implement these interfaces.
+
+## Analysis
+
+I found:
+
+1. **response_writer.go:Hijack()** (lines 110-121) - Currently uses an unsafe type assertion:
+   ```go
+   return w.ResponseWriter.(http.Hijacker).Hijack()
+   ```
+   This panics if the underlying writer doesn't implement http.Hijacker.
+
+2. **response_writer.go:CloseNotify()** (lines 123-126) - Currently uses an unsafe type assertion:
+   ```go
+   return w.ResponseWriter.(http.CloseNotifier).CloseNotify()
+   ```
+   This panics if the underlying writer doesn't implement http.CloseNotifier.
+
+3. **response_writer.go:Flush()** (lines 129-134) - Already implements graceful degradation correctly:
+   ```go
+   if f, ok := w.ResponseWriter.(http.Flusher); ok {
+       f.Flush()
+   }
+   ```
+
+4. **context.go:Stream()** (line 1357) - Calls w.CloseNotify(), but this will automatically work once CloseNotify() is fixed to not panic.
+
+The fix requires updating Hijack() and CloseNotify() to follow the same pattern as Flush() - using type assertion with the `ok` pattern to gracefully degrade instead of panicking.
+
+```json
+{
+  "sites": ["response_writer.go:Hijack", "response_writer.go:CloseNotify"],
+  "complete": true,
+  "unresolved": []
+}
+```

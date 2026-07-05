@@ -1,0 +1,38 @@
+I have all the information needed. Let me compile the complete list.
+
+**Definitions:**
+- `storage_backend.go:769` — `toSnowflakeRV` (the function to be renamed)
+- `eventstore.go:309` — `subtractDurationFromSnowflake` (the function to be renamed)
+
+**Call sites by containing function:**
+- `storage_backend.go:887` → `WriteEvent`
+- `storage_backend.go:1196` → `ReadResource`
+- `storage_backend.go:1285,1319` → `ListIterator`
+- `storage_backend.go:1580,1618` → `ListModifiedSince`
+- `storage_backend.go:1801,1818` → `ListHistory`
+- `storage_backend_test.go:1299` → `seedBackend`
+- `eventstore_test.go:777` → `TestSubtractDurationFromSnowflake`
+- `eventstore_test.go:852,869` → `testListKeysSinceWithSnowflakeTime`
+- `datastore_test.go:3444` → `TestToSnowflakeRVIdempotent`
+
+Since both symbols are currently unexported, they cannot be referenced from outside the `resource` package — so the grep over all Go files is exhaustive.
+
+```json
+{
+  "sites": [
+    "pkg/storage/unified/resource/storage_backend.go:toSnowflakeRV",
+    "pkg/storage/unified/resource/eventstore.go:subtractDurationFromSnowflake",
+    "pkg/storage/unified/resource/storage_backend.go:WriteEvent",
+    "pkg/storage/unified/resource/storage_backend.go:ReadResource",
+    "pkg/storage/unified/resource/storage_backend.go:ListIterator",
+    "pkg/storage/unified/resource/storage_backend.go:ListModifiedSince",
+    "pkg/storage/unified/resource/storage_backend.go:ListHistory",
+    "pkg/storage/unified/resource/storage_backend_test.go:seedBackend",
+    "pkg/storage/unified/resource/eventstore_test.go:TestSubtractDurationFromSnowflake",
+    "pkg/storage/unified/resource/eventstore_test.go:testListKeysSinceWithSnowflakeTime",
+    "pkg/storage/unified/resource/datastore_test.go:TestToSnowflakeRVIdempotent"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

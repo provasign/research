@@ -1,0 +1,21 @@
+Based on my comprehensive search of the codebase, I've identified all functions that need to be changed to fix the XORM Update calls that don't specify the table explicitly for alert rules.
+
+I found the following Update calls without explicit `.Table()` specification:
+
+1. **Line 608 in alert_rule.go** - `UpdateAlertRules` method: `sess.ID(r.Existing.ID).AllCols().Omit("rule_guid").Update(converted)`
+2. **Line 710 in alert_rule.go** - `preventIntermediateUniqueConstraintViolations` method: `sess.ID(r.ID).Cols("title").Update(&alertRule{...})`  
+3. **Line 75 in rule_group_index_migration.go** - `updateRulesOrderInGroup.Exec` method: `sess.ID(rule.ID).Cols(...).Update(rule)`
+
+For comparison, I verified that `UpdateFolderFullpathsForFolders` at line 225 correctly uses `.Table(alertRule{})` before the Update call, and migrations using raw SQL with `sess.Exec()` explicitly specify the table in the SQL string.
+
+```json
+{
+  "sites": [
+    "pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules",
+    "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations",
+    "pkg/services/sqlstore/migrations/ualert/rule_group_index_migration.go:updateRulesOrderInGroup.Exec"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

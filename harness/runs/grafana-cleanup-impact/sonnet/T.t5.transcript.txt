@@ -1,0 +1,29 @@
+Now I have a complete picture. Let me compile all the sites:
+
+The `LifecycleManager.Cleanup` interface in `storage.go` currently has signature `Cleanup(ctx context.Context) (int64, error)`. Adding a retention cutoff time means every **interface declaration**, **concrete implementation**, and **caller** of this method must change.
+
+Summary of all sites:
+
+1. **Interface declaration** — `storage.go:Cleanup` (the `LifecycleManager` interface method signature itself)
+2. **PostgreSQL implementation** — `postgres_lifecycle.go:Cleanup` (`PostgreSQLStore.Cleanup`, currently computes its own cutoff from `s.config.RetentionTTL`; would instead receive it)
+3. **SQL adapter implementation** — `sql_adapter.go:Cleanup` (`sqlAdapter.Cleanup`, implements the interface)
+4. **gRPC client implementation** — `grpc_store.go:Cleanup` (`storeGRPC.Cleanup`, must encode the cutoff into the gRPC request)
+5. **Lifecycle runner (direct caller)** — `lifecycle.go:runCleanup` (calls `lifecycleMgr.Cleanup(ctx)`, must compute and pass the cutoff)
+6. **Lifecycle starter** — `lifecycle.go:startCleanup` (calls `runCleanup` without passing `retentionTTL`; must forward it so `runCleanup` can compute the cutoff)
+7. **Test gRPC server mock** — `grpc_store_test.go:Cleanup` (`mockGRPCServer.Cleanup`, calls `s.lifecycle.Cleanup(ctx)`, must decode cutoff from gRPC request and pass it)
+
+```json
+{
+  "sites": [
+    "pkg/registry/apps/annotation/storage.go:Cleanup",
+    "pkg/registry/apps/annotation/postgres_lifecycle.go:Cleanup",
+    "pkg/registry/apps/annotation/sql_adapter.go:Cleanup",
+    "pkg/registry/apps/annotation/grpc_store.go:Cleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:runCleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:startCleanup",
+    "pkg/registry/apps/annotation/grpc_store_test.go:Cleanup"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

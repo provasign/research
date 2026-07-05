@@ -1,0 +1,21 @@
+Based on my analysis of the codebase, I've identified all functions that must be changed to fix the alert rule update table issue on PostgreSQL.
+
+The problem occurs when XORM Update calls don't explicitly specify the table, causing it to infer the wrong table name (using "user" instead of "alert_rule") when the session is part of a larger transaction. This is exactly what the git history shows was fixed in commit 7bf0e7644b.
+
+The two functions that contain the problematic Update calls are:
+
+1. **UpdateAlertRules** (line 608): `sess.ID(r.Existing.ID).AllCols().Omit("rule_guid").Update(converted)` - missing `.Table()` and has wrong column name
+2. **preventIntermediateUniqueConstraintViolations** (line 710): `sess.ID(r.ID).Cols("title").Update(&alertRule{...})` - missing `.Table()`
+
+Both require adding `.Table(alertRule{})` before `.ID()`, and the first also needs changing "rule_guid" to "guid" to match the actual struct field name.
+
+```json
+{
+  "sites": [
+    "pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules",
+    "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

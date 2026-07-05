@@ -1,0 +1,21 @@
+Based on my comprehensive analysis of the gin codebase, I have identified all functions that must change to fix this issue.
+
+## Analysis Summary
+
+The issue is that `Hijack()` and `CloseNotify()` methods on gin's `responseWriter` struct panic when the underlying `http.ResponseWriter` doesn't implement the corresponding interfaces. The methods that need to be fixed are:
+
+1. **`response_writer.go` line 111 - `Hijack()`**: Currently does an unsafe type assertion at line 120: `w.ResponseWriter.(http.Hijacker).Hijack()` which panics if the interface isn't implemented.
+
+2. **`response_writer.go` line 124 - `CloseNotify()`**: Currently does an unsafe type assertion at line 125: `w.ResponseWriter.(http.CloseNotifier).CloseNotify()` which panics if the interface isn't implemented.
+
+Both methods should be updated to match the pattern already used by `Flush()` (line 129) and `Pusher()` (line 136), which check for interface implementation with `ok` before calling the method.
+
+**Why not `context.go:Stream()`?** The `Stream()` method calls `CloseNotify()` at line 1357. Once `CloseNotify()` is fixed to degrade gracefully (e.g., returning a never-closing channel when the interface isn't implemented), `Stream()` will work correctly without panicking and without requiring changes.
+
+```json
+{
+  "sites": ["response_writer.go:Hijack", "response_writer.go:CloseNotify"],
+  "complete": true,
+  "unresolved": []
+}
+```

@@ -1,0 +1,40 @@
+I now have a complete picture. Let me produce the final answer.
+
+The two unused arguments identified:
+1. `reason string` in `ResourceIndex.UpdateIndex` — unused in `bleveIndex.UpdateIndex` (body never references it)
+2. `ctx context.Context` in `SearchBackend.GetIndex` — explicitly discarded (`_`) in `bleveBackend.GetIndex`
+
+Every site that must change:
+
+```json
+{
+  "sites": [
+    "pkg/storage/unified/resource/search.go:UpdateIndex",
+    "pkg/storage/unified/resource/search.go:GetIndex",
+    "pkg/storage/unified/search/bleve.go:UpdateIndex",
+    "pkg/storage/unified/search/bleve.go:GetIndex",
+    "pkg/storage/unified/resource/search_test.go:MockResourceIndex.UpdateIndex",
+    "pkg/storage/unified/resource/search_test.go:mockSearchBackend.GetIndex",
+    "pkg/storage/unified/resource/search_test.go:slowSearchBackendWithCache.GetIndex",
+    "pkg/storage/unified/resource/search.go:searchSupport.getOrCreateIndex",
+    "pkg/storage/unified/resource/search.go:searchSupport.findIndexesToRebuild",
+    "pkg/storage/unified/resource/search.go:searchSupport.rebuildIndex",
+    "pkg/storage/unified/resource/search_test.go:TestSearchGetOrCreateIndexWithCancellation",
+    "pkg/storage/unified/resource/search_test.go:checkRebuildIndex",
+    "pkg/storage/unified/resource/search_test.go:TestSearchGetOrCreateIndexWithIndexUpdate",
+    "pkg/storage/unified/resource/search_test.go:checkMockIndexUpdateCalls",
+    "pkg/storage/unified/search/bleve_test.go:TestBuildIndexExpiration",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdate",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndBuildIndex",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateSearchAndRebuild",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearch",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearchWithIndexMinUpdateInterval",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdateWithErrors",
+    "pkg/storage/unified/testing/search_backend.go:runTestSearchBackendBuildIndex"
+  ],
+  "complete": true,
+  "unresolved": [
+    "pkg/registry/apis/dashboard/search_test.go:MockClient.UpdateIndex already has the wrong return type (error vs (int64,error)) so it does not implement resource.ResourceIndex and is unaffected by the interface change — but its presence warrants a manual review to confirm it is intentionally orphaned."
+  ]
+}
+```

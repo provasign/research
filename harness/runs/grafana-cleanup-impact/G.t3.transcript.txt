@@ -1,0 +1,26 @@
+Based on my investigation, the `LifecycleManager` interface and its `Cleanup` method are confined entirely to the `pkg/registry/apps/annotation` package (no external references). I traced the interface, all three implementations, the caller chain, and the gRPC test mock.
+
+Changing `Cleanup(ctx)` → `Cleanup(ctx, cutoff)` forces:
+- The interface declaration (`storage.go`)
+- All 3 implementations: `PostgreSQLStore`, `sqlAdapter`, `storeGRPC`
+- The caller `runCleanup` (calls `lifecycleMgr.Cleanup`) and its caller `startCleanup` (which owns `retentionTTL` and must supply the cutoff)
+- The test gRPC server mock `mockGRPCServer.Cleanup`, which calls `s.lifecycle.Cleanup`
+
+`register.go` already passes `cfg.RetentionTTL` into `startCleanup`, so it needs no change. The generated proto methods keep their `*CleanupRequest` signatures (a cutoff field would be added to the message, not the function signature), so they are data/codegen changes, not function-signature sites.
+
+{
+  "sites": [
+    "pkg/registry/apps/annotation/storage.go:LifecycleManager.Cleanup",
+    "pkg/registry/apps/annotation/postgres_lifecycle.go:PostgreSQLStore.Cleanup",
+    "pkg/registry/apps/annotation/sql_adapter.go:sqlAdapter.Cleanup",
+    "pkg/registry/apps/annotation/grpc_store.go:storeGRPC.Cleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:runCleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:startCleanup",
+    "pkg/registry/apps/annotation/grpc_store_test.go:mockGRPCServer.Cleanup"
+  ],
+  "complete": true,
+  "unresolved": [
+    "Proto: CleanupRequest message (proto/store.proto + regenerated storepb/v1/*.pb.go) needs a cutoff field for the value to transit gRPC; this is a message/codegen change, not a function-signature edit, so excluded from sites.",
+    "Design degree-of-freedom: cutoff may be threaded via runCleanup's parameter or stored on AppInstaller; either way both runCleanup and startCleanup bodies change, so both are listed regardless."
+  ]
+}

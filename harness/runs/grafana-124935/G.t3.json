@@ -1,0 +1,120 @@
+{
+  "status": "ok",
+  "model": "opus",
+  "task_id": "grafana-124935",
+  "arm": "G",
+  "trial": 3,
+  "recall": 1.0,
+  "precision": 1.0,
+  "f1": 1.0,
+  "found": [
+    "pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules",
+    "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"
+  ],
+  "missed": [],
+  "extra": [],
+  "weak_matches": [],
+  "claimed_complete": true,
+  "overconfident": false,
+  "surfaced_gap": true,
+  "cost": {
+    "wall_s": 126.64,
+    "duration_ms": 125846,
+    "num_turns": 10,
+    "usage": {
+      "input_tokens": 2432,
+      "cache_creation_input_tokens": 20376,
+      "cache_read_input_tokens": 200989,
+      "output_tokens": 7761,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 20376,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 131,
+          "output_tokens": 2914,
+          "cache_read_input_tokens": 35060,
+          "cache_creation_input_tokens": 599,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 599
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "total_cost_usd": 0.5116195
+  },
+  "tools_used": [
+    "Grep",
+    "Read",
+    "prism"
+  ],
+  "graph_used": true,
+  "violation": null,
+  "tool_trace": [
+    {
+      "tool": "Bash",
+      "bin": "prism",
+      "detail": "/Users/tapabratapal/bin/prism query \"alert rule update wrong table xorm Update missing table name\" --terms alert_rule,Update,Table --include graph,tests --format text 2>&1 | head -80"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "\\.Update\\("
+    },
+    {
+      "tool": "Read",
+      "bin": "",
+      "detail": "/Users/tapabratapal/gvg-corpus/wt-124935/pkg/services/ngalert/store/alert_rule.go"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "\\.Update\\(|\\.Table\\("
+    },
+    {
+      "tool": "Bash",
+      "bin": "prism",
+      "detail": "/Users/tapabratapal/bin/prism lookup ngalert/store.alertRuleFromModelsAlertRule --format text 2>&1 | head -20"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "Update\\(&?alertRule|Update\\(converted|Update\\(.*[Rr]ule"
+    },
+    {
+      "tool": "Read",
+      "bin": "",
+      "detail": "/Users/tapabratapal/gvg-corpus/wt-124935/pkg/services/sqlstore/migrations/ualert/rule_group_index_migration.go"
+    },
+    {
+      "tool": "Bash",
+      "bin": "prism",
+      "detail": "/Users/tapabratapal/bin/prism lookup ualert.alertRule --format text 2>&1 | head -40; echo \"=== TableName ===\"; grep -rn \"func.*alertRule.*TableName\\|TableName()\" /Users/tapabratapal/gvg-corpus/wt-1249"
+    },
+    {
+      "tool": "Read",
+      "bin": "",
+      "detail": "/Users/tapabratapal/gvg-corpus/wt-124935/pkg/services/ngalert/store/models.go"
+    }
+  ],
+  "answer": {
+    "sites": [
+      "pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules",
+      "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"
+    ],
+    "complete": true,
+    "unresolved": [
+      "pkg/services/sqlstore/migrations/ualert/rule_group_index_migration.go:migrateAlertRuleGroupIndex has a similar table-less .Update(rule) on a separate ualert.alertRule struct (no TableName method); excluded as a historical migration outside the runtime alert-rule update path the issue describes, but it shares the latent pattern"
+    ]
+  }
+}

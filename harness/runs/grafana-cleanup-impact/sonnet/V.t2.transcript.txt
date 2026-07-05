@@ -1,0 +1,19 @@
+I now have a complete picture of all the sites. Let me compile the final answer.
+
+The `LifecycleManager` interface lives entirely within the `annotation` package. Three types implement it (`PostgreSQLStore`, `storeGRPC`, `sqlAdapter`), and `runCleanup` is the sole call site of the interface method. Because `runCleanup` would need to compute/receive the cutoff time to pass along, `startCleanup` — which holds `retentionTTL` and drives `runCleanup` in a goroutine — must also change its body. The test's `mockGRPCServer.Cleanup` calls `s.lifecycle.Cleanup(ctx)` directly, so its body changes too.
+
+```json
+{
+  "sites": [
+    "pkg/registry/apps/annotation/storage.go:LifecycleManager",
+    "pkg/registry/apps/annotation/postgres_lifecycle.go:Cleanup",
+    "pkg/registry/apps/annotation/grpc_store.go:Cleanup",
+    "pkg/registry/apps/annotation/sql_adapter.go:Cleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:runCleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:startCleanup",
+    "pkg/registry/apps/annotation/grpc_store_test.go:Cleanup"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

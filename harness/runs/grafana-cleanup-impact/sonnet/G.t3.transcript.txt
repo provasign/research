@@ -1,0 +1,23 @@
+The prism query confirms no external callers — the `LifecycleManager` interface is entirely within the annotation package. I have the complete picture.
+
+Summary of findings:
+- **Interface**: `storage.go` declares `LifecycleManager.Cleanup(ctx context.Context) (int64, error)`
+- **3 implementations**: `PostgreSQLStore.Cleanup`, `sqlAdapter.Cleanup`, `storeGRPC.Cleanup`
+- **2 call sites**: `lifecycle.go:runCleanup` (line 49, calls `lifecycleMgr.Cleanup(ctx)`), and `grpc_store_test.go:mockGRPCServer.Cleanup` (line 116, calls `s.lifecycle.Cleanup(ctx)`)
+- **1 transitive**: `lifecycle.go:startCleanup` already receives `retentionTTL` and calls `runCleanup` — must update its call once `runCleanup`'s signature changes to carry the cutoff through
+
+```json
+{
+  "sites": [
+    "pkg/registry/apps/annotation/storage.go:Cleanup",
+    "pkg/registry/apps/annotation/postgres_lifecycle.go:Cleanup",
+    "pkg/registry/apps/annotation/sql_adapter.go:Cleanup",
+    "pkg/registry/apps/annotation/grpc_store.go:Cleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:runCleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:startCleanup",
+    "pkg/registry/apps/annotation/grpc_store_test.go:Cleanup"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

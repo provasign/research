@@ -1,0 +1,24 @@
+Based on my analysis of the codebase, I've identified all the functions that must be changed to fix the issue where Hijack() and CloseNotify() panic when the underlying http.ResponseWriter doesn't implement the required interfaces.
+
+The issue occurs because both methods use direct type assertions without checking if the underlying ResponseWriter implements the interfaces, unlike Flush() which already has graceful degradation.
+
+Current problematic code:
+- **Line 120** in response_writer.go: `return w.ResponseWriter.(http.Hijacker).Hijack()` - panics if not a Hijacker
+- **Line 125** in response_writer.go: `return w.ResponseWriter.(http.CloseNotifier).CloseNotify()` - panics if not a CloseNotifier
+
+The fix requires using type assertions with the `ok` pattern (like Flush() does at line 131):
+- For Hijack(): Return an error if http.Hijacker is not implemented
+- For CloseNotify(): Return a valid channel that never closes if http.CloseNotifier is not implemented
+
+The Stream() method in context.go (line 1357) calls CloseNotify(), but it will work correctly with a never-closing channel since it uses a select with default, allowing graceful degradation without detection of client disconnection.
+
+```json
+{
+  "sites": [
+    "response_writer.go:Hijack",
+    "response_writer.go:CloseNotify"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

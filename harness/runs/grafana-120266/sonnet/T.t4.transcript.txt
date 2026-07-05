@@ -1,0 +1,23 @@
+Now I have enough information to identify all the panic sites. Let me summarize my findings:
+
+**Confirmed panic sites:**
+
+1. **`client.go:Trace` (line 266)**: `response.Data[0]` with no length check — direct crash when the trace response has zero items.
+
+2. **`client_utils.go:TransformSearchResponse` (lines 51–52)**: The `sort.Slice` comparator accesses `response[i].Spans[0]` and `response[j].Spans[0]` without checking `len(Spans) > 0` — panics when any trace in the search result has an empty `Spans` slice.
+
+3. **`grpc_utils.go:TransformGrpcSearchResponse` (lines 53–54)**: The `sort.Slice` comparator accesses `resourceSpans[i].ScopeSpans[0].Spans[0]` and `resourceSpans[j].ScopeSpans[0].Spans[0]` with no bounds checks on `ScopeSpans` or `Spans` — same class of panic.
+
+`GrpcTrace` in `grpc_client.go` is safe because `TransformGrpcTraceResponse` only uses `range` loops over the result slice (no index access), so an empty `ResourceSpans` produces an empty frame, not a panic.
+
+```json
+{
+  "sites": [
+    "pkg/tsdb/jaeger/client.go:Trace",
+    "pkg/tsdb/jaeger/utils/client_utils.go:TransformSearchResponse",
+    "pkg/tsdb/jaeger/utils/grpc_utils.go:TransformGrpcSearchResponse"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

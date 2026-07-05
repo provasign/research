@@ -1,0 +1,15 @@
+All sites traced. The `LifecycleManager` interface has three implementations (`sqlAdapter`, `PostgreSQLStore`, `storeGRPC`) plus one internal caller chain (`runCleanup` ← `startCleanup`) and one test caller (`mockGRPCServer.Cleanup`). The gRPC client implementation also needs the cutoff added to the wire request to forward it correctly, which depends on a proto/generated-code change (not a hand-edited function).
+
+{
+  "sites": [
+    "pkg/registry/apps/annotation/storage.go:LifecycleManager.Cleanup",
+    "pkg/registry/apps/annotation/sql_adapter.go:sqlAdapter.Cleanup",
+    "pkg/registry/apps/annotation/postgres_lifecycle.go:PostgreSQLStore.Cleanup",
+    "pkg/registry/apps/annotation/grpc_store.go:storeGRPC.Cleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:runCleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:startCleanup",
+    "pkg/registry/apps/annotation/grpc_store_test.go:mockGRPCServer.Cleanup"
+  ],
+  "complete": true,
+  "unresolved": ["To actually carry the cutoff over gRPC, the CleanupRequest proto message (pkg/registry/apps/annotation/proto/store.proto) and its regenerated code (storepb/v1/store.pb.go, store_grpc.pb.go) must gain a cutoff field; these are generated/schema artifacts rather than hand-edited functions, so they are not listed as function sites. storeGRPC.Cleanup and mockGRPCServer.Cleanup (already listed) are the hand-written functions that set/read that field."]
+}

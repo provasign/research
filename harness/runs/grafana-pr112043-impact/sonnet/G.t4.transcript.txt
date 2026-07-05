@@ -1,0 +1,48 @@
+Based on my thorough analysis of the codebase, I can now compile the complete impact list.
+
+**Findings:**
+- `reason string` in `ResourceIndex.UpdateIndex` is **conclusively unused** in `bleveIndex.UpdateIndex` (the only non-test implementation)
+- `indexBuildReason string` in `SearchBackend.BuildIndex` is the strongest candidate for the SearchBackend change — it's used only for observability (span attributes, logging, metrics), not core logic, matching the same pattern as `reason` in `UpdateIndex`
+- `rebuild bool` in `BuildIndex` is used in real logic (decides memory vs. file-based index), so it's not a removal candidate
+- No other interface methods have truly unused parameters in the real bleve implementation
+
+```json
+{
+  "sites": [
+    "pkg/storage/unified/resource/search.go:UpdateIndex",
+    "pkg/storage/unified/resource/search.go:BuildIndex",
+    "pkg/storage/unified/resource/search.go:getOrCreateIndex",
+    "pkg/storage/unified/resource/search.go:build",
+    "pkg/storage/unified/search/bleve.go:UpdateIndex",
+    "pkg/storage/unified/search/bleve.go:BuildIndex",
+    "pkg/storage/unified/resource/search_test.go:UpdateIndex",
+    "pkg/storage/unified/resource/search_test.go:BuildIndex",
+    "pkg/storage/unified/resource/search_test.go:TestSearchGetOrCreateIndexWithIndexUpdate",
+    "pkg/storage/unified/resource/search_test.go:checkMockIndexUpdateCalls",
+    "pkg/storage/unified/search/bleve_test.go:testBleveBackend",
+    "pkg/storage/unified/search/bleve_test.go:TestBuildIndexExpiration",
+    "pkg/storage/unified/search/bleve_test.go:TestCloseAllIndexes",
+    "pkg/storage/unified/search/bleve_test.go:TestBuildIndex",
+    "pkg/storage/unified/search/bleve_test.go:TestRebuildingIndexClosesPreviousCachedIndex",
+    "pkg/storage/unified/search/bleve_test.go:testBleveIndexWithFailures",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdate",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndBuildIndex",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateSearchAndRebuild",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearch",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearchWithIndexMinUpdateInterval",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdateWithErrors",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexBuildInfo",
+    "pkg/storage/unified/search/bleve_search_test.go:newTestDashboardsIndex",
+    "pkg/storage/unified/testing/search_backend.go:runTestSearchBackendBuildIndex",
+    "pkg/storage/unified/testing/search_backend.go:runTestResourceIndex",
+    "pkg/storage/unified/testing/benchmark.go:runSearchBackendBenchmarkWriteThroughput"
+  ],
+  "complete": false,
+  "unresolved": [
+    "Which specific argument in SearchBackend.BuildIndex is being removed is uncertain: `indexBuildReason string` (5th param, used only for observability) is the most likely candidate, but `rebuild bool` (8th param) is used in real logic so is unlikely. If the SearchBackend change is to a different method or a different param, some sites in this list may be false positives and others may be missing.",
+    "pkg/storage/unified/resource/search_test.go:BuildIndex appears twice — once for mockSearchBackend and once for slowSearchBackendWithCache — both need to change but are disambiguated only by receiver, which the format cannot distinguish here.",
+    "pkg/registry/apis/dashboard/search_test.go:UpdateIndex (MockClient) has a different return type (error vs int64,error) and is NOT a ResourceIndex implementation; it may need cosmetic cleanup for consistency but is not a compile-time obligation.",
+    "No SQL or other non-bleve implementation of ResourceIndex or SearchBackend was found outside of test mocks, so the bleve path is the only production implementation. If additional backends exist in other repos or plugins, they would also need updating."
+  ]
+}
+```

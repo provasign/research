@@ -1,0 +1,17 @@
+Based on my analysis:
+
+- `secureValueClient.Get` (pkg/registry/apis/secret/secure_value_client.go:107) is the method changing signature.
+- It is reached only as a direct method call (`c.Get`) and via the `dynamic.ResourceInterface` returned by `Client()`/`Namespace()`.
+- Direct internal call: `Update` at line 137.
+- The `contracts.SecureValueClient` interface (only exposing `Client()`) is consumed nowhere in production — a repo-wide search for `SecureValueClient` yields only the definition files, the wire provider, and the test file. So the only external callers are the two test functions, which obtain the client and call `nsClient.Get(...)`.
+
+Call sites that must change:
+- `secure_value_client.go:Update` (internal `c.Get`)
+- `secure_value_client_test.go:TestIntegration_SecureValueClient_CRUD` (3 calls)
+- `secure_value_client_test.go:Test_SecureValueClient_CRUD_NoPermissions` (1 call)
+
+{
+  "sites": ["pkg/registry/apis/secret/secure_value_client.go:Update", "pkg/registry/apis/secret/secure_value_client_test.go:TestIntegration_SecureValueClient_CRUD", "pkg/registry/apis/secret/secure_value_client_test.go:Test_SecureValueClient_CRUD_NoPermissions"],
+  "complete": true,
+  "unresolved": ["Test call sites invoke Get through the k8s dynamic.ResourceInterface returned by Client(); the concrete target is secureValueClient, but if the fix kept the external interface signature it could not dispatch the new param — no production consumer of contracts.SecureValueClient exists, so no other call sites were found."]
+}

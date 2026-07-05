@@ -1,0 +1,34 @@
+Based on my investigation of the Grafana repository, I have identified all XORM Update calls in the ngalert store that don't explicitly specify the table. Here are my findings:
+
+**Analysis:**
+
+I searched the codebase for XORM Update calls and found the pattern used elsewhere in the code:
+- Correct pattern: `sess.Table(alertRule{}).ID(id).Update(...)` or `sess.Table("alert_rule").ID(id).Update(...)`
+- Problematic pattern: `sess.ID(id).Update(...)` without explicit Table()
+
+I found two Update calls in alert_rule.go that are missing explicit table specification:
+
+1. **Line 608** in `UpdateAlertRules`: 
+   ```go
+   sess.ID(r.Existing.ID).AllCols().Omit("rule_guid").Update(converted)
+   ```
+
+2. **Line 710** in `preventIntermediateUniqueConstraintViolations`:
+   ```go
+   sess.ID(r.ID).Cols("title").Update(&alertRule{Title: uniqueTempTitle, Version: r.Version})
+   ```
+
+Both methods are part of the alert rule update pipeline. Line 710's function is called from line 575 of `UpdateAlertRules` within the same transaction.
+
+All other Update/Delete operations in the alert rule code explicitly specify tables using `sess.Table(...)` before the operation.
+
+```json
+{
+  "sites": [
+    "pkg/services/ngalert/store/alert_rule.go:UpdateAlertRules",
+    "pkg/services/ngalert/store/alert_rule.go:preventIntermediateUniqueConstraintViolations"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

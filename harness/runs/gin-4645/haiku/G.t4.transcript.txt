@@ -1,0 +1,19 @@
+Based on my comprehensive analysis of the codebase, here are the functions that must change to fix the graceful degradation issue:
+
+**Summary of findings:**
+
+1. **response_writer.go:Hijack** (line 111-121) - Currently uses direct type assertion `w.ResponseWriter.(http.Hijacker).Hijack()` at line 120 without checking if the interface is implemented. This panics if the underlying ResponseWriter doesn't implement http.Hijacker.
+
+2. **response_writer.go:CloseNotify** (line 124-126) - Currently uses direct type assertion `w.ResponseWriter.(http.CloseNotifier).CloseNotify()` at line 125 without checking if the interface is implemented. This panics if the underlying ResponseWriter doesn't implement http.CloseNotifier.
+
+3. **context.go:Stream** - DOES NOT NEED CHANGES. It calls `w.CloseNotify()` but if CloseNotify is fixed to gracefully return a never-closing channel (like Flush gracefully does nothing), Stream will work correctly without modifications.
+
+The fix pattern should match the existing graceful degradation in **Flush()** (lines 129-134) and **Pusher()** (lines 136-141), which both use type assertions with the `ok` check pattern.
+
+```json
+{
+  "sites": ["response_writer.go:Hijack", "response_writer.go:CloseNotify"],
+  "complete": true,
+  "unresolved": []
+}
+```

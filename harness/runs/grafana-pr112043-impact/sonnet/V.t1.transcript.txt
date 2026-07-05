@@ -1,0 +1,38 @@
+Now I have a complete picture. Let me compile the final analysis.
+
+Based on my investigation:
+- `reason string` in `ResourceIndex.UpdateIndex` is unused in `bleveIndex.UpdateIndex` (line 1361 in bleve.go — `reason` never referenced in the body)
+- `ctx context.Context` in `SearchBackend.GetIndex` is unused in `bleveBackend.GetIndex` (marked `_ context.Context` at line 173 in bleve.go)
+
+These are the two arguments being removed. Every site that implements or calls these methods must change.
+
+```json
+{
+  "sites": [
+    "pkg/storage/unified/resource/search.go:ResourceIndex",
+    "pkg/storage/unified/resource/search.go:SearchBackend",
+    "pkg/storage/unified/resource/search.go:getOrCreateIndex",
+    "pkg/storage/unified/resource/search.go:findIndexesToRebuild",
+    "pkg/storage/unified/resource/search.go:rebuildIndex",
+    "pkg/storage/unified/search/bleve.go:UpdateIndex",
+    "pkg/storage/unified/search/bleve.go:GetIndex",
+    "pkg/storage/unified/resource/search_test.go:MockResourceIndex.UpdateIndex",
+    "pkg/storage/unified/resource/search_test.go:mockSearchBackend.GetIndex",
+    "pkg/storage/unified/resource/search_test.go:slowSearchBackendWithCache.GetIndex",
+    "pkg/storage/unified/resource/search_test.go:TestSearchGetOrCreateIndexWithIndexUpdate",
+    "pkg/storage/unified/resource/search_test.go:checkMockIndexUpdateCalls",
+    "pkg/storage/unified/resource/search_test.go:TestSearchGetOrCreateIndexWithCancellation",
+    "pkg/storage/unified/resource/search_test.go:checkRebuildIndex",
+    "pkg/storage/unified/testing/search_backend.go:runTestSearchBackendBuildIndex",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdate",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndBuildIndex",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateSearchAndRebuild",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearch",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearchWithIndexMinUpdateInterval",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdateWithErrors",
+    "pkg/storage/unified/search/bleve_test.go:TestBuildIndexExpiration"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

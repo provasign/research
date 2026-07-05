@@ -1,0 +1,9 @@
+Both panicking methods use unchecked type assertions. `Flush` and `Pusher` already use the comma-ok pattern to degrade gracefully. `Hijack` (line 120) and `CloseNotify` (line 125) do not.
+
+`context.go:Stream` calls `CloseNotify()` but tolerates a nil channel (select with `default` never blocks), so it doesn't require changes once `CloseNotify` degrades gracefully.
+
+{
+  "sites": ["response_writer.go:Hijack", "response_writer.go:CloseNotify"],
+  "complete": true,
+  "unresolved": []
+}

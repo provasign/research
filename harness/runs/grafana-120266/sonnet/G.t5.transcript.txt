@@ -1,0 +1,19 @@
+The analysis is complete. Here is what I found:
+
+**Root cause**: `JaegerClient.Trace` in `pkg/tsdb/jaeger/client.go` at line 266 does `response.Data[0]` with no length guard. When Jaeger returns an empty `data` array (`{"data": [], ...}`), this panics.
+
+**Other `[0]` accesses checked**:
+- `client_utils.go:76` (`trace.Spans[0]`) — guarded by `if len(trace.Spans) == 0 { continue }` at line 71
+- `grpc_utils.go:87` (`scopeSpan.Spans[0]`) — guarded by `if len(scopeSpan.Spans) == 0 { continue }` at line 82
+- `client_utils.go:51-52` and `grpc_utils.go:53-54` (inside `sort.Slice` comparators) — these only execute when the outer slice has ≥2 elements, so an _empty_ result set never invokes them; they are a separate latent bug on non-empty result sets with structurally empty spans
+- `grpc_client.go:270` (`TransformGrpcTraceResponse(response.Result.ResourceSpans, ...)`) — iterates with `for range`, safe on empty/nil slice
+
+The stack trace pointing at `client.go` confirms the single panic site.
+
+```json
+{
+  "sites": ["pkg/tsdb/jaeger/client.go:Trace"],
+  "complete": true,
+  "unresolved": []
+}
+```

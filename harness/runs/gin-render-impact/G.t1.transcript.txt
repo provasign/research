@@ -1,0 +1,31 @@
+All Render implementations are self-contained (no render-to-render delegation), and the sole production dispatch site is `Context.Render` at context.go:1188. The complete in-repo production set is the 18 concrete `Render` methods, the interface declaration, and the one invoker. External and test concerns are noted as unresolved.
+
+{
+  "sites": [
+    "render/render.go:Render",
+    "render/json.go:JSON.Render",
+    "render/json.go:IndentedJSON.Render",
+    "render/json.go:SecureJSON.Render",
+    "render/json.go:JsonpJSON.Render",
+    "render/json.go:AsciiJSON.Render",
+    "render/json.go:PureJSON.Render",
+    "render/xml.go:XML.Render",
+    "render/text.go:String.Render",
+    "render/redirect.go:Redirect.Render",
+    "render/data.go:Data.Render",
+    "render/html.go:HTML.Render",
+    "render/yaml.go:YAML.Render",
+    "render/reader.go:Reader.Render",
+    "render/protobuf.go:ProtoBuf.Render",
+    "render/toml.go:TOML.Render",
+    "render/pdf.go:PDF.Render",
+    "render/bson.go:BSON.Render",
+    "render/msgpack.go:MsgPack.Render",
+    "context.go:Context.Render"
+  ],
+  "complete": false,
+  "unresolved": [
+    "context.go:Context.SSEvent passes github.com/gin-contrib/sse v1.1.0's sse.Event{} into Context.Render, so sse.Event satisfies render.Render structurally. After the signature change, sse.Event.Render(w) no longer matches the interface and context.go will not compile. sse.Event is an external dependency that cannot be edited in this repo (requires a dependency bump or an in-repo wrapper), so this site is unresolved.",
+    "Test code must also change to compile under `go test`: context_test.go:TestRender.Render (a test type implementing render.Render, passed to c.Render in TestContextRenderIfErr) plus direct .Render(w) invocations in render/render_test.go, render/render_msgpack_test.go, render/reader_test.go, and binding/json_test.go. These are test-only and were excluded from the production sites list; include them if the test build must compile."
+  ]
+}

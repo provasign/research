@@ -1,0 +1,169 @@
+{
+  "status": "ok",
+  "model": "opus",
+  "task_id": "grafana-cleanup-impact",
+  "arm": "T",
+  "trial": 2,
+  "recall": 0.8333,
+  "precision": 1.0,
+  "f1": 0.9091,
+  "found": [
+    "pkg/registry/apps/annotation/grpc_store.go:Cleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:runCleanup",
+    "pkg/registry/apps/annotation/lifecycle.go:startCleanup",
+    "pkg/registry/apps/annotation/postgres_lifecycle.go:Cleanup",
+    "pkg/registry/apps/annotation/sql_adapter.go:Cleanup"
+  ],
+  "missed": [
+    "pkg/registry/apps/annotation/storage.go:LifecycleManager"
+  ],
+  "extra": [],
+  "weak_matches": [],
+  "claimed_complete": true,
+  "overconfident": true,
+  "surfaced_gap": true,
+  "cost": {
+    "wall_s": 140.13,
+    "duration_ms": 139601,
+    "num_turns": 18,
+    "usage": {
+      "input_tokens": 2473,
+      "cache_creation_input_tokens": 31896,
+      "cache_read_input_tokens": 406005,
+      "output_tokens": 9072,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 31896,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "not_available",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 870,
+          "cache_read_input_tokens": 45006,
+          "cache_creation_input_tokens": 2018,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 2018
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "total_cost_usd": 0.7620945000000001
+  },
+  "tools_used": [
+    "Grep",
+    "Read"
+  ],
+  "graph_used": false,
+  "violation": null,
+  "tool_trace": [
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "LifecycleManager"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "func.*Cleanup\\(ctx"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "Cleanup"
+    },
+    {
+      "tool": "Read",
+      "bin": "",
+      "detail": "pkg/registry/apps/annotation/storage.go"
+    },
+    {
+      "tool": "Read",
+      "bin": "",
+      "detail": "pkg/registry/apps/annotation/lifecycle.go"
+    },
+    {
+      "tool": "Read",
+      "bin": "",
+      "detail": "pkg/registry/apps/annotation/grpc_store.go"
+    },
+    {
+      "tool": "Read",
+      "bin": "",
+      "detail": "pkg/registry/apps/annotation/sql_adapter.go"
+    },
+    {
+      "tool": "Read",
+      "bin": "",
+      "detail": "pkg/registry/apps/annotation/postgres_lifecycle.go"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "func.*Cleanup\\(ctx context.Context, (req|in) \\*storev1.CleanupRequest\\)"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "AnnotationStoreServer|RegisterAnnotationStoreServer|UnimplementedAnnotationStoreServer"
+    },
+    {
+      "tool": "Read",
+      "bin": "",
+      "detail": "pkg/registry/apps/annotation/register.go"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "func.*Cleanup"
+    },
+    {
+      "tool": "Read",
+      "bin": "",
+      "detail": "pkg/registry/apps/annotation/grpc_store_test.go"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "\\.Cleanup\\(ctx"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "lifecycle\\.Cleanup|lifecycleMgr\\.Cleanup|LifecycleManager"
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "Cleanup\\("
+    },
+    {
+      "tool": "Grep",
+      "bin": "",
+      "detail": "var _ LifecycleManager"
+    }
+  ],
+  "answer": {
+    "sites": [
+      "pkg/registry/apps/annotation/storage.go:Cleanup",
+      "pkg/registry/apps/annotation/sql_adapter.go:Cleanup",
+      "pkg/registry/apps/annotation/postgres_lifecycle.go:Cleanup",
+      "pkg/registry/apps/annotation/grpc_store.go:Cleanup",
+      "pkg/registry/apps/annotation/lifecycle.go:runCleanup",
+      "pkg/registry/apps/annotation/lifecycle.go:startCleanup",
+      "pkg/registry/apps/annotation/grpc_store_test.go:Cleanup"
+    ],
+    "complete": true,
+    "unresolved": [
+      "To actually carry the cutoff over gRPC, the CleanupRequest proto message (pkg/registry/apps/annotation/proto/store.proto) and its regenerated code (storepb/v1/store.pb.go, store_grpc.pb.go) must gain a cutoff field; these are generated/schema artifacts rather than hand-edited functions, so they are not listed as function sites. storeGRPC.Cleanup and mockGRPCServer.Cleanup (already listed) are the hand-written functions that set/read that field."
+    ]
+  }
+}

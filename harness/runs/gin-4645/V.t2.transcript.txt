@@ -1,0 +1,9 @@
+The two type assertions that panic are `Hijack()` (line 120) and `CloseNotify()` (line 125) — both use unchecked `.(...)` assertions, unlike `Flush`/`Pusher` which use the `, ok` form. The caller `Context.Stream` (context.go:1357) relies on `CloseNotify()`'s return; a graceful fix returns a safe channel (nil/never-closed), so the signature and caller don't need to change.
+
+Both are concrete methods on the only production implementation (`responseWriter`); no dynamic dispatch is involved.
+
+{
+  "sites": ["response_writer.go:Hijack", "response_writer.go:CloseNotify"],
+  "complete": true,
+  "unresolved": []
+}

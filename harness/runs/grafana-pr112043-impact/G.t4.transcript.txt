@@ -1,0 +1,31 @@
+I've traced both interfaces. The unused arguments are `ctx` from `SearchBackend.GetIndex` (the bleve impl already uses `_ context.Context`) and `reason` from `ResourceIndex.UpdateIndex` (never referenced in the bleve impl body). I resolved all implementers (bleve + test mocks) and every call site through the call graph; the only holder of a `SearchBackend` is `searchSupport`, and `ResourceIndex` values stay within that package.
+
+{
+  "sites": [
+    "pkg/storage/unified/resource/search.go:SearchBackend",
+    "pkg/storage/unified/resource/search.go:ResourceIndex",
+    "pkg/storage/unified/search/bleve.go:bleveBackend.GetIndex",
+    "pkg/storage/unified/search/bleve.go:bleveIndex.UpdateIndex",
+    "pkg/storage/unified/resource/search_test.go:mockSearchBackend.GetIndex",
+    "pkg/storage/unified/resource/search_test.go:slowSearchBackendWithCache.GetIndex",
+    "pkg/storage/unified/resource/search_test.go:MockResourceIndex.UpdateIndex",
+    "pkg/storage/unified/resource/search.go:searchSupport.findIndexesToRebuild",
+    "pkg/storage/unified/resource/search.go:searchSupport.rebuildIndex",
+    "pkg/storage/unified/resource/search.go:searchSupport.getOrCreateIndex",
+    "pkg/storage/unified/resource/search_test.go:TestSearchGetOrCreateIndexWithCancellation",
+    "pkg/storage/unified/resource/search_test.go:checkRebuildIndex",
+    "pkg/storage/unified/testing/search_backend.go:runTestSearchBackendBuildIndex",
+    "pkg/storage/unified/search/bleve_test.go:TestBuildIndexExpiration",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateSearchAndRebuild",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdate",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndBuildIndex",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearch",
+    "pkg/storage/unified/search/bleve_test.go:TestConcurrentIndexUpdateAndSearchWithIndexMinUpdateInterval",
+    "pkg/storage/unified/search/bleve_test.go:TestIndexUpdateWithErrors"
+  ],
+  "complete": true,
+  "unresolved": [
+    "Exact removed args inferred from code (GetIndex uses '_ context.Context'; 'reason' unreferenced in bleveIndex.UpdateIndex), not from the PR diff (gh/WebFetch were unavailable); if the PR also trims a used-looking BuildIndex arg, that is not captured here.",
+    "pkg/registry/apis/dashboard/search_test.go:MockClient.UpdateIndex is intentionally EXCLUDED: it implements resource.ResourceClient (UpdateIndex(ctx, reason) error), a different interface than ResourceIndex (returns (int64, error)), so it is out of scope unless ResourceClient is also being changed."
+  ]
+}

@@ -1,0 +1,32 @@
+I have a complete picture. Here is my final analysis:
+
+- **Two interfaces** must be updated: the narrow `routeService` interface in `api_provisioning.go` (only has `GetManagedRoute`) and the full `RouteService` interface in `routingtree/legacy_storage.go` (all 5 methods).
+- **Five concrete methods** on `routes.Service` must be updated.
+- **Two explicit override methods** on `routes.FakeService` must be updated (`GetManagedRoute` and `GetManagedRoutes`; the other three are promoted from the embedded `Service` so they update automatically).
+- **Five call-site functions** in `routingtree/legacy_storage.go` (CRUD handlers calling the service) and **one** in `api_provisioning.go` must have the new `user` argument threaded through.
+- **One test function** in `service_test.go` contains direct calls that must be updated to compile.
+
+```json
+{
+  "sites": [
+    "pkg/services/ngalert/api/api_provisioning.go:routeService",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:RouteService",
+    "pkg/services/ngalert/notifier/routes/service.go:GetManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:GetManagedRoutes",
+    "pkg/services/ngalert/notifier/routes/service.go:CreateManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:UpdateManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:DeleteManagedRoute",
+    "pkg/services/ngalert/notifier/routes/testing.go:GetManagedRoute",
+    "pkg/services/ngalert/notifier/routes/testing.go:GetManagedRoutes",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:List",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Get",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Create",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Update",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Delete",
+    "pkg/services/ngalert/api/api_provisioning.go:RouteGetPolicyTreeExport",
+    "pkg/services/ngalert/notifier/routes/service_test.go:TestGetManagedRoute"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```
