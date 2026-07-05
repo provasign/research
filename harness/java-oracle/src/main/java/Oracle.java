@@ -126,7 +126,18 @@ public final class Oracle {
         }
 
         // --- caller sites: invocations resolving into the family ---
+        // occurrences: exact "relpath|startLine|endLine|site" positions of every
+        // token that must change (family declaration names + family-resolving
+        // calls/method-refs), for edit application (Mode B, rename plans).
         TreeSet<String> callerSites = new TreeSet<>();
+        TreeSet<String> occurrences = new TreeSet<>();
+        for (CtMethod<?> m : family) {
+            SourcePosition p = m.getPosition();
+            String site = siteOf(m, repo);
+            if (site == null || p == null || !p.isValidPosition() || p.getFile() == null) continue;
+            int nameLine = declNameLine(m);
+            occurrences.add(rel(repo, p.getFile().toPath()) + "|" + nameLine + "|" + nameLine + "|" + site);
+        }
         int unresolvedSameName = 0, resolvedHits = 0;
         for (CtInvocation<?> inv : model.getElements(new TypeFilter<>(CtInvocation.class))) {
             if (inv.getExecutable() == null) continue;
@@ -138,6 +149,26 @@ public final class Oracle {
             resolvedHits++;
             String site = enclosingSite(inv, repo);
             if (site != null) callerSites.add(site);
+            SourcePosition p = inv.getPosition();
+            if (site != null && p != null && p.isValidPosition() && p.getFile() != null)
+                occurrences.add(rel(repo, p.getFile().toPath()) + "|" + p.getLine() + "|"
+                        + p.getEndLine() + "|" + site);
+        }
+        // method references (Type::target) resolving into the family
+        for (spoon.reflect.code.CtExecutableReferenceExpression<?, ?> refx :
+                model.getElements(new TypeFilter<>(spoon.reflect.code.CtExecutableReferenceExpression.class))) {
+            if (refx.getExecutable() == null) continue;
+            if (!targetName.equals(refx.getExecutable().getSimpleName())) continue;
+            CtExecutable<?> decl = null;
+            try { decl = refx.getExecutable().getExecutableDeclaration(); } catch (Exception ignore) {}
+            if (!(decl instanceof CtMethod) || !familyKeys.contains(key((CtMethod<?>) decl))) continue;
+            String site = enclosingSite(refx, repo);
+            SourcePosition p = refx.getPosition();
+            if (site != null && p != null && p.isValidPosition() && p.getFile() != null) {
+                callerSites.add(site);
+                occurrences.add(rel(repo, p.getFile().toPath()) + "|" + p.getLine() + "|"
+                        + p.getEndLine() + "|" + site);
+            }
         }
 
         TreeSet<String> gt = new TreeSet<>();
@@ -150,6 +181,7 @@ public final class Oracle {
         sb.append("  \"overrides_external\": ").append(jsonArr(externalRoots)).append(",\n");
         sb.append("  \"family\": ").append(jsonArr(familySites)).append(",\n");
         sb.append("  \"callers\": ").append(jsonArr(callerSites)).append(",\n");
+        sb.append("  \"occurrences\": ").append(jsonArr(occurrences)).append(",\n");
         sb.append("  \"ground_truth\": ").append(jsonArr(gt)).append(",\n");
         sb.append("  \"stats\": {")
           .append("\"family\": ").append(family.size())
@@ -186,10 +218,26 @@ public final class Oracle {
         return rel(repo, p.getFile().toPath()) + ":" + m.getSimpleName();
     }
 
-    /** Attribute an invocation to its enclosing method/constructor. */
-    private static String enclosingSite(CtInvocation<?> inv, Path repo) {
-        CtExecutable<?> enc = inv.getParent(CtExecutable.class);
-        SourcePosition p = inv.getPosition();
+    /** Line of a method declaration's name token (not its modifiers). */
+    private static int declNameLine(CtMethod<?> m) {
+        SourcePosition p = m.getPosition();
+        if (p instanceof spoon.reflect.cu.position.DeclarationSourcePosition
+                && p.getCompilationUnit() != null) {
+            int ns = ((spoon.reflect.cu.position.DeclarationSourcePosition) p).getNameStart();
+            String src = p.getCompilationUnit().getOriginalSourceCode();
+            if (src != null && ns > 0 && ns < src.length()) {
+                int line = 1;
+                for (int i = 0; i < ns; i++) if (src.charAt(i) == '\n') line++;
+                return line;
+            }
+        }
+        return p.getLine();
+    }
+
+    /** Attribute an invocation/reference to its enclosing method/constructor. */
+    private static String enclosingSite(spoon.reflect.declaration.CtElement el, Path repo) {
+        CtExecutable<?> enc = el.getParent(CtExecutable.class);
+        SourcePosition p = el.getPosition();
         Path file = (p != null && p.isValidPosition() && p.getFile() != null) ? p.getFile().toPath() : null;
         String name = null;
         while (enc != null) {
