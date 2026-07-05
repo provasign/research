@@ -1,7 +1,8 @@
 # HANDOFF — provasign/research (read this first)
 
-Single, self-contained restart point. Everything below is committed on `main`
-(run *data* is gitignored, machine-local — see §Assets). Last updated 2026-07-04.
+Single, self-contained restart point. Everything below is committed on `main`,
+including the full run data under `harness/runs/` (released with the paper).
+Last updated 2026-07-04.
 
 > **2026-07-04 product finalization (this session):** Python 4th-language arm
 > done (Django quote_name, 32 GT: engine 1.000/0.865; Haiku & Local30B G* at
