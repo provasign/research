@@ -230,6 +230,13 @@ def main() -> int:
                 "recall": run.get("recall"), "missed": len(run.get("missed") or []),
                 **{k: r[k] for k in ("sites_edited", "build_pass", "compile_errors")},
             }
+            # Vacuous-pass guard: a fully-missed CLOSED subgraph (declaration
+            # plus all its callers missed together) compiles trivially. Flag
+            # it so it can never silently count as a genuine pass.
+            if rec["build_pass"] and rec["missed"] > 0:
+                rec["anomaly"] = "passed-with-misses (closed-subgraph or @Override-less miss) — exclude from pass-rate claims"
+                print(f"  WARNING: {rec['task']} {rec['model']} {rec['arm']}.{rec['trial']} "
+                      f"passed with {rec['missed']} missed sites", file=sys.stderr)
             results.append(rec)
             print(f"{rec['task']:26s} {rec['model']:22s} {rec['arm']:5s} {rec['trial']:3s} "
                   f"recall={rec['recall']:.3f} missed={rec['missed']:3d} "
