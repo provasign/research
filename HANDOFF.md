@@ -54,7 +54,7 @@ architecture follows the same pattern.
 | `harness/rescore_java.py` | Mandatory post-processing for all Java runs |
 | `harness/agg_jackson.py` | Aggregate recall/tokens/cost across all runs |
 | `harness/tasks/jackson-*.json` | 6 size-graded tasks (GT from Spoon oracle) |
-| `harness/runs/` | Run data (gitignored; source of all numbers) |
+| `harness/runs/` | Full run data, committed (source of all numbers; released with the paper) |
 
 ---
 
