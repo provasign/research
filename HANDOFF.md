@@ -18,11 +18,13 @@ grove v0.15.0 / prism v0.17.0.
 - Verify the 12 citations (all marked `TODO` in the .tex — best-effort from memory, must be checked)
 - Confirm artifact URLs in the Artifact section still resolve (four release tags: astkit v0.4.17, grove v0.14.1, prism v0.16.1, research v1.0.0)
 
-**2. Mode B — compile / fail-to-pass**
-§5.5 has a derived metric (expected compile failures from missed sites) but actual
-compilation was never run. This is what makes "competes with commercial" concrete for
-companies — a missed change site breaks the build. Setup: `run_local_gstar.py` result
-set → apply edits → compile and report pass/fail.
+**2. Mode B — DONE (2026-07-05).** Actual compile experiment now in §5.5:
+162 runs (a 50-run GPT pilot excluded for harness comparability), missed>0 ↔
+compile-failure exactly across every run; error counts deduplicated (maven
+double-prints each error); claim framed construction-vs-empirical (the
+missed>0→FAIL half is the evidence). Harness: `harness/mode_b.py` + oracle
+occurrence output (`harness/java-oracle/occ/`). rename_plan unblocked and
+shipped (grove v0.17.x / prism v0.19.x).
 
 **3. GPT/Codex tier**
 Cross-family data point for the paper. `harness/java-oracle/CODEX.md` has the
