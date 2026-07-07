@@ -70,7 +70,13 @@ CORPORA = {
                         "pin": "cea7eb61f4321738a895095942d600bd770b51a8"},
     "gin": {"owner": "gin-gonic", "repo": "gin",
             "pin": "d75fcd4c9ab260e5225de590f1f0f8c0e0e12d11"},
+    "commons-collections": {"owner": "apache", "repo": "commons-collections",
+                             "pin": "4db4327796f9679b9e57f6788d1d7bb2e8459360"},
 }
+
+# Tasks whose corpus is identical to (same repo + pin as) an entry already
+# in CORPORA — fetched once, reused, no duplicate download.
+CORPUS_ALIAS = {"grafana-bigblast-txsession": "grafana-122750"}
 
 # Go tasks are natural-language prompts, not oracle-derived FQNs (see
 # engine_ceiling.py's prism_query for the Java/TS/Python automatic path) —
@@ -81,6 +87,7 @@ GO_QUERIES = {
     "grafana-120119": [f"RouteService.{m}" for m in
                         ("GetManagedRoute", "GetManagedRoutes", "CreateManagedRoute",
                          "UpdateManagedRoute", "DeleteManagedRoute")],
+    "grafana-bigblast-txsession": ["SQLStore.WithTransactionalDbSession"],
 }
 
 # Compile invariant: (corpus, query, exceptions). exceptions lists GT-shaped
@@ -199,6 +206,7 @@ def check_ceiling_regression(prism: Path, corpus_root: Path, baseline: dict) -> 
         ("jackson-deserialize", "jackson-databind"), ("jackson-serialize", "jackson-databind"),
         ("typeorm-driver-escape", "typeorm"), ("django-quotename", "django"),
         ("guava-forwarding-delegate", "guava"),
+        ("commons-collections-transformer-transform", "commons-collections"),
     ]:
         task = Task.load(str(HARNESS_DIR / "tasks" / f"{task_id}.json"))
         workdir = fetch_corpus(corpus_name, CORPORA[corpus_name], corpus_root)
@@ -213,7 +221,8 @@ def check_ceiling_regression(prism: Path, corpus_root: Path, baseline: dict) -> 
     # Go: multi-method queries hardcoded (no automatic FQN derivation).
     for task_id, queries in GO_QUERIES.items():
         task = Task.load(str(HARNESS_DIR / "tasks" / f"{task_id}.json"))
-        workdir = fetch_corpus(task_id, CORPORA[task_id], corpus_root)
+        corpus_key = CORPUS_ALIAS.get(task_id, task_id)
+        workdir = fetch_corpus(corpus_key, CORPORA[corpus_key], corpus_root)
         seen = {}
         for q in queries:
             raw, _ = engine_sites(prism, q, workdir)
