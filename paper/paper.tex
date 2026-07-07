@@ -57,16 +57,19 @@ $0.997$ mean recall in a single agent turn. The pattern replicates in a second
 framework (Guava, a 310-site change): the small tier collapses on text
 ($0.17$) but sits at the engine ceiling ($0.997$) with the operation, at
 $1/21$st the frontier-text cost. The engine operation itself scores
-$0.993$ recall / $0.948$ precision against the oracle with no LLM in the loop.
+$0.993$ recall / $0.950$ precision against the oracle with no LLM in the loop.
 Applying each answer as edits and compiling converts the recall gap into
 build outcomes: across 162 runs, every answer that missed a site failed to
 compile and every complete answer compiled; the smallest tier on text search
 produced no compiling build (0/16), while its task-altitude failures reduce
 to a single shared two-error engine residual.
-Building the deterministic operation also surfaced five latent resolution defects
-that every LLM-orchestrated arm had silently absorbed; a traversal that lives in
-a tool can be regression-tested in a way that a traversal buried in an agent
-loop cannot. We give the mechanism and the boundary it predicts: task-shaped operations
+Building the deterministic operation also surfaced latent resolution defects
+that every LLM-orchestrated arm had silently absorbed---five in the initial
+Java build, and independently in Go a missing response-schema entry that made
+the task-altitude operation lose to text (mean recall $0.935$) until fixed,
+after which every tier reached $1.000$; a traversal that lives in a tool can be
+regression-tested in a way that a traversal buried in an agent loop cannot.
+We give the mechanism and the boundary it predicts: task-shaped operations
 outperform primitive kits on completeness-critical traversals, and any
 comparison of context paradigms that fixes the interface silently conflates
 two independent variables.
@@ -511,7 +514,7 @@ actually needed for: identifying the target and consuming the result.
 \label{sec:ceiling}
 Because the \gstar{} operation is deterministic, we can score it directly against
 the oracle with no model in the loop: mean recall $0.993$, mean precision
-$0.948$ across the six tasks (per-task recall $\ge 0.974$; the misses are three
+$0.950$ across the six tasks (per-task recall $\ge 0.974$; the misses are three
 call sites behind chained receivers and one multi-line call-site argument-count
 extraction). Agent-mediated \gstar{} runs reproduce this ceiling ($0.997$; the
 small difference reflects task-scope judgments such as including supertype
@@ -827,6 +830,61 @@ and reported those callers too ($1.000/0.256$ at 6 turns); with the
 text-search escape removed it scores $1.000/0.865$, the engine ceiling
 (\cref{sec:external}).
 
+\subsection{A second engine gap, found by testing two Go tasks at task altitude}
+\label{sec:go-declaration}
+
+Two further Go change-impact tasks---grafana's \code{DataKeyCache} (16
+sites, a five-method interface) and \code{RouteService} (15 sites, also
+five methods)---give the mechanism argument of \cref{sec:bugs} an
+independent, unplanned second test.
+
+\paragraph{First measurement: \gstar{} loses to text.} A fresh $n=5$,
+three-tier (Haiku/Sonnet/Opus) T-vs-\gstar{} run on both tasks put text
+ahead: mean recall $0.998$ (1/30 runs overconfident) against \gstar{}'s
+$0.935$ (22/30 overconfident)---the only task-altitude result in this paper
+where \gstar{} trails text. Every \gstar{} miss, at every tier, was the same
+kind of site: the interface declaration itself (\code{secrets.go:%
+DataKeyCache}; \code{RouteService} and a second, package-private
+\code{routeService} satisfied by the same implementation). The engine's
+family and caller traversal was complete in every run; \code{change\_impact}'s
+result groups, however, were exclusively method-scoped, so nothing in the
+response ever named the enclosing type for a faithful relay to carry
+forward. \code{routeService} exposed a second, independent defect: the
+closure walk climbed from the seed type only, so a sibling interface
+satisfied by the same implementation but rooted in a different file was
+outside its reach regardless of what the agent did with the response.
+
+\paragraph{Fix and re-measurement.} We added a \code{declaringTypes} result
+group---the type declaration itself, emitted whenever a queried language's
+member specifications are body text rather than indexed symbols (Go,
+TypeScript)---and broadened the closure walk to originate from every family
+member rather than only the seed, using the same evidence the family walk
+already requires (an \code{implements}/\code{extends} edge plus the member
+declared on the candidate type; a same-named interface declaring different
+members stays excluded, regression-tested against this exact shape).
+Steering was updated to list the new group as a required part of the
+answer. Re-running the identical protocol: recall $1.000$ in every one of
+29 valid cells (one Sonnet trial excluded as an arm-boundary violation,
+\cref{sec:design}), zero overconfident. \gstar{} now exceeds the text
+baseline it had just lost to.
+
+\paragraph{Reading.} The interface-declaration miss is not new to this
+study---earlier, primitives-only experimentation with these same tasks had
+already surfaced agents omitting an interface's declaration while
+completely enumerating its implementations and callers, and the only
+account available at the time was behavioral: agents reason in terms of
+functions and forget a signature is also declared on its type. Measuring
+the identical target through a deterministic operation converts that
+account into something falsifiable. The traversal was complete; the
+response schema was not. That distinction is visible only when an
+oracle-scored, model-free layer exists to attribute the failure to---absent
+it, the same miss reads as an unfixable property of agent cognition rather
+than a fixable property of a tool. The fix here is a capability the engine
+did not have, not a prompt correction: the pre-fix \gstar{} guidance already
+instructed the union of every returned group, and every tier, including
+Opus, still dropped the type, because the type was never in a group to
+begin with.
+
 \section{Mechanism}
 \label{sec:mechanism}
 
@@ -854,7 +912,11 @@ With many sites and the graph at task altitude, the traversal is one
 deterministic closure computed where the data lives. The LLM's remaining surface
 is target identification and relay---short-horizon, low-variance work that every
 tier performs equally well. Completeness stops being a model property and
-becomes a tool property, and the tiers converge.
+becomes a tool property, and the tiers converge. That property has two
+independent failure modes, not one: the traversal can be incomplete, or the
+traversal can be complete while the response schema omits a site class
+entirely (\cref{sec:go-declaration})---in the latter case every tier fails
+identically, since there is nothing in the response for any model to relay.
 
 This predicts the boundary structure we observe: the graph earns its keep
 wherever the change-set exceeds what text search reliably enumerates; who
@@ -933,13 +995,33 @@ target overrode a JDK interface, making the refactor ill-posed, the oracle
 closure over-broad, and the generic name scorer-hostile---and is excluded;
 such targets are now rejected at task-generation time), and Guava (310-site
 replication, \cref{tab:guava}, $n{=}1$ per cell). Cross-language coverage
-now spans Go (grafana), TypeScript (TypeORM), and Python (Django), each
-with $n{=}1$ per cell. A large Go codebase with wide interfaces remains
-untested, and the Guava, TypeORM, and Django cells warrant replication
-trials. The Python oracle relies on Jedi type inference, which cannot
-follow dynamic multi-hop chains; nine additional callers discovered by the
-engine were manually verified and added to the ground-truth---a limitation
-of dynamically typed oracle targets absent from the statically typed corpora.
+spans Go (grafana), TypeScript (TypeORM), and Python (Django). Two of the
+four Go tasks (\cref{sec:go-declaration}) now run at $n{=}5$ across three
+tiers (30 cells); the original grafana task and the TypeORM and Django
+cells remain $n{=}1$ and warrant replication. A large Go codebase with wide
+interfaces remains untested. The Python oracle relies on Jedi type
+inference, which cannot follow dynamic multi-hop chains; nine additional
+callers discovered by the engine were manually verified and added to the
+ground-truth---a limitation of dynamically typed oracle targets absent from
+the statically typed corpora.
+\item \textbf{Undiscovered resolution defects.} A post-hoc invariant audit---
+does a compiling repository ever report an unaccounted \code{missing\_%
+implementations} site; is a rename plan ever incomplete for the contract it
+was asked to rename---found and fixed defects the reported ceilings had not
+been sensitive enough to expose on their own: case-insensitive symbol
+attachment conflating same-file, differently-cased declarations (Go pairs
+these idiomatically); nested-qualified supertype names resolving to an
+arbitrary same-named type anywhere in the corpus rather than the one nested
+inside the named qualifier; and a source-formatting edge case in the parser
+that buried a supertype clause behind a trailing comment on a wrapped
+declaration header. All corpora were re-scored after each fix; every number
+in this paper reflects the post-fix engine (jackson's ceiling moved from
+$0.993/0.948$ to $0.993/0.950$---one fewer spurious closure member---Guava,
+Django, TypeORM, and the Go tasks were unchanged or improved, per the
+released run logs). The audit is now a standing, continuously-run suite
+rather than a one-time sweep, but its coverage is bounded by the invariants
+we thought to encode; further defects of this kind, in this or other
+resolution paths, cannot be ruled out.
 \item \textbf{Mode B is compile-only and Java-only.} \Cref{sec:modeb} applies
 answers and compiles, but does not run tests, covers one language, and
 simulates edit application at oracle-resolved positions rather than letting
