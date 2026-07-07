@@ -1,0 +1,41 @@
+Perfect! Now I have a complete picture. Let me compile the final list of all functions/methods that must change.
+
+Based on my search, here are all the call sites:
+
+**For `toSnowflakeRV` → `ToSnowflakeRV`:**
+- Definition at storage_backend.go:769
+- Calls at storage_backend.go:887 (in WriteEvent)
+- Calls at storage_backend.go:1196 (in ReadResource)
+- Calls at storage_backend.go:1285, 1319 (in ListIterator)
+- Call at storage_backend.go:1580 (in ListModifiedSince)
+- Calls at storage_backend.go:1801, 1818 (in ListHistory)
+- Call at datastore_test.go:3444 (in TestToSnowflakeRVIdempotent)
+
+**For `subtractDurationFromSnowflake` → `SubtractDurationFromSnowflake`:**
+- Definition at eventstore.go:309
+- Call at storage_backend.go:1618 (in ListModifiedSince)
+- Call at eventstore_test.go:777 (in TestSubtractDurationFromSnowflake)
+- Calls at eventstore_test.go:852, 869 (in testListKeysSinceWithSnowflakeTime)
+- Call at storage_backend_test.go:1299 (in seedBackend)
+
+The complete set of functions/methods that must have their code changed:
+
+```json
+{
+  "sites": [
+    "pkg/storage/unified/resource/storage_backend.go:toSnowflakeRV",
+    "pkg/storage/unified/resource/storage_backend.go:WriteEvent",
+    "pkg/storage/unified/resource/storage_backend.go:ReadResource",
+    "pkg/storage/unified/resource/storage_backend.go:ListIterator",
+    "pkg/storage/unified/resource/storage_backend.go:ListModifiedSince",
+    "pkg/storage/unified/resource/storage_backend.go:ListHistory",
+    "pkg/storage/unified/resource/eventstore.go:subtractDurationFromSnowflake",
+    "pkg/storage/unified/resource/datastore_test.go:TestToSnowflakeRVIdempotent",
+    "pkg/storage/unified/resource/eventstore_test.go:TestSubtractDurationFromSnowflake",
+    "pkg/storage/unified/resource/eventstore_test.go:testListKeysSinceWithSnowflakeTime",
+    "pkg/storage/unified/resource/storage_backend_test.go:seedBackend"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

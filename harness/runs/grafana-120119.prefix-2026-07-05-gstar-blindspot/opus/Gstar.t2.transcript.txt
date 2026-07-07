@@ -1,0 +1,28 @@
+I have full picture. The prism graph flagged `Service.getImportedRoute`, and the internal `revision.GetManagedRoute` calls inside `UpdateManagedRoute`/`DeleteManagedRoute` as callers, but those are calls to `ConfigRevision.GetManagedRoute`/`ManagedRoute.GetManagedRoute` (different receivers, different arity) — name collisions, not the service method. I filtered them. I also found a second interface (`routeService` in api_provisioning.go) that prism's per-type query surfaced via its caller.
+
+{
+  "sites": [
+    "pkg/services/ngalert/notifier/routes/service.go:Service.GetManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:Service.GetManagedRoutes",
+    "pkg/services/ngalert/notifier/routes/service.go:Service.CreateManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:Service.UpdateManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:Service.DeleteManagedRoute",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:RouteService.GetManagedRoutes",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:RouteService.GetManagedRoute",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:RouteService.DeleteManagedRoute",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:RouteService.CreateManagedRoute",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:RouteService.UpdateManagedRoute",
+    "pkg/services/ngalert/api/api_provisioning.go:routeService.GetManagedRoute",
+    "pkg/services/ngalert/notifier/routes/testing.go:FakeService.GetManagedRoute",
+    "pkg/services/ngalert/notifier/routes/testing.go:FakeService.GetManagedRoutes",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:legacyStorage.List",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:legacyStorage.Get",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:legacyStorage.Create",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:legacyStorage.Update",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:legacyStorage.Delete",
+    "pkg/services/ngalert/api/api_provisioning.go:ProvisioningSrv.RouteGetPolicyTreeExport",
+    "pkg/services/ngalert/notifier/routes/service_test.go:TestGetManagedRoute"
+  ],
+  "complete": true,
+  "unresolved": []
+}

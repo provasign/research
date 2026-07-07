@@ -1,0 +1,13 @@
+All call sites are within the same `resource` package (the test files call the unexported helpers directly, so they're internal test files). The grep across the whole repo found no external references. Mapping each call site to its enclosing function:
+
+- `storage_backend.go:769` defines `toSnowflakeRV`; calls at 887 (`WriteEvent`), 1196 (`ReadResource`), 1285 & 1319 (`ListIterator`), 1580 & 1618 (`ListModifiedSince`), 1801 & 1818 (`ListHistory`).
+- `eventstore.go:309` defines `subtractDurationFromSnowflake`; calls at storage_backend.go:1618 (`ListModifiedSince`, already counted).
+- Test call sites: eventstore_test.go 777 (`TestSubtractDurationFromSnowflake`), 852 & 869 (`testListKeysSinceWithSnowflakeTime`); datastore_test.go 3444 (`TestToSnowflakeRVIdempotent`); storage_backend_test.go 1299 (`seedBackend`).
+
+The comment/string references (datastore_test.go:3431/3445, eventstore_test.go:851/868) are non-code and don't affect compilation, so they're excluded.
+
+{
+  "sites": ["pkg/storage/unified/resource/storage_backend.go:toSnowflakeRV", "pkg/storage/unified/resource/eventstore.go:subtractDurationFromSnowflake", "pkg/storage/unified/resource/storage_backend.go:WriteEvent", "pkg/storage/unified/resource/storage_backend.go:ReadResource", "pkg/storage/unified/resource/storage_backend.go:ListIterator", "pkg/storage/unified/resource/storage_backend.go:ListModifiedSince", "pkg/storage/unified/resource/storage_backend.go:ListHistory", "pkg/storage/unified/resource/eventstore_test.go:TestSubtractDurationFromSnowflake", "pkg/storage/unified/resource/eventstore_test.go:testListKeysSinceWithSnowflakeTime", "pkg/storage/unified/resource/datastore_test.go:TestToSnowflakeRVIdempotent", "pkg/storage/unified/resource/storage_backend_test.go:seedBackend"],
+  "complete": true,
+  "unresolved": []
+}

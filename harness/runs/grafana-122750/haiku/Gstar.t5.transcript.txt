@@ -1,0 +1,47 @@
+Based on my analysis with `prism change-impact`, I can now provide the complete list of functions that must change. I ran change-impact for each of the five DataKeyCache methods and consolidated the results.
+
+The sites that **definitely must change**:
+
+1. **Interface declaration** (affects all 5 methods at once)
+2. **All three implementations** of DataKeyCache (ossDataKeyCache, stubCache, NoopDataKeyCache) - each with 5 methods
+3. **Direct callers in the encryption manager package** that invoke these methods
+4. **Test functions in the encryption package** that directly exercise the cache
+
+However, I notice prism also reported integration tests from other packages (pkg/api, pkg/services, etc.) as callers. These appear to be transitively reachable through the encryption manager, not direct callers. Since they invoke methods through the manager's APIs rather than directly on the cache, they shouldn't need source code changes—only the manager methods they call will change.
+
+```json
+{
+  "sites": [
+    "pkg/registry/apis/secret/encryption/secrets.go:DataKeyCache",
+    "pkg/registry/apis/secret/encryption/manager/oss_dek_cache.go:ossDataKeyCache.GetById",
+    "pkg/registry/apis/secret/encryption/manager/oss_dek_cache.go:ossDataKeyCache.GetByLabel",
+    "pkg/registry/apis/secret/encryption/manager/oss_dek_cache.go:ossDataKeyCache.Set",
+    "pkg/registry/apis/secret/encryption/manager/oss_dek_cache.go:ossDataKeyCache.RemoveExpired",
+    "pkg/registry/apis/secret/encryption/manager/oss_dek_cache.go:ossDataKeyCache.Flush",
+    "pkg/registry/apis/secret/encryption/manager/manager_test.go:stubCache.GetById",
+    "pkg/registry/apis/secret/encryption/manager/manager_test.go:stubCache.GetByLabel",
+    "pkg/registry/apis/secret/encryption/manager/manager_test.go:stubCache.Set",
+    "pkg/registry/apis/secret/encryption/manager/manager_test.go:stubCache.RemoveExpired",
+    "pkg/registry/apis/secret/encryption/manager/manager_test.go:stubCache.Flush",
+    "pkg/registry/apis/secret/encryption/manager/test_helpers.go:NoopDataKeyCache.GetById",
+    "pkg/registry/apis/secret/encryption/manager/test_helpers.go:NoopDataKeyCache.GetByLabel",
+    "pkg/registry/apis/secret/encryption/manager/test_helpers.go:NoopDataKeyCache.Set",
+    "pkg/registry/apis/secret/encryption/manager/test_helpers.go:NoopDataKeyCache.RemoveExpired",
+    "pkg/registry/apis/secret/encryption/manager/test_helpers.go:NoopDataKeyCache.Flush",
+    "pkg/registry/apis/secret/encryption/manager/manager.go:dataKeyById",
+    "pkg/registry/apis/secret/encryption/manager/manager.go:dataKeyByLabel",
+    "pkg/registry/apis/secret/encryption/manager/manager.go:cacheDataKey",
+    "pkg/registry/apis/secret/encryption/manager/manager.go:Run",
+    "pkg/registry/apis/secret/encryption/manager/manager.go:ConsolidateNamespace",
+    "pkg/registry/apis/secret/encryption/manager/manager_test.go:TestEncryptionService_FlushCache",
+    "pkg/registry/apis/secret/encryption/manager/manager_test.go:TestIntegration_SecretsService",
+    "pkg/registry/apis/secret/encryption/manager/oss_dek_cache_test.go:TestOSSDataKeyCache",
+    "pkg/registry/apis/secret/encryption/manager/oss_dek_cache_test.go:TestOSSDataKeyCache_FalseConditions",
+    "pkg/registry/apis/secret/encryption/manager/oss_dek_cache_test.go:TestOSSDataKeyCache_NamespaceIsolation",
+    "pkg/registry/apis/secret/encryption/manager/oss_dek_cache_test.go:TestOSSDataKeyCache_Expiration",
+    "pkg/registry/apis/secret/encryption/manager/oss_dek_cache_test.go:TestOSSDataKeyCache_Flush"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

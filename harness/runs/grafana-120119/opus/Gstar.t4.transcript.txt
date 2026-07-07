@@ -1,0 +1,26 @@
+I've verified the internal references. The calls at service.go lines 91/196/278/424 are to `rev.GetManagedRoute` / `imported.GetManagedRoute` (the `ConfigRevision`/`ImportedConfigRevision` methods), **not** `Service.GetManagedRoute`. So prism's listing of `getImportedRoute` as a caller of `Service.GetManagedRoute` is a name-conflation false positive — it doesn't call any of the 5 changing service methods. (`UpdateManagedRoute`/`DeleteManagedRoute` are in the set anyway as changing methods.)
+
+The full change-set from prism (union of declarations, declaringTypes, supers, and callers) across all 5 methods, with the verified false positive removed:
+
+{
+  "sites": [
+    "pkg/services/ngalert/notifier/routes/service.go:GetManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:GetManagedRoutes",
+    "pkg/services/ngalert/notifier/routes/service.go:CreateManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:UpdateManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:DeleteManagedRoute",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:RouteService",
+    "pkg/services/ngalert/api/api_provisioning.go:routeService",
+    "pkg/services/ngalert/notifier/routes/testing.go:GetManagedRoute",
+    "pkg/services/ngalert/notifier/routes/testing.go:GetManagedRoutes",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Get",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:List",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Create",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Update",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Delete",
+    "pkg/services/ngalert/api/api_provisioning.go:RouteGetPolicyTreeExport",
+    "pkg/services/ngalert/notifier/routes/service_test.go:TestGetManagedRoute"
+  ],
+  "complete": true,
+  "unresolved": ["prism listed Service.getImportedRoute (service.go:420) as a caller of GetManagedRoute, but it actually calls ImportedConfigRevision.GetManagedRoute (a different type's same-named method) and none of the 5 changing service methods, so it was excluded as a name-conflation false positive"]
+}

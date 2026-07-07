@@ -1,0 +1,24 @@
+I've traced the complete change-set. Prism's caller list for `GetManagedRoute` included three false positives caused by name-conflation with `ConfigRevision.GetManagedRoute` / `imported.GetManagedRoute` (the storage-layer method of the same name): `Service.getImportedRoute` and the internal `revision.GetManagedRoute(name)` calls inside `Update/DeleteManagedRoute`. I verified those call the storage method, not the service method, and excluded `getImportedRoute`. Everything else is confirmed by reading the source.
+
+{
+  "sites": [
+    "pkg/services/ngalert/notifier/routes/service.go:Service.GetManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:Service.GetManagedRoutes",
+    "pkg/services/ngalert/notifier/routes/service.go:Service.CreateManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:Service.UpdateManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:Service.DeleteManagedRoute",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:RouteService",
+    "pkg/services/ngalert/api/api_provisioning.go:routeService",
+    "pkg/services/ngalert/notifier/routes/testing.go:FakeService.GetManagedRoute",
+    "pkg/services/ngalert/notifier/routes/testing.go:FakeService.GetManagedRoutes",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:legacyStorage.Get",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:legacyStorage.List",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:legacyStorage.Create",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:legacyStorage.Update",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:legacyStorage.Delete",
+    "pkg/services/ngalert/api/api_provisioning.go:ProvisioningSrv.RouteGetPolicyTreeExport",
+    "pkg/services/ngalert/notifier/routes/service_test.go:TestGetManagedRoute"
+  ],
+  "complete": true,
+  "unresolved": []
+}

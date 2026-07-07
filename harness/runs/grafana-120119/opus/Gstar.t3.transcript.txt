@@ -1,0 +1,24 @@
+I have the complete picture. The prism results reported `getImportedRoute`, and the internal `revision.GetManagedRoute(name)` calls inside `UpdateManagedRoute`/`DeleteManagedRoute` as callers of `Service.GetManagedRoute`, but these actually call `ConfigRevision.GetManagedRoute` (a different, unchanged method sharing the name). `getImportedRoute` calls the zero-arg `imported.GetManagedRoute()` — also unchanged — so I exclude it. `UpdateManagedRoute`/`DeleteManagedRoute` remain because they are themselves two of the five changing methods. The `FakeService` embeds `Service` and only overrides the two Get methods, so only those two fakes need changing.
+
+{
+  "sites": [
+    "pkg/services/ngalert/notifier/routes/service.go:GetManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:GetManagedRoutes",
+    "pkg/services/ngalert/notifier/routes/service.go:CreateManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:UpdateManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:DeleteManagedRoute",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:RouteService",
+    "pkg/services/ngalert/api/api_provisioning.go:routeService",
+    "pkg/services/ngalert/notifier/routes/testing.go:FakeService.GetManagedRoute",
+    "pkg/services/ngalert/notifier/routes/testing.go:FakeService.GetManagedRoutes",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:List",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Get",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Create",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Update",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Delete",
+    "pkg/services/ngalert/api/api_provisioning.go:RouteGetPolicyTreeExport",
+    "pkg/services/ngalert/notifier/routes/service_test.go:TestGetManagedRoute"
+  ],
+  "complete": true,
+  "unresolved": ["prism reported Service.getImportedRoute plus the internal calls in UpdateManagedRoute/DeleteManagedRoute as callers of Service.GetManagedRoute, but code inspection shows those invoke ConfigRevision.GetManagedRoute (an unchanged same-named method); getImportedRoute is excluded as a false positive, while UpdateManagedRoute/DeleteManagedRoute remain only because they are themselves two of the five changing methods"]
+}

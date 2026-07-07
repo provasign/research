@@ -43,7 +43,10 @@ def engine_sites(query: str, workdir: Path) -> tuple[list[str], dict]:
         raise RuntimeError(f"prism change-impact failed: {result.stderr[:400]}")
     data = json.loads(result.stdout)
     sites: list[str] = []
-    for group in ("declarations", "family", "callers"):
+    # declaringTypes: interface/type declaration blocks whose member specs are
+    # not separate symbols (Go/TS) — the type IS the change site a PR diff
+    # attributes the edit to, so the ceiling union must count it.
+    for group in ("declarations", "family", "callers", "declaringTypes"):
         for sym in data.get(group, []):
             fp = sym.get("filePath") or sym.get("file", "")
             name = sym.get("name", "")

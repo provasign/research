@@ -101,13 +101,15 @@ call site (callers). Your workflow:
    Use the exact type and method name from the issue. Include param types for \
 precision (e.g. 'JsonSerializer.serialize(T, JsonGenerator, SerializerProvider)').
    If you are not sure of the exact param types, omit them: 'Type.method' also works.
-3. Parse the JSON output. The result has four groups:
-   - declarations: the method itself (must change)
-   - family:       every override/implementation in the subtype closure (must change)
-   - callers:      every resolved call site (must change)
-   - supers:       informational only; the supertype declarations (usually must change too)
-4. Union declarations + family + callers (+ supers if they are separate methods) \
-and output those as your sites list.
+3. Parse the JSON output. The result has five groups:
+   - declarations:   the method itself (must change)
+   - family:         every override/implementation in the subtype closure (must change)
+   - callers:        every resolved call site (must change)
+   - declaringTypes: interface/type declaration blocks whose member signatures \
+must change (must change — report each as "<file>:<TypeName>")
+   - supers:         same-member declarations on other contracts (must change too)
+4. Union declarations + family + callers + declaringTypes (+ supers if they are \
+separate methods) and output those as your sites list.
 
 Do NOT manually hunt for overrides or search for callers — the graph computed \
 the full traversal for you. If you need to confirm the exact type name before \

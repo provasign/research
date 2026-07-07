@@ -1,0 +1,24 @@
+Based on my investigation, I've traced the complete impact. The service methods live on `*routes.Service` (service.go), are abstracted by two interfaces (`RouteService` in routingtree, `routeService` in api_provisioning), have one fake (`FakeService`), and are invoked at the legacyStorage REST handlers, the provisioning export handler, and one test. The identically-named methods on `ConfigRevision`/`ImportedConfigRevision` in `legacy_storage/` are a different type with different signatures — they are called internally and do not change.
+
+{
+  "sites": [
+    "pkg/services/ngalert/notifier/routes/service.go:GetManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:GetManagedRoutes",
+    "pkg/services/ngalert/notifier/routes/service.go:CreateManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:UpdateManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:DeleteManagedRoute",
+    "pkg/services/ngalert/notifier/routes/testing.go:FakeService.GetManagedRoute",
+    "pkg/services/ngalert/notifier/routes/testing.go:FakeService.GetManagedRoutes",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:RouteService",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:List",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Get",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Create",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Update",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Delete",
+    "pkg/services/ngalert/api/api_provisioning.go:routeService",
+    "pkg/services/ngalert/api/api_provisioning.go:RouteGetPolicyTreeExport",
+    "pkg/services/ngalert/notifier/routes/service_test.go:TestGetManagedRoute"
+  ],
+  "complete": true,
+  "unresolved": []
+}

@@ -1,0 +1,31 @@
+The `legacy_storage/*` files (routes.go, imported.go, and their tests) contain `ConfigRevision`/`ImportedConfigRevision` methods with different signatures (`GetManagedRoute(name string)`, etc.) — these are the underlying storage layer, NOT the service methods, so they are unaffected.
+
+Complete analysis:
+- **Service impl** (`routes/service.go`): all 5 methods on `*Service`
+- **Fake** (`routes/testing.go`): `FakeService` overrides `GetManagedRoute`/`GetManagedRoutes`; Create/Update/Delete are inherited from embedded `Service` (auto-update)
+- **Interfaces**: `routeService` in api_provisioning.go (only GetManagedRoute) and `RouteService` in routingtree/legacy_storage.go (all 5)
+- **Call sites**: RouteGetPolicyTreeExport (api), and List/Get/Create/Update/Delete (routingtree), plus the test `TestGetManagedRoute`
+- Wiring points (`api.go`, `ngalert.go`, `register.go`, `NewStorage`) pass the concrete `*routes.Service` by reference — no signature change needed.
+
+{
+  "sites": [
+    "pkg/services/ngalert/notifier/routes/service.go:GetManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:GetManagedRoutes",
+    "pkg/services/ngalert/notifier/routes/service.go:CreateManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:UpdateManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:DeleteManagedRoute",
+    "pkg/services/ngalert/notifier/routes/testing.go:FakeService.GetManagedRoute",
+    "pkg/services/ngalert/notifier/routes/testing.go:FakeService.GetManagedRoutes",
+    "pkg/services/ngalert/api/api_provisioning.go:routeService",
+    "pkg/services/ngalert/api/api_provisioning.go:RouteGetPolicyTreeExport",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:RouteService",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:List",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Get",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Create",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Update",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Delete",
+    "pkg/services/ngalert/notifier/routes/service_test.go:TestGetManagedRoute"
+  ],
+  "complete": true,
+  "unresolved": []
+}

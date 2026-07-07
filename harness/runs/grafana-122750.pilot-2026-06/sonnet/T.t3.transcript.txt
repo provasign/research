@@ -1,0 +1,80 @@
+Now I have all the information. Let me compile the complete list of functions that must change.
+
+The interface methods that gain `context.Context` as first parameter:
+
+**Interface** (1 site):
+- `pkg/registry/apis/secret/encryption/secrets.go:DataKeyCache` (interface declaration — 5 method signatures)
+
+**`ossDataKeyCache` implementation** (5 methods):
+- `pkg/registry/apis/secret/encryption/manager/oss_dek_cache.go:GetById`
+- `pkg/registry/apis/secret/encryption/manager/oss_dek_cache.go:GetByLabel`
+- `pkg/registry/apis/secret/encryption/manager/oss_dek_cache.go:Set`
+- `pkg/registry/apis/secret/encryption/manager/oss_dek_cache.go:RemoveExpired`
+- `pkg/registry/apis/secret/encryption/manager/oss_dek_cache.go:Flush`
+
+**`NoopDataKeyCache` implementation** in test_helpers.go (5 methods):
+- `pkg/registry/apis/secret/encryption/manager/test_helpers.go:GetById`
+- `pkg/registry/apis/secret/encryption/manager/test_helpers.go:GetByLabel`
+- `pkg/registry/apis/secret/encryption/manager/test_helpers.go:Set`
+- `pkg/registry/apis/secret/encryption/manager/test_helpers.go:RemoveExpired`
+- `pkg/registry/apis/secret/encryption/manager/test_helpers.go:Flush`
+
+**`stubCache` implementation** in manager_test.go (5 methods):
+- `pkg/registry/apis/secret/encryption/manager/manager_test.go:GetByLabel` (stubCache)
+- `pkg/registry/apis/secret/encryption/manager/manager_test.go:GetById` (stubCache)
+- `pkg/registry/apis/secret/encryption/manager/manager_test.go:Set` (stubCache)
+- `pkg/registry/apis/secret/encryption/manager/manager_test.go:Flush` (stubCache)
+- `pkg/registry/apis/secret/encryption/manager/manager_test.go:RemoveExpired` (stubCache)
+
+**Call sites in manager.go** (the callers need to pass ctx):
+- `pkg/registry/apis/secret/encryption/manager/manager.go:dataKeyByLabel` (calls `GetByLabel`)
+- `pkg/registry/apis/secret/encryption/manager/manager.go:dataKeyById` (calls `GetById`)
+- `pkg/registry/apis/secret/encryption/manager/manager.go:ConsolidateNamespace` (calls `Flush`)
+- `pkg/registry/apis/secret/encryption/manager/manager.go:Run` (calls `RemoveExpired`)
+- `pkg/registry/apis/secret/encryption/manager/manager.go:cacheDataKey` (calls `Set`)
+
+**Call sites in tests** — these are inside test functions that directly call cache methods:
+- `pkg/registry/apis/secret/encryption/manager/manager_test.go:TestIntegration_SecretsService` (calls `Flush` on line 616)
+- `pkg/registry/apis/secret/encryption/manager/manager_test.go:TestEncryptionService_FlushCache` (calls `GetById`, `GetByLabel`, `Flush` on lines 828-850)
+- `pkg/registry/apis/secret/encryption/manager/oss_dek_cache_test.go:TestOSSDataKeyCache` (calls `Set`, `GetById`, `GetByLabel`)
+- `pkg/registry/apis/secret/encryption/manager/oss_dek_cache_test.go:TestOSSDataKeyCache_FalseConditions` (calls various methods)
+- `pkg/registry/apis/secret/encryption/manager/oss_dek_cache_test.go:TestOSSDataKeyCache_NamespaceIsolation` (calls various methods)
+- `pkg/registry/apis/secret/encryption/manager/oss_dek_cache_test.go:TestOSSDataKeyCache_Expiration` (calls various methods)
+- `pkg/registry/apis/secret/encryption/manager/oss_dek_cache_test.go:TestOSSDataKeyCache_Flush` (calls various methods)
+
+```json
+{
+  "sites": [
+    "pkg/registry/apis/secret/encryption/secrets.go:DataKeyCache",
+    "pkg/registry/apis/secret/encryption/manager/oss_dek_cache.go:GetById",
+    "pkg/registry/apis/secret/encryption/manager/oss_dek_cache.go:GetByLabel",
+    "pkg/registry/apis/secret/encryption/manager/oss_dek_cache.go:Set",
+    "pkg/registry/apis/secret/encryption/manager/oss_dek_cache.go:RemoveExpired",
+    "pkg/registry/apis/secret/encryption/manager/oss_dek_cache.go:Flush",
+    "pkg/registry/apis/secret/encryption/manager/test_helpers.go:GetById",
+    "pkg/registry/apis/secret/encryption/manager/test_helpers.go:GetByLabel",
+    "pkg/registry/apis/secret/encryption/manager/test_helpers.go:Set",
+    "pkg/registry/apis/secret/encryption/manager/test_helpers.go:RemoveExpired",
+    "pkg/registry/apis/secret/encryption/manager/test_helpers.go:Flush",
+    "pkg/registry/apis/secret/encryption/manager/manager_test.go:GetById",
+    "pkg/registry/apis/secret/encryption/manager/manager_test.go:GetByLabel",
+    "pkg/registry/apis/secret/encryption/manager/manager_test.go:Set",
+    "pkg/registry/apis/secret/encryption/manager/manager_test.go:RemoveExpired",
+    "pkg/registry/apis/secret/encryption/manager/manager_test.go:Flush",
+    "pkg/registry/apis/secret/encryption/manager/manager.go:dataKeyByLabel",
+    "pkg/registry/apis/secret/encryption/manager/manager.go:dataKeyById",
+    "pkg/registry/apis/secret/encryption/manager/manager.go:ConsolidateNamespace",
+    "pkg/registry/apis/secret/encryption/manager/manager.go:Run",
+    "pkg/registry/apis/secret/encryption/manager/manager.go:cacheDataKey",
+    "pkg/registry/apis/secret/encryption/manager/manager_test.go:TestIntegration_SecretsService",
+    "pkg/registry/apis/secret/encryption/manager/manager_test.go:TestEncryptionService_FlushCache",
+    "pkg/registry/apis/secret/encryption/manager/oss_dek_cache_test.go:TestOSSDataKeyCache",
+    "pkg/registry/apis/secret/encryption/manager/oss_dek_cache_test.go:TestOSSDataKeyCache_FalseConditions",
+    "pkg/registry/apis/secret/encryption/manager/oss_dek_cache_test.go:TestOSSDataKeyCache_NamespaceIsolation",
+    "pkg/registry/apis/secret/encryption/manager/oss_dek_cache_test.go:TestOSSDataKeyCache_Expiration",
+    "pkg/registry/apis/secret/encryption/manager/oss_dek_cache_test.go:TestOSSDataKeyCache_Flush"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

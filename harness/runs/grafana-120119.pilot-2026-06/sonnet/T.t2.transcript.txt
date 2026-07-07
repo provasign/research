@@ -1,0 +1,29 @@
+Now I have a complete picture. Let me produce the final analysis.
+
+```json
+{
+  "sites": [
+    "pkg/services/ngalert/api/api_provisioning.go:routeService",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:RouteService",
+    "pkg/services/ngalert/notifier/routes/service.go:GetManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:GetManagedRoutes",
+    "pkg/services/ngalert/notifier/routes/service.go:CreateManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:UpdateManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:DeleteManagedRoute",
+    "pkg/services/ngalert/notifier/routes/testing.go:GetManagedRoute",
+    "pkg/services/ngalert/notifier/routes/testing.go:GetManagedRoutes",
+    "pkg/services/ngalert/api/api_provisioning.go:RouteGetPolicyTreeExport",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:List",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Get",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Create",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Update",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Delete",
+    "pkg/services/ngalert/notifier/routes/service_test.go:TestGetManagedRoute"
+  ],
+  "complete": true,
+  "unresolved": [
+    "FakeService.GetManagedRoutes in testing.go overrides the embedded Service.GetManagedRoutes with its own signature. It is NOT required by any interface that gains the user parameter (routeService in api_provisioning.go only declares GetManagedRoute; timeIntervalRouteRefService only declares RenameTimeIntervalInRoutes). It technically compiles without changing — the override stays in place with old signature shadowing the promoted method — but it would be an incorrect fake. Included in sites for correctness, but not strictly a compile error.",
+    "FakeService (testing.go) inherits CreateManagedRoute, UpdateManagedRoute, DeleteManagedRoute from embedded Service. When Service methods gain the user parameter, those promoted methods automatically get the new signature, so no separate override is needed. However, if any test directly calls these three on a FakeService and needs user-aware behaviour, additional fake overrides would be required — no such test was found."
+  ]
+}
+```

@@ -1,0 +1,29 @@
+I've traced the complete call graph. Here's my analysis:
+
+- **Interfaces** declaring these methods: `RouteService` (routingtree) declares all 5; `routeService` (api_provisioning) declares `GetManagedRoute`.
+- **Concrete impl**: `*routes.Service` has all 5 methods.
+- **Fake**: `FakeService` overrides only `GetManagedRoute`/`GetManagedRoutes` (Create/Update/Delete are inherited from embedded `Service`, so they update automatically).
+- **Call sites**: the 5 `legacyStorage` REST methods, `ProvisioningSrv.RouteGetPolicyTreeExport`, and `TestGetManagedRoute`. The other `*ManagedRoute` references are on `ConfigRevision` (a different method set, out of scope).
+
+{
+  "sites": [
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:RouteService",
+    "pkg/services/ngalert/api/api_provisioning.go:routeService",
+    "pkg/services/ngalert/notifier/routes/service.go:Service.GetManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:Service.GetManagedRoutes",
+    "pkg/services/ngalert/notifier/routes/service.go:Service.CreateManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:Service.UpdateManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:Service.DeleteManagedRoute",
+    "pkg/services/ngalert/notifier/routes/testing.go:FakeService.GetManagedRoute",
+    "pkg/services/ngalert/notifier/routes/testing.go:FakeService.GetManagedRoutes",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:legacyStorage.List",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:legacyStorage.Get",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:legacyStorage.Create",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:legacyStorage.Update",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:legacyStorage.Delete",
+    "pkg/services/ngalert/api/api_provisioning.go:ProvisioningSrv.RouteGetPolicyTreeExport",
+    "pkg/services/ngalert/notifier/routes/service_test.go:TestGetManagedRoute"
+  ],
+  "complete": true,
+  "unresolved": []
+}

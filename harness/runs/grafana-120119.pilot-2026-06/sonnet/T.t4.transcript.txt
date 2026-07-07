@@ -1,0 +1,36 @@
+Now I have all the information needed. Let me compile the complete picture:
+
+- **Interfaces**: `RouteService` (routingtree, 5 methods) and `routeService` (api_provisioning, 1 method)
+- **Concrete implementations**: all 5 methods on `Service` in routes/service.go
+- **Fake overrides**: the 2 explicit overrides on `FakeService` in testing.go (the other 3 are inherited via struct embedding from `Service`, so they change automatically)
+- **Call sites**: 5 methods in legacyStorage (routingtree) + `RouteGetPolicyTreeExport` in api_provisioning
+- **Test call sites**: `TestGetManagedRoute` in service_test.go (calls `sut.GetManagedRoute` and `sut.GetManagedRoutes` directly)
+
+```json
+{
+  "sites": [
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:RouteService.GetManagedRoutes",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:RouteService.GetManagedRoute",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:RouteService.DeleteManagedRoute",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:RouteService.CreateManagedRoute",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:RouteService.UpdateManagedRoute",
+    "pkg/services/ngalert/api/api_provisioning.go:routeService.GetManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:GetManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:GetManagedRoutes",
+    "pkg/services/ngalert/notifier/routes/service.go:CreateManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:UpdateManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:DeleteManagedRoute",
+    "pkg/services/ngalert/notifier/routes/testing.go:FakeService.GetManagedRoute",
+    "pkg/services/ngalert/notifier/routes/testing.go:FakeService.GetManagedRoutes",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:List",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Get",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Create",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Update",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Delete",
+    "pkg/services/ngalert/api/api_provisioning.go:RouteGetPolicyTreeExport",
+    "pkg/services/ngalert/notifier/routes/service_test.go:TestGetManagedRoute"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

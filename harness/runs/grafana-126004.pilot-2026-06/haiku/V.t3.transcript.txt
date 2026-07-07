@@ -1,0 +1,40 @@
+Perfect! The prism tool confirms all references are unambiguous. Let me compile the complete list of sites that must change:
+
+Based on the analysis:
+
+**Definitions (2):**
+- `storage_backend.go:toSnowflakeRV` — definition at line 769
+- `eventstore.go:subtractDurationFromSnowflake` — definition at line 309
+
+**Call sites by function (9 unique functions with call sites):**
+1. `storage_backend.go:WriteEvent` — calls `toSnowflakeRV` at line 887
+2. `storage_backend.go:ReadResource` — calls `toSnowflakeRV` at line 1196
+3. `storage_backend.go:ListIterator` — calls `toSnowflakeRV` at lines 1285, 1319
+4. `storage_backend.go:ListModifiedSince` — calls `toSnowflakeRV` at line 1580, calls `subtractDurationFromSnowflake` at line 1618
+5. `storage_backend.go:ListHistory` — calls `toSnowflakeRV` at lines 1801, 1818
+6. `storage_backend_test.go:seedBackend` — calls `subtractDurationFromSnowflake` at line 1299
+7. `datastore_test.go:TestToSnowflakeRVIdempotent` — calls `toSnowflakeRV` at line 3444
+8. `eventstore_test.go:TestSubtractDurationFromSnowflake` — calls `subtractDurationFromSnowflake` at line 777
+9. `eventstore_test.go:testListKeysSinceWithSnowflakeTime` — calls `subtractDurationFromSnowflake` at lines 852, 869
+
+All references are confirmed unambiguous by prism. Here's the output:
+
+```json
+{
+  "sites": [
+    "pkg/storage/unified/resource/storage_backend.go:toSnowflakeRV",
+    "pkg/storage/unified/resource/eventstore.go:subtractDurationFromSnowflake",
+    "pkg/storage/unified/resource/storage_backend.go:WriteEvent",
+    "pkg/storage/unified/resource/storage_backend.go:ReadResource",
+    "pkg/storage/unified/resource/storage_backend.go:ListIterator",
+    "pkg/storage/unified/resource/storage_backend.go:ListModifiedSince",
+    "pkg/storage/unified/resource/storage_backend.go:ListHistory",
+    "pkg/storage/unified/resource/storage_backend_test.go:seedBackend",
+    "pkg/storage/unified/resource/datastore_test.go:TestToSnowflakeRVIdempotent",
+    "pkg/storage/unified/resource/eventstore_test.go:TestSubtractDurationFromSnowflake",
+    "pkg/storage/unified/resource/eventstore_test.go:testListKeysSinceWithSnowflakeTime"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

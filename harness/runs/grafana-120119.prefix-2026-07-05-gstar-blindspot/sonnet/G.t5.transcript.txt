@@ -1,0 +1,34 @@
+I have a complete picture of the codebase. Let me compile the final answer.
+
+The managed-routes service methods exist in two interface declarations, one concrete implementation (`*routes.Service`), one fake (`*routes.FakeService`), and several call sites. Here is the exhaustive map:
+
+**Interfaces**: two separate `routeService`/`RouteService` interfaces declare these methods.  
+**Implementations**: five methods on `*routes.Service`.  
+**Fakes**: `FakeService` explicitly overrides `GetManagedRoute` and `GetManagedRoutes` (the other three are promoted from the embedded `Service`).  
+**Call sites**: five methods in `legacyStorage` (k8s apiserver adapter) and one HTTP handler in `api_provisioning.go`.  
+**Test call sites**: `TestGetManagedRoute` calls `sut.GetManagedRoute` and `sut.GetManagedRoutes` directly on `*Service`.
+
+```json
+{
+  "sites": [
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:RouteService",
+    "pkg/services/ngalert/api/api_provisioning.go:routeService",
+    "pkg/services/ngalert/notifier/routes/service.go:GetManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:GetManagedRoutes",
+    "pkg/services/ngalert/notifier/routes/service.go:CreateManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:UpdateManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:DeleteManagedRoute",
+    "pkg/services/ngalert/notifier/routes/testing.go:FakeService.GetManagedRoute",
+    "pkg/services/ngalert/notifier/routes/testing.go:FakeService.GetManagedRoutes",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:List",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Get",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Create",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Update",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:Delete",
+    "pkg/services/ngalert/api/api_provisioning.go:RouteGetPolicyTreeExport",
+    "pkg/services/ngalert/notifier/routes/service_test.go:TestGetManagedRoute"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

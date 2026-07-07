@@ -1,0 +1,36 @@
+I have a complete picture. Prism's automatic traversal was incomplete (it conflated `Service.GetManagedRoute` with the unrelated `ConfigRevision.GetManagedRoute`/`ImportedConfigRevision.GetManagedRoute` methods, and missed both interfaces plus the external call sites), so I verified everything manually.
+
+The change set:
+- **Two interfaces**: `RouteService` (routingtree, all 5 methods) and `routeService` (api_provisioning.go, just `GetManagedRoute`)
+- **Concrete impl**: `*routes.Service` (all 5 methods)
+- **Fakes**: `FakeService` overrides only `GetManagedRoute`/`GetManagedRoutes` (Create/Update/Delete are inherited from embedded `Service`, so they pick up the new signature automatically)
+- **Call sites**: the 5 `legacyStorage` REST methods, `RouteGetPolicyTreeExport`, and the `TestGetManagedRoute` test
+
+The `legacy_storage.ConfigRevision.*` and `ImportedConfigRevision.GetManagedRoute` methods are distinct methods on different types (different signatures) and are NOT part of this change.
+
+{
+  "sites": [
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:RouteService.GetManagedRoutes",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:RouteService.GetManagedRoute",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:RouteService.DeleteManagedRoute",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:RouteService.CreateManagedRoute",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:RouteService.UpdateManagedRoute",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:legacyStorage.List",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:legacyStorage.Get",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:legacyStorage.Create",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:legacyStorage.Update",
+    "pkg/registry/apps/alerting/notifications/routingtree/legacy_storage.go:legacyStorage.Delete",
+    "pkg/services/ngalert/api/api_provisioning.go:routeService.GetManagedRoute",
+    "pkg/services/ngalert/api/api_provisioning.go:ProvisioningSrv.RouteGetPolicyTreeExport",
+    "pkg/services/ngalert/notifier/routes/service.go:Service.GetManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:Service.GetManagedRoutes",
+    "pkg/services/ngalert/notifier/routes/service.go:Service.CreateManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:Service.UpdateManagedRoute",
+    "pkg/services/ngalert/notifier/routes/service.go:Service.DeleteManagedRoute",
+    "pkg/services/ngalert/notifier/routes/testing.go:FakeService.GetManagedRoute",
+    "pkg/services/ngalert/notifier/routes/testing.go:FakeService.GetManagedRoutes",
+    "pkg/services/ngalert/notifier/routes/service_test.go:TestGetManagedRoute"
+  ],
+  "complete": true,
+  "unresolved": []
+}

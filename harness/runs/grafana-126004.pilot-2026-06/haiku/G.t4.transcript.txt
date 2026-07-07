@@ -1,0 +1,65 @@
+Perfect! Now I have the complete picture. Let me compile the final list of all sites that need to change:
+
+```json
+{
+  "sites": [
+    "pkg/storage/unified/resource/storage_backend.go:toSnowflakeRV",
+    "pkg/storage/unified/resource/storage_backend.go:kvStorageBackend.WriteEvent",
+    "pkg/storage/unified/resource/storage_backend.go:kvStorageBackend.ReadResource",
+    "pkg/storage/unified/resource/storage_backend.go:kvStorageBackend.ListIterator",
+    "pkg/storage/unified/resource/storage_backend.go:kvStorageBackend.ListModifiedSince",
+    "pkg/storage/unified/resource/storage_backend.go:kvStorageBackend.ListHistory",
+    "pkg/storage/unified/resource/datastore_test.go:TestToSnowflakeRVIdempotent",
+    "pkg/storage/unified/resource/eventstore.go:subtractDurationFromSnowflake",
+    "pkg/storage/unified/resource/storage_backend.go:kvStorageBackend.ListModifiedSince",
+    "pkg/storage/unified/resource/eventstore_test.go:TestSubtractDurationFromSnowflake",
+    "pkg/storage/unified/resource/eventstore_test.go:testListKeysSinceWithSnowflakeTime",
+    "pkg/storage/unified/resource/storage_backend_test.go:seedBackend"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```
+
+Wait, let me verify I have the exact count right by double-checking the line numbers from prism output:
+
+For `toSnowflakeRV` (9 references):
+- Line 769: definition 
+- Line 887: in WriteEvent ✓
+- Line 1196: in ReadResource ✓
+- Line 1285: in ListIterator ✓
+- Line 1319: in ListIterator (second call in same method)
+- Line 1580: in ListModifiedSince ✓
+- Line 1801: in ListHistory ✓
+- Line 1818: in ListHistory (second call in same method)
+- Line 3444 in datastore_test.go: in TestToSnowflakeRVIdempotent ✓
+
+For `subtractDurationFromSnowflake` (6 references):
+- Line 309: definition
+- Line 1618 in storage_backend.go: in ListModifiedSince ✓
+- Line 777 in eventstore_test.go: in TestSubtractDurationFromSnowflake ✓
+- Line 852 in eventstore_test.go: in testListKeysSinceWithSnowflakeTime ✓
+- Line 869 in eventstore_test.go: in testListKeysSinceWithSnowflakeTime (second call in same function)
+- Line 1299 in storage_backend_test.go: in seedBackend ✓
+
+Now let me format this correctly - the user wants the function/method that needs to change, and if there are multiple call sites in the same function, they likely should be listed separately since they're different locations:
+
+```json
+{
+  "sites": [
+    "pkg/storage/unified/resource/storage_backend.go:toSnowflakeRV",
+    "pkg/storage/unified/resource/storage_backend.go:kvStorageBackend.WriteEvent",
+    "pkg/storage/unified/resource/storage_backend.go:kvStorageBackend.ReadResource",
+    "pkg/storage/unified/resource/storage_backend.go:kvStorageBackend.ListIterator",
+    "pkg/storage/unified/resource/storage_backend.go:kvStorageBackend.ListModifiedSince",
+    "pkg/storage/unified/resource/storage_backend.go:kvStorageBackend.ListHistory",
+    "pkg/storage/unified/resource/datastore_test.go:TestToSnowflakeRVIdempotent",
+    "pkg/storage/unified/resource/eventstore.go:subtractDurationFromSnowflake",
+    "pkg/storage/unified/resource/storage_backend_test.go:seedBackend",
+    "pkg/storage/unified/resource/eventstore_test.go:TestSubtractDurationFromSnowflake",
+    "pkg/storage/unified/resource/eventstore_test.go:testListKeysSinceWithSnowflakeTime"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```

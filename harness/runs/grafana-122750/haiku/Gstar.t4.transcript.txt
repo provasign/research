@@ -1,0 +1,51 @@
+Based on my analysis using the `prism change-impact` command for all five interface methods, I'll now compile the complete list of sites that must change. Let me organize all the findings:
+
+**Interface declaration and implementations (from prism family field):**
+- Interface: pkg/registry/apis/secret/encryption/secrets.go:DataKeyCache
+- Implementations in ossDataKeyCache: 5 methods
+- Implementations in NoopDataKeyCache: 5 methods  
+- Implementations in stubCache: 5 methods
+
+**Callers from all method queries:**
+The prism output shows various callers, but I've verified that some may be false positives (same method names on other types like http.Header.Set). The most reliable callers are those I've directly verified in manager.go and the direct test calls in oss_dek_cache_test.go.
+
+Here's my final answer:
+
+```json
+{
+  "sites": [
+    "pkg/registry/apis/secret/encryption/secrets.go:DataKeyCache",
+    "pkg/registry/apis/secret/encryption/manager/oss_dek_cache.go:ossDataKeyCache.GetById",
+    "pkg/registry/apis/secret/encryption/manager/oss_dek_cache.go:ossDataKeyCache.GetByLabel",
+    "pkg/registry/apis/secret/encryption/manager/oss_dek_cache.go:ossDataKeyCache.Set",
+    "pkg/registry/apis/secret/encryption/manager/oss_dek_cache.go:ossDataKeyCache.RemoveExpired",
+    "pkg/registry/apis/secret/encryption/manager/oss_dek_cache.go:ossDataKeyCache.Flush",
+    "pkg/registry/apis/secret/encryption/manager/test_helpers.go:NoopDataKeyCache.GetById",
+    "pkg/registry/apis/secret/encryption/manager/test_helpers.go:NoopDataKeyCache.GetByLabel",
+    "pkg/registry/apis/secret/encryption/manager/test_helpers.go:NoopDataKeyCache.Set",
+    "pkg/registry/apis/secret/encryption/manager/test_helpers.go:NoopDataKeyCache.RemoveExpired",
+    "pkg/registry/apis/secret/encryption/manager/test_helpers.go:NoopDataKeyCache.Flush",
+    "pkg/registry/apis/secret/encryption/manager/manager_test.go:stubCache.GetById",
+    "pkg/registry/apis/secret/encryption/manager/manager_test.go:stubCache.GetByLabel",
+    "pkg/registry/apis/secret/encryption/manager/manager_test.go:stubCache.Set",
+    "pkg/registry/apis/secret/encryption/manager/manager_test.go:stubCache.RemoveExpired",
+    "pkg/registry/apis/secret/encryption/manager/manager_test.go:stubCache.Flush",
+    "pkg/registry/apis/secret/encryption/manager/manager.go:EncryptionManager.dataKeyById",
+    "pkg/registry/apis/secret/encryption/manager/manager.go:EncryptionManager.dataKeyByLabel",
+    "pkg/registry/apis/secret/encryption/manager/manager.go:EncryptionManager.cacheDataKey",
+    "pkg/registry/apis/secret/encryption/manager/manager.go:EncryptionManager.Run",
+    "pkg/registry/apis/secret/encryption/manager/manager.go:EncryptionManager.ConsolidateNamespace",
+    "pkg/registry/apis/secret/encryption/manager/oss_dek_cache_test.go:TestOSSDataKeyCache",
+    "pkg/registry/apis/secret/encryption/manager/oss_dek_cache_test.go:TestOSSDataKeyCache_FalseConditions",
+    "pkg/registry/apis/secret/encryption/manager/oss_dek_cache_test.go:TestOSSDataKeyCache_NamespaceIsolation",
+    "pkg/registry/apis/secret/encryption/manager/oss_dek_cache_test.go:TestOSSDataKeyCache_Expiration",
+    "pkg/registry/apis/secret/encryption/manager/oss_dek_cache_test.go:TestOSSDataKeyCache_Flush",
+    "pkg/registry/apis/secret/encryption/manager/manager_test.go:TestIntegration_SecretsService",
+    "pkg/registry/apis/secret/encryption/manager/manager_test.go:TestEncryptionService_FlushCache"
+  ],
+  "complete": false,
+  "unresolved": [
+    "Prism reported numerous test callers from other packages (login_test.go, ds_proxy_test.go, datasource_test.go, ngalert tests, kvstore tests, etc.) but direct verification shows these may be false positives from same-named methods on other types (e.g., http.Header.Set vs cache.Set, KVStore.Set vs cache.Set). Excluded these to avoid inflating the list with likely false positives. The manager_test.go and oss_dek_cache_test.go tests are included as they provably call the cache methods directly."
+  ]
+}
+```

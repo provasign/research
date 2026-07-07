@@ -1,0 +1,34 @@
+The prism output is clear. Let me compile the complete list from the reference data:
+
+**`toSnowflakeRV` → `ToSnowflakeRV`** (9 references total):
+- Definition at `storage_backend.go:769` in `toSnowflakeRV`
+- Called from `kvStorageBackend.WriteEvent`, `kvStorageBackend.ReadResource`, `kvStorageBackend.ListIterator` (×2), `kvStorageBackend.ListModifiedSince`, `kvStorageBackend.ListHistory` (×2) — all in `storage_backend.go`
+- Called from `TestToSnowflakeRVIdempotent` in `datastore_test.go`
+
+**`subtractDurationFromSnowflake` → `SubtractDurationFromSnowflake`** (6 references total):
+- Definition at `eventstore.go:309` in `subtractDurationFromSnowflake`
+- Called from `kvStorageBackend.ListModifiedSince` in `storage_backend.go` (same function also calls `toSnowflakeRV`)
+- Called from `TestSubtractDurationFromSnowflake`, `testListKeysSinceWithSnowflakeTime` (×2) in `eventstore_test.go`
+- Called from `seedBackend` in `storage_backend_test.go`
+
+Both searches returned "unambiguous" — these are unexported package-private symbols, so all callers are within the same package and prism has found them all.
+
+```json
+{
+  "sites": [
+    "pkg/storage/unified/resource/storage_backend.go:toSnowflakeRV",
+    "pkg/storage/unified/resource/storage_backend.go:WriteEvent",
+    "pkg/storage/unified/resource/storage_backend.go:ReadResource",
+    "pkg/storage/unified/resource/storage_backend.go:ListIterator",
+    "pkg/storage/unified/resource/storage_backend.go:ListModifiedSince",
+    "pkg/storage/unified/resource/storage_backend.go:ListHistory",
+    "pkg/storage/unified/resource/datastore_test.go:TestToSnowflakeRVIdempotent",
+    "pkg/storage/unified/resource/eventstore.go:subtractDurationFromSnowflake",
+    "pkg/storage/unified/resource/eventstore_test.go:TestSubtractDurationFromSnowflake",
+    "pkg/storage/unified/resource/eventstore_test.go:testListKeysSinceWithSnowflakeTime",
+    "pkg/storage/unified/resource/storage_backend_test.go:seedBackend"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```
