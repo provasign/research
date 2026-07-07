@@ -1,0 +1,60 @@
+name: Engine invariants
+on:
+  push:
+    branches: [main]
+    paths:
+      - "harness/ci_invariants.py"
+      - "harness/ci_baseline.json"
+      - "harness/tasks/**"
+      - "harness/score.py"
+      - "harness/schema.py"
+      - ".github/workflows/engine-invariants.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "harness/ci_invariants.py"
+      - "harness/ci_baseline.json"
+      - "harness/tasks/**"
+      - "harness/score.py"
+      - "harness/schema.py"
+      - ".github/workflows/engine-invariants.yml"
+  workflow_dispatch:
+    inputs:
+      prism_version:
+        description: "prism release tag to test (overrides the pinned default — use to validate a new release before bumping PRISM_VERSION)"
+        required: false
+  schedule:
+    # Weekly backstop: catches a pinned corpus commit becoming unreachable
+    # (repo renamed/deleted) even with no local push.
+    - cron: "17 6 * * 1"
+env:
+  # Bumped deliberately after a new prism release is verified — never
+  # "latest", so this suite can't start failing (or silently passing
+  # differently) from an unrelated, unreviewed release.
+  PRISM_VERSION: "v0.20.2"
+jobs:
+  invariants:
+    name: Ceiling regression + compile invariant + structural checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download prism
+        run: |
+          set -euo pipefail
+          VERSION="${{ github.event.inputs.prism_version || env.PRISM_VERSION }}"
+          curl -fsSL -o /usr/local/bin/prism \
+            "https://github.com/provasign/prism/releases/download/${VERSION}/prism-${VERSION}-linux-amd64"
+          chmod +x /usr/local/bin/prism
+          prism version
+      - name: Run invariant suite
+        run: python3 harness/ci_invariants.py --corpus-root /tmp/ci-corpus --prism /usr/local/bin/prism
+      - name: Upload corpus fetch logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-corpus-state
+          path: /tmp/ci-corpus
+          retention-days: 3
