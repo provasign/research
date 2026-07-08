@@ -4,7 +4,7 @@
       "status": "ok",
       "model": "sonnet",
       "task_id": "jackson-serialize",
-      "arm": "G",
+      "arm": "Gstar",
       "trial": 1,
       "recall": 0.9815,
       "precision": 0.9907,
@@ -127,53 +127,47 @@
       "weak_matches": [],
       "claimed_complete": true,
       "overconfident": true,
-      "surfaced_gap": false,
+      "surfaced_gap": true,
       "cost": {
-        "wall_s": 333.36,
-        "duration_ms": 332758,
-        "num_turns": 34,
+        "wall_s": 177.48,
+        "duration_ms": 176505,
+        "num_turns": 23,
         "usage": {
-          "input_tokens": 3632,
-          "cache_creation_input_tokens": 93333,
-          "cache_read_input_tokens": 2606780,
-          "output_tokens": 34500,
+          "input_tokens": 46,
+          "cache_creation_input_tokens": 50377,
+          "cache_read_input_tokens": 1129360,
+          "output_tokens": 16193,
           "server_tool_use": {
             "web_search_requests": 0,
             "web_fetch_requests": 0
           },
           "service_tier": "standard",
           "cache_creation": {
-            "ephemeral_1h_input_tokens": 93333,
+            "ephemeral_1h_input_tokens": 50377,
             "ephemeral_5m_input_tokens": 0
           },
           "inference_geo": "not_available",
           "iterations": [
             {
               "input_tokens": 2,
-              "output_tokens": 10453,
-              "cache_read_input_tokens": 123648,
-              "cache_creation_input_tokens": 272,
+              "output_tokens": 10142,
+              "cache_read_input_tokens": 69030,
+              "cache_creation_input_tokens": 10215,
               "cache_creation": {
                 "ephemeral_5m_input_tokens": 0,
-                "ephemeral_1h_input_tokens": 272
+                "ephemeral_1h_input_tokens": 10215
               },
               "type": "message"
             }
           ],
           "speed": "standard"
         },
-        "total_cost_usd": 1.871578
+        "total_cost_usd": 0.885423
       },
       "tools_used": [
-        "Glob",
-        "Grep",
-        "Read",
-        "awk",
-        "ls",
-        "prism",
-        "pwd",
-        "python3",
-        "rm"
+        "grep",
+        "mkdir",
+        "prism"
       ],
       "graph_used": true,
       "change_impact_used": true,
@@ -182,191 +176,159 @@
         {
           "tool": "Bash",
           "bin": "prism",
-          "detail": "/Users/tapabratapal/bin/prism lookup com.fasterxml.jackson.databind.JsonSerializer#serialize --format text"
+          "detail": "/Users/tapabratapal/bin/prism change-impact 'JsonSerializer.serialize' . 2>&1 | head -c 20000"
         },
         {
           "tool": "Bash",
           "bin": "prism",
-          "detail": "/Users/tapabratapal/bin/prism query \"JsonSerializer.serialize method signature change\" --terms JsonSerializer,serialize --include graph --format text"
+          "detail": "/Users/tapabratapal/bin/prism change-impact 'JsonSerializer.serialize' . > /tmp/prism_out.json 2>&1; wc -l /tmp/prism_out.json"
         },
         {
           "tool": "Bash",
           "bin": "prism",
-          "detail": "/Users/tapabratapal/bin/prism references JsonSerializer.serialize --format text 2>&1 | head -300"
+          "detail": "/Users/tapabratapal/bin/prism change-impact 'JsonSerializer.serialize' . > /tmp/prism_out.json 2>&1"
+        },
+        {
+          "tool": "Bash",
+          "bin": "mkdir",
+          "detail": "mkdir -p /Users/tapabratapal/gvg-corpus/jackson-databind/.tmp_prism && /Users/tapabratapal/bin/prism change-impact 'JsonSerializer.serialize' . > /Users/tapabratapal/gvg-corpus/jackson-databind/.tmp_p"
+        },
+        {
+          "tool": "Bash",
+          "bin": "mkdir",
+          "detail": "mkdir -p /Users/tapabratapal/gvg-corpus/jackson-databind/.tmp_prism"
+        },
+        {
+          "tool": "Bash",
+          "bin": "mkdir",
+          "detail": "mkdir -p .tmp_prism"
         },
         {
           "tool": "Bash",
           "bin": "prism",
-          "detail": "/Users/tapabratapal/bin/prism --help 2>&1 | head -80"
+          "detail": "/Users/tapabratapal/bin/prism change-impact 'JsonSerializer.serialize' . | python3 -c \"\nimport json,sys\nd=json.load(sys.stdin)\nfor k in d:\n    if isinstance(d[k], list):\n        print(k, len(d[k]))\n  "
         },
         {
           "tool": "Bash",
           "bin": "prism",
-          "detail": "/Users/tapabratapal/bin/prism change-impact \"JsonSerializer.serialize\" --format text 2>&1 | head -400"
+          "detail": "/Users/tapabratapal/bin/prism change-impact 'JsonSerializer.serialize' . | python3 -c \"import json,sys; d=json.load(sys.stdin); [print(k, len(v) if isinstance(v,list) else v) for k,v in d.items()]\""
         },
         {
           "tool": "Bash",
           "bin": "prism",
-          "detail": "/Users/tapabratapal/bin/prism change-impact \"JsonSerializer.serialize\" --format json > /tmp/impact.json 2>&1; wc -l /tmp/impact.json; python3 -c \"\nimport json\nd = json.load(open('/tmp/impact.json'))\np"
+          "detail": "/Users/tapabratapal/bin/prism change-impact 'JsonSerializer.serialize' . | jq 'keys'"
         },
         {
           "tool": "Bash",
           "bin": "prism",
-          "detail": "/Users/tapabratapal/bin/prism change-impact \"JsonSerializer.serialize\" --format json > /tmp/impact.json 2>&1"
+          "detail": "/Users/tapabratapal/bin/prism change-impact 'JsonSerializer.serialize' . | jq -c '{totalSites, completeness, declCount: (.declarations|length), familyCount: (.family|length), callersCount: (.callers|l"
         },
         {
           "tool": "Bash",
           "bin": "prism",
-          "detail": "/Users/tapabratapal/bin/prism change-impact \"JsonSerializer.serialize\" --format json > /tmp/impact.json 2>&1; wc -l /tmp/impact.json"
+          "detail": "/Users/tapabratapal/bin/prism change-impact 'JsonSerializer.serialize' . | jq -r '.declarations[] | .filePath + \":\" + .qualifiedName'"
         },
         {
           "tool": "Bash",
           "bin": "prism",
-          "detail": "/Users/tapabratapal/bin/prism change-impact \"JsonSerializer.serialize\" --format json > impact.json"
-        },
-        {
-          "tool": "Bash",
-          "bin": "pwd",
-          "detail": "pwd"
+          "detail": "/Users/tapabratapal/bin/prism change-impact 'JsonSerializer.serialize' . | jq -r '.family[] | .filePath + \":\" + .qualifiedName' | sort"
         },
         {
           "tool": "Bash",
           "bin": "prism",
-          "detail": "/Users/tapabratapal/bin/prism change-impact \"JsonSerializer.serialize\" --format json 1> /Users/tapabratapal/gvg-corpus/jackson-databind/graph/impact.json"
+          "detail": "/Users/tapabratapal/bin/prism change-impact 'JsonSerializer.serialize' . | jq -r '.callers[] | .filePath + \":\" + .qualifiedName' | sort"
+        },
+        {
+          "tool": "Bash",
+          "bin": "grep",
+          "detail": "grep -n \"class JSONPObject\" -A5 /Users/tapabratapal/gvg-corpus/jackson-databind/src/main/java/com/fasterxml/jackson/databind/util/JSONPObject.java; echo ---; grep -n \"serialize\" /Users/tapabratapal/gv"
+        },
+        {
+          "tool": "Bash",
+          "bin": "grep",
+          "detail": "grep -n \"class JSONWrappedObject\\|implements\\|void serialize\" /Users/tapabratapal/gvg-corpus/jackson-databind/src/main/java/com/fasterxml/jackson/databind/util/JSONWrappedObject.java"
+        },
+        {
+          "tool": "Bash",
+          "bin": "grep",
+          "detail": "grep -n \"class AsNumber\\|class BooleanSerializer\\|extends\\|void serialize\" /Users/tapabratapal/gvg-corpus/jackson-databind/src/main/java/com/fasterxml/jackson/databind/ser/std/BooleanSerializer.java"
+        },
+        {
+          "tool": "Bash",
+          "bin": "grep",
+          "detail": "grep -n \"class Default\\|class Dynamic\\|extends\\|implements\\|void serialize\" /Users/tapabratapal/gvg-corpus/jackson-databind/src/main/java/com/fasterxml/jackson/databind/ser/std/StdKeySerializers.java "
         },
         {
           "tool": "Bash",
           "bin": "prism",
-          "detail": "/Users/tapabratapal/bin/prism change-impact \"JsonSerializer.serialize\" --format json | python3 -c \"\nimport json,sys\nd = json.load(sys.stdin)\nprint(list(d.keys()))\nfor k in d.keys():\n    v = d[k]\n    i"
+          "detail": "/Users/tapabratapal/bin/prism change-impact 'JsonSerializer.serialize' . | jq -r '.declarations[], .family[] | .filePath + \":\" + .name' | sort -u | wc -l\n/Users/tapabratapal/bin/prism change-impact 'J"
         },
         {
           "tool": "Bash",
           "bin": "prism",
-          "detail": "/Users/tapabratapal/bin/prism change-impact \"JsonSerializer.serialize\" --format json | python3 -c \"\nimport json,sys\nd = json.load(sys.stdin)\nprint(list(d.keys()))\nfor k in d.keys():\n    v = d[k]\n    i"
-        },
-        {
-          "tool": "Bash",
-          "bin": "python3",
-          "detail": "python3 --version"
+          "detail": "/Users/tapabratapal/bin/prism change-impact 'JsonSerializer.serialize' . | jq -r '\n  (.declarations[] | .filePath + \":\" + .qualifiedName),\n  (.family[] | .filePath + \":\" + .qualifiedName),\n  (.callers"
         },
         {
           "tool": "Bash",
           "bin": "prism",
-          "detail": "/Users/tapabratapal/bin/prism change-impact \"JsonSerializer.serialize\" --format json | python3 -c \"\nimport json,sys\nd = json.load(sys.stdin)\nprint(list(d.keys()))\nfor k in d.keys():\n    v = d[k]\n    i"
-        },
-        {
-          "tool": "Bash",
-          "bin": "python3",
-          "detail": "python3 -c \"print('hello')\""
+          "detail": "/Users/tapabratapal/bin/prism change-impact 'JsonSerializer.serialize' . | jq -r '\n  (.declarations[] | .filePath + \":\" + .qualifiedName),\n  (.family[] | .filePath + \":\" + .qualifiedName),\n  (.callers"
         },
         {
           "tool": "Bash",
           "bin": "prism",
-          "detail": "/Users/tapabratapal/bin/prism change-impact \"JsonSerializer.serialize\" --format text 2>&1 | wc -l"
+          "detail": "/Users/tapabratapal/bin/prism change-impact 'JsonSerializer.serialize' . | jq '\n  [\n    (.declarations[] | .filePath + \":\" + .qualifiedName),\n    (.family[] | .filePath + \":\" + .qualifiedName),\n    (."
         },
         {
           "tool": "Bash",
           "bin": "prism",
-          "detail": "/Users/tapabratapal/bin/prism change-impact \"JsonSerializer.serialize\" --format text > /Users/tapabratapal/gvg-corpus/jackson-databind/graph/impact.txt 2>&1"
-        },
-        {
-          "tool": "Bash",
-          "bin": "prism",
-          "detail": "/Users/tapabratapal/bin/prism change-impact \"JsonSerializer.serialize\" --format text"
-        },
-        {
-          "tool": "Read",
-          "bin": "",
-          "detail": "/Users/tapabratapal/.claude/projects/-Users-tapabratapal-gvg-corpus-jackson-databind/b383b4a5-a4dd-43c1-9d06-098eb14f1b52/tool-results/b2ugmc0tp.txt"
-        },
-        {
-          "tool": "Read",
-          "bin": "",
-          "detail": "/Users/tapabratapal/.claude/projects/-Users-tapabratapal-gvg-corpus-jackson-databind/b383b4a5-a4dd-43c1-9d06-098eb14f1b52/tool-results/b2ugmc0tp.txt"
-        },
-        {
-          "tool": "Grep",
-          "bin": "",
-          "detail": "\"qualifiedName\""
-        },
-        {
-          "tool": "Bash",
-          "bin": "awk",
-          "detail": "awk 'NR>=1 && NR<=411' /Users/tapabratapal/.claude/projects/-Users-tapabratapal-gvg-corpus-jackson-databind/b383b4a5-a4dd-43c1-9d06-098eb14f1b52/tool-results/b2ugmc0tp.txt | grep -c qualifiedName"
-        },
-        {
-          "tool": "Grep",
-          "bin": "",
-          "detail": "\"qualifiedName\""
-        },
-        {
-          "tool": "Bash",
-          "bin": "prism",
-          "detail": "/Users/tapabratapal/bin/prism status 2>&1 | head -40"
-        },
-        {
-          "tool": "Glob",
-          "bin": "",
-          "detail": "src/test-*/**/*.java"
-        },
-        {
-          "tool": "Grep",
-          "bin": "",
-          "detail": "extends (JsonSerializer|StdSerializer|StdScalarSerializer)"
-        },
-        {
-          "tool": "Grep",
-          "bin": "",
-          "detail": "extends (JsonSerializer|StdSerializer|StdScalarSerializer)"
-        },
-        {
-          "tool": "Bash",
-          "bin": "prism",
-          "detail": "/Users/tapabratapal/bin/prism lookup StdSerializer.serialize --format text 2>&1 | head -20; echo ---; /Users/tapabratapal/bin/prism lookup BeanSerializerBase.serialize --format text 2>&1 | head -20"
-        },
-        {
-          "tool": "Bash",
-          "bin": "prism",
-          "detail": "/Users/tapabratapal/bin/prism references DateTimeSerializerBase.serialize --format text 2>&1 | head -20"
-        },
-        {
-          "tool": "Grep",
-          "bin": "",
-          "detail": "extends DateTimeSerializerBase"
-        },
-        {
-          "tool": "Bash",
-          "bin": "rm",
-          "detail": "rm -f /Users/tapabratapal/gvg-corpus/jackson-databind/graph/impact.json /Users/tapabratapal/gvg-corpus/jackson-databind/graph/impact.txt 2>/dev/null; echo done"
-        },
-        {
-          "tool": "Bash",
-          "bin": "ls",
-          "detail": "ls /Users/tapabratapal/gvg-corpus/jackson-databind/graph/ 2>&1"
+          "detail": "/Users/tapabratapal/bin/prism change-impact 'JsonSerializer.serialize' . | jq -c '\n  [\n    (.declarations[] | .filePath + \":\" + .qualifiedName),\n    (.family[] | .filePath + \":\" + .qualifiedName),\n   "
         }
       ],
       "answer": {
         "sites": [
           "src/main/java/com/fasterxml/jackson/databind/JsonSerializer.java:serialize",
+          "src/main/java/com/fasterxml/jackson/databind/SerializerProvider.java:defaultSerializeField",
+          "src/main/java/com/fasterxml/jackson/databind/SerializerProvider.java:defaultSerializeNull",
+          "src/main/java/com/fasterxml/jackson/databind/SerializerProvider.java:defaultSerializeValue",
           "src/main/java/com/fasterxml/jackson/databind/ext/CoreXMLSerializers.java:serialize",
+          "src/main/java/com/fasterxml/jackson/databind/ext/CoreXMLSerializers.java:serializeWithType",
           "src/main/java/com/fasterxml/jackson/databind/ext/DOMSerializer.java:serialize",
           "src/main/java/com/fasterxml/jackson/databind/ext/NioPathSerializer.java:serialize",
+          "src/main/java/com/fasterxml/jackson/databind/ext/NioPathSerializer.java:serializeWithType",
           "src/main/java/com/fasterxml/jackson/databind/ext/SqlBlobSerializer.java:serialize",
+          "src/main/java/com/fasterxml/jackson/databind/ser/AnyGetterWriter.java:getAndFilter",
+          "src/main/java/com/fasterxml/jackson/databind/ser/AnyGetterWriter.java:getAndSerialize",
+          "src/main/java/com/fasterxml/jackson/databind/ser/BeanPropertyWriter.java:_handleSelfReference",
+          "src/main/java/com/fasterxml/jackson/databind/ser/BeanPropertyWriter.java:serializeAsElement",
+          "src/main/java/com/fasterxml/jackson/databind/ser/BeanPropertyWriter.java:serializeAsField",
+          "src/main/java/com/fasterxml/jackson/databind/ser/BeanPropertyWriter.java:serializeAsPlaceholder",
           "src/main/java/com/fasterxml/jackson/databind/ser/BeanSerializer.java:serialize",
+          "src/main/java/com/fasterxml/jackson/databind/ser/DefaultSerializerProvider.java:_serialize",
+          "src/main/java/com/fasterxml/jackson/databind/ser/DefaultSerializerProvider.java:_serializeNull",
+          "src/main/java/com/fasterxml/jackson/databind/ser/VirtualBeanPropertyWriter.java:serializeAsElement",
+          "src/main/java/com/fasterxml/jackson/databind/ser/VirtualBeanPropertyWriter.java:serializeAsField",
           "src/main/java/com/fasterxml/jackson/databind/ser/impl/BeanAsArraySerializer.java:serialize",
           "src/main/java/com/fasterxml/jackson/databind/ser/impl/FailingSerializer.java:serialize",
           "src/main/java/com/fasterxml/jackson/databind/ser/impl/IndexedListSerializer.java:serialize",
+          "src/main/java/com/fasterxml/jackson/databind/ser/impl/IndexedListSerializer.java:serializeContents",
+          "src/main/java/com/fasterxml/jackson/databind/ser/impl/IndexedListSerializer.java:serializeContentsUsing",
           "src/main/java/com/fasterxml/jackson/databind/ser/impl/IndexedStringListSerializer.java:serialize",
+          "src/main/java/com/fasterxml/jackson/databind/ser/impl/IteratorSerializer.java:_serializeDynamicContents",
           "src/main/java/com/fasterxml/jackson/databind/ser/impl/IteratorSerializer.java:serialize",
+          "src/main/java/com/fasterxml/jackson/databind/ser/impl/IteratorSerializer.java:serializeContents",
           "src/main/java/com/fasterxml/jackson/databind/ser/impl/MapEntrySerializer.java:serialize",
+          "src/main/java/com/fasterxml/jackson/databind/ser/impl/MapEntrySerializer.java:serializeDynamic",
           "src/main/java/com/fasterxml/jackson/databind/ser/impl/StringArraySerializer.java:serialize",
+          "src/main/java/com/fasterxml/jackson/databind/ser/impl/StringArraySerializer.java:serializeContentsSlow",
           "src/main/java/com/fasterxml/jackson/databind/ser/impl/StringCollectionSerializer.java:serialize",
           "src/main/java/com/fasterxml/jackson/databind/ser/impl/TypeWrappedSerializer.java:serialize",
           "src/main/java/com/fasterxml/jackson/databind/ser/impl/UnknownSerializer.java:serialize",
           "src/main/java/com/fasterxml/jackson/databind/ser/impl/UnsupportedTypeSerializer.java:serialize",
+          "src/main/java/com/fasterxml/jackson/databind/ser/impl/UnwrappingBeanPropertyWriter.java:serializeAsField",
           "src/main/java/com/fasterxml/jackson/databind/ser/impl/UnwrappingBeanSerializer.java:serialize",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/ArraySerializerBase.java:serialize",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/AsArraySerializerBase.java:serialize",
+          "src/main/java/com/fasterxml/jackson/databind/ser/std/BeanSerializerBase.java:_serializeWithObjectId",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/BeanSerializerBase.java:serialize",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/BooleanSerializer.java:serialize",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/BooleanSerializer.java:serialize",
@@ -375,16 +337,31 @@
           "src/main/java/com/fasterxml/jackson/databind/ser/std/CalendarSerializer.java:serialize",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/ClassSerializer.java:serialize",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/CollectionSerializer.java:serialize",
+          "src/main/java/com/fasterxml/jackson/databind/ser/std/CollectionSerializer.java:serializeContents",
+          "src/main/java/com/fasterxml/jackson/databind/ser/std/CollectionSerializer.java:serializeContentsUsing",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/DateSerializer.java:serialize",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/DateTimeSerializerBase.java:serialize",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/EnumSerializer.java:serialize",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/EnumSetSerializer.java:serialize",
+          "src/main/java/com/fasterxml/jackson/databind/ser/std/EnumSetSerializer.java:serializeContents",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/FileSerializer.java:serialize",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/InetAddressSerializer.java:serialize",
+          "src/main/java/com/fasterxml/jackson/databind/ser/std/InetAddressSerializer.java:serializeWithType",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/InetSocketAddressSerializer.java:serialize",
+          "src/main/java/com/fasterxml/jackson/databind/ser/std/InetSocketAddressSerializer.java:serializeWithType",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/IterableSerializer.java:serialize",
+          "src/main/java/com/fasterxml/jackson/databind/ser/std/IterableSerializer.java:serializeContents",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/JsonValueSerializer.java:serialize",
+          "src/main/java/com/fasterxml/jackson/databind/ser/std/JsonValueSerializer.java:serializeWithType",
+          "src/main/java/com/fasterxml/jackson/databind/ser/std/MapProperty.java:serializeAsElement",
+          "src/main/java/com/fasterxml/jackson/databind/ser/std/MapProperty.java:serializeAsField",
+          "src/main/java/com/fasterxml/jackson/databind/ser/std/MapSerializer.java:_writeNullKeyedEntry",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/MapSerializer.java:serialize",
+          "src/main/java/com/fasterxml/jackson/databind/ser/std/MapSerializer.java:serializeFields",
+          "src/main/java/com/fasterxml/jackson/databind/ser/std/MapSerializer.java:serializeFieldsUsing",
+          "src/main/java/com/fasterxml/jackson/databind/ser/std/MapSerializer.java:serializeOptionalFields",
+          "src/main/java/com/fasterxml/jackson/databind/ser/std/MapSerializer.java:serializeTypedFields",
+          "src/main/java/com/fasterxml/jackson/databind/ser/std/NonTypedScalarSerializerBase.java:serializeWithType",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/NullSerializer.java:serialize",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/NumberSerializer.java:serialize",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/NumberSerializer.java:serialize",
@@ -392,10 +369,14 @@
           "src/main/java/com/fasterxml/jackson/databind/ser/std/NumberSerializers.java:serialize",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/NumberSerializers.java:serialize",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/NumberSerializers.java:serialize",
+          "src/main/java/com/fasterxml/jackson/databind/ser/std/NumberSerializers.java:serializeWithType",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/NumberSerializers.java:serialize",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/NumberSerializers.java:serialize",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/ObjectArraySerializer.java:serialize",
+          "src/main/java/com/fasterxml/jackson/databind/ser/std/ObjectArraySerializer.java:serializeContents",
+          "src/main/java/com/fasterxml/jackson/databind/ser/std/ObjectArraySerializer.java:serializeContentsUsing",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/RawSerializer.java:serialize",
+          "src/main/java/com/fasterxml/jackson/databind/ser/std/RawSerializer.java:serializeWithType",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/ReferenceTypeSerializer.java:serialize",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/SerializableSerializer.java:serialize",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/SqlDateSerializer.java:serialize",
@@ -416,13 +397,19 @@
           "src/main/java/com/fasterxml/jackson/databind/ser/std/StdKeySerializers.java:serialize",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/StdKeySerializers.java:serialize",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/StdKeySerializers.java:serialize",
+          "src/main/java/com/fasterxml/jackson/databind/ser/std/StdScalarSerializer.java:serializeWithType",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/StdSerializer.java:serialize",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/StringSerializer.java:serialize",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/TimeZoneSerializer.java:serialize",
+          "src/main/java/com/fasterxml/jackson/databind/ser/std/TimeZoneSerializer.java:serializeWithType",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/ToEmptyObjectSerializer.java:serialize",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/ToStringSerializerBase.java:serialize",
+          "src/main/java/com/fasterxml/jackson/databind/ser/std/ToStringSerializerBase.java:serializeWithType",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/TokenBufferSerializer.java:serialize",
+          "src/main/java/com/fasterxml/jackson/databind/ser/std/TokenBufferSerializer.java:serializeWithType",
           "src/main/java/com/fasterxml/jackson/databind/ser/std/UUIDSerializer.java:serialize",
+          "src/main/java/com/fasterxml/jackson/databind/util/JSONPObject.java:serialize",
+          "src/main/java/com/fasterxml/jackson/databind/util/JSONWrappedObject.java:serialize",
           "src/test-jdk17/java/com/fasterxml/jackson/databind/records/RecordJsonSerDeser188Test.java:serialize",
           "src/test/java/com/fasterxml/jackson/databind/HandlerInstantiationTest.java:serialize",
           "src/test/java/com/fasterxml/jackson/databind/contextual/ContextAttributeWithSerTest.java:serialize",
@@ -463,8 +450,8 @@
           "src/test/java/com/fasterxml/jackson/databind/ser/SerializationAnnotationsTest.java:serialize",
           "src/test/java/com/fasterxml/jackson/databind/ser/TestCustomSerializers.java:serialize",
           "src/test/java/com/fasterxml/jackson/databind/ser/TestCustomSerializers.java:serialize",
-          "src/test/java/com/fasterxml/jackson/databind/ser/TestCustomSerializers.java:serialize",
           "src/test/java/com/fasterxml/jackson/databind/ser/TestCustomSerializers.java:testCustomLists",
+          "src/test/java/com/fasterxml/jackson/databind/ser/TestCustomSerializers.java:serialize",
           "src/test/java/com/fasterxml/jackson/databind/ser/TestEmptyClass.java:serialize",
           "src/test/java/com/fasterxml/jackson/databind/ser/TestJsonSerialize.java:serialize",
           "src/test/java/com/fasterxml/jackson/databind/ser/TestJsonSerialize2.java:serialize",
@@ -485,58 +472,13 @@
           "src/test/java/com/fasterxml/jackson/databind/ser/jdk/NumberSerTest.java:serialize",
           "src/test/java/com/fasterxml/jackson/databind/ser/jdk/NumberSerTest.java:serialize",
           "src/test/java/com/fasterxml/jackson/databind/util/TokenBufferTest.java:serialize",
-          "src/test/java/perf/ManualWritePerfWithUUID.java:serialize",
-          "src/main/java/com/fasterxml/jackson/databind/SerializerProvider.java:defaultSerializeValue",
-          "src/main/java/com/fasterxml/jackson/databind/SerializerProvider.java:defaultSerializeField",
-          "src/main/java/com/fasterxml/jackson/databind/SerializerProvider.java:defaultSerializeNull",
-          "src/main/java/com/fasterxml/jackson/databind/ext/CoreXMLSerializers.java:serializeWithType",
-          "src/main/java/com/fasterxml/jackson/databind/ext/NioPathSerializer.java:serializeWithType",
-          "src/main/java/com/fasterxml/jackson/databind/ser/AnyGetterWriter.java:getAndSerialize",
-          "src/main/java/com/fasterxml/jackson/databind/ser/AnyGetterWriter.java:getAndFilter",
-          "src/main/java/com/fasterxml/jackson/databind/ser/BeanPropertyWriter.java:serializeAsField",
-          "src/main/java/com/fasterxml/jackson/databind/ser/BeanPropertyWriter.java:serializeAsElement",
-          "src/main/java/com/fasterxml/jackson/databind/ser/BeanPropertyWriter.java:serializeAsPlaceholder",
-          "src/main/java/com/fasterxml/jackson/databind/ser/BeanPropertyWriter.java:_handleSelfReference",
-          "src/main/java/com/fasterxml/jackson/databind/ser/DefaultSerializerProvider.java:_serialize",
-          "src/main/java/com/fasterxml/jackson/databind/ser/DefaultSerializerProvider.java:_serializeNull",
-          "src/main/java/com/fasterxml/jackson/databind/ser/VirtualBeanPropertyWriter.java:serializeAsField",
-          "src/main/java/com/fasterxml/jackson/databind/ser/VirtualBeanPropertyWriter.java:serializeAsElement",
-          "src/main/java/com/fasterxml/jackson/databind/ser/impl/IndexedListSerializer.java:serializeContents",
-          "src/main/java/com/fasterxml/jackson/databind/ser/impl/IndexedListSerializer.java:serializeContentsUsing",
-          "src/main/java/com/fasterxml/jackson/databind/ser/impl/IteratorSerializer.java:serializeContents",
-          "src/main/java/com/fasterxml/jackson/databind/ser/impl/IteratorSerializer.java:_serializeDynamicContents",
-          "src/main/java/com/fasterxml/jackson/databind/ser/impl/MapEntrySerializer.java:serializeDynamic",
-          "src/main/java/com/fasterxml/jackson/databind/ser/impl/StringArraySerializer.java:serializeContentsSlow",
-          "src/main/java/com/fasterxml/jackson/databind/ser/impl/UnwrappingBeanPropertyWriter.java:serializeAsField",
-          "src/main/java/com/fasterxml/jackson/databind/ser/std/BeanSerializerBase.java:_serializeWithObjectId",
-          "src/main/java/com/fasterxml/jackson/databind/ser/std/CollectionSerializer.java:serializeContents",
-          "src/main/java/com/fasterxml/jackson/databind/ser/std/CollectionSerializer.java:serializeContentsUsing",
-          "src/main/java/com/fasterxml/jackson/databind/ser/std/EnumSetSerializer.java:serializeContents",
-          "src/main/java/com/fasterxml/jackson/databind/ser/std/InetAddressSerializer.java:serializeWithType",
-          "src/main/java/com/fasterxml/jackson/databind/ser/std/InetSocketAddressSerializer.java:serializeWithType",
-          "src/main/java/com/fasterxml/jackson/databind/ser/std/IterableSerializer.java:serializeContents",
-          "src/main/java/com/fasterxml/jackson/databind/ser/std/JsonValueSerializer.java:serializeWithType",
-          "src/main/java/com/fasterxml/jackson/databind/ser/std/MapProperty.java:serializeAsField",
-          "src/main/java/com/fasterxml/jackson/databind/ser/std/MapProperty.java:serializeAsElement",
-          "src/main/java/com/fasterxml/jackson/databind/ser/std/MapSerializer.java:serializeFields",
-          "src/main/java/com/fasterxml/jackson/databind/ser/std/MapSerializer.java:serializeOptionalFields",
-          "src/main/java/com/fasterxml/jackson/databind/ser/std/MapSerializer.java:serializeFieldsUsing",
-          "src/main/java/com/fasterxml/jackson/databind/ser/std/MapSerializer.java:serializeTypedFields",
-          "src/main/java/com/fasterxml/jackson/databind/ser/std/MapSerializer.java:_writeNullKeyedEntry",
-          "src/main/java/com/fasterxml/jackson/databind/ser/std/NonTypedScalarSerializerBase.java:serializeWithType",
-          "src/main/java/com/fasterxml/jackson/databind/ser/std/NumberSerializers.java:serializeWithType",
-          "src/main/java/com/fasterxml/jackson/databind/ser/std/ObjectArraySerializer.java:serializeContents",
-          "src/main/java/com/fasterxml/jackson/databind/ser/std/ObjectArraySerializer.java:serializeContentsUsing",
-          "src/main/java/com/fasterxml/jackson/databind/ser/std/RawSerializer.java:serializeWithType",
-          "src/main/java/com/fasterxml/jackson/databind/ser/std/StdScalarSerializer.java:serializeWithType",
-          "src/main/java/com/fasterxml/jackson/databind/ser/std/TimeZoneSerializer.java:serializeWithType",
-          "src/main/java/com/fasterxml/jackson/databind/ser/std/ToStringSerializerBase.java:serializeWithType",
-          "src/main/java/com/fasterxml/jackson/databind/ser/std/TokenBufferSerializer.java:serializeWithType",
-          "src/main/java/com/fasterxml/jackson/databind/util/JSONPObject.java:serialize",
-          "src/main/java/com/fasterxml/jackson/databind/util/JSONWrappedObject.java:serialize"
+          "src/test/java/perf/ManualWritePerfWithUUID.java:serialize"
         ],
         "complete": true,
-        "unresolved": []
+        "unresolved": [
+          "src/main/java/com/fasterxml/jackson/databind/util/JSONPObject.java:JSONPObject.serialize and src/main/java/com/fasterxml/jackson/databind/util/JSONWrappedObject.java:JSONWrappedObject.serialize were flagged by prism as overrides but are actually JsonSerializable.serialize(JsonGenerator, SerializerProvider) implementations (unrelated interface, different arity) \u2014 included only as call sites (they invoke JsonSerializer.serialize internally), not as declarations needing signature change",
+          "dynamic/reflective serializer instantiation via SimpleModule.addSerializer or ObjectMapper.registerModule in test files was not separately traced beyond what prism's caller/family resolution reported; assumed complete based on prism's 'closed' completeness flag"
+        ]
       }
     }
   ],
