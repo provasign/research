@@ -28,6 +28,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import signal
 import subprocess
 import time
@@ -102,7 +103,11 @@ def parse_stream(stdout: str) -> dict:
         elif obj.get("type") == "result":
             env.update(obj)
     env["tool_trace"] = trace
-    env["prism_used"] = any("prism" in t for t in trace)
+    # Detect an actual prism INVOCATION (the binary run as a command), not the
+    # substring "prism" anywhere — the worktree path could contain it. Matches
+    # `prism ...` or `/path/to/prism ...`, not an unrelated path segment.
+    env["prism_used"] = any(re.search(r"(?:^|[\s;&|(])(?:[^\s;&|(]*/)?prism\s", t)
+                            for t in trace)
     return env
 
 
@@ -152,12 +157,18 @@ def run_arm(task: dict, arm: str, prism: str) -> dict:
             "model_patch": patch,
             "empty_patch": not patch.strip(),
             "turns": env.get("num_turns"),
-            "input_tokens": usage.get("input_tokens", 0) + usage.get("cache_read_input_tokens", 0),
+            # Fresh (billed-at-full) input vs cheap cache reads, kept separate —
+            # cache reads dominate and would distort a raw "input tokens" total;
+            # cost_usd is the honest efficiency metric (it weights them correctly).
+            "fresh_input_tokens": usage.get("input_tokens", 0)
+                + usage.get("cache_creation_input_tokens", 0),
+            "cache_read_tokens": usage.get("cache_read_input_tokens", 0),
             "output_tokens": usage.get("output_tokens", 0),
             "cost_usd": env.get("total_cost_usd"),
             "wall_s": env.get("_wall_s"),
             "timed_out": env.get("_timed_out"),
             "prism_used": env.get("prism_used"),
+            "tool_trace": env.get("tool_trace", []),
         }
     finally:
         sh("git", "-C", str(repo_dir), "worktree", "remove", "--force", str(wt))
@@ -191,7 +202,9 @@ def main() -> None:
                     help="fetch N SWE-bench Verified tasks to --tasks and exit")
     ap.add_argument("--tasks", required=True)
     ap.add_argument("--limit", type=int, default=20)
-    ap.add_argument("--arms", nargs="+", default=["no-prism", "prism"])
+    # "baseline" not "no-prism": the arm name becomes a worktree dir, and
+    # "no-prism" contains the substring "prism" which fooled usage detection.
+    ap.add_argument("--arms", nargs="+", default=["baseline", "prism"])
     ap.add_argument("--out", default="runs/swebench")
     ap.add_argument("--prism", default=str(Path.home() / "bin" / "prism"))
     args = ap.parse_args()
@@ -218,26 +231,28 @@ def main() -> None:
             }) + "\n")
             preds[arm].flush()
             json.dump(rec, open(outdir / f"{task['instance_id']}.{arm}.json", "w"))
-            print(f"      turns={rec['turns']} in_tok={rec['input_tokens']} "
-                  f"out_tok={rec['output_tokens']} ${rec['cost_usd']} "
-                  f"empty={rec['empty_patch']} prism_used={rec['prism_used']}", flush=True)
+            print(f"      turns={rec['turns']} fresh_in={rec['fresh_input_tokens']} "
+                  f"cache={rec['cache_read_tokens']} out={rec['output_tokens']} "
+                  f"${rec['cost_usd']} empty={rec['empty_patch']} prism_used={rec['prism_used']}",
+                  flush=True)
 
     for f in preds.values():
         f.close()
 
-    print("\n" + "=" * 66)
+    print("\n" + "=" * 74)
     print(f"{'arm':10} {'n':>3} {'nonempty':>9} {'mean_turns':>11} "
-          f"{'mean_in_tok':>12} {'mean_out_tok':>13} {'mean_$':>8}")
+          f"{'mean_fresh':>11} {'mean_out':>9} {'mean_$':>8} {'prism%':>7}")
     for arm in args.arms:
         m = [r for r in metrics[arm] if not r["timed_out"]]
         if not m:
             continue
         ne = sum(1 for r in m if not r["empty_patch"])
         mt = sum(r["turns"] or 0 for r in m) / len(m)
-        mi = sum(r["input_tokens"] for r in m) / len(m)
+        mf = sum(r["fresh_input_tokens"] for r in m) / len(m)
         mo = sum(r["output_tokens"] for r in m) / len(m)
         mc = sum(r["cost_usd"] or 0 for r in m) / len(m)
-        print(f"{arm:10} {len(m):>3} {ne:>9} {mt:>11.1f} {mi:>12.0f} {mo:>13.0f} {mc:>8.3f}")
+        pu = 100 * sum(1 for r in m if r["prism_used"]) / len(m)
+        print(f"{arm:10} {len(m):>3} {ne:>9} {mt:>11.1f} {mf:>11.0f} {mo:>9.0f} {mc:>8.3f} {pu:>6.0f}%")
     print("\nNext: score correctness with the SWE-bench Docker harness on each")
     print("arm's predictions.jsonl (FAIL_TO_PASS/PASS_TO_PASS). Efficiency is only")
     print("comparable at EQUAL resolve-rate — report resolve-rate FIRST.")
