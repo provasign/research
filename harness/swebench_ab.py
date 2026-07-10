@@ -216,28 +216,39 @@ def main() -> None:
     tasks = json.load(open(args.tasks))[:args.limit]
     outdir = HARNESS / args.out
     outdir.mkdir(parents=True, exist_ok=True)
-    preds = {a: open(outdir / f"{a}.predictions.jsonl", "w") for a in args.arms}
-    metrics = {a: [] for a in args.arms}
 
+    # Idempotent resume: per-task metric JSONs are the source of truth and
+    # survive a kill. Skip any (task, arm) already recorded; a re-launch picks
+    # up exactly where a turn-boundary kill left off, re-paying for nothing.
     for i, task in enumerate(tasks):
         for arm in args.arms:
+            recpath = outdir / f"{task['instance_id']}.{arm}.json"
+            if recpath.exists():
+                print(f"[{i+1}/{len(tasks)}] {task['instance_id']} :: {arm}  SKIP (done)", flush=True)
+                continue
             print(f"[{i+1}/{len(tasks)}] {task['instance_id']} :: {arm}", flush=True)
             rec = run_arm(task, arm, args.prism)
-            metrics[arm].append(rec)
-            preds[arm].write(json.dumps({
-                "instance_id": rec["instance_id"],
-                "model_name_or_path": f"prism-ab-{arm}",
-                "model_patch": rec["model_patch"],
-            }) + "\n")
-            preds[arm].flush()
-            json.dump(rec, open(outdir / f"{task['instance_id']}.{arm}.json", "w"))
+            json.dump(rec, open(recpath, "w"))
             print(f"      turns={rec['turns']} fresh_in={rec['fresh_input_tokens']} "
                   f"cache={rec['cache_read_tokens']} out={rec['output_tokens']} "
                   f"${rec['cost_usd']} empty={rec['empty_patch']} prism_used={rec['prism_used']}",
                   flush=True)
 
-    for f in preds.values():
-        f.close()
+    # Rebuild predictions.jsonl from all present metric JSONs (kill-safe).
+    metrics = {a: [] for a in args.arms}
+    for arm in args.arms:
+        with open(outdir / f"{arm}.predictions.jsonl", "w") as pf:
+            for task in tasks:
+                rp = outdir / f"{task['instance_id']}.{arm}.json"
+                if not rp.exists():
+                    continue
+                rec = json.load(open(rp))
+                metrics[arm].append(rec)
+                pf.write(json.dumps({
+                    "instance_id": rec["instance_id"],
+                    "model_name_or_path": f"prism-ab-{arm}",
+                    "model_patch": rec["model_patch"],
+                }) + "\n")
 
     print("\n" + "=" * 74)
     print(f"{'arm':10} {'n':>3} {'nonempty':>9} {'mean_turns':>11} "
