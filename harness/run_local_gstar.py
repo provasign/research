@@ -159,11 +159,31 @@ def run_one(task: Task, model: str, workdir: Path) -> dict:
 
         calls = msg.get("tool_calls") or []
         if not calls:
-            # Model emitted text instead of a tool call — nudge it.
-            messages.append({"role": "assistant", "content": (msg.get("content") or "")[:400]})
-            messages.append({"role": "user", "content":
-                             "Call change_impact with the method symbol, then submit_answer."})
-            continue
+            # Some Ollama model templates never populate tool_calls and emit the
+            # call as raw JSON in content instead (qwen2.5-coder:14b does this:
+            # content = {"name": "change_impact", "arguments": {...}} with
+            # tool_calls=None). The model's DECISION is correct; only the
+            # serialization is nonstandard — parse it. Same accommodation class
+            # as the turn-0 invocation wall, and disclosed alongside it.
+            content = (msg.get("content") or "").strip()
+            parsed = None
+            if content.startswith("{"):
+                try:
+                    obj = json.loads(content)
+                    if isinstance(obj, dict) and obj.get("name") in (
+                            "change_impact", "submit_answer"):
+                        parsed = {"function": {"name": obj["name"],
+                                               "arguments": obj.get("arguments", {})}}
+                except json.JSONDecodeError:
+                    pass
+            if parsed:
+                calls = [parsed]
+            else:
+                # Genuine text response — nudge it.
+                messages.append({"role": "assistant", "content": content[:400]})
+                messages.append({"role": "user", "content":
+                                 "Call change_impact with the method symbol, then submit_answer."})
+                continue
 
         messages.append({
             "role": "assistant",
