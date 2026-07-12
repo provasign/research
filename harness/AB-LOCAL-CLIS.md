@@ -75,6 +75,41 @@ oracle-scored runs surface them as failures you can root-cause.** The
 diagnosis and fix are tracked in the mason repo; this doc reports the
 pre-fix numbers and will link the post-fix rerun rather than replacing them.
 
+### Post-fix follow-up (2026-07-12, mason v0.23.1/v0.24.0) — full disclosure
+
+Root cause, from full transcripts: (1) the v0.20 `code_context` tool lured
+the 30B into redundant context-gathering on a task whose complete procedure
+is `rename_plan → apply`; (2) with a ~500k-token polluted context the model
+ignored the *textual* "apply ambiguous edits in one call" instruction and
+hand-edited files one by one. A prompt-level nudge does not survive context
+pollution; only structure does. **Fix (v0.23.1): the rename wall** — after
+`rename_plan` the only tool that will *execute* is `apply_rename_plan`
+(enforced at dispatch, because local providers do not strictly honor
+offered-tool lists — the first fix attempt leaked exactly there); while
+ambiguous edits are pending the set stays `{apply, bash}`; a green build
+releases it.
+
+Mechanism verified on a clean instrumented run: `code_context` refused at
+the wall, ONE `apply includeAmbiguous` call (24 edits), interface renamed,
+build green.
+
+The scripted 3-trial rerun, however, is **environmentally contaminated and
+we are not citing it as the post-fix number**: the laptop slept mid-grid
+(one "pass" shows a 3,128s wall against a 900s kill timer — monotonic
+timers pause during sleep), and the machine was otherwise in normal
+interactive use. Raw results (1 pass, 2 fails) are archived in
+`runs/ab-local-clis/postfix-contaminated/` for completeness.
+
+What those contaminated runs DID surface is a fifth finding: a new
+failure mode **after** the discipline fix. Twice, the model completed the
+rename correctly, then — under quality-gate pressure to also fix test-file
+mocks — got confused and ran `git checkout -- .`, reverting its own
+completed work before burning the rest of its budget. mason v0.24.0 adds a
+**self-revert guard**: tree-wide revert commands are refused mid-task once
+the agent has made changes (single-file reverts stay legal; full rollback
+belongs to the user's /undo). A clean, machine-idle rerun on v0.24.0 is
+queued and will be appended here — pass or fail.
+
 ## Caveats (read before quoting)
 
 - n=3 per cell, one machine, wall times on a shared laptop. Directional.
