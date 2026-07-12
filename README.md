@@ -139,6 +139,41 @@ Everything downstream of the agent (scoring, normalization, aggregation) is
 deterministic — the paper's tables are reproducible from `harness/runs/`
 **without any LLM**.
 
+## Negative results & validity findings (read these too)
+
+Transparency is the point of this repo. Alongside the positive results, we
+publish the experiments that did NOT produce citable numbers — with the raw
+data and the reason each one fails validity:
+
+- **SWE-bench Verified A/B** ([`harness/SWEBENCH-AB-RESULTS.md`](harness/SWEBENCH-AB-RESULTS.md),
+  runs in `harness/runs/swebench-20/`): a 20-task prism-vs-baseline run where
+  the baseline resolved 75% — above state-of-the-art agentic systems, from a
+  single-pass agent that can't even run the project's tests. The cause is
+  **training-data contamination, and we measured it**: 9/20 tasks in each arm
+  reproduce the merged human fix with 100% exact added-line overlap
+  (`harness/contamination_check.py`). On memorized tasks tooling cannot help
+  or hurt, so we do not cite these numbers for or against anything — they
+  measure memorization, not context tooling.
+- **PR-replay mining (Netty)** ([`harness/PR-REPLAY-FINDINGS.md`](harness/PR-REPLAY-FINDINGS.md),
+  runs in `harness/runs/pr-replay-netty-*.jsonl`): an attempt to mine clean
+  change-impact tasks from real merged PRs, fully automatically. Loose
+  classification pollutes the ground truth (the top-scoring "task" was an
+  aggregate merge PR); strict gates collapse the yield to zero in our sample.
+  Clean breaking refactors are rare in real history, and identifying them
+  outcome-blind is a research problem in its own right. No recall number from
+  this pilot is citable, and the doc explains the path that would be
+  (compiler-as-oracle on verified refactors, or a live pipeline).
+- **One paper task excluded after audit** (`commons-collections-mapiterator-next`):
+  the refactor target overrides `java.util.Iterator.next`, making the task
+  ill-posed; disclosed in the paper's threats section rather than dropped
+  silently. The early bare-name Java ground truth was likewise replaced by
+  the Spoon type-resolution oracle when it was shown invalid.
+
+The same discipline runs through the positive results: the paper's honesty
+note discloses that the study began as a *negative* result on Go, and the
+engine-defect findings (five latent Java resolution bugs, one Go schema gap)
+exist because a deterministic op is testable in a way an agent loop is not.
+
 ## Related repositories
 
 The tools under test (all open source; Apache-2.0 / MIT):

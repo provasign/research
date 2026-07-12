@@ -20,6 +20,28 @@ is Jan 2026, so it has very likely MEMORIZED these fixes. On a memorized task
 the model recalls the answer regardless of tooling — so prism cannot help or
 hurt, which is exactly the tie + slight overhead observed.
 
+### Contamination MEASURED, not just inferred (2026-07-12)
+`contamination_check.py` compares each agent patch against the GOLD (merged
+human) patch — a model that solves an issue writes its own fix; a model that
+memorized the repo's history reproduces the merged one. On the archived runs
+(`runs/swebench-20/`, gold patches in `tasks-with-gold.json`):
+
+| arm | verbatim gold reproductions (exact added-line overlap = 100%) | resolved: mean exact-line overlap with gold | unresolved: same |
+|---|---|---|---|
+| baseline | **9/20** | 71% | 35% |
+| prism | **9/20** | 68% | 31% |
+
+Nearly half the tasks are answered with a byte-identical reproduction of the
+fix that was merged upstream in 2024, and resolved tasks track the gold patch
+at ~2× the rate of unresolved ones — in BOTH arms, independent of tooling.
+That is direct, per-task evidence of memorization, and it converts the
+inference above into a measured artifact. Reproduce with:
+
+```sh
+python3 contamination_check.py --runs runs/swebench-20 \
+    --tasks runs/swebench-20/tasks-with-gold.json --arm baseline
+```
+
 This is the same class of trap PR-replay hit: a methodology with an uncontrolled
 validity flaw (there: task-identification; here: contamination) yields numbers
 that look like a result but measure the wrong thing. SWE-bench "solved the
