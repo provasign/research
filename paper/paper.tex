@@ -69,11 +69,6 @@ Java build, and independently in Go a missing response-schema entry that made
 the task-altitude operation lose to text (mean recall $0.935$) until fixed,
 after which every tier reached $1.000$; a traversal that lives in a tool can be
 regression-tested in a way that a traversal buried in an agent loop cannot.
-An independent third-party name-resolution code graph, scored under the
-identical protocol, loses completeness exactly where the mechanism predicts
-(mean recall $0.52$ vs.\ $0.99$, with parity where dispatch is direct-name),
-and in an agent A/B its completeness reverts to being purchased with model
-capability.
 We give the mechanism and the boundary it predicts: task-shaped operations
 outperform primitive kits on completeness-critical traversals, and any
 comparison of context paradigms that fixes the interface silently conflates
@@ -145,12 +140,6 @@ types) that every LLM-orchestrated arm had silently absorbed.
 size-graded task generator, a scoring fix (line$\rightarrow$method
 normalization) without which graph arms are silently under-credited, and the
 graph-native \code{change\_impact} operation itself.
-\item An external replication of the mechanism: an independent,
-third-party name-resolution code graph scored under the identical protocol
-loses completeness exactly where the mechanism predicts (mean recall $0.52$
-vs.\ $0.99$; parity where dispatch is direct-name), and in an agent A/B its
-completeness reverts to being purchased with model capability
-(\cref{sec:codegraph}).
 \end{enumerate}
 
 \section{Related work}
@@ -177,11 +166,7 @@ LLMs~\cite{codexgraph} and graph-structured retrieval more
 broadly~\cite{graphrag} argue structure should help. We ask the prior question
 empirically---\emph{when} does the structure change the answer rather than just
 the path to it---and find the answer is conditioned on task size, model
-capability, and interface altitude. Practitioner tools in this space span a
-resolution spectrum, from tree-sitter name-resolution graphs optimized for
-context-delivery efficiency (e.g.\ CodeGraph~\cite{codegraph}) to type-resolved
-engines; \cref{sec:codegraph} measures where on that spectrum completeness is
-gained and lost, under the identical protocol.
+capability, and interface altitude.
 
 \paragraph{Static call-graph construction (our oracle, not the tool under test).}
 Sound change-impact ground truth requires resolved dispatch. We use Class
@@ -905,45 +890,6 @@ instructed the union of every returned group, and every tier, including
 Opus, still dropped the type, because the type was never in a group to
 begin with.
 
-\subsection{External comparison: an independent name-resolution graph tool}
-\label{sec:codegraph}
-
-The mechanism this paper proposes predicts that a code graph built on
-\emph{name} resolution will lose completeness exactly where \emph{type}
-resolution is load-bearing---overload disambiguation, wide subtype closures,
-callers not named after the target---independently of how well it delivers
-context otherwise. A third-party open-source tool, CodeGraph
-v1.4.1~\cite{codegraph} (a tree-sitter code graph with a one-call
-\code{explore} context operation and 30+ language coverage), permits testing
-that prediction on an implementation we did not build. We score its
-strongest surface (\code{explore}, the operation its agents call---not its
-weaker CLI subcommands) against the same oracles and the same scorer as
-every arm above, crediting every symbol it associates with the target, on
-ten tasks across the four study languages (blast radius 8--310).
-
-Mean recall is $0.52$ against the study engine's $0.99$, and the
-\emph{distribution} matches the prediction rather than a uniform quality
-gap. Where dispatch is direct-name---gin's \code{Render} interface, every
-implementor carrying a same-named method---the name-resolution tool ties at
-$1.000/1.000$: the control case. Where completeness requires isolating an
-overload's true callers or closing a wide subtype family, it collapses
-(\code{JsonDeserializer.deserialize}, 104 sites: $0.00$;
-\code{ForwardingObject.delegate}, 310 sites: $0.17$), with mid-range scores
-on the remaining tasks ($0.25$--$0.82$). An agent A/B (one agent, one task,
-arms differing only in the available tool) shows the engine gap surviving
-into agent outcomes, in the tier-dependent form
-\cref{sec:altitude} predicts: on the weak tier the name-resolution tool
-yields recall $0.00$---the model cannot recover what the traversal never
-returned---while the task-altitude arm yields $1.00$; on the frontier tier
-both reach $1.00$, but the name-resolution arm spends $8\times$ the turns
-and $24\times$ the tokens re-deriving through text what its graph did not
-resolve, so completeness is again bought with model capability. This is
-the study's central contrast reproduced on an external artifact: at task
-altitude over a type-resolved graph, completeness is a tool property; over
-a name-resolved graph, it reverts to being a model property. Protocol,
-fairness provisions, per-task tables, and raw runs are in the companion
-repository.
-
 \section{Mechanism}
 \label{sec:mechanism}
 
@@ -1153,10 +1099,6 @@ README.
 \item astkit v0.4.17 (multi-language AST parser, Tree-sitter + native enrichment):\\
   \url{https://github.com/provasign/astkit/releases/tag/v0.4.17}
 \end{itemize}
-The external comparison of \cref{sec:codegraph} was run on later engine
-releases (Prism v0.24 / Grove v0.20) against CodeGraph v1.4.1; its scripts,
-per-task tables, fairness protocol, and raw runs are in the companion
-repository under \code{harness/AB-CODEGRAPH.md}.
 
 % ---------------------------------------------------------------------------
 % ---------------------------------------------------------------------------
@@ -1189,9 +1131,6 @@ Code Repositories via Code Graph Databases. \emph{arXiv:2408.03910}, 2024.
 
 \bibitem{graphrag} D.~Edge et al. From Local to Global: A Graph RAG Approach to
 Query-Focused Summarization. \emph{arXiv:2404.16130}, 2024.
-
-\bibitem{codegraph} C.~McHenry. CodeGraph: Local Code Intelligence for AI
-Agents. \url{https://github.com/colbymchenry/codegraph}, 2026. Version 1.4.1.
 
 \bibitem{cha} J.~Dean, D.~Grove, and C.~Chambers. Optimization of Object-Oriented
 Programs Using Static Class Hierarchy Analysis. \emph{ECOOP}, 1995.
