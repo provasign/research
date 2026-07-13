@@ -45,11 +45,11 @@ tool: [github.com/provasign/prism](https://github.com/provasign/prism).
 
 All consolidated in [`RESULTS.md`](RESULTS.md): the with/without-Prism agent
 grid (recall 0.997 tier-invariant with Prism vs 0.76–0.95 without; 28×
-cheaper at the bottom tier), the named-tool comparison (Prism 0.99 vs
-CodeGraph 0.52 engine completeness, and the agent A/B where the gap
-survives with 17× cost separation at equal correctness), the local-model
-result (recall 1.00 at $0), and the experiments whose numbers we measured
-and refuse to cite (SWE-bench contamination, PR-replay validity).
+cheaper at the bottom tier), the ongoing cross-tool benchmarking program
+(first entry CodeGraph: 0.99 vs 0.52 engine completeness, and the agent A/B
+where the gap survives with 17× cost separation at equal correctness), the
+local-model result (recall 1.00 at $0), and the experiments whose numbers we
+measured and refuse to cite (SWE-bench contamination, PR-replay validity).
 
 ## Repository map
 
@@ -60,7 +60,7 @@ and refuse to cite (SWE-bench contamination, PR-replay validity).
 | `harness/` | Arms runner, scorers, aggregators — see [`harness/README.md`](harness/README.md) |
 | `harness/tasks/*.json` | Task definitions incl. oracle-derived ground truth (self-contained; oracles are only needed to *regenerate* GT) |
 | `harness/runs/` | **All scored run logs** — `runs/<task>/<model>/<Arm>.t<n>.json` + full agent transcripts |
-| [`harness/AB-CODEGRAPH.md`](harness/AB-CODEGRAPH.md) | Named-tool comparison: Prism vs CodeGraph — engine completeness, efficiency, agent A/B, repro |
+| [`harness/AB-CODEGRAPH.md`](harness/AB-CODEGRAPH.md) | Cross-tool benchmarking (ongoing; first entry: CodeGraph) — engine completeness, efficiency next to recall, agent A/B, repro |
 | [`harness/AB-LOCAL-CLIS.md`](harness/AB-LOCAL-CLIS.md) | Local-model agentic coding across CLIs (OpenCode, Continue.dev, mason) |
 | `harness/java-oracle/` | Spoon type-resolution oracle (Java GT) |
 | `harness/ts-oracle/` | ts-morph oracle (TypeScript GT) |

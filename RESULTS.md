@@ -35,10 +35,13 @@ allowlists. Mean recall / cost per task / agent turns:
   TypeScript, and Python tasks, and on a second Java codebase
   (Commons Collections); see the paper §Results II.
 
-## 2 · Prism vs CodeGraph — engine completeness (no LLM)
+## 2 · Cross-tool benchmarking (ongoing) — engine completeness (no LLM)
 
-Both engines, same oracle, same scorer, 10 tasks, 4 languages, blast radius
-8→310 sites. Full table and fairness protocol:
+For transparency we continuously benchmark Prism against other open-source
+context tools under one standing rule set (same oracles, same scorer,
+strongest surface, goals stated fairly, raw runs published). First entry:
+CodeGraph. Both engines, same oracle, same scorer, 10 tasks, 4 languages,
+blast radius 8→310 sites. Full table and fairness protocol:
 [`harness/AB-CODEGRAPH.md`](harness/AB-CODEGRAPH.md).
 
 | | Prism | CodeGraph (its headline `explore`) |

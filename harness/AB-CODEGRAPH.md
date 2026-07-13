@@ -7,10 +7,20 @@
 raw outputs: [`runs/codegraph-engine/`](runs/codegraph-engine/),
 [`runs/ab-agentic/`](runs/ab-agentic/).
 
+This is the first entry in an **ongoing program of benchmarking Prism
+against other open-source code-context tools** — run for transparency, under
+one standing rule set: same independent oracles, same scorer, same corpora,
+each tool queried through its strongest surface, its own goals stated
+fairly, every raw run published. The purpose is to test the paper's
+mechanism (type vs name resolution) on implementations we did not build,
+not to rank products.
+
 [CodeGraph](https://github.com/colbymchenry/codegraph) is an open-source
 tree-sitter code-graph tool (30+ languages, FTS5 search, one-call `explore`
 context). Its headline claims are context-delivery *efficiency* (fewer tool
-calls, faster, fewer tokens). This benchmark measures it on the axis this
+calls, faster, fewer tokens) — a different, legitimate goal from Prism's
+completeness-first design, which is exactly what makes it informative to
+measure. This benchmark measures it on the axis this
 repository's paper argues governs safe refactors — **change-impact
 completeness** — and then tests its own efficiency claims in an agent A/B.
 Both engines are scored against the **same independent oracles**
