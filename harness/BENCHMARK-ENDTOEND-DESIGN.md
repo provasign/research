@@ -99,6 +99,31 @@ We also record, per task, **whether the agent used a graph op at all and which
 altitude** (`GRAPH_TOOL_PREFIXES`) — so "on localized tasks the agent fell back
 to grep even when the graph was available" is itself reportable.
 
+## Runner architecture (validated 2026-07-13)
+
+Two backends, by necessity (no `ANTHROPIC_API_KEY` on this machine), with
+matched tool exposure and the identical underlying engine — the fairness that
+counts is same-tools-same-engine, not same-harness-code:
+
+- **Cloud (Sonnet, Haiku)** — `claude -p --allowedTools ... --mcp-config ...`,
+  the proven pattern from `ab_agentic_mcp.py`. Per-arm tool exposure comes
+  straight from `ab_endtoend_arms.py` (its allowlist strings are already
+  claude-CLI-shaped). Subject to the subscription rate limit → auto-pause/resume
+  (below).
+- **Local (qwen3-coder:30b)** — `run_local_agent.py`, a neutral OpenAI-compatible
+  ReAct loop over ollama. **Validated**: qwen3-coder:30b did native
+  tool-calling and fixed a planted bug end-to-end (grep→read→edit→build→finish,
+  8 turns, 21 s, correct diff). Context tools shell out to the `prism`/`codegraph`
+  CLIs — same engine the cloud arms reach via MCP. No rate limit → never pauses.
+
+**Auto-pause / auto-resume** (per the requirement): the runner is cell-based
+(task × arm × model); every completed cell writes a result JSON and is skipped
+on restart (resumable, as `swebench_ab.py` already is). On an Anthropic
+rate-limit/usage-limit error the cloud runner writes a `paused` marker with the
+reset time and exits cleanly; a `ScheduleWakeup` at the reset time re-invokes it,
+and it continues from the first unfinished cell. Local cells run continuously in
+the background meanwhile.
+
 ## Reused vs to-build
 
 - **Reuse:** `swebench_ab.py` (2 arms → 4; extend `ARMS` import from
