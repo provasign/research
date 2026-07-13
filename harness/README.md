@@ -28,6 +28,13 @@ the full reproduction pipeline; this file is the operational reference.
 | `tasks/*.json` | Task definitions **with GT embedded** — self-contained for scoring |
 | `runs/` | All scored runs + transcripts (released; layout in repo README) |
 | `tests/` | Scorer + codex-runner unit tests (`python3 tests/test_score.py`) |
+| `codegraph_vs_prism.py` | Engine-level Prism-vs-CodeGraph completeness sweep, no LLM — see [AB-CODEGRAPH.md](AB-CODEGRAPH.md) |
+| `efficiency_sweep.py` | Speed + tokens for the same one-call use case, reported next to recall |
+| `ab_agentic_mcp.py` | Three-arm agent A/B (prism / codegraph / grep) via `claude -p` + MCP |
+| `ab_local_clis.py` | Local-model agentic coding across CLIs — see [AB-LOCAL-CLIS.md](AB-LOCAL-CLIS.md) |
+| `ab_mason_claude.py` | Product A/B: mason (local 30B) vs Claude Code — see [AB-MASON-CLAUDE.md](AB-MASON-CLAUDE.md) |
+| `swebench_ab.py` / `contamination_check.py` | SWE-bench A/B + the contamination measurement that voids it — see [SWEBENCH-AB-RESULTS.md](SWEBENCH-AB-RESULTS.md) |
+| `pr_replay.py` | PR-replay task-mining pilot — see [PR-REPLAY-FINDINGS.md](PR-REPLAY-FINDINGS.md) |
 
 ## Arms (`arms.py`)
 

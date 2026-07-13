@@ -32,7 +32,7 @@ def _git(repo: str, *args: str) -> str:
 
 # Generated/mock files churn on regeneration and are not hand-written change
 # sites; including them in GT penalises a correct agent (the codegen trap that
-# sank PR-diff task #79392 -- see PILOT.md methodological lessons).
+# sank PR-diff task #79392 -- a pilot-phase methodological lesson).
 GEN_RE = re.compile(r"(_gen|\.pb|\.gen|wire_gen|generated|zz_generated)\.go$"
                     r"|/mocks?/|mock_.*\.go$|_mock\.go$")
 

@@ -1,4 +1,4 @@
-# grove change-impact — the graph-native build (ROADMAP build #1)
+# grove change-impact — the graph-native build
 
 **Status: engine done, measured, 2026-07-03.** `grove change-impact
 'Type.method(Params)'` computes the type-resolved change-set — declaration +
@@ -83,7 +83,7 @@ every LLM arm in the original study — G-arm agents silently inherited them,
 which is itself evidence for deterministic, testable traversals over
 LLM-orchestrated ones.
 
-## Next (per ROADMAP)
+## Next
 
 - Expose as `prism_change_impact` MCP tool (Path B rung 1 / prerequisite for
   the Claude-tier G* arm).
