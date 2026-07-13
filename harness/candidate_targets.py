@@ -6,7 +6,7 @@ under-matches, while the resolved graph is exact (the H2/H3 case). This ranks
 callee names by (distinct implementations x callers x caller-packages) so we can
 pick targets for `oracle_task.py`, after excluding generated/mock/test sites.
 
-VALIDITY GUARDRAILS (see HANDOFF.md W1 -- do not relitigate):
+VALIDITY GUARDRAILS (do not relitigate):
   * This finds interface-impl-ENUMERATION candidates (many impls of one name).
     That is the valid adversarial. It is NOT the excluded concrete-caller design
     (one concrete method reached via a k8s-style interface = VTA-only, unfair to

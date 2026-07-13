@@ -25,19 +25,47 @@ are weakest but leaves much of the benefit unrealized (orchestration is itself
 a frontier skill); at task altitude completeness becomes **tier-invariant** —
 every tier, including the free local model, lands on the engine's ceiling.
 
+## The tool under test: what Prism is
+
+Prism (with its embedded Grove engine) is a **type-resolved code graph
+exposed to coding agents at task altitude**: whole questions — "every site
+this signature change breaks", "every type that fails to implement X",
+"the change-set split covered/untested" — answered in one deterministic
+call, instead of primitives the agent must orchestrate. The design
+principles the study tests, in order: **correctness and completeness
+first** (a faster incomplete answer is a faster broken build), **task
+altitude** (orchestrating traversals is itself a frontier-model skill),
+**determinism** (the engine solves the traversal; the agent relays it —
+testable without an LLM), and the consequence the paper measures, **tier
+invariance** (the same completeness from a free local 30B to a frontier
+model). Positioning, use cases, and where Prism is deliberately the wrong
+tool: [github.com/provasign/prism](https://github.com/provasign/prism).
+
+## Headline numbers
+
+All consolidated in [`RESULTS.md`](RESULTS.md): the with/without-Prism agent
+grid (recall 0.997 tier-invariant with Prism vs 0.76–0.95 without; 28×
+cheaper at the bottom tier), the named-tool comparison (Prism 0.99 vs
+CodeGraph 0.52 engine completeness, and the agent A/B where the gap
+survives with 17× cost separation at equal correctness), the local-model
+result (recall 1.00 at $0), and the experiments whose numbers we measured
+and refuse to cite (SWE-bench contamination, PR-replay validity).
+
 ## Repository map
 
 | Path | Contents |
 |---|---|
 | `paper/paper.tex` | The paper (builds with `tectonic paper.tex`) |
+| [`RESULTS.md`](RESULTS.md) | **Every headline number in one place** — with/without Prism, vs CodeGraph, agent A/Bs, and what we refuse to cite |
 | `harness/` | Arms runner, scorers, aggregators — see [`harness/README.md`](harness/README.md) |
 | `harness/tasks/*.json` | Task definitions incl. oracle-derived ground truth (self-contained; oracles are only needed to *regenerate* GT) |
 | `harness/runs/` | **All scored run logs** — `runs/<task>/<model>/<Arm>.t<n>.json` + full agent transcripts |
+| [`harness/AB-CODEGRAPH.md`](harness/AB-CODEGRAPH.md) | Named-tool comparison: Prism vs CodeGraph — engine completeness, efficiency, agent A/B, repro |
+| [`harness/AB-LOCAL-CLIS.md`](harness/AB-LOCAL-CLIS.md) | Local-model agentic coding across CLIs (OpenCode, Continue.dev, mason) |
 | `harness/java-oracle/` | Spoon type-resolution oracle (Java GT) |
 | `harness/ts-oracle/` | ts-morph oracle (TypeScript GT) |
 | `harness/py-oracle/` | Jedi oracle (Python GT) |
-| `THESIS.md` | The claim arc — what we believed, in order, including the reversals |
-| `HANDOFF.md`, `ROADMAP.md` | Working research notes, kept for transparency |
+| `THESIS.md` | The falsifiable sub-claims and their verdicts |
 | `LOCAL-MODEL-SETUP.md` | Ollama setup for the local-30B tier |
 
 ## The arms

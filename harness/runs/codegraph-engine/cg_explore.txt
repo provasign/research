@@ -1,0 +1,692 @@
+**Exploration: JsonNode.get**
+
+Found 106 symbols across 3 files.
+
+**Blast radius — what depends on these (update/verify before editing)**
+
+- `get` (src/main/java/com/fasterxml/jackson/databind/node/ArrayNode.java:261) — 16 callers in `src/main/java/com/fasterxml/jackson/databind/node/ArrayNode.java`, `src/main/java/com/fasterxml/jackson/databind/ser/std/StdArraySerializers.java`, `src/main/java/com/fasterxml/jackson/databind/util/ArrayBuilders.java`; tests: `src/test/java/com/fasterxml/jackson/databind/ObjectReaderTest.java`, `src/test/java/com/fasterxml/jackson/databind/convert/ArrayConversionsTest.java`, `src/test/java/com/fasterxml/jackson/databind/convert/ConvertingDeserializerTest.java`, `src/test/java/com/fasterxml/jackson/databind/deser/jdk/JDKScalarsDeserTest.java` +3
+- `get` (src/main/java/com/fasterxml/jackson/databind/node/ContainerNode.java:52) — 1 caller; tests: `src/test/java/com/fasterxml/jackson/databind/convert/ConvertingDeserializerTest.java`
+- `get` (src/main/java/com/fasterxml/jackson/databind/node/ObjectNode.java:277) — 18 callers in `src/main/java/com/fasterxml/jackson/databind/deser/DefaultDeserializationContext.java`, `src/main/java/com/fasterxml/jackson/databind/deser/std/JsonNodeDeserializer.java`, `src/main/java/com/fasterxml/jackson/databind/node/ObjectNode.java`, `src/main/java/com/fasterxml/jackson/databind/ser/DefaultSerializerProvider.java`; tests: `src/test/java/com/fasterxml/jackson/databind/deser/merge/NodeMergeTest.java`, `src/test/java/com/fasterxml/jackson/databind/jsonschema/TestGenerateJsonSchema.java`, `src/test/java/com/fasterxml/jackson/databind/module/TestCustomEnumKeyDeserializer.java`, `src/test/java/com/fasterxml/jackson/databind/node/JsonNodeDeepCopyTest.java` +3
+
+**Relationships**
+
+**extends:**
+- JsonNode → Base
+
+**implements:**
+- JsonNode → TreeNode
+
+**calls:**
+- _at → get
+- findStandardImpl → get
+- equals → get
+- get → get
+- _numberList → get
+- verifyIntegralArrays → get
+- verifyDoubleArrays → get
+- testPropertyAnnotationForLists → get
+- _testNullForPrimitiveArrays → get
+- testDirectCreation → get
+- ... and 97 more
+
+**references:**
+- get → JsonNode
+- add → ArrayNode
+- add → ArrayNode
+- add → ArrayNode
+- set → ArrayNode
+- get → JsonNode
+- addArray → ArrayNode
+- insert → ArrayNode
+- insert → ArrayNode
+- insert → ArrayNode
+- ... and 46 more
+
+**instantiates:**
+- testBasics → ObjectNode
+- testBigNumbers → ObjectNode
+- appendCompletedChunk → Node
+
+**Source Code**
+
+> The code below is the **verbatim, current on-disk source** of these files — re-read from disk on this call and line-numbered, byte-for-byte identical to what the Read tool returns. It is NOT a summary, outline, or stale cache. Treat each block as a Read you have already performed: do not Read a file shown here.
+
+**`src/main/java/com/fasterxml/jackson/databind/JsonNode.java`** — JsonNode(references), calls(calls), references(references), get(method), path(method), OverwriteMode(enum), JsonNode(method), at(method), at(calls), _at(method), +12 more
+
+```java
+56	     *
+57	     * @since 2.14
+58	     */
+59	    public enum OverwriteMode {
+60	        /**
+61	         * Mode in which no values may be overwritten, not even {@code NullNode}s;
+62	         * only compatible paths may be traversed.
+63	         */
+64	        NONE,
+65	
+66	        /**
+67	         * Mode in which explicit {@code NullNode}s may be replaced but no other
+68	         * node types.
+69	         */
+70	        NULLS,
+71	
+72	        /**
+73	         * Mode in which all scalar value nodes may be replaced, but not
+74	         * Array or Object nodes.
+75	         */
+76	        SCALARS,
+77	
+78	        /**
+79	         * Mode in which all incompatible node types may be replaced, including
+80	         * Array and Object nodes where necessary.
+81	         */
+82	        ALL
+83	    }
+84	
+85	    /*
+86	    /**********************************************************
+87	    /* Construction, related
+88	    /**********************************************************
+89	     */
+90	
+91	    protected JsonNode() { }
+92	
+93	    /**
+94	     * Method that can be called to get a node that is guaranteed
+
+... (gap) ...
+
+187	     *   if this node is an array and has specified element.
+188	     *   Null otherwise.
+189	     */
+190	    @Override
+191	    public abstract JsonNode get(int index);
+192	
+193	    /**
+194	     * Method for accessing value of the specified field of
+
+... (gap) ...
+
+205	     *   if this node is an object and has value for the specified
+206	     *   field. Null otherwise.
+207	     */
+208	    @Override
+209	    public JsonNode get(String fieldName) { return null; }
+210	    /**
+211	     * This method is similar to {@link #get(String)}, except
+212	     * that instead of returning null if no such value exists (due
+213	     * to this node not being an object, or object not having value
+214	     * for the specified field),
+215	     * a "missing node" (node that returns true for
+216	     * {@link #isMissingNode}) will be returned. This allows for
+217	     * convenient and safe chained access via path calls.
+218	     */
+219	
+220	    @Override
+221	    public abstract JsonNode path(String fieldName);
+222	
+223	    /**
+224	     * This method is similar to {@link #get(int)}, except
+225	     * that instead of returning null if no such element exists (due
+226	     * to index being out of range, or this node not being an array),
+227	     * a "missing node" (node that returns true for
+228	     * {@link #isMissingNode}) will be returned. This allows for
+229	     * convenient and safe chained access via path calls.
+230	     */
+231	    @Override
+232	    public abstract JsonNode path(int index);
+233	
+234	    @Override
+235	    public Iterator<String> fieldNames() {
+
+... (gap) ...
+
+278	     *
+279	     * @since 2.3
+280	     */
+281	    @Override
+282	    public final JsonNode at(String jsonPtrExpr) {
+283	        return at(JsonPointer.compile(jsonPtrExpr));
+284	    }
+285	
+286	    /**
+287	     * Helper method used by other methods for traversing the next step
+288	     * of given path expression, and returning matching value node if any:
+289	     * if no match, {@code null} is returned.
+290	     *
+291	     * @param ptr Path expression to use
+292	     *
+293	     * @return Either matching {@link JsonNode} for the first step of path or
+294	     *    {@code null} if no match (including case that this node is not a container)
+295	     */
+296	    protected abstract JsonNode _at(JsonPointer ptr);
+297	
+298	    /*
+299	    /**********************************************************
+
+... (gap) ...
+
+819	     *
+820	     * @since 2.10
+821	     */
+822	    public JsonNode required(String propertyName) throws IllegalArgumentException {
+823	        return _reportRequiredViolation("Node of type `%s` has no fields", getClass().getName());
+824	    }
+825	
+826	    /**
+827	     * Method is functionally equivalent to
+
+... (gap) ...
+
+866	     *
+867	     * @since 2.10
+868	     */
+869	    public JsonNode requiredAt(String pathExpr) throws IllegalArgumentException {
+870	        return requiredAt(JsonPointer.compile(pathExpr));
+871	    }
+872	
+873	    /**
+874	     * Method is functionally equivalent to
+
+... (gap) ...
+
+1006	     * convenience "for-each" loop can be used for looping over elements
+1007	     * of JSON Array constructs.
+1008	     */
+1009	    @Override
+1010	    public final Iterator<JsonNode> iterator() { return elements(); }
+1011	
+1012	    /**
+1013	     * Method for accessing all value nodes of this Node, iff
+1014	     * this node is a JSON Array or Object node. In case of Object node,
+1015	     * field names (keys) are not included, only values.
+1016	     * For other types of nodes, returns empty iterator.
+1017	     */
+1018	    public Iterator<JsonNode> elements() {
+1019	        return ClassUtil.emptyIterator();
+1020	    }
+1021	
+1022	    /**
+1023	     * @return Iterator that can be used to traverse all key/value pairs for
+1024	     *   object nodes; empty iterator (no contents) for other types
+1025	     */
+1026	    public Iterator<Map.Entry<String, JsonNode>> fields() {
+1027	        return ClassUtil.emptyIterator();
+1028	    }
+1029	
+1030	    /**
+1031	     * Accessor that will return properties of {@code ObjectNode}
+
+... (gap) ...
+
+1038	     *
+1039	     * @since 2.15
+1040	     */
+1041	    public Set<Map.Entry<String, JsonNode>> properties() {
+1042	        return Collections.emptySet();
+1043	    }
+1044	
+1045	    /*
+1046	    /**********************************************************
+
+... (gap) ...
+
+1060	     *
+1061	     * @return Value of first matching node found, if any; null if none
+1062	     */
+1063	    public abstract JsonNode findValue(String fieldName);
+1064	
+1065	    /**
+1066	     * Method for finding JSON Object fields with specified name -- both immediate
+
+... (gap) ...
+
+1073	     *
+1074	     * @param fieldName Name of field to look for
+1075	     */
+1076	    public final List<JsonNode> findValues(String fieldName)
+1077	    {
+1078	        List<JsonNode> result = findValues(fieldName, null);
+1079	        if (result == null) {
+1080	            return Collections.emptyList();
+1081	        }
+1082	        return result;
+1083	    }
+1084	
+1085	    /**
+1086	     * Similar to {@link #findValues}, but will additionally convert
+
+... (gap) ...
+
+1514	     *
+1515	     * @since 2.6
+1516	     */
+1517	    public boolean equals(Comparator<JsonNode> comparator, JsonNode other) {
+1518	        return comparator.compare(this, other) == 0;
+1519	    }
+1520	
+1521	    /*
+1522	    /**********************************************************
+```
+
+**`src/main/java/com/fasterxml/jackson/databind/node/ArrayNode.java`** — JsonNode(references), calls(calls), imports(imports), ArrayNode(references), references(references), get(method), path(method), com.fasterxml.jackson.databind.node(namespace), JsonNode(imports), serialVersionUID(constant), +15 more
+
+```java
+1	package com.fasterxml.jackson.databind.node;
+2	
+3	import java.io.IOException;
+4	import java.math.BigDecimal;
+5	import java.math.BigInteger;
+6	import java.util.*;
+7	
+8	import com.fasterxml.jackson.core.*;
+9	import com.fasterxml.jackson.core.type.WritableTypeId;
+10	
+11	import com.fasterxml.jackson.databind.JsonNode;
+12	import com.fasterxml.jackson.databind.SerializerProvider;
+13	import com.fasterxml.jackson.databind.jsontype.TypeSerializer;
+14	import com.fasterxml.jackson.databind.util.RawValue;
+15	
+16	/**
+17	 * Node class that represents Arrays mapped from JSON content.
+18	 *<p>
+19	 * Note: class was <code>final</code> temporarily for Jackson 2.2.
+20	 */
+21	public class ArrayNode
+22	    extends ContainerNode<ArrayNode>
+23	    implements java.io.Serializable // since 2.10
+24	{
+25	    private static final long serialVersionUID = 1L;
+26	
+27	    private final List<JsonNode> _children;
+28	
+29	    public ArrayNode(JsonNodeFactory nf) {
+30	        super(nf);
+
+... (gap) ...
+
+42	    /**
+43	     * @since 2.7
+44	     */
+45	    public ArrayNode(JsonNodeFactory nf, List<JsonNode> children) {
+46	        super(nf);
+47	        _children = Objects.requireNonNull(children,
+48	                "Must not pass `null` for 'children' argument");
+49	    }
+50	
+51	    @Override
+52	    protected JsonNode _at(JsonPointer ptr) {
+53	        return get(ptr.getMatchingIndex());
+54	    }
+55	
+56	    // note: co-variant to allow caller-side type safety
+57	    @SuppressWarnings("unchecked")
+
+... (gap) ...
+
+193	        return next._withArrayAddTailProperty(tail, preferIndex);
+194	    }
+195	
+196	    protected void _withXxxSetArrayElement(int index, JsonNode value) {
+197	        // 27-Jul-2022, tatu: Let's make it less likely anyone OOMs by
+198	        //    humongous index...
+199	        if (index >= size()) {
+200	            final int max = _nodeFactory.getMaxElementIndexForInsert();
+201	            if (index > max) {
+202	                _reportWrongNodeOperation("Too big Array index (%d; max %d) to use for insert with `JsonPointer`",
+203	                        index, max);
+204	            }
+205	            while (index >= this.size()) {
+206	                addNull();
+207	            }
+208	        }
+209	        set(index, value);
+210	    }
+211	
+212	    /*
+213	    /**********************************************************
+
+... (gap) ...
+
+236	        return true;
+237	    }
+238	
+239	    @Override public JsonToken asToken() { return JsonToken.START_ARRAY; }
+240	
+241	    @Override
+242	    public int size() {
+243	        return _children.size();
+244	    }
+245	
+246	    @Override // since 2.10
+247	    public boolean isEmpty() { return _children.isEmpty(); }
+248	
+249	    /**
+250	     * {@inheritDoc}
+251	     *<p>
+252	     * NOTE: actual underlying implementation returns {@link java.util.ListIterator}
+253	     * from {@link java.util.List#listIterator()} that contains elements, since Jackson 2.18
+254	     * (before was only generic {@link java.util.Iterator}).
+255	     */
+256	    @Override
+257	    public Iterator<JsonNode> elements() {
+258	        return _children.listIterator();
+259	    }
+260	
+261	    @Override
+262	    public JsonNode get(int index) {
+263	        if ((index >= 0) && (index < _children.size())) {
+264	            return _children.get(index);
+265	        }
+266	        return null;
+267	    }
+268	
+269	    @Override
+270	    public JsonNode get(String fieldName) { return null; }
+271	
+272	    @Override
+273	    public JsonNode path(String fieldName) { return MissingNode.getInstance(); }
+274	
+275	    @Override
+276	    public JsonNode path(int index) {
+277	        if (index >= 0 && index < _children.size()) {
+278	            return _children.get(index);
+279	        }
+280	        return MissingNode.getInstance();
+281	    }
+282	
+283	    @Override
+284	    public JsonNode required(int index) {
+285	        if ((index >= 0) && (index < _children.size())) {
+286	            return _children.get(index);
+287	        }
+288	        return _reportRequiredViolation("No value at index #%d [0, %d) of `ArrayNode`",
+289	                index, _children.size());
+290	    }
+291	
+292	    @Override
+293	    public boolean equals(Comparator<JsonNode> comparator, JsonNode o)
+294	    {
+295	        if (!(o instanceof ArrayNode)) {
+296	            return false;
+297	        }
+298	        ArrayNode other = (ArrayNode) o;
+299	        final int len = _children.size();
+300	        if (other.size() != len) {
+301	            return false;
+302	        }
+303	        List<JsonNode> l1 = _children;
+304	        List<JsonNode> l2 = other._children;
+305	        for (int i = 0; i < len; ++i) {
+306	            if (!l1.get(i).equals(comparator, l2.get(i))) {
+307	                return false;
+308	            }
+309	        }
+310	        return true;
+311	    }
+312	
+313	    /*
+314	    /**********************************************************
+315	    /* Public API, serialization
+316	    /**********************************************************
+317	     */
+318	
+319	    @Override
+320	    public void serialize(JsonGenerator g, SerializerProvider provider) throws IOException
+321	    {
+322	        final List<JsonNode> c = _children;
+323	        final int size = c.size();
+324	        g.writeStartArray(this, size);
+325	        for (int i = 0; i < size; ++i) { // we'll typically have array list
+326	            JsonNode value = c.get(i);
+327	            value.serialize(g, provider);
+328	        }
+329	        g.writeEndArray();
+330	    }
+331	
+332	    @Override
+333	    public void serializeWithType(JsonGenerator g, SerializerProvider provider, TypeSerializer typeSer)
+
+... (gap) ...
+
+1196	    /**********************************************************
+1197	     */
+1198	
+1199	    protected ArrayNode _set(int index, JsonNode node) {
+1200	        if (index < 0 || index >= _children.size()) {
+1201	            throw new IndexOutOfBoundsException("Illegal index "+ index +", array size "+size());
+1202	        }
+1203	        _children.set(index, node);
+1204	        return this;
+1205	    }
+1206	
+1207	    protected ArrayNode _add(JsonNode node) {
+1208	        _children.add(node);
+1209	        return this;
+1210	    }
+1211	
+1212	    protected ArrayNode _insert(int index, JsonNode node)
+1213	    {
+1214	        if (index < 0) {
+1215	            _children.add(0, node);
+1216	        } else if (index >= _children.size()) {
+1217	            _children.add(node);
+1218	        } else {
+1219	            _children.add(index, node);
+1220	        }
+1221	        return this;
+1222	    }
+1223	}
+1224	
+```
+
+**`src/main/java/com/fasterxml/jackson/databind/node/ObjectNode.java`** — JsonNode(references), calls(calls), references(references), get(method), path(method), serialVersionUID(constant), _children(field), ObjectNode(method), _at(method), get(calls), +11 more
+
+```java
+22	    extends ContainerNode<ObjectNode>
+23	    implements java.io.Serializable
+24	{
+25	    private static final long serialVersionUID = 1L; // since 2.10
+26	
+27	    // Note: LinkedHashMap for backwards compatibility
+28	    protected final Map<String, JsonNode> _children;
+29	
+30	    public ObjectNode(JsonNodeFactory nc) {
+31	        super(nc);
+32	        _children = new LinkedHashMap<String, JsonNode>();
+33	    }
+34	
+35	    /**
+36	     * @since 2.4
+37	     */
+38	    public ObjectNode(JsonNodeFactory nc, Map<String, JsonNode> children) {
+39	        super(nc);
+40	        _children = Objects.requireNonNull(children,
+41	                "Must not pass `null` for 'children' argument");
+42	    }
+43	
+44	    @Override
+45	    protected JsonNode _at(JsonPointer ptr) {
+46	        return get(ptr.getMatchingProperty());
+47	    }
+48	
+49	    /* Question: should this delegate to `JsonNodeFactory`? It does not absolutely
+50	     * have to, as long as sub-types override the method but...
+51	     */
+52	    // note: co-variant for type safety
+53	    @SuppressWarnings("unchecked")
+54	    @Override
+55	    public ObjectNode deepCopy()
+56	    {
+57	        ObjectNode ret = objectNode();
+58	        for (Map.Entry<String, JsonNode> entry: _children.entrySet()) {
+59	            ret._children.put(entry.getKey(), entry.getValue().deepCopy());
+60	        }
+61	        return ret;
+62	    }
+63	
+64	    /*
+65	    /**********************************************************
+
+... (gap) ...
+
+261	
+262	    @Override public JsonToken asToken() { return JsonToken.START_OBJECT; }
+263	
+264	    @Override
+265	    public int size() {
+266	        return _children.size();
+267	    }
+268	
+269	    @Override // since 2.10
+270	    public boolean isEmpty() { return _children.isEmpty(); }
+271	
+272	    @Override
+273	    public Iterator<JsonNode> elements() {
+274	        return _children.values().iterator();
+275	    }
+276	
+277	    @Override
+278	    public JsonNode get(int index) { return null; }
+279	
+280	    @Override
+281	    public JsonNode get(String propertyName) {
+282	        return _children.get(propertyName);
+283	    }
+284	
+285	    @Override
+286	    public Iterator<String> fieldNames() {
+287	        return _children.keySet().iterator();
+288	    }
+289	
+290	    @Override
+291	    public JsonNode path(int index) {
+292	        return MissingNode.getInstance();
+293	    }
+294	
+295	    @Override
+296	    public JsonNode path(String propertyName)
+297	    {
+298	        JsonNode n = _children.get(propertyName);
+299	        if (n != null) {
+300	            return n;
+301	        }
+302	        return MissingNode.getInstance();
+303	    }
+304	
+305	    @Override
+306	    public JsonNode required(String propertyName) {
+307	        JsonNode n = _children.get(propertyName);
+308	        if (n != null) {
+309	            return n;
+310	        }
+311	        return _reportRequiredViolation("No value for property '%s' of `ObjectNode`", propertyName);
+312	    }
+313	
+314	    /**
+315	     * Method to use for accessing all properties (with both names
+316	     * and values) of this JSON Object.
+317	     */
+318	    @Override
+319	    public Iterator<Map.Entry<String, JsonNode>> fields() {
+320	        return _children.entrySet().iterator();
+321	    }
+322	
+323	    /**
+324	     * Method to use for accessing all properties (with both names
+325	     * and values) of this JSON Object.
+326	     *
+327	     * @since 2.15
+328	     */
+329	    @Override
+330	    public Set<Map.Entry<String, JsonNode>> properties() {
+331	        return _children.entrySet();
+332	    }
+333	    
+334	    @Override
+335	    public boolean equals(Comparator<JsonNode> comparator, JsonNode o)
+336	    {
+337	        if (!(o instanceof ObjectNode)) {
+338	            return false;
+339	        }
+340	        ObjectNode other = (ObjectNode) o;
+341	        Map<String, JsonNode> m1 = _children;
+342	        Map<String, JsonNode> m2 = other._children;
+343	
+344	        final int len = m1.size();
+345	        if (m2.size() != len) {
+346	            return false;
+347	        }
+348	
+349	        for (Map.Entry<String, JsonNode> entry : m1.entrySet()) {
+350	            JsonNode v2 = m2.get(entry.getKey());
+351	            if ((v2 == null) || !entry.getValue().equals(comparator, v2)) {
+352	                return false;
+353	            }
+354	        }
+355	        return true;
+356	    }
+357	
+358	    /*
+359	    /**********************************************************
+360	    /* Public API, finding value nodes
+361	    /**********************************************************
+362	     */
+363	
+364	    @Override
+365	    public JsonNode findValue(String propertyName)
+366	    {
+367	        JsonNode jsonNode = _children.get(propertyName);
+368	        if (jsonNode != null) {
+369	            return jsonNode;
+370	        }
+371	
+372	        for (JsonNode child : _children.values()) {
+373	            JsonNode value = child.findValue(propertyName);
+374	            if (value != null) {
+375	                return value;
+376	            }
+377	        }
+378	        return null;
+379	    }
+380	
+381	    @Override
+382	    public List<JsonNode> findValues(String propertyName, List<JsonNode> foundSoFar)
+383	    {
+384	        for (Map.Entry<String, JsonNode> entry : _children.entrySet()) {
+385	            if (propertyName.equals(entry.getKey())) {
+386	                if (foundSoFar == null) {
+387	                    foundSoFar = new ArrayList<JsonNode>();
+388	                }
+389	                foundSoFar.add(entry.getValue());
+390	            } else { // only add children if parent not added
+391	                foundSoFar = entry.getValue().findValues(propertyName, foundSoFar);
+392	            }
+393	        }
+394	        return foundSoFar;
+395	    }
+396	
+397	    @Override
+398	    public List<String> findValuesAsText(String propertyName, List<String> foundSoFar)
+
+... (gap) ...
+
+579	     *
+580	     * @since 2.1
+581	     */
+582	    @SuppressWarnings("unchecked")
+583	    public <T extends JsonNode> T set(String propertyName, JsonNode value)
+584	    {
+585	        if (value == null) {
+586	            value = nullNode();
+587	        }
+588	        _children.put(propertyName, value);
+589	        return (T) this;
+590	    }
+591	
+592	    /**
+593	     * Method for adding given properties to this object node, overriding
+```
+
+
+... (output truncated to budget; the source above is complete and verbatim — treat it as already Read. For any area not covered, run another codegraph_explore with the specific names — do NOT Read these files.)
