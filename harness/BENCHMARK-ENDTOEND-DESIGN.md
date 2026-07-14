@@ -135,6 +135,36 @@ the background meanwhile.
   end-to-end test harnessing is the stretch goal), the blast-radius stratifier
   (one grove call per task), and the four-arm runner loop.
 
+## Task source: self-mined fresh 2026 PRs (decided + validated 2026-07-13)
+
+SWE-bench-Live tops out at **June 2025** — pre-cutoff for the test models
+(the prior run documented a Jan 2026 cutoff), so it cannot give a
+contamination-free set. Decision: **mine genuinely post-cutoff (2026) Python
+PRs ourselves**, accepting the per-repo Docker lift SWE-bench-Live would have
+saved, in exchange for "clean by construction."
+
+**Validated:** the live GitHub data universe is at 2026 (django has PRs merged
+2026-07-13); `gh` is authenticated; `mine_2026_tasks.py` found **21 well-shaped
+2026 bug-fix candidates from one 80-PR scan of django** — each links an issue,
+touches source *and* tests, and is reasonably sized. Several are high-blast-
+radius (cross-file symbol moves) — the tail where the graph should help and
+where name-resolution CodeGraph should lose to type-resolution Prism.
+
+**Pilot strategy to bound the Docker lift:** start with a *single* well-behaved
+pure-Python repo (pytest, pip-installable, fast suite) and mine many 2026 tasks
+from it — one Docker environment, many tasks — before adding repos. Multi-repo
+and multi-language come later (as the user staged it).
+
+**Pipeline:** `mine_2026_tasks.py` (candidates) -> Docker fail->pass
+verification promotes candidates to tasks (base fails the test, base+gold
+passes) -> `contamination_check.py` as a belt-and-suspenders leakage measure ->
+blast-radius stratifier -> four-arm runs (cloud via `claude -p`, local via
+`run_local_agent.py`) -> Docker score (fail->pass + no pass->fail).
+
+**Blocked on:** the Docker daemon (installed, not running — a GUI app only the
+user can start). Everything up to scoring — mining, task construction, agent
+runs — is unblocked and can proceed now; scoring waits for the daemon.
+
 ## Open decisions (cost/scope, not design)
 
 1. **Headline model** — Sonnet (the "regular agent" a real user runs), and
