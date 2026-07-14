@@ -90,19 +90,19 @@ def _ctx_tools(arm: str) -> dict:
         return {}
     if arm == "prism_g":  # primitives -- agent orchestrates
         return {
-            "prism_search":     (lambda cwd, q, **_: _prism("search", q, cwd=cwd), {"q": "str"}, "Find a symbol by keyword."),
-            "prism_lookup":     (lambda cwd, symbol, **_: _prism("lookup", symbol, cwd=cwd), {"symbol": "str"}, "One symbol's body."),
-            "prism_references": (lambda cwd, name, **_: _prism("references", name, cwd=cwd), {"name": "str"}, "Where a symbol is used."),
+            "prism_search":     (lambda cwd, q="", **_: _prism("search", q, cwd=cwd), {"q": "str"}, "Find a symbol by keyword."),
+            "prism_lookup":     (lambda cwd, symbol="", **_: _prism("lookup", symbol, cwd=cwd), {"symbol": "str"}, "One symbol's body."),
+            "prism_references": (lambda cwd, name="", **_: _prism("references", name, cwd=cwd), {"name": "str"}, "Where a symbol is used."),
         }
     if arm == "prism_gstar":  # task altitude -- query first, task-shaped ops on shape only
         return {
-            "prism_query":         (lambda cwd, task, terms="", **_: _prism("query", task, "--terms", terms, "--include", "graph,tests,coverage_gaps", cwd=cwd), {"task": "str", "terms": "str"}, "PRIMARY: task-relevant code, callers, tests, gaps in one call."),
-            "prism_change_impact": (lambda cwd, method, **_: _prism("change-impact", method, cwd=cwd), {"method": "str"}, "ONLY for a signature/type change: every affected site."),
-            "prism_rename_plan":   (lambda cwd, method, newName, **_: _prism("rename-plan", method, newName, cwd=cwd), {"method": "str", "newName": "str"}, "ONLY for a rename."),
+            "prism_query":         (lambda cwd, task="", terms="", **_: _prism("query", task, "--terms", terms, "--include", "graph,tests,coverage_gaps", cwd=cwd), {"task": "str", "terms": "str"}, "PRIMARY: task-relevant code, callers, tests, gaps in one call."),
+            "prism_change_impact": (lambda cwd, method="", **_: _prism("change-impact", method, cwd=cwd), {"method": "str"}, "ONLY for a signature/type change: every affected site."),
+            "prism_rename_plan":   (lambda cwd, method="", newName="", **_: _prism("rename-plan", method, newName, cwd=cwd), {"method": "str", "newName": "str"}, "ONLY for a rename."),
         }
     if arm == "codegraph":
         return {
-            "codegraph_explore": (lambda cwd, query, **_: _codegraph("explore", query, cwd=cwd), {"query": "str"}, "PRIMARY: relevant symbols, call paths, blast radius in one call."),
+            "codegraph_explore": (lambda cwd, query="", **_: _codegraph("explore", query, cwd=cwd), {"query": "str"}, "PRIMARY: relevant symbols, call paths, blast radius in one call."),
         }
     raise ValueError(arm)
 
