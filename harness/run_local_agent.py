@@ -41,20 +41,28 @@ def _codegraph(*args: str, cwd: str) -> str:
 
 
 # --- base tools every arm gets (find, read, edit, build) ---
-def _tool_grep(cwd, pattern, **_):
+# All args default so a malformed tool call returns an error to the model
+# instead of crashing the run.
+def _tool_grep(cwd, pattern="", **_):
+    if not pattern:
+        return "(no pattern given)"
     r = subprocess.run(["rg", "-n", "--no-heading", pattern], cwd=cwd,
                        capture_output=True, text=True, timeout=60)
     return (r.stdout or "(no matches)")[:4000]
 
 
-def _tool_read(cwd, path, **_):
+def _tool_read(cwd, path="", **_):
+    if not path:
+        return "(no path given)"
     p = Path(cwd) / path
     if not p.exists():
         return f"(no such file: {path})"
     return p.read_text(errors="replace")[:8000]
 
 
-def _tool_edit(cwd, path, old, new, **_):
+def _tool_edit(cwd, path="", old="", new="", **_):
+    if not path or not old:
+        return "(edit needs path, old, new)"
     p = Path(cwd) / path
     if not p.exists():
         return f"(no such file: {path})"
@@ -67,7 +75,9 @@ def _tool_edit(cwd, path, old, new, **_):
     return f"(edited {path})"
 
 
-def _tool_build(cwd, cmd, **_):
+def _tool_build(cwd, cmd="", **_):
+    if not cmd:
+        return "(no command given)"
     if not any(cmd.startswith(x) for x in ("go build", "go vet", "python -m py_compile",
                                             "npm run build", "mvn -q compile", "ls", "cat")):
         return "(command not permitted; build/inspect only)"
@@ -125,10 +135,17 @@ def _schema(name, params, desc):
 
 
 def run(model: str, arm: str, repo: str, task_prompt: str) -> dict:
-    tools = {**BASE_TOOLS, **_ctx_tools(arm)}
+    # `_nogrep` variants strip content-search (grep) so discovery is FORCED
+    # through the graph -- the clean isolation test, applied symmetrically.
+    nogrep = arm.endswith("_nogrep")
+    base_arm = arm[:-7] if nogrep else arm
+    tools = {**BASE_TOOLS, **_ctx_tools(base_arm)}
+    if nogrep:
+        tools.pop("grep", None)
     tools["finish"] = (None, {"summary": "str"}, "Call when the fix is complete.")
     tool_schemas = [_schema(n, p, d) for n, (_, p, d) in tools.items()]
-    sys = (f"You are fixing a codebase. {GUIDANCE[arm]} When the fix is done and builds, call finish. "
+    guidance = GUIDANCE[base_arm] + (" You have NO text-search tool; discover code THROUGH the graph tools." if nogrep else "")
+    sys = (f"You are fixing a codebase. {guidance} When the fix is done and builds, call finish. "
            f"Make the smallest change that resolves the issue.")
     msgs = [{"role": "system", "content": sys}, {"role": "user", "content": task_prompt}]
     trace, t0 = [], time.monotonic()
