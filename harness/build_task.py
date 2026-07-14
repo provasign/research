@@ -27,6 +27,20 @@ def sh(*a, cwd=None, timeout=600):
     return r.stdout
 
 
+def problem_statement(repo: str, meta: dict) -> str:
+    """The agent must get the PROBLEM, not the PR author's solution. Prefer the
+    linked ISSUE's text (a bug report); fall back to the PR title alone -- never
+    the PR body, which routinely describes the fix and would leak the answer."""
+    text = meta["title"] + " " + (meta.get("body") or "")
+    for num in re.findall(r"#(\d+)", text):
+        r = subprocess.run(["gh", "issue", "view", num, "-R", repo,
+                            "--json", "title,body"], capture_output=True, text=True)
+        if r.returncode == 0:  # a real issue (gh issue view fails on PRs)
+            iss = json.loads(r.stdout)
+            return (iss["title"] + "\n\n" + (iss["body"] or "")).strip()
+    return meta["title"].strip()
+
+
 def build(repo: str, pr: int, clone_root: str) -> dict:
     root = Path(clone_root) / repo.replace("/", "__")
     if not root.exists():
@@ -49,7 +63,7 @@ def build(repo: str, pr: int, clone_root: str) -> dict:
     tst = [f for f in files if TEST_RE.search(f)]
     gold = sh("git", "-C", str(root), "diff", f"{base}..{merge}", "--", *src) if src else ""
     tpatch = sh("git", "-C", str(root), "diff", f"{base}..{merge}", "--", *tst) if tst else ""
-    problem = (meta["title"] + "\n\n" + (meta["body"] or "")).strip()
+    problem = problem_statement(repo, meta)
     return {
         "instance_id": f"{repo.replace('/', '__')}__pr{pr}",
         "repo": repo, "pr": pr, "base_commit": base, "merge_commit": merge,

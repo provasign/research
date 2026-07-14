@@ -92,9 +92,28 @@ def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
     return rec
 
 
+def _run_mason(wt: Path, task) -> dict:
+    """The competent-local-harness arm: mason (Prism baked in, self-indexes)."""
+    prompt = task["problem_statement"] + TASK_TAIL
+    t0 = time.monotonic()
+    r = subprocess.run(["mason", "--yes", "--model", "ollama:qwen3-coder:30b", prompt],
+                       cwd=wt, capture_output=True, text=True, timeout=1800)
+    return {"wall_s": round(time.monotonic() - t0, 1),
+            "agent_error": (r.stderr[-200:] if r.returncode else None)}
+
+
 def run_cell(task: dict, arm: str, model: str) -> dict:
     repo, wt = _worktree(task)
     try:
+        if arm == "mason":
+            meta = _run_mason(wt, task)
+            diff = _agent_diff(wt, task)
+            docker_eval._sh("git", "-C", str(repo), "worktree", "remove",
+                            "--force", str(wt), check=False)
+            sc = docker_eval.score(task, diff) if diff.strip() else {"resolved": False, "empty_diff": True}
+            return {"task": task["instance_id"], "arm": arm, "model": model,
+                    "kind": task.get("kind"), "resolved": sc.get("resolved"),
+                    "diff_lines": diff.count("\n"), **meta, "score": sc}
         _index_graph(wt, arm)
         if model == "local":
             prompt = task["problem_statement"] + TASK_TAIL
