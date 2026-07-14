@@ -38,9 +38,11 @@ def _repo_dir(task) -> Path:
 def _pytest_in_docker(worktree: Path, modules: list[str]) -> dict[str, str]:
     """Run the given test modules in a container; return {nodeid: outcome}."""
     # Install the project (editable) + pytest; project test-extras if declared.
-    cmd = ("pip install -q -e . pytest 2>&1 | tail -2; "
+    # pytest-timeout guards against a single hanging test (e.g. pager/stress
+    # tests) blocking the whole module run.
+    cmd = ("pip install -q -e . pytest pytest-timeout 2>&1 | tail -2; "
            "python -m pytest " + " ".join(modules) +
-           " -v --tb=no -p no:cacheprovider -o addopts=''")
+           " -v --tb=no -p no:cacheprovider -o addopts='' --timeout=90")
     out = _sh("docker", "run", "--rm", "-v", f"{worktree}:/w", "-w", "/w",
               IMAGE, "bash", "-lc", cmd, timeout=1200, check=False)
     res = {m.group(1): m.group(2) for m in RESULT_RE.finditer(out)}
