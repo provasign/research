@@ -1,0 +1,35 @@
+{
+  "instance_id": "pallets__click__pr3493",
+  "repo": "pallets/click",
+  "pr": 3493,
+  "base_commit": "d42f15b71757de791a5781fb179fd972da9169f5",
+  "merge_commit": "a5f5aa6d4012d256ccca24638f2642fc371e9f77",
+  "problem_statement": "Handle empty bytes in echo\n\nPreviously, an empty byte string could cause an exception if `nl=True`.\r\n\r\nThis PR narrows the type scope of `out`, to `bytes() | bytearray() | str` and handles all cases exhaustively.\r\n\r\nWe also change from `typing.Any`, which effectively disables typing for a variable, to `object`, which is more restrictive. See  https://mypy.readthedocs.io/en/latest/dynamic_typing.html#any-vs-object for more.\r\n\r\nfixes #3487\r\n\r\n<!--\r\nEnsure each step in CONTRIBUTING.rst is complete, especially the following:\r\n\r\n- Add tests that demonstrate the correct behavior of the change. Tests\r\n  should fail without the change.\r\n- Add or update relevant docs, in the docs folder and in code.\r\n- Add an entry in CHANGES.rst summarizing the change and linking to the issue.\r\n- Add `.. versionchanged::` entries in any relevant code docs.\r\n-->",
+  "patch": "diff --git a/CHANGES.rst b/CHANGES.rst\nindex eb32cd8..c640740 100644\n--- a/CHANGES.rst\n+++ b/CHANGES.rst\n@@ -10,6 +10,8 @@ Unreleased\n -   Zsh completion scripts parse correctly on Windows. :issue:`3277`\n -   Shell completion of `Choice` `Enum` values produces a valid completion\n     result. :issue:`3015`\n+-   Fix empty byte-string handling in echo. :issue:`3487`\n+\n \n Version 8.4.0\n -------------\ndiff --git a/src/click/utils.py b/src/click/utils.py\nindex 223d6b8..67922b8 100644\n--- a/src/click/utils.py\n+++ b/src/click/utils.py\n@@ -232,7 +232,7 @@ class KeepOpenFile:\n \n \n def echo(\n-    message: t.Any | None = None,\n+    message: object = None,\n     file: t.IO[t.Any] | None = None,\n     nl: bool = True,\n     err: bool = False,\n@@ -287,14 +287,15 @@ def echo(\n         if file is None:\n             return\n \n-    # Convert non bytes/text into the native string type.\n-    if message is not None and not isinstance(message, (str, bytes, bytearray)):\n-        out: str | bytes | bytearray | None = str(message)\n-    else:\n-        out = message\n+    match message:\n+        case str() | bytes() | bytearray():\n+            out = message\n+        case None:\n+            out = \"\"\n+        case _:\n+            out = str(message)\n \n     if nl:\n-        out = out or \"\"\n         if isinstance(out, str):\n             out += \"\\n\"\n         else:\n@@ -310,7 +311,6 @@ def echo(\n     # would expect. Eg: you can write to StringIO for other cases.\n     if isinstance(out, (bytes, bytearray)):\n         binary_file = _find_binary_writer(file)\n-\n         if binary_file is not None:\n             file.flush()\n             binary_file.write(out)\n",
+  "test_patch": "diff --git a/tests/test_utils.py b/tests/test_utils.py\nindex a16493b..6dd0ede 100644\n--- a/tests/test_utils.py\n+++ b/tests/test_utils.py\n@@ -8,6 +8,7 @@ from contextlib import nullcontext\n from decimal import Decimal\n from fractions import Fraction\n from functools import partial\n+from io import BytesIO\n from io import StringIO\n from unittest.mock import patch\n \n@@ -97,6 +98,10 @@ def test_echo_custom_file():\n     click.echo(\"hello\", file=f)\n     assert f.getvalue() == \"hello\\n\"\n \n+    b = BytesIO()\n+    click.echo(b\"\", b)\n+    assert b.getvalue() == b\"\\n\"\n+\n \n def test_echo_no_streams(monkeypatch, runner):\n     \"\"\"echo should not fail when stdout and stderr are None with pythonw on Windows.\"\"\"\n",
+  "test_modules": [
+    "tests/test_utils.py"
+  ],
+  "src_files": [
+    "CHANGES.rst",
+    "src/click/utils.py"
+  ],
+  "fail_to_pass": [
+    "tests/test_utils.py::test_echo_custom_file"
+  ],
+  "pass_to_pass": [
+    "tests/test_utils.py::test_confirm_repeat",
+    "tests/test_utils.py::test_echo",
+    "tests/test_utils.py::test_echo_no_streams",
+    "tests/test_utils.py::test_echo_via_pager[test0-cat]",
+    "tests/test_utils.py::test_filename_formatting",
+    "tests/test_utils.py::test_full_prompt_passed_to_readline[confirm]",
+    "tests/test_utils.py::test_full_prompt_passed_to_readline[prompt-custom-suffix]",
+    "tests/test_utils.py::test_full_prompt_passed_to_readline[prompt-hidden]",
+    "tests/test_utils.py::test_full_prompt_passed_to_readline[prompt]",
+    "tests/test_utils.py::test_prompts",
+    "tests/test_utils.py::test_prompts_abort",
+    "tests/test_utils.py::test_prompts_eof",
+    "tests/test_utils.py::test_unset_sentinel"
+  ]
+}

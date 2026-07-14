@@ -34,12 +34,13 @@ def build(repo: str, pr: int, clone_root: str) -> dict:
         # demand -- minutes faster than a full clone on large repos like django.
         sh("git", "clone", "--quiet", "--filter=blob:none",
            f"https://github.com/{repo}.git", str(root), timeout=600)
-    sh("git", "-C", str(root), "fetch", "--quiet", "origin",
-       f"pull/{pr}/head", f"pull/{pr}/merge")
     meta = json.loads(sh("gh", "pr", "view", str(pr), "-R", repo, "--json",
                          "title,body,mergeCommit,baseRefOid,files"))
     merge = meta["mergeCommit"]["oid"]
-    # base = first parent of the merge commit (pre-fix tree)
+    # The merge/squash commit is on the default branch (already in the blobless
+    # clone; commit objects are present, blobs fetched on demand). No pull-ref
+    # fetch needed -- those are pruned for merged PRs. base = its first parent.
+    sh("git", "-C", str(root), "fetch", "--quiet", "origin", merge, timeout=300)
     parents = sh("git", "-C", str(root), "rev-list", "--parents", "-n", "1", merge).split()
     base = parents[1]
     # full PR diff, split into gold (source) vs test by file
