@@ -116,6 +116,20 @@ ARMS = {
     },
 }
 
+# Forced-graph (_nogrep) variants: strip every text-search/browse tool so
+# discovery MUST go through the graph -- the clean isolation, symmetric across
+# graph arms. Baseline keeps grep (grep IS its tool / the control).
+_SEARCH = {"Grep", "Glob", "Bash(rg:*)", "Bash(grep:*)", "Bash(find:*)",
+           "Bash(ls:*)", "Bash(cat:*)"}
+for _base in ("prism_g", "prism_gstar", "codegraph"):
+    ARMS[_base + "_nogrep"] = {
+        "guidance": ARMS[_base]["guidance"] +
+                    "\nYou have NO grep/text-search tool. Discover all code THROUGH "
+                    "the graph tools above, then read/edit the files they point to.",
+        "allowed": [t for t in ARMS[_base]["allowed"] if t not in _SEARCH],
+        "mcp": ARMS[_base]["mcp"],
+    }
+
 # Which MCP tool families count as "used the graph" when reading a tool_trace --
 # lets the runner report the finding the user cares about: on localized tasks,
 # did the agent reach for a graph op at all, and WHICH altitude?

@@ -58,9 +58,9 @@ def _agent_diff(wt: Path, task) -> str:
 
 
 def _index_graph(wt: Path, arm: str):
-    if arm in ("prism_g", "prism_gstar"):
+    if arm.startswith("prism_g") or arm.startswith("prism_gstar"):
         subprocess.run(["prism", "index", str(wt)], capture_output=True, timeout=300)
-    if arm == "codegraph":
+    if arm.startswith("codegraph"):
         subprocess.run(["codegraph", "index", str(wt)], capture_output=True, timeout=300)
 
 
