@@ -93,13 +93,22 @@ def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
 
 
 def _run_mason(wt: Path, task) -> dict:
-    """The competent-local-harness arm: mason (Prism baked in, self-indexes)."""
+    """The competent-local-harness arm: mason (Prism baked in, self-indexes).
+    Output is teed to a visible per-cell log; capped at 10 min so a thrashing
+    cell is recorded as unresolved instead of blocking the whole run."""
     prompt = task["problem_statement"] + TASK_TAIL
+    log = OUT / f"{task['instance_id']}.mason.transcript.txt"
     t0 = time.monotonic()
-    r = subprocess.run(["mason", "--yes", "--model", "ollama:qwen3-coder:30b", prompt],
-                       cwd=wt, capture_output=True, text=True, timeout=1800)
-    return {"wall_s": round(time.monotonic() - t0, 1),
-            "agent_error": (r.stderr[-200:] if r.returncode else None)}
+    timed_out = False
+    with open(log, "w") as fh:
+        p = subprocess.Popen(["mason", "--yes", "--model", "ollama:qwen3-coder:30b",
+                              prompt], cwd=wt, stdout=fh, stderr=subprocess.STDOUT, text=True)
+        try:
+            p.wait(timeout=600)
+        except subprocess.TimeoutExpired:
+            p.kill(); p.wait(); timed_out = True
+    return {"wall_s": round(time.monotonic() - t0, 1), "timed_out": timed_out,
+            "transcript": str(log)}
 
 
 def run_cell(task: dict, arm: str, model: str) -> dict:
@@ -141,22 +150,33 @@ def main():
     tasks = [json.loads((Path("tasks-e2e") / f"{i}.json").read_text())
              for i in json.loads(Path(a.manifest).read_text())]
     print(f"# {len(tasks)} tasks x {a.arms} x {a.models}", flush=True)
+    import os
+    wait_on_limit = os.environ.get("E2E_WAIT_ON_LIMIT") == "1"
+    sleep_s = int(os.environ.get("E2E_LIMIT_SLEEP", "1200"))
     for model in a.models.split(","):
         for task in tasks:
             for arm in a.arms.split(","):
                 f = OUT / f"{task['instance_id']}.{model}.{arm}.json"
                 if f.exists():
                     print(f"  (cached) {f.name}", flush=True); continue
-                try:
-                    rec = run_cell(task, arm, model)
-                except RateLimited as e:
-                    (OUT / "PAUSED.json").write_text(json.dumps(
-                        {"at": f.name, "reason": str(e)[:200], "ts": int(time.time())}))
-                    print(f"  PAUSED at {f.name}: rate-limited", flush=True)
-                    sys.exit(42)
+                while True:  # retry the SAME cell across a rate-limit window
+                    try:
+                        rec = run_cell(task, arm, model)
+                        break
+                    except RateLimited as e:
+                        (OUT / "PAUSED.json").write_text(json.dumps(
+                            {"at": f.name, "reason": str(e)[:200], "ts": int(time.time())}))
+                        if not wait_on_limit:
+                            print(f"  PAUSED at {f.name}: rate-limited", flush=True)
+                            sys.exit(42)
+                        print(f"  RATE-LIMITED at {f.name}; sleeping {sleep_s}s then retrying",
+                              flush=True)
+                        time.sleep(sleep_s)
+                (OUT / "PAUSED.json").unlink(missing_ok=True)
                 f.write_text(json.dumps(rec, indent=2))
                 print(f"  {model:7} {arm:12} {task['instance_id'][-24:]:24} "
-                      f"resolved={rec['resolved']} turns={rec.get('turns')}", flush=True)
+                      f"resolved={rec['resolved']} turns={rec.get('turns')} "
+                      f"wall={rec.get('wall_s')}s", flush=True)
     print("# done", flush=True)
 
 
