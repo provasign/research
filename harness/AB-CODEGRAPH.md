@@ -139,11 +139,17 @@ tool available; oracle-scored (`ab_agentic_mcp.py`):
 
 ## 4 · Local tier — the $0 story
 
-Local qwen3-coder:30b via mason (Prism-native), same task, oracle-scored on
-what Prism renders to the user (mason's payload isolation puts the complete
-set in front of the human, not the model's context):
+Local qwen3-coder:30b at task altitude (change_impact operation), same task,
+oracle-scored on the agent's own output:
 
-    prism (local 30B, $0): recall 1.00 (all 8 incl. has/hasNonNull/_at), 23.8 s
+    local 30B, $0: recall 1.00 on jsonnode (all 8 incl. has/hasNonNull/_at),
+    0.997 mean across the 7-task change-impact grid
+    (harness/runs/*/qwen3-coder-30b-gstar/).
+
+Note: a separate general-context run of the same local model (prism_query
+rather than change_impact, harness/runs/ab-agentic/jsonnode.local-30b.prism.json)
+relayed 5 of 8 — recall 0.625. The task-shaped operation is what gets the
+local model to the ceiling.
 
 ## 5 · Tier table — cost of reaching a COMPLETE change-set
 

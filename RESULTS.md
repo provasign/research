@@ -64,7 +64,7 @@ reach a complete change-set and what it cost:
 
 | tier | Prism | CodeGraph | baseline (grep) |
 |---|---|---|---|
-| local 30B ($0)  | **1.00** (23.8 s) | (weak tier: see Haiku) | — |
+| local 30B ($0)  | **1.00** | (weak tier: see Haiku) | — |
 | Haiku (cheap)   | **1.00** · 3 turns · 67k tok · $0.04 | 0.00 · 31 turns · 1.79M · $0.33 | 0.75 |
 | Opus (frontier) | **1.00** · 3 turns · 60k tok · $0.14 | 1.00 · 23 turns · 1.43M · $2.38 | 0.62 |
 
@@ -76,9 +76,10 @@ reach a complete change-set and what it cost:
 
 ## 4 · Local models can do agentic coding — with the right tool
 
-- Local qwen3-coder:30b + Prism (via mason): recall **1.00** on the
-  diagnostic change-impact task, $0, 23.8 s
-  ([`harness/runs/ab-agentic/`](harness/runs/ab-agentic/)).
+- Local qwen3-coder:30b at task altitude (change_impact): recall **1.00**
+  on the diagnostic task (agent-scored, all 8 sites) and **0.997 mean** across
+  the 7-task change-impact grid, $0
+  ([`harness/runs/*/qwen3-coder-30b-gstar/`](harness/runs/)).
 - The same local model driving generic CLIs without task-altitude tooling
   (OpenCode, Continue.dev) scored 0–1/9 on the same task family
   ([`harness/AB-LOCAL-CLIS.md`](harness/AB-LOCAL-CLIS.md)).
@@ -108,6 +109,6 @@ pipeline on fresh PRs that post-date model training cutoffs.
 | Prism 0.99 vs CodeGraph 0.52 | `harness/AB-CODEGRAPH.md` §1 | `harness/runs/codegraph-engine/` |
 | Efficiency sweep | `harness/AB-CODEGRAPH.md` §2 | `harness/efficiency_sweep.py` |
 | Agent A/B incl. CodeGraph | `harness/AB-CODEGRAPH.md` §3 | `harness/runs/ab-agentic/` |
-| Local-tier result | `harness/AB-CODEGRAPH.md` §4 | `harness/runs/ab-agentic/jsonnode.local-30b.prism.json` |
+| Local-tier result (change_impact) | `harness/AB-CODEGRAPH.md` §4 | `harness/runs/*/qwen3-coder-30b-gstar/` |
 | Local CLIs (OpenCode/Continue) | `harness/AB-LOCAL-CLIS.md` | `harness/runs/` |
 | Contamination measurement | `harness/SWEBENCH-AB-RESULTS.md` | `harness/runs/swebench-20/` |
