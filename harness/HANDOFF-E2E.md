@@ -194,6 +194,33 @@ TOOL_ARTIFACTS += .shale.
 3. Commit prism (query source delivery) + research (harness fixes, rescore,
    arms, results).
 
+## MINER FIXED 2026-07-14 night (post-release)
+
+build_task.problem_statement rewritten: (1) GitHub's authoritative
+closingIssuesReferences first; (2) only keyword-linked "fixes/closes #N"
+numbers from the PR text, never bare cross-references; (3) every candidate
+verified to be a real issue via the pull_request marker in the issues API —
+`gh issue view <pr-number>` SUCCEEDS on PRs (GitHub models PRs as issues),
+which was the root cause.
+
+Audit of the 5 pilot tasks with the fixed extractor:
+- pr3493, pr3678: unchanged (were correct).
+- pr3653: now carries real issue #3572 (ANSI codes not stripped from
+  click.confirm) — matches the gold patch. VALID going forward.
+- pr3504: now carries real issue #3043 (multi-line help broken in fish) —
+  symptom-level, so the wire-format-redesign gold patch is now fairly
+  reachable. VALID going forward.
+- pr3534: NEW finding — the old statement was the PR title, "Flush stdin
+  after writing to a pager", i.e. a SOLUTION LEAK. Corrected to the real
+  issue's symptom text. The published 3-trial grid ran pr3534 with the
+  leaked statement — the leak hit every arm identically, so the ARM
+  comparison stands, but absolute resolve rates on pr3534 are inflated.
+  Task files carry a statement_note marking pre-fix cells.
+
+Consequence for the next run: all 5 tasks are now clean; re-running the
+grid on corrected statements is the paper-grade version (expect pr3534 to
+get harder for everyone, pr3504/pr3653 to become winnable).
+
 ## FILE MAP (all in research/harness/)
 
 | file | role |
