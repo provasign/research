@@ -1,0 +1,75 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index 6de4216..426e8ae 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -1146,6 +1146,11 @@ class Command:
+         for param in self.params:
+             all_names.difference_update(param.opts)
+             all_names.difference_update(param.secondary_opts)
++            for help_name in list(all_names):
++                _, derived_name = _split_opt(help_name)
++                derived_name = derived_name.replace("-", "_").lower()
++                if param.name == derived_name:
++                    all_names.discard(help_name)
+         return list(all_names)
+ 
+     def get_help_option(self, ctx: Context) -> Option | None:
+diff --git a/tests/test_commands.py b/tests/test_commands.py
+index 35ba65c..c813b2e 100644
+--- a/tests/test_commands.py
++++ b/tests/test_commands.py
+@@ -488,6 +488,54 @@ def test_help_param_priority(runner):
+     assert result.exit_code == 0
+ 
+ 
++def test_help_option_with_conflicting_params(runner):
++    """Help option should not be added if a param has the same name."""
++
++    # Test 1: Argument named 'help' should conflict with help option
++    @click.command()
++    @click.argument("help")
++    def cmd1(help):
++        click.echo(f"help={help}")
++
++    # Should work with a value
++    result = runner.invoke(cmd1, ["value"])
++    assert result.exit_code == 0
++    assert result.output == "help=value\n"
++
++    # Should show error about missing argument, not about --help
++    result = runner.invoke(cmd1, [])
++    assert result.exit_code == 2
++    assert "Missing argument" in result.output
++    assert "HELP" in result.output
++
++    # Test 2: Option '--help' should conflict with default help option
++    @click.command()
++    @click.option("--help", default="default")
++    def cmd2(help):
++        click.echo(f"help={help}")
++
++    # Should work with default
++    result = runner.invoke(cmd2, [])
++    assert result.exit_code == 0
++    assert "help=default" in result.output
++
++    # Should work with custom value
++    result = runner.invoke(cmd2, ["--help", "custom"])
++    assert result.exit_code == 0
++    assert "help=custom" in result.output
++
++    # Test 3: Normal argument should still have --help option
++    @click.command()
++    @click.argument("name")
++    def cmd3(name):
++        click.echo(f"name={name}")
++
++    result = runner.invoke(cmd3, ["--help"])
++    assert result.exit_code == 0
++    assert "Usage:" in result.output
++    assert "Show this message" in result.output
++
++
+ def test_unprocessed_options(runner):
+     @click.command(context_settings=dict(ignore_unknown_options=True))
+     @click.argument("args", nargs=-1, type=click.UNPROCESSED)

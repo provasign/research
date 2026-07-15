@@ -1,0 +1,20 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index 6de4216..8da6af1 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -1143,9 +1143,15 @@ class Command:
+     def get_help_option_names(self, ctx: Context) -> list[str]:
+         """Returns the names for the help option."""
+         all_names = set(ctx.help_option_names)
++        reserved_names = {param.name for param in self.params}
+         for param in self.params:
+             all_names.difference_update(param.opts)
+             all_names.difference_update(param.secondary_opts)
++        all_names = {
++            name
++            for name in all_names
++            if _split_opt(name)[1].replace("-", "_").lower() not in reserved_names
++        }
+         return list(all_names)
+ 
+     def get_help_option(self, ctx: Context) -> Option | None:

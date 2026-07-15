@@ -11,7 +11,8 @@ import json
 from pathlib import Path
 
 OUT = Path("runs/e2e")
-ARMS = ["baseline", "prism_g", "prism_gstar", "codegraph", "mason"]
+ARMS = ["baseline", "prism_g", "prism_gstar", "prism_explore", "codegraph", "mason",
+        "prism_g_nogrep", "prism_gstar_nogrep", "prism_explore_nogrep", "codegraph_nogrep"]
 
 
 def load():
@@ -64,8 +65,13 @@ def main():
         for t in tasks:
             row = [t.split("__")[-1]]
             for a in arms:
-                c = next((x for x in cells if x["task"] == t and x["model"] == m and x["arm"] == a), None)
-                row.append("✓" if c and c.get("resolved") else ("·" if c else ""))
+                cs = [x for x in cells if x["task"] == t and x["model"] == m and x["arm"] == a]
+                if not cs:
+                    row.append("")
+                elif len(cs) == 1:
+                    row.append("✓" if cs[0].get("resolved") else "·")
+                else:  # multiple trials: show resolved fraction
+                    row.append(f"{sum(1 for c in cs if c.get('resolved'))}/{len(cs)}")
             L.append("| " + " | ".join(row) + " |")
         L.append("")
 

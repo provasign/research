@@ -1,0 +1,89 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index 6de4216..b31afc9 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -1146,6 +1146,19 @@ class Command:
+         for param in self.params:
+             all_names.difference_update(param.opts)
+             all_names.difference_update(param.secondary_opts)
++
++        # Remove help option names if a param already uses the derived name
++        param_names = {param.name for param in self.params}
++        all_names_to_remove = set()
++        for help_name in all_names:
++            # Extract the derived name from the help option name
++            # e.g., '--help' -> 'help', '--my-help' -> 'my_help'
++            prefix, name = _split_opt(help_name)
++            derived_name = name.replace("-", "_").lower()
++            if derived_name in param_names:
++                all_names_to_remove.add(help_name)
++
++        all_names.difference_update(all_names_to_remove)
+         return list(all_names)
+ 
+     def get_help_option(self, ctx: Context) -> Option | None:
+diff --git a/tests/test_commands.py b/tests/test_commands.py
+index 35ba65c..0440e14 100644
+--- a/tests/test_commands.py
++++ b/tests/test_commands.py
+@@ -488,6 +488,60 @@ def test_help_param_priority(runner):
+     assert result.exit_code == 0
+ 
+ 
++def test_help_option_names_conflict_with_argument(runner):
++    """When an argument is named 'help', the --help option should not be added."""
++    @click.command()
++    @click.argument("help")
++    def cli(help):
++        click.echo(help)
++
++    # The argument should work
++    result = runner.invoke(cli, ["test_value"])
++    assert result.exit_code == 0
++    assert "test_value" in result.output
++
++    # --help should not exist since it conflicts with the argument
++    result = runner.invoke(cli, ["--help"])
++    assert result.exit_code != 0
++    assert "No such option" in result.output or "Error" in result.output
++
++
++def test_help_option_names_conflict_with_option(runner):
++    """When an option is named '--help', the automatic help option should not be added."""
++    @click.command()
++    @click.option("--help", default="default")
++    def cli(help):
++        click.echo(help)
++
++    # The option should work normally
++    result = runner.invoke(cli, [])
++    assert result.exit_code == 0
++    assert "default" in result.output
++
++    # --help should work as the user's option
++    result = runner.invoke(cli, ["--help", "custom"])
++    assert result.exit_code == 0
++    assert "custom" in result.output
++
++
++def test_help_option_names_conflict_custom_name(runner):
++    """When custom help option name is configured, conflicts should still be resolved."""
++    @click.command(context_settings={"help_option_names": ["--ayuda"]})
++    @click.argument("ayuda")
++    def cli(ayuda):
++        click.echo(ayuda)
++
++    # The argument should work
++    result = runner.invoke(cli, ["test_value"])
++    assert result.exit_code == 0
++    assert "test_value" in result.output
++
++    # --ayuda should not exist since it conflicts with the argument
++    result = runner.invoke(cli, ["--ayuda"])
++    assert result.exit_code != 0
++    assert "No such option" in result.output or "Error" in result.output
++
++
+ def test_unprocessed_options(runner):
+     @click.command(context_settings=dict(ignore_unknown_options=True))
+     @click.argument("args", nargs=-1, type=click.UNPROCESSED)

@@ -49,16 +49,25 @@ def _worktree(task):
     return repo, wt
 
 
+# Index/tool artifacts the context tools drop into the worktree. They MUST be
+# excluded from the agent diff: git apply is atomic, so a single binary stub
+# (e.g. .grove/grove.db) makes the whole patch unappliable and silently zeroes
+# the score (this invalidated every prism-arm cell before 2026-07-14).
+TOOL_ARTIFACTS = (".grove", ".codegraph", ".prism", "prism.yaml", ".p.diff",
+                  ".shale")  # mason's evidence trail
+
+
 def _agent_diff(wt: Path, task) -> str:
     """The agent's change to NON-test files (test_patch is the harness's job)."""
     docker_eval._sh("git", "-C", str(wt), "add", "-A", check=False)
     excludes = [f":(exclude){m}" for m in task["test_modules"]]
+    excludes += [f":(exclude){a}" for a in TOOL_ARTIFACTS]
     return docker_eval._sh("git", "-C", str(wt), "diff", "--cached", "--", ".",
                            *excludes, check=False)
 
 
 def _index_graph(wt: Path, arm: str):
-    if arm.startswith("prism_g") or arm.startswith("prism_gstar"):
+    if arm.startswith("prism"):
         subprocess.run(["prism", "index", str(wt)], capture_output=True, timeout=300)
     if arm.startswith("codegraph"):
         subprocess.run(["codegraph", "index", str(wt)], capture_output=True, timeout=300)
@@ -111,12 +120,19 @@ def _run_mason(wt: Path, task) -> dict:
             "transcript": str(log)}
 
 
-def run_cell(task: dict, arm: str, model: str) -> dict:
+def _save_diff(task, model: str, arm: str, tag: str, diff: str):
+    """Persist the agent diff next to the cell JSON so failed fixes can be
+    inspected after the worktree is gone."""
+    (OUT / f"{task['instance_id']}.{model}.{arm}{tag}.diff").write_text(diff)
+
+
+def run_cell(task: dict, arm: str, model: str, tag: str = "") -> dict:
     repo, wt = _worktree(task)
     try:
         if arm == "mason":
             meta = _run_mason(wt, task)
             diff = _agent_diff(wt, task)
+            _save_diff(task, model, arm, tag, diff)
             docker_eval._sh("git", "-C", str(repo), "worktree", "remove",
                             "--force", str(wt), check=False)
             sc = docker_eval.score(task, diff) if diff.strip() else {"resolved": False, "empty_diff": True}
@@ -132,6 +148,7 @@ def run_cell(task: dict, arm: str, model: str) -> dict:
         else:
             meta = _run_cloud(model, arm, wt, task)
         diff = _agent_diff(wt, task)
+        _save_diff(task, model, arm, tag, diff)
     finally:
         docker_eval._sh("git", "-C", str(repo), "worktree", "remove", "--force",
                         str(wt), check=False)
@@ -146,6 +163,9 @@ def main():
     ap.add_argument("manifest")
     ap.add_argument("--models", default="local,haiku,sonnet")
     ap.add_argument("--arms", default="baseline,prism_g,prism_gstar,codegraph")
+    ap.add_argument("--trials", type=int, default=1,
+                    help="trials per cell; trial 1 keeps the unsuffixed cell name "
+                         "(cache-compatible), trials 2..N write .t<n>.json")
     a = ap.parse_args()
     tasks = [json.loads((Path("tasks-e2e") / f"{i}.json").read_text())
              for i in json.loads(Path(a.manifest).read_text())]
@@ -156,27 +176,30 @@ def main():
     for model in a.models.split(","):
         for task in tasks:
             for arm in a.arms.split(","):
-                f = OUT / f"{task['instance_id']}.{model}.{arm}.json"
-                if f.exists():
-                    print(f"  (cached) {f.name}", flush=True); continue
-                while True:  # retry the SAME cell across a rate-limit window
-                    try:
-                        rec = run_cell(task, arm, model)
-                        break
-                    except RateLimited as e:
-                        (OUT / "PAUSED.json").write_text(json.dumps(
-                            {"at": f.name, "reason": str(e)[:200], "ts": int(time.time())}))
-                        if not wait_on_limit:
-                            print(f"  PAUSED at {f.name}: rate-limited", flush=True)
-                            sys.exit(42)
-                        print(f"  RATE-LIMITED at {f.name}; sleeping {sleep_s}s then retrying",
-                              flush=True)
-                        time.sleep(sleep_s)
-                (OUT / "PAUSED.json").unlink(missing_ok=True)
-                f.write_text(json.dumps(rec, indent=2))
-                print(f"  {model:7} {arm:12} {task['instance_id'][-24:]:24} "
-                      f"resolved={rec['resolved']} turns={rec.get('turns')} "
-                      f"wall={rec.get('wall_s')}s", flush=True)
+                for trial in range(1, a.trials + 1):
+                    tag = "" if trial == 1 else f".t{trial}"
+                    f = OUT / f"{task['instance_id']}.{model}.{arm}{tag}.json"
+                    if f.exists():
+                        print(f"  (cached) {f.name}", flush=True); continue
+                    while True:  # retry the SAME cell across a rate-limit window
+                        try:
+                            rec = run_cell(task, arm, model, tag)
+                            break
+                        except RateLimited as e:
+                            (OUT / "PAUSED.json").write_text(json.dumps(
+                                {"at": f.name, "reason": str(e)[:200], "ts": int(time.time())}))
+                            if not wait_on_limit:
+                                print(f"  PAUSED at {f.name}: rate-limited", flush=True)
+                                sys.exit(42)
+                            print(f"  RATE-LIMITED at {f.name}; sleeping {sleep_s}s then retrying",
+                                  flush=True)
+                            time.sleep(sleep_s)
+                    (OUT / "PAUSED.json").unlink(missing_ok=True)
+                    rec["trial"] = trial
+                    f.write_text(json.dumps(rec, indent=2))
+                    print(f"  {model:7} {arm:12} {task['instance_id'][-24:]:24} "
+                          f"t{trial} resolved={rec['resolved']} turns={rec.get('turns')} "
+                          f"wall={rec.get('wall_s')}s", flush=True)
     print("# done", flush=True)
 
 
