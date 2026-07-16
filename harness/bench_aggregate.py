@@ -151,9 +151,17 @@ def main():
              "re-type a 100–300 item list, so with-Prism recall falls to the "
              "baseline level. The engine resolves these completely; the model's relay "
              "is the bottleneck — exactly what Mason's payload isolation removes.")
-    L.append("- Local tier is complete; cloud tiers (Haiku/Sonnet/Opus) pending. "
-             "One task (grafana-securevalue) was dropped: its corpus fixture was a "
-             "3-file stub, not the real repo.\n")
+    L.append("- **The tier story**: baseline recall is bought with model strength "
+             "(0.16 local → 0.84 Haiku) and costs turns + tokens to get there; "
+             "with Prism, both tiers reach ~1.0 in 3–6 turns. The graph gives a weak "
+             "local model what a stronger model otherwise buys with capability.")
+    L.append("- **Honest outlier**: grafana-querydata Haiku+Prism (0.84→0.14) — the "
+             "model mis-used the tool on 2 of 3 trials (submitted the wrong/oversized "
+             "site set), dragging that one task below its baseline. The engine "
+             "resolves it; the model's tool use was inconsistent there.")
+    L.append("- Local + Haiku tiers complete; Sonnet/Opus pending. One task "
+             "(grafana-securevalue) was dropped: its corpus fixture was a 3-file "
+             "stub, not the real repo.\n")
 
     report = "\n".join(L)
     Path("BENCH-MATRIX.md").write_text(report)

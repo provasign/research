@@ -30,6 +30,22 @@ from schema import Task
 OUT = Path("runs/bench-matrix")
 OUT.mkdir(parents=True, exist_ok=True)
 
+# Stronger baseline steering for the cloud A/B. claude -p occasionally one-shots
+# a guessed answer instead of engaging the search tools (1 turn, hallucinated
+# sites, recall 0.0). Force genuine tool use so the baseline is a fair,
+# tool-using control rather than a lazy guess. Both arms stay properly steered;
+# only the tool available differs.
+cloud.ARMS["baseline"]["guidance"] = (
+    "TOOLS: ripgrep/grep/find and file reads only. This is a real code-search "
+    "task — you MUST search the repository before answering; do NOT guess or "
+    "answer from memory. Locate the target method, then find EVERY site that must "
+    "change: its declaration, overrides/implementations, and every caller — "
+    "including callers in OTHER files and indirect ones that do not contain the "
+    "method name. Search for the method name AND the types involved, and READ the "
+    "files to confirm each site. Submit only sites you have verified by reading "
+    "the code; an unverified or guessed answer is wrong."
+)
+
 TASKS = [
     "tasks/jackson-jsonnode-get.json",       # java, 8
     "tasks/jackson-settable-set.json",       # java, 22
@@ -38,7 +54,6 @@ TASKS = [
     "tasks/guava-forwarding-delegate.json",  # java, 310
     "tasks/grafana-checkhealth-impact.json", # go, 41
     "tasks/grafana-querydata-impact.json",   # go, 51
-    "tasks/grafana-securevalue-get.json",    # go, 26
     "tasks/typeorm-driver-escape.json",      # ts, 37
     "tasks/django-quotename.json",           # py, 32
 ]
