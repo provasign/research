@@ -159,7 +159,7 @@ def main():
              "model mis-used the tool on 2 of 3 trials (submitted the wrong/oversized "
              "site set), dragging that one task below its baseline. The engine "
              "resolves it; the model's tool use was inconsistent there.")
-    L.append("- Local, Haiku, and Sonnet tiers complete. Opus failed this run (all cells rate-limited to empty answers) and was archived to runs/bench-matrix-opus-failed/ pending a clean re-run with tighter rate-limit handling. One task "
+    L.append("- All four tiers complete (local + Haiku + Sonnet + Opus), 54 cells each, no fast-fails. One task "
              "(grafana-securevalue) was dropped: its corpus fixture was a 3-file "
              "stub, not the real repo.\n")
 

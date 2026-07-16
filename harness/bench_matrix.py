@@ -69,6 +69,14 @@ def is_rate_limited(rec: dict) -> bool:
     return any(h in blob for h in RATE_HINTS)
 
 
+def is_transient_fail(rec: dict) -> bool:
+    """A cloud cell that consumed ZERO input tokens didn't actually run — it is
+    the rate-limit fast-fail signature (claude -p returns an empty result JSON,
+    num_turns=1, no usage, ~1.5s, and NO error string, so is_rate_limited misses
+    it). A genuine run always consumes input tokens, so 0 tokens == retry."""
+    return (rec.get("tokens_in") or 0) == 0
+
+
 def run_cell(model: str, arm: str, task: Task) -> dict:
     if model == "local":
         rec = local.run(arm, task, LOCAL_MODEL)
@@ -115,11 +123,22 @@ def main() -> None:
                     f = OUT / f"{task.id}.{model}.{arm}.t{trial}.json"
                     if f.exists():
                         continue
+                    attempt = 0
                     while True:
                         rec = run_cell(model, arm, task)
-                        if model != "local" and is_rate_limited(rec) and wait:
-                            print(f"  RATE-LIMITED {f.name}; sleep {sleep_s}s", flush=True)
+                        if model == "local" or not wait:
+                            break
+                        attempt += 1
+                        if is_rate_limited(rec) and attempt <= 8:
+                            print(f"  RATE-LIMITED {f.name} (try {attempt}); sleep {sleep_s}s",
+                                  flush=True)
                             time.sleep(sleep_s)
+                            continue
+                        if is_transient_fail(rec) and attempt <= 12:
+                            # 0-token fast-fail (transient per-minute limit): short backoff
+                            print(f"  TRANSIENT-FAIL {f.name} (0 tokens, try {attempt}); sleep 90s",
+                                  flush=True)
+                            time.sleep(90)
                             continue
                         break
                     rec["trial"] = trial
