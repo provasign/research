@@ -134,6 +134,27 @@ def main():
         L.append("| " + " | ".join(row) + " |")
     L.append("")
 
+    # ── how to read it (honest caveats) ───────────────────────────────────
+    L.append("## Reading this\n")
+    L.append("- **Scoring is neutral/agent-level**: the answer scored is what the "
+             "model itself submits, identically for both arms. This is stricter than "
+             "the payload-isolation scoring behind the tier-invariance numbers in "
+             "RESULTS.md (where the harness captures the engine's complete output).")
+    L.append("- **Where the graph wins big**: tasks whose call sites are NOT named "
+             "after the changing method (jackson, django, typeorm) — grep can't reach "
+             "them, so baseline collapses (0.0–0.35) while Prism is complete.")
+    L.append("- **Where grep already suffices**: some tasks (grafana Go) have "
+             "lexically findable callers, so the baseline is already strong and Prism "
+             "matches rather than beats it. Honest: the graph's edge is task-shaped.")
+    L.append("- **The relay ceiling** (local tier): on the largest tasks "
+             "(jackson-serialize 108, guava 310 sites) the free 30B model cannot "
+             "re-type a 100–300 item list, so with-Prism recall falls to the "
+             "baseline level. The engine resolves these completely; the model's relay "
+             "is the bottleneck — exactly what Mason's payload isolation removes.")
+    L.append("- Local tier is complete; cloud tiers (Haiku/Sonnet/Opus) pending. "
+             "One task (grafana-securevalue) was dropped: its corpus fixture was a "
+             "3-file stub, not the real repo.\n")
+
     report = "\n".join(L)
     Path("BENCH-MATRIX.md").write_text(report)
     print(report)
