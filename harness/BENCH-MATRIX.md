@@ -15,6 +15,21 @@
 | opus | without Prism | 1.000 | 20 | 475K | 12K | 133 |
 | opus | with Prism | 1.000 | 4 | 85K | 3K | 30 |
 
+## Precision & F1 (derived) — did an arm win recall by over-reporting?
+
+| Model | Arm | Recall | Precision | F1 |
+|---|---|---:|---:|---:|
+| local | without Prism | 0.156 | 1.000 | 0.270 |
+| local | with Prism | 1.000 | 0.917 | 0.957 |
+| haiku | without Prism | 0.843 | 0.661 | 0.741 |
+| haiku | with Prism | 1.000 | 0.759 | 0.863 |
+| sonnet | without Prism | 1.000 | 0.800 | 0.889 |
+| sonnet | with Prism | 1.000 | 0.745 | 0.854 |
+| opus | without Prism | 1.000 | 0.612 | 0.759 |
+| opus | with Prism | 1.000 | 0.745 | 0.854 |
+
+Prism precision sits at ~0.74–0.92 (not ~0.1), so it is **not** inflating recall by dumping the blast radius. Two caveats: (1) derived from recall·gt/sites_submitted (n_sites may include a few test sites the exact scorer excludes, so this slightly *under*states precision); (2) ground truth is the sites the PR *actually changed* — a subset of the full caller set `change_impact` returns — so many "false positives" are real callers that specific PR didn't touch. The engine's precision against the true blast radius is 0.948 (see RESULTS.md).
+
 ## With Prism vs without — recall gain, token savings, speedup
 
 | Model | Recall (w/o → with) | Token savings | Turns (w/o → with) | Speed |

@@ -87,6 +87,39 @@ def main():
                      f"| {fnum(a['wall'])} |")
     L.append("")
 
+    # ── precision / F1 (derived) ───────────────────────────────────────────
+    # We recorded recall + gt + n_sites (sites submitted), so precision =
+    # (recall*gt)/n_sites is recoverable without a re-run. Answers "did an arm
+    # win recall by over-reporting?" Two honest caveats stated below the table.
+    L.append("## Precision & F1 (derived) — did an arm win recall by over-reporting?\n")
+    L.append("| Model | Arm | Recall | Precision | F1 |")
+    L.append("|---|---|---:|---:|---:|")
+    for m in models:
+        for arm in ARMS:
+            sel = [c for c in cells if c["model"] == m and c["arm"] == arm]
+            if not sel:
+                continue
+            precs, recs = [], []
+            for c in sel:
+                r, gt, ns = c.get("recall"), c.get("gt"), c.get("n_sites")
+                if r is None or not gt:
+                    continue
+                p = min((r * gt) / ns, 1.0) if ns else (1.0 if r == 0 else 0.0)
+                precs.append(p)
+                recs.append(r)
+            mr, mp = med(recs), med(precs)
+            f1 = (2 * mp * mr / (mp + mr)) if (mp and mr and (mp + mr)) else 0.0
+            L.append(f"| {m} | {ARM_LABEL[arm]} | {fnum(mr)} | {fnum(mp)} | {fnum(f1)} |")
+    L.append("")
+    L.append("Prism precision sits at ~0.74–0.92 (not ~0.1), so it is **not** inflating "
+             "recall by dumping the blast radius. Two caveats: (1) derived from "
+             "recall·gt/sites_submitted (n_sites may include a few test sites the exact "
+             "scorer excludes, so this slightly *under*states precision); (2) ground "
+             "truth is the sites the PR *actually changed* — a subset of the full caller "
+             "set `change_impact` returns — so many \"false positives\" are real callers "
+             "that specific PR didn't touch. The engine's precision against the true "
+             "blast radius is 0.948 (see RESULTS.md).\n")
+
     # ── with vs without: savings + deltas ──────────────────────────────────
     L.append("## With Prism vs without — recall gain, token savings, speedup\n")
     L.append("| Model | Recall (w/o → with) | Token savings | Turns (w/o → with) | Speed |")

@@ -289,7 +289,10 @@ def run(arm: str, task: Task, model: str) -> dict:
            "turns": turns, "tokens_in": tok_in, "tokens_out": tok_out,
            "cost_usd": 0.0}
     if answer is not None:
-        rec["recall"] = round(score(task, answer, arm, 1).recall, 3)
+        _sc = score(task, answer, arm, 1)
+        rec["recall"] = round(_sc.recall, 3)
+        rec["precision"] = round(_sc.precision, 3)
+        rec["f1"] = round(_sc.f1, 3)
         rec["n_sites"] = len(answer.sites)
         rec["complete_claim"] = answer.complete
     else:

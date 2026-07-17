@@ -86,7 +86,10 @@ def run_arm(arm: str, task: Task, corpus: Path, model: str) -> dict:
         rec["tokens_in"] = u.get("input_tokens", 0) + u.get("cache_read_input_tokens", 0)
         rec["tokens_out"] = u.get("output_tokens", 0)
         answer = Answer.parse(j.get("result", ""))
-        rec["recall"] = round(score(task, answer, arm, 1).recall, 3)
+        _sc = score(task, answer, arm, 1)
+        rec["recall"] = round(_sc.recall, 3)
+        rec["precision"] = round(_sc.precision, 3)
+        rec["f1"] = round(_sc.f1, 3)
         rec["n_sites"] = len(answer.sites)
         rec["complete_claim"] = answer.complete
     except Exception as e:
