@@ -106,6 +106,23 @@ ARMS = {
             "mcp__prism__prism_read", "mcp__prism__prism_lookup"],
         "mcp": str(CFG_DIR / "prism.json"),
     },
+    # Prism SOURCE DELIVERY -- the feature built for LOCALIZED bug fixes (v0.25):
+    # prism_query returns edit-ready, line-numbered source windows + each anchor's
+    # callers and covering tests, in one call. No change_impact to distract from a
+    # localized fix. This is the arm that tests "does Prism help fix bugs" with the
+    # RIGHT tool (vs prism_gstar, which leads with the wide-blast-radius op).
+    "prism_source": {
+        "guidance": "CONTEXT TOOL: Prism source delivery. Call prism_query(task="
+                    "\"<the bug symptom>\", terms=[a few anchor symbols]) FIRST -- for "
+                    "a bug fix it returns the relevant code as verbatim, LINE-NUMBERED "
+                    "source windows plus each anchor's callers and covering tests, "
+                    "edit-ready. Treat those windows as reads you already did: edit "
+                    "the files directly, do not re-read them. Then build and verify.",
+        "allowed": _EDIT_AND_BUILD + [
+            "mcp__prism__prism_query", "mcp__prism__prism_read",
+            "mcp__prism__prism_lookup", "mcp__prism__prism_edges"],
+        "mcp": str(CFG_DIR / "prism.json"),
+    },
     # CodeGraph -- explore is the one-call peer of prism_query (same altitude).
     "codegraph": {
         "guidance": "CONTEXT TOOL: CodeGraph. codegraph_explore(task/symbol) "

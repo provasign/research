@@ -1,0 +1,29 @@
+diff --git a/src/click/shell_completion.py b/src/click/shell_completion.py
+index b01e290..be46a45 100644
+--- a/src/click/shell_completion.py
++++ b/src/click/shell_completion.py
+@@ -181,7 +181,7 @@ function %(complete_func)s;
+ COMP_CWORD=(commandline -t) %(prog_name)s);
+ 
+     for completion in $response;
+-        set -l metadata (string split \n $completion);
++        set -l metadata (string split -- "\\n" $completion);
+ 
+         if test $metadata[1] = "dir";
+             __fish_complete_directories $metadata[2];
+@@ -427,11 +427,10 @@ class FishComplete(ShellComplete):
+             Escape newlines in value and help to fix completion errors with
+             multi-line help strings.
+         """
+-        # The fish completion script splits each response line on literal
+-        # newlines, so any newline in the value or help would corrupt the
+-        # frame. Replace them with the two-character escape "\n" so the text
+-        # round-trips through fish without breaking the format. The "_"
+-        # sentinel for missing help mirrors :class:`ZshComplete`.
++        # The fish completion script splits each response line on the literal
++        # two-character sequence "\n", so any actual newline in the value or help
++        # would corrupt the frame. Replace them with the escaped sequence so the
++        # text round-trips through fish without breaking the format.
+         help_ = item.help or "_"
+         value = item.value.replace("\n", r"\n")
+         help_escaped = help_.replace("\n", r"\n")

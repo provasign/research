@@ -1,0 +1,46 @@
+diff --git a/src/click/shell_completion.py b/src/click/shell_completion.py
+index b01e290..c5189f9 100644
+--- a/src/click/shell_completion.py
++++ b/src/click/shell_completion.py
+@@ -180,19 +180,29 @@ function %(complete_func)s;
+     set -l response (env %(complete_var)s=fish_complete COMP_WORDS=(commandline -cp) \
+ COMP_CWORD=(commandline -t) %(prog_name)s);
+ 
+-    for completion in $response;
+-        set -l metadata (string split \n $completion);
+-
+-        if test $metadata[1] = "dir";
+-            __fish_complete_directories $metadata[2];
+-        else if test $metadata[1] = "file";
+-            __fish_complete_path $metadata[2];
+-        else if test $metadata[1] = "plain";
+-            if test $metadata[3] != "_";
+-                echo $metadata[2]\t$metadata[3];
+-            else;
+-                echo $metadata[2];
++    set -l lines (string split \\n "$response");
++    set -l i 1;
++    while test $i -le (count $lines);
++        if test (count $lines) -ge (math $i + 2);
++            set -l type $lines[$i];
++            set -l value $lines[(math $i + 1)];
++            set -l help $lines[(math $i + 2)];
++
++            if test "$type" = "dir";
++                __fish_complete_directories "$value";
++            else if test "$type" = "file";
++                __fish_complete_path "$value";
++            else if test "$type" = "plain";
++                if test "$help" != "_";
++                    echo "$value"\\t"$help";
++                else;
++                    echo "$value";
++                end;
+             end;
++
++            set -l i (math $i + 3);
++        else;
++            break;
+         end;
+     end;
+ end;

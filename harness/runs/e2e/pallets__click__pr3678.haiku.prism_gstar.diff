@@ -1,0 +1,68 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index 6de4216..2c0d8db 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -1146,6 +1146,16 @@ class Command:
+         for param in self.params:
+             all_names.difference_update(param.opts)
+             all_names.difference_update(param.secondary_opts)
++            # Also remove help option names that would conflict with existing
++            # parameter names. For example, if there's an argument named 'help',
++            # we shouldn't create a help option '--help' since it would derive
++            # to the name 'help' which would conflict.
++            for help_name in list(all_names):
++                # Derive what the parameter name would be from this option name
++                _prefix, name = _split_opt(help_name)
++                param_name = name.replace("-", "_").lower()
++                if param_name == param.name:
++                    all_names.discard(help_name)
+         return list(all_names)
+ 
+     def get_help_option(self, ctx: Context) -> Option | None:
+diff --git a/tests/test_arguments.py b/tests/test_arguments.py
+index f4b4523..2633d7c 100644
+--- a/tests/test_arguments.py
++++ b/tests/test_arguments.py
+@@ -741,3 +741,42 @@ def test_argument_custom_class_can_override_type_cast_value_and_never_sees_unset
+     result = runner.invoke(cmd, pass_argv)
+     assert not result.exception
+     assert result.exit_code == 0
++
++
++def test_argument_named_help_no_conflict(runner):
++    """Argument named 'help' should not prevent the command from working.
++
++    The automatic help option should be suppressed to avoid a name conflict.
++    """
++    @click.command()
++    @click.argument("help")
++    def cmd(help):
++        click.echo(f"Got: {help}")
++
++    # Should be able to pass a value
++    result = runner.invoke(cmd, ["myvalue"])
++    assert result.exit_code == 0
++    assert "Got: myvalue" in result.output
++
++    # --help should not be available (no automatic help due to conflict)
++    result = runner.invoke(cmd, ["--help"])
++    assert result.exit_code != 0
++    assert "No such option: --help" in result.output or "no such option" in result.output.lower()
++
++
++def test_option_named_help_no_automatic_help(runner):
++    """Option named '--help' should suppress the automatic help option."""
++    @click.command()
++    @click.option("--help", default="default_value")
++    def cmd(help):
++        click.echo(f"Got: {help}")
++
++    # Should use the default value
++    result = runner.invoke(cmd, [])
++    assert result.exit_code == 0
++    assert "Got: default_value" in result.output
++
++    # Option should take precedence, no automatic help available
++    result = runner.invoke(cmd, ["--help", "custom_value"])
++    assert result.exit_code == 0
++    assert "Got: custom_value" in result.output
