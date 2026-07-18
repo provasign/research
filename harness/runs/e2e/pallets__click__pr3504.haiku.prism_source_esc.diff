@@ -1,0 +1,33 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index bc04f64..11b0a3a 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -110,6 +110,19 @@ def _format_deprecated_suffix(deprecated: bool | str) -> str:
+     return ""
+ 
+ 
++def _process_help_for_completion(help_text: str | None) -> str | None:
++    """Process help text for shell completion by stripping the \\b marker
++    that indicates non-reformattable text. The \\b marker is used by
++    Click's help formatter but should not appear in completion output.
++    """
++    if help_text is None:
++        return None
++    lines = help_text.split("\n", 1)
++    if lines[0].strip() == "\b":
++        return lines[1] if len(lines) > 1 else None
++    return help_text
++
++
+ def batch(iterable: cabc.Iterable[V], batch_size: int) -> list[tuple[V, ...]]:
+     return list(zip(*repeat(iter(iterable), batch_size), strict=False))
+ 
+@@ -1337,7 +1350,7 @@ class Command:
+                     continue
+ 
+                 results.extend(
+-                    CompletionItem(name, help=param.help)
++                    CompletionItem(name, help=_process_help_for_completion(param.help))
+                     for name in [*param.opts, *param.secondary_opts]
+                     if name.startswith(incomplete)
+                 )

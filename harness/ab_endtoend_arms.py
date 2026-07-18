@@ -123,6 +123,27 @@ ARMS = {
             "mcp__prism__prism_lookup", "mcp__prism__prism_edges"],
         "mcp": str(CFG_DIR / "prism.json"),
     },
+    # prism_source + FAILURE-GATED ESCALATION (change B). Same focused source
+    # delivery, but if the fix fails its tests, widen: grep the surrounding code
+    # and read the failing test to check whether the correct fix is broader than
+    # the anchor. Gated behind an observed test failure, so it is a strict no-op
+    # on any fix that passes first try -- can't regress the good tasks by design.
+    "prism_source_esc": {
+        "guidance": ("CONTEXT TOOL: Prism source delivery. Call prism_query(task="
+                    "\"<the bug symptom>\", terms=[a few anchor symbols]) FIRST -- for "
+                    "a bug fix it returns the relevant code as verbatim, LINE-NUMBERED "
+                    "source windows plus each anchor's callers and covering tests, "
+                    "edit-ready. Treat those windows as reads you already did: edit "
+                    "the files directly, do not re-read them. Then run the tests. IF "
+                    "THEY STILL FAIL, do not just keep tweaking the same lines -- grep "
+                    "the surrounding code and read the failing test to check whether the "
+                    "correct fix is WIDER than what you changed (a shared format, "
+                    "protocol, or contract used elsewhere). Widen, then fix."),
+        "allowed": _EDIT_AND_BUILD + [
+            "mcp__prism__prism_query", "mcp__prism__prism_read",
+            "mcp__prism__prism_lookup", "mcp__prism__prism_edges"],
+        "mcp": str(CFG_DIR / "prism.json"),
+    },
     # CodeGraph -- explore is the one-call peer of prism_query (same altitude).
     "codegraph": {
         "guidance": "CONTEXT TOOL: CodeGraph. codegraph_explore(task/symbol) "

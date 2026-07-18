@@ -1,0 +1,41 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index 19fae4a..f11651e 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -471,9 +471,14 @@ class CliRunner:
+             errors="backslashreplace",
+         )
+ 
++        default_color = color
++
+         @_pause_echo(echo_input)  # type: ignore
+         def visible_input(prompt: str | None = None) -> str:
+-            sys.stdout.write(prompt or "")
++            prompt_text = prompt or ""
++            if not default_color:
++                prompt_text = _compat.strip_ansi(prompt_text)
++            sys.stdout.write(prompt_text)
+             try:
+                 val = next(text_input).rstrip("\r\n")
+             except StopIteration as e:
+@@ -484,7 +489,10 @@ class CliRunner:
+ 
+         @_pause_echo(echo_input)  # type: ignore
+         def hidden_input(prompt: str | None = None) -> str:
+-            sys.stdout.write(f"{prompt or ''}\n")
++            prompt_text = prompt or ""
++            if not default_color:
++                prompt_text = _compat.strip_ansi(prompt_text)
++            sys.stdout.write(f"{prompt_text}\n")
+             sys.stdout.flush()
+             try:
+                 return next(text_input).rstrip("\r\n")
+@@ -501,8 +509,6 @@ class CliRunner:
+             sys.stdout.flush()
+             return char
+ 
+-        default_color = color
+-
+         def should_strip_ansi(
+             stream: t.IO[t.Any] | None = None, color: bool | None = None
+         ) -> bool:
