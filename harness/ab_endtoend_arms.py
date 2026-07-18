@@ -123,6 +123,25 @@ ARMS = {
             "mcp__prism__prism_lookup", "mcp__prism__prism_edges"],
         "mcp": str(CFG_DIR / "prism.json"),
     },
+    # prism_source + UPFRONT HEDGE (change A). Licenses grep for contract-wide
+    # fixes BEFORE acting -- the agent judges upfront whether the fix is broad.
+    # NOT failure-gated: the clause is in effect on every fix, so this is the arm
+    # that tests whether A's upfront judgment taxes/regresses the localized fixes
+    # that already pass (the risk B avoids by gating behind an observed failure).
+    "prism_source_a": {
+        "guidance": ("CONTEXT TOOL: Prism source delivery. Call prism_query(task="
+                    "\"<the bug symptom>\", terms=[a few anchor symbols]) FIRST -- for "
+                    "a bug fix it returns the relevant code as verbatim, LINE-NUMBERED "
+                    "source windows plus each anchor's callers and covering tests, "
+                    "edit-ready. These are the anchor and its immediate context; do not "
+                    "re-read them. BUT if the fix touches behavior beyond what is shown "
+                    "(a shared format, protocol, or contract used elsewhere), grep to "
+                    "map the full extent BEFORE editing. Then edit and verify."),
+        "allowed": _EDIT_AND_BUILD + [
+            "mcp__prism__prism_query", "mcp__prism__prism_read",
+            "mcp__prism__prism_lookup", "mcp__prism__prism_edges"],
+        "mcp": str(CFG_DIR / "prism.json"),
+    },
     # prism_source + FAILURE-GATED ESCALATION (change B). Same focused source
     # delivery, but if the fix fails its tests, widen: grep the surrounding code
     # and read the failing test to check whether the correct fix is broader than
