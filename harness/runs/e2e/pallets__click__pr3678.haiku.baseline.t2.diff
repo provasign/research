@@ -1,0 +1,67 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index 6de4216..c07b379 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -1146,6 +1146,13 @@ class Command:
+         for param in self.params:
+             all_names.difference_update(param.opts)
+             all_names.difference_update(param.secondary_opts)
++            # Also check if the parameter name conflicts with derived help option names.
++            # For example, if a parameter is named 'help', it conflicts with '--help'.
++            for help_name in list(all_names):
++                _, opt_name = _split_opt(help_name)
++                derived_param_name = opt_name.replace("-", "_").lower()
++                if param.name == derived_param_name:
++                    all_names.discard(help_name)
+         return list(all_names)
+ 
+     def get_help_option(self, ctx: Context) -> Option | None:
+diff --git a/tests/test_arguments.py b/tests/test_arguments.py
+index f4b4523..4b1bec6 100644
+--- a/tests/test_arguments.py
++++ b/tests/test_arguments.py
+@@ -741,3 +741,44 @@ def test_argument_custom_class_can_override_type_cast_value_and_never_sees_unset
+     result = runner.invoke(cmd, pass_argv)
+     assert not result.exception
+     assert result.exit_code == 0
++
++
++def test_argument_named_help(runner):
++    """Test that an argument named 'help' doesn't interfere with auto-generated help option.
++
++    When a command has an argument named 'help', the automatic '--help' option
++    should not be added to prevent naming conflicts. Positional arguments should
++    work correctly.
++    """
++    @click.command()
++    @click.argument("help")
++    def cmd(help):
++        click.echo(f"help={help}")
++
++    # Test positional argument works
++    result = runner.invoke(cmd, ["value"])
++    assert result.exit_code == 0
++    assert "help=value" in result.output
++
++    # Test --help is not available (since there's a parameter named 'help')
++    result = runner.invoke(cmd, ["--help"])
++    assert result.exit_code == 2
++    assert "No such option '--help'" in result.output
++
++
++def test_option_named_help(runner):
++    """Test that an option named '--help' prevents auto-generated help option."""
++    @click.command()
++    @click.option("--help", default="default_value")
++    def cmd(help):
++        click.echo(f"help={help}")
++
++    # Test the custom --help option works
++    result = runner.invoke(cmd, ["--help", "custom_value"])
++    assert result.exit_code == 0
++    assert "help=custom_value" in result.output
++
++    # Test --help without value (should fail since it's a required option)
++    result = runner.invoke(cmd, ["--help"])
++    assert result.exit_code == 2
++    assert "Option '--help' requires an argument" in result.output

@@ -1,0 +1,17 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index 6de4216..09ec710 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -1146,6 +1146,12 @@ class Command:
+         for param in self.params:
+             all_names.difference_update(param.opts)
+             all_names.difference_update(param.secondary_opts)
++            # Also check if parameter name conflicts with help option names.
++            # This handles cases like @click.argument('help') where the parameter
++            # name is 'help' but its opts is ['help'] (without dashes).
++            for opt in ctx.help_option_names:
++                if param.name and opt.lstrip("-") == param.name:
++                    all_names.discard(opt)
+         return list(all_names)
+ 
+     def get_help_option(self, ctx: Context) -> Option | None:

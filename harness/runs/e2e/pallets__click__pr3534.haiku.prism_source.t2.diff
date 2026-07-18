@@ -1,0 +1,39 @@
+diff --git a/src/click/termui.py b/src/click/termui.py
+index 91ef6e1..ed72354 100644
+--- a/src/click/termui.py
++++ b/src/click/termui.py
+@@ -346,6 +346,7 @@ def echo_via_pager(
+     with get_pager_file(color=color) as pager:
+         for text in itertools.chain(text_generator, "\n"):
+             pager.write(text)
++            pager.flush()
+ 
+ 
+ @t.overload
+diff --git a/test_generator_fix.py b/test_generator_fix.py
+new file mode 100644
+index 0000000..c94b6e8
+--- /dev/null
++++ b/test_generator_fix.py
+@@ -0,0 +1,21 @@
++#!/usr/bin/env python3
++"""Test that echo_via_pager streams output from generators correctly."""
++import time
++import click
++import sys
++
++def count_generator():
++    """Simulate the user's reported issue - a generator that yields slowly."""
++    for i in range(5):
++        time.sleep(0.5)
++        yield f"\ncount {i}"
++
++if __name__ == "__main__":
++    # Use cat as the pager to see output in real-time
++    import os
++    os.environ["PAGER"] = "cat"
++
++    print("Testing generator streaming with echo_via_pager...", file=sys.stderr)
++    print("Output should appear progressively, not all at once:", file=sys.stderr)
++
++    click.echo_via_pager(count_generator())

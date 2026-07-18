@@ -1,0 +1,45 @@
+diff --git a/src/click/termui.py b/src/click/termui.py
+index 91ef6e1..8147bb6 100644
+--- a/src/click/termui.py
++++ b/src/click/termui.py
+@@ -344,8 +344,9 @@ def echo_via_pager(
+     text_generator = (el if isinstance(el, str) else str(el) for el in i)
+ 
+     with get_pager_file(color=color) as pager:
+-        for text in itertools.chain(text_generator, "\n"):
++        for text in itertools.chain(text_generator, ["\n"]):
+             pager.write(text)
++            pager.flush()
+ 
+ 
+ @t.overload
+diff --git a/test_generator_pager.py b/test_generator_pager.py
+new file mode 100644
+index 0000000..071ceec
+--- /dev/null
++++ b/test_generator_pager.py
+@@ -0,0 +1,24 @@
++#!/usr/bin/env python3
++"""Test script to verify echo_via_pager works with generators."""
++import time
++import click
++import sys
++
++def count():
++    """Generator that yields items with delay, simulating the original issue."""
++    for i in range(5):
++        time.sleep(0.5)
++        yield f"count {i}\n"
++
++def count_no_sleep():
++    """Generator that yields items without delay."""
++    for i in range(5):
++        yield f"count {i}\n"
++
++if __name__ == "__main__":
++    if len(sys.argv) > 1 and sys.argv[1] == "sleep":
++        print("Testing with delayed generator (should show output as it comes)...")
++        click.echo_via_pager(count())
++    else:
++        print("Testing with immediate generator...")
++        click.echo_via_pager(count_no_sleep())

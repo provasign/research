@@ -1,0 +1,41 @@
+diff --git a/src/click/termui.py b/src/click/termui.py
+index 91ef6e1..ed72354 100644
+--- a/src/click/termui.py
++++ b/src/click/termui.py
+@@ -346,6 +346,7 @@ def echo_via_pager(
+     with get_pager_file(color=color) as pager:
+         for text in itertools.chain(text_generator, "\n"):
+             pager.write(text)
++            pager.flush()
+ 
+ 
+ @t.overload
+diff --git a/test_generator_fix.py b/test_generator_fix.py
+new file mode 100644
+index 0000000..c4aae08
+--- /dev/null
++++ b/test_generator_fix.py
+@@ -0,0 +1,23 @@
++#!/usr/bin/env python3
++"""Test that echo_via_pager works correctly with generators that have delays."""
++
++import time
++import click
++import sys
++
++def count_generator():
++    """Generator that yields items with delays, simulating the issue."""
++    for i in range(3):
++        time.sleep(0.1)  # Small delay to simulate slow generator
++        yield f"Item {i}\n"
++
++if __name__ == "__main__":
++    # This test demonstrates that the fix allows output to be displayed
++    # as items are yielded, not all at once after all items are generated
++    print("Testing echo_via_pager with a generator that has delays...")
++    print("Each item should appear immediately as it's yielded:")
++    print()
++
++    click.echo_via_pager(count_generator())
++
++    print("Test completed!")

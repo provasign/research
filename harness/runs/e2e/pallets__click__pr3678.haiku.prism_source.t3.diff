@@ -1,0 +1,104 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index 6de4216..fd74b9b 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -1146,6 +1146,12 @@ class Command:
+         for param in self.params:
+             all_names.difference_update(param.opts)
+             all_names.difference_update(param.secondary_opts)
++            # Also check if the parameter name conflicts with any help option name.
++            # For "--help", a parameter named "help" should conflict.
++            for help_option_name in list(all_names):
++                _, base_name = _split_opt(help_option_name)
++                if param.name == base_name:
++                    all_names.discard(help_option_name)
+         return list(all_names)
+ 
+     def get_help_option(self, ctx: Context) -> Option | None:
+diff --git a/tests/test_commands.py b/tests/test_commands.py
+index 35ba65c..365f33e 100644
+--- a/tests/test_commands.py
++++ b/tests/test_commands.py
+@@ -648,3 +648,82 @@ def test_suggest_possible_commands(runner, value, expect):
+ 
+     result = runner.invoke(cli, [value])
+     assert expect in result.output
++
++
++def test_help_option_automatic_conflict_resolution(runner):
++    """Test that the help option automatically resolves conflicts with arguments.
++
++    When a parameter is named 'help' (with or without dashes), the automatic
++    help option should be disabled to avoid conflicts.
++    """
++    # Test: argument named 'help' should disable the help option
++    @click.command()
++    @click.argument("help")
++    def cmd_arg_help(help):
++        click.echo(f"help={help}")
++
++    # The argument accepts a value
++    result = runner.invoke(cmd_arg_help, ["value"])
++    assert result.exit_code == 0
++    assert result.output == "help=value\n"
++
++    # --help is treated as the argument value (not the help flag)
++    result = runner.invoke(cmd_arg_help, ["--help"])
++    assert result.exit_code == 2
++
++    # Test: argument named differently should allow help
++    @click.command()
++    @click.argument("something")
++    def cmd_arg_other(something):
++        click.echo(f"something={something}")
++
++    # The --help flag works
++    result = runner.invoke(cmd_arg_other, ["--help"])
++    assert result.exit_code == 0
++    assert "Usage:" in result.output
++
++    # Test: option named '--help' should disable the help option
++    @click.command()
++    @click.option("--help", default="default")
++    def cmd_opt_help(help):
++        click.echo(f"help={help}")
++
++    # The option accepts a value
++    result = runner.invoke(cmd_opt_help, ["--help", "value"])
++    assert result.exit_code == 0
++    assert result.output == "help=value\n"
++
++    # Without the value, it uses the default
++    result = runner.invoke(cmd_opt_help, [])
++    assert result.exit_code == 0
++    assert result.output == "help=default\n"
++
++
++def test_get_help_option_names_with_conflicts(runner):
++    """Test get_help_option_names correctly handles parameter name conflicts."""
++    # Test with argument named 'help'
++    @click.command()
++    @click.argument("help")
++    def cmd1(help):
++        pass
++
++    ctx = click.Context(cmd1)
++    assert cmd1.get_help_option_names(ctx) == []
++
++    # Test with argument named 'something_else'
++    @click.command()
++    @click.argument("something_else")
++    def cmd2(something_else):
++        pass
++
++    ctx = click.Context(cmd2)
++    assert cmd2.get_help_option_names(ctx) == ["--help"]
++
++    # Test with option '--help'
++    @click.command()
++    @click.option("--help", default="value")
++    def cmd3(help):
++        pass
++
++    ctx = click.Context(cmd3)
++    assert cmd3.get_help_option_names(ctx) == []

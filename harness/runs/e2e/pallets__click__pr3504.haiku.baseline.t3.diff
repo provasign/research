@@ -1,0 +1,16 @@
+diff --git a/src/click/shell_completion.py b/src/click/shell_completion.py
+index b01e290..621da00 100644
+--- a/src/click/shell_completion.py
++++ b/src/click/shell_completion.py
+@@ -433,6 +433,11 @@ class FishComplete(ShellComplete):
+         # round-trips through fish without breaking the format. The "_"
+         # sentinel for missing help mirrors :class:`ZshComplete`.
+         help_ = item.help or "_"
++        # Strip the Click-specific formatting marker from the start of help text.
++        # The marker is a backspace character that tells formatters not to rewrap text.
++        # It's only meaningful for CLI help display, not shell completion.
++        if help_ != "_" and help_.startswith("\b"):
++            help_ = help_[1:].lstrip()
+         value = item.value.replace("\n", r"\n")
+         help_escaped = help_.replace("\n", r"\n")
+         return f"{item.type}\n{value}\n{help_escaped}"

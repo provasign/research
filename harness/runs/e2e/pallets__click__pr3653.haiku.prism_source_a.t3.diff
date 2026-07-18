@@ -1,0 +1,34 @@
+diff --git a/src/click/termui.py b/src/click/termui.py
+index e5e9678..8606684 100644
+--- a/src/click/termui.py
++++ b/src/click/termui.py
+@@ -12,6 +12,7 @@ from contextlib import redirect_stdout
+ from gettext import gettext as _
+ 
+ from ._compat import isatty
++from ._compat import should_strip_ansi
+ from ._compat import strip_ansi
+ from .exceptions import Abort
+ from .exceptions import UsageError
+@@ -202,6 +203,11 @@ def prompt(
+ 
+         confirmation_prompt = _build_prompt(confirmation_prompt, prompt_suffix)
+ 
++    if should_strip_ansi(color=resolve_color_default()):
++        prompt = strip_ansi(prompt)
++        if confirmation_prompt:
++            confirmation_prompt = strip_ansi(confirmation_prompt)
++
+     while True:
+         while True:
+             value = prompt_func(prompt)
+@@ -267,6 +273,9 @@ def confirm(
+         "y/n" if default is None else ("Y/n" if default else "y/N"),
+     )
+ 
++    if should_strip_ansi(color=resolve_color_default()):
++        prompt = strip_ansi(prompt)
++
+     while True:
+         try:
+             value = _readline_prompt(visible_prompt_func, prompt, err).lower().strip()
