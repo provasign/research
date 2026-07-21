@@ -207,9 +207,22 @@ or CI sees it — not on OSS history that has already passed through exactly
 the gate verify replaces. Mining human main branches for verify's value is
 looking where the light already is. The honest real-world validation is to
 run the same replay against an AGENT's raw diff stream (pre-CI), which is the
-documented next step. The miner (`harness/oops_pairs.py`) is the reusable
-instrument for it. Seeded-edit recall (88%, §above) remains the standing
-measured number; real-world recall awaits an ungated diff source.
+documented next step. Three independent free paths to a real-world number
+were tried and all returned nulls with the SAME root cause — the
+incompleteness verify targets requires a capable agent making a genuine
+fan-out edit:
+  1. OSS history (typeorm/jackson/commons-lang/netty): forgotten-caller
+     pairs already gated away by CI before merge.
+  2. 65 cached ungated agent diffs (e2e click tasks): ZERO changed a
+     function signature — bug fixes, not verify's domain.
+  3. Local 30B on a signature-change EDIT task (mason ungated via
+     MASON_SKIP_VERIFY_GATE): the model could not execute the fan-out edit
+     at all — misread it, ran tests in circles, edited nothing.
+The real-world measurement needs a FRONTIER agent producing genuine
+fan-out edit diffs (which forget sites at the measured 0.62-0.75 rate) —
+gated behind API credits. Seeded-edit recall (88%) remains the standing
+number; the instruments (miner + MASON_SKIP_VERIFY_GATE + verify replay)
+are ready the moment a credited agent diff stream exists.
 
 ## 6 · Where each result comes from
 
