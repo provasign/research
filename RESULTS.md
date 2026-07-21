@@ -134,10 +134,16 @@ Verdicts are **fail-closed 36/36** (28 incomplete, 8 review, 0 false
 "complete") — after fixing three fail-open holes the first run exposed
 (empty post-edit blast radius; subdir work-roots (guava/guava) path-mismatch;
 TS/Go declaration-block member changes never seeded). Site-level catch:
-137/420 forgotten files (guava 89%, django 100%, jackson-serialize 9%) — the
-post-edit graph cannot enumerate dependents of the OLD contract where the
-edit severs signature binding. Open item: base-contract enumeration.
-Positioning: trust the verdict; the site list is a head start.
+137/420 forgotten files pre-fix. **Base-contract enumeration landed the same
+day (prism v0.28.0)**: dependents of the OLD signature recovered via
+base-parameter-list family match + their still-resolved callers — catch
+**33% → 60%** (querydata 8→91%, checkhealth 95%, jsonnode/django 100%,
+guava 96%), verdicts fail-closed throughout (raw:
+`harness/runs/verify-bench/final-base-contract.log`). Remaining gaps,
+disclosed: Java generic params defeat verbatim matching (serialize 12%);
+declaration-block members (typeorm) stay at review; grafana/django trial
+false flags are unaudited (bench-artifact share unknown).
+Positioning: trust the verdict; the site list is a strong head start.
 
 ### Mason + free local model — the headline (`runs/mason-bench/`, 2 trials/task)
 
