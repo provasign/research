@@ -100,6 +100,56 @@ therefore has **no citable number yet**. The citable path is documented in
 the PR-replay report: compiler-as-oracle on verified refactors, or a live
 pipeline on fresh PRs that post-date model training cutoffs.
 
+
+## 7 · 2026-07-20 — the task compiler, the verify gate, and the mason+local headline
+
+All runs oracle-scored on the 9-task bed (Java/Go/TS/Py, 8–310 sites), cached
+under `harness/runs/`. Drivers: `harness/ab_unified.py`, `harness/ab_phrasing.py`,
+`harness/ab_phrasing2.py`, `harness/verify_bench.py`, `harness/mason_bench.py`.
+
+### Unified `prism(task)` tool, three model tiers (`runs/ab-unified/`, 3 trials/cell)
+
+| model | grep baseline | unified prism | direct change_impact |
+|---|---|---|---|
+| Haiku  | 0.721 @ 1,592k tok | **0.896 @ 104k** | 0.869 @ 226k |
+| Sonnet | 0.877 @ 1,441k | 0.875 @ 279k | 0.955 @ 488k |
+| Opus   | 0.958 @ 552k | **0.983 @ 113k** | 0.987 @ 203k |
+
+Cheap tier: capability win (+0.175 recall, 15× fewer tokens). Frontier:
+economics win (recall ~ties, 5× fewer tokens). Sonnet wart: occasionally
+answers in 1 turn without calling the tool (the measured discretion problem).
+
+### Phrasing sensitivity (`runs/ab-phrasing*/`)
+
+Stripping the target symbol from the task collapses tool-only retrieval
+(grafana 0.941 → 0.007 when the agent is FORBIDDEN from rephrasing/grepping).
+A GUESSED term for a common name hurts (jackson 0.837 → 0.565). Natural agent
+behavior — investigate, form its own task string, pass CONFIRMED terms —
+recovers most of it (0.02 → 0.61 on the same vague prompts). Steering now
+says: confirmed anchors, never guessed terms.
+
+### Verify at corpus scale (`runs/verify-bench/`, seeded incomplete edits, 3 trials + control × 9 corpora)
+
+Verdicts are **fail-closed 36/36** (28 incomplete, 8 review, 0 false
+"complete") — after fixing three fail-open holes the first run exposed
+(empty post-edit blast radius; subdir work-roots (guava/guava) path-mismatch;
+TS/Go declaration-block member changes never seeded). Site-level catch:
+137/420 forgotten files (guava 89%, django 100%, jackson-serialize 9%) — the
+post-edit graph cannot enumerate dependents of the OLD contract where the
+edit severs signature binding. Open item: base-contract enumeration.
+Positioning: trust the verdict; the site list is a head start.
+
+### Mason + free local model — the headline (`runs/mason-bench/`, 2 trials/task)
+
+**mason v0.27.0 + qwen3-coder:30b (local, $0): mean recall 0.989, median
+1.000, mean input 16k tokens** — above every measured cloud arm (best:
+Opus+unified 0.983 @ 113k). Scoring is the narrated engine relay — mason's
+payload isolation keeps graph payloads out of the model's context by design,
+and the model's own JSON recitation hallucinates paths when asked to retype
+the list (measured; that failure is what payload isolation exists to
+prevent). Precision 0.48–1.0: the relay includes the full family
+(declaringTypes, tests) beyond the oracle's caller set.
+
 ## 6 · Where each result comes from
 
 | claim | source | raw data |
@@ -112,3 +162,7 @@ pipeline on fresh PRs that post-date model training cutoffs.
 | Local-tier result (change_impact) | `harness/AB-CODEGRAPH.md` §4 | `harness/runs/*/qwen3-coder-30b-gstar/` |
 | Local CLIs (OpenCode/Continue) | `harness/AB-LOCAL-CLIS.md` | `harness/runs/` |
 | Contamination measurement | `harness/SWEBENCH-AB-RESULTS.md` | `harness/runs/swebench-20/` |
+| Unified-tool 3-tier grid | §7 above | `harness/runs/ab-unified/` |
+| Phrasing sensitivity | §7 above | `harness/runs/ab-phrasing/`, `ab-phrasing2/` |
+| Verify corpus bench | §7 above | `harness/runs/verify-bench/` |
+| Mason+local 0.989 | §7 above | `harness/runs/mason-bench/` |
