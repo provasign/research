@@ -1,0 +1,36 @@
+diff --git a/src/click/shell_completion.py b/src/click/shell_completion.py
+index b01e290..59373fe 100644
+--- a/src/click/shell_completion.py
++++ b/src/click/shell_completion.py
+@@ -426,6 +426,8 @@ class FishComplete(ShellComplete):
+         .. versionchanged:: 8.4.0
+             Escape newlines in value and help to fix completion errors with
+             multi-line help strings.
++        .. versionchanged:: 8.1.7
++            Fix handling of literal newlines in help text for fish completion.
+         """
+         # The fish completion script splits each response line on literal
+         # newlines, so any newline in the value or help would corrupt the
+diff --git a/test_multiline_help.py b/test_multiline_help.py
+new file mode 100644
+index 0000000..320ffa3
+--- /dev/null
++++ b/test_multiline_help.py
+@@ -0,0 +1,16 @@
++import click
++
++@click.command()
++@click.option(
++    "--at",
++    "--attachment-type",
++    type=(str, str),
++    multiple=True,
++    callback=lambda ctx, param, value: value,
++    help="\b\nAttachment with explicit mimetype,\n--at image.jpg image/jpeg",
++)
++def cli():
++    pass
++
++if __name__ == "__main__":
++    cli()
+\ No newline at end of file

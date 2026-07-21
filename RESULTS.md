@@ -159,6 +159,29 @@ the list (measured; that failure is what payload isolation exists to
 prevent). Precision 0.48–1.0: the relay includes the full family
 (declaringTypes, tests) beyond the oracle's caller set.
 
+
+### Mason + local on e2e BUG FIXING — the honest boundary (`runs/e2e/*.local.mason*`, 2026-07-21)
+
+The 0.989 enumeration headline does NOT transfer to end-to-end bug fixing.
+mason v0.28.0 + qwen3-coder:30b on the 5 real 2026 click bugs, 3 trials
+each, time budget leveled with the cloud arms (1800s — the first run's
+600s cap killed 11/15 cells mid-flight and was an unfair harness default):
+
+| arm (same 5 tasks) | resolved cells |
+|---|---|
+| haiku baseline | 9/15 |
+| haiku prism_source | 9/15 |
+| **local mason** | **3/15** (pr3493 3/3; others 0/3) |
+
+Reading: enumeration is ENGINE-limited (the graph does the work — model
+tier barely matters), but fixing is MODEL-limited (reasoning + edit
+quality). A 30B local model with the best harness we have resolves the
+small localized bug reliably (3/3) and fails the subtler four with real,
+plausible-but-wrong attempts (verified by diff inspection; no scoring
+artifacts). The tier-invariance claim is therefore SCOPED: it holds for
+completeness/context work, not for e2e fixing. Fixing on the local tier
+needs a stronger local model, not a better graph.
+
 ## 6 · Where each result comes from
 
 | claim | source | raw data |

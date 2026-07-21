@@ -1,0 +1,109 @@
+diff --git a/src/click/utils.py b/src/click/utils.py
+index 223d6b8..4f1a9a0 100644
+--- a/src/click/utils.py
++++ b/src/click/utils.py
+@@ -294,7 +294,7 @@ def echo(
+         out = message
+ 
+     if nl:
+-        out = out or ""
++        out = "" if out is None else out
+         if isinstance(out, str):
+             out += "\n"
+         else:
+diff --git a/test_bug.py b/test_bug.py
+new file mode 100644
+index 0000000..31dfe51
+--- /dev/null
++++ b/test_bug.py
+@@ -0,0 +1,9 @@
++import io
++import click
++
++# This should reproduce the bug
++try:
++    click.echo(b'', io.BytesIO(), nl=True)
++    print("No error occurred")
++except Exception as e:
++    print(f"Error: {type(e).__name__}: {e}")
+\ No newline at end of file
+diff --git a/test_echo_logic.py b/test_echo_logic.py
+new file mode 100644
+index 0000000..aa3b8d9
+--- /dev/null
++++ b/test_echo_logic.py
+@@ -0,0 +1,39 @@
++#!/usr/bin/env python3
++
++# Test various edge cases for echo function logic
++
++def simulate_echo_logic(message):
++    """Simulate the fixed echo function logic"""
++    
++    # Convert non bytes/text into the native string type.
++    if message is not None and not isinstance(message, (str, bytes, bytearray)):
++        out = str(message)
++    else:
++        out = message
++    
++    print(f"Original message: {repr(message)}")
++    print(f"After conversion: {repr(out)}")
++    
++    # This is the fixed logic
++    nl = True  # Test with nl=True as in the bug report
++    if nl:
++        out = "" if out is None else out 
++        print(f"After nl handling: {repr(out)}")
++        print(f"Type after nl handling: {type(out)}")
++        if isinstance(out, str):
++            out += "\n"
++            print("Appended string newline")
++        else:
++            out += b"\n"
++            print("Appended bytes newline")
++    
++    print(f"Final result: {repr(out)}")
++    print("---")
++
++if __name__ == "__main__":
++    # Test cases
++    simulate_echo_logic(None)
++    simulate_echo_logic(b"")
++    simulate_echo_logic("")
++    simulate_echo_logic(b"hello")
++    simulate_echo_logic("hello")
+\ No newline at end of file
+diff --git a/test_logic.py b/test_logic.py
+new file mode 100644
+index 0000000..a31a747
+--- /dev/null
++++ b/test_logic.py
+@@ -0,0 +1,27 @@
++#!/usr/bin/env python3
++
++# Test the logic of the echo function fix
++
++def test_logic():
++    # Case 1: message = None
++    message = None
++    out = message if message is not None else ""
++    print(f"message=None, out={repr(out)}")
++    
++    # Case 2: message = b""
++    message = b""
++    out = message if message is not None else ""
++    print(f"message=b'', out={repr(out)}")
++    
++    # Case 3: message = ""
++    message = ""
++    out = message if message is not None else ""
++    print(f"message='', out={repr(out)}")
++    
++    # Case 4: message = b"hello"
++    message = b"hello"
++    out = message if message is not None else ""
++    print(f"message=b'hello', out={repr(out)}")
++
++if __name__ == "__main__":
++    test_logic()
+\ No newline at end of file

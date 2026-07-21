@@ -103,8 +103,11 @@ def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
 
 def _run_mason(wt: Path, task) -> dict:
     """The competent-local-harness arm: mason (Prism baked in, self-indexes).
-    Output is teed to a visible per-cell log; capped at 10 min so a thrashing
-    cell is recorded as unresolved instead of blocking the whole run."""
+    Output is teed to a visible per-cell log; capped at 30 min — the SAME
+    budget the cloud arms get (subprocess timeout 1800). The old 600s cap
+    killed 11/15 mason v0.28 cells mid-flight: the completeness gate and
+    prepare obligations do strictly more engine work per task, and a slow
+    local model pays for it in wall-clock, not correctness."""
     prompt = task["problem_statement"] + TASK_TAIL
     log = OUT / f"{task['instance_id']}.mason.transcript.txt"
     t0 = time.monotonic()
@@ -113,7 +116,7 @@ def _run_mason(wt: Path, task) -> dict:
         p = subprocess.Popen(["mason", "--yes", "--model", "ollama:qwen3-coder:30b",
                               prompt], cwd=wt, stdout=fh, stderr=subprocess.STDOUT, text=True)
         try:
-            p.wait(timeout=600)
+            p.wait(timeout=1800)
         except subprocess.TimeoutExpired:
             p.kill(); p.wait(); timed_out = True
     return {"wall_s": round(time.monotonic() - t0, 1), "timed_out": timed_out,

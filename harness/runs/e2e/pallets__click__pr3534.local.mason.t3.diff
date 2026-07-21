@@ -1,0 +1,32 @@
+diff --git a/src/click/termui.py b/src/click/termui.py
+index 91ef6e1..3adea76 100644
+--- a/src/click/termui.py
++++ b/src/click/termui.py
+@@ -340,12 +340,22 @@ def echo_via_pager(
+     else:
+         i = iter(t.cast("cabc.Iterable[str]", text_or_generator))
+ 
+-    # convert every element of i to a text type if necessary
+-    text_generator = (el if isinstance(el, str) else str(el) for el in i)
+-
+     with get_pager_file(color=color) as pager:
+-        for text in itertools.chain(text_generator, "\n"):
+-            pager.write(text)
++        # For generators, we need to write each yielded value immediately
++        # to support the case where a generator yields some values and then
++        # raises an exception (the yielded values should be written before
++        # the exception propagates)
++        if inspect.isgeneratorfunction(text_or_generator):
++            for el in i:
++                # convert element to text type if necessary
++                text = el if isinstance(el, str) else str(el)
++                pager.write(text)
++        else:
++            # For non-generator iterables, we can use the original approach
++            # convert every element of i to a text type if necessary
++            text_generator = (el if isinstance(el, str) else str(el) for el in i)
++            for text in itertools.chain(text_generator, "\n"):
++                pager.write(text)
+ 
+ 
+ @t.overload
