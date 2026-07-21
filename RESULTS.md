@@ -182,6 +182,35 @@ artifacts). The tier-invariance claim is therefore SCOPED: it holds for
 completeness/context work, not for e2e fixing. Fixing on the local tier
 needs a stronger local model, not a better graph.
 
+
+### Real-world verify recall — the oops-pair hunt, and what it found (`harness/oops_pairs.py`, 2026-07-21)
+
+To get a NON-synthetic verify recall number we built a miner for
+"oops-pairs": a commit A that changed a method signature, followed within a
+window by a commit B that fixed a CALL SITE A forgot — the human noticing a
+missed caller. Replay verify at A vs A^; does it flag what B later fixed?
+
+**The dominant finding is a null result, and it is informative.** Across
+600 commits each of typeorm (TS), jackson-databind / commons-lang / netty
+(Java, 8k-14k commits available), signature-change-with-forgotten-caller
+pairs are RARE on mature main branches — because CI and code review already
+catch forgotten callers before merge. The naturally-occurring "missed site"
+incidents that DO appear (e.g. typeorm 8a51e304: "the metadata classes were
+missed — their .connection property was renamed in #12249") are mostly
+PROPERTY renames handled by codemod campaigns, not method-signature changes
+with un-updated callers. That is precisely verify's blind spot vs. its sweet
+spot.
+
+**This is evidence FOR the positioning, not against it.** Verify's value is
+on UNREVIEWED, UNGATED diffs — an autonomous agent's output before any human
+or CI sees it — not on OSS history that has already passed through exactly
+the gate verify replaces. Mining human main branches for verify's value is
+looking where the light already is. The honest real-world validation is to
+run the same replay against an AGENT's raw diff stream (pre-CI), which is the
+documented next step. The miner (`harness/oops_pairs.py`) is the reusable
+instrument for it. Seeded-edit recall (88%, §above) remains the standing
+measured number; real-world recall awaits an ungated diff source.
+
 ## 6 · Where each result comes from
 
 | claim | source | raw data |
