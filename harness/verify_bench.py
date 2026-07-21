@@ -117,9 +117,14 @@ def main():
             rec = run_trial(task, corpus, gt_files, decl, decl_re, decl_new, method, comment, upd)
             if "error" in rec:
                 trials.append({"trial": trial, "error": rec["error"]}); continue
-            mf = {Path(f).name for f in rec["missedFiles"]}
-            caught = [f for f in forgot if Path(f).name in mf]
-            false_ = [f for f in upd if Path(f).name in mf]
+            # FULL-PATH matching: verify reports exact work-root-relative
+            # paths; basename matching miscounted sibling files that share a
+            # name (grafana healthcheck.go x12, django operations.py — the
+            # audited "false flags" were real missed sites in NON-updated
+            # same-named files).
+            mf = set(rec["missedFiles"])
+            caught = [f for f in forgot if f in mf]
+            false_ = [f for f in upd if f in mf]
             trials.append({"trial": trial, "verdict": rec["verdict"],
                            "forgot": len(forgot), "caught": len(caught),
                            "falseFlag": len(false_), "falseFiles": false_[:4],
@@ -130,8 +135,8 @@ def main():
         sh(["git", "checkout", "-q", "--", "."], corpus)
         rec = run_trial(task, corpus, gt_files, decl, decl_re, decl_new, method, comment, gt_files)
         if "error" not in rec:
-            mf = {Path(f).name for f in rec["missedFiles"]}
-            false_ = [f for f in gt_files if Path(f).name in mf]
+            mf = set(rec["missedFiles"])
+            false_ = [f for f in gt_files if f in mf]
             trials.append({"trial": "control", "verdict": rec["verdict"], "falseFlag": len(false_)})
             print(f"{task:28} control: verdict={rec['verdict']:<11} falseGTflags={len(false_)}", flush=True)
         else:

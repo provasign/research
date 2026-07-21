@@ -137,13 +137,17 @@ TS/Go declaration-block member changes never seeded). Site-level catch:
 137/420 forgotten files pre-fix. **Base-contract enumeration landed the same
 day (prism v0.28.0)**: dependents of the OLD signature recovered via
 base-parameter-list family match + their still-resolved callers — catch
-**33% → 60%** (querydata 8→91%, checkhealth 95%, jsonnode/django 100%,
-guava 96%), verdicts fail-closed throughout (raw:
-`harness/runs/verify-bench/final-base-contract.log`). Remaining gaps,
-disclosed: Java generic params defeat verbatim matching (serialize 12%);
-declaration-block members (typeorm) stay at review; grafana/django trial
-false flags are unaudited (bench-artifact share unknown).
-Positioning: trust the verdict; the site list is a strong head start.
+**33% → 80%** (prism v0.29.0: + generic-type-variable wildcards + TYPE-only
+parameter matching — override families rename params freely). Per task:
+django/checkhealth/jsonnode 100%, querydata 94%, guava 93%, serialize 83%,
+settable 71%, writetypeprefix 57%, typeorm 0% (declaration-block members —
+the one remaining gap, held at review, never a silent pass). **False flags:
+ZERO** across all trials and controls — the earlier "false flags" audited to
+a bench artifact (basename collisions: grafana has 12 healthcheck.go files;
+every audited flagged line was a genuinely untouched site in a NON-updated
+same-named file). Raw: `harness/runs/verify-bench/definitive-v0.29.0.log`.
+Positioning: trust the verdict AND the site list; declaration-block members
+are the disclosed remainder.
 
 ### Mason + free local model — the headline (`runs/mason-bench/`, 2 trials/task)
 
