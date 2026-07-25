@@ -60,7 +60,13 @@ def run_claude(workdir: Path, prompt: str, model: str, arm: str, cont: bool, tim
     if cont:
         cmd.append("--continue")
     t0 = time.monotonic()
-    r = subprocess.run(cmd, cwd=workdir, capture_output=True, text=True, timeout=timeout)
+    try:
+        r = subprocess.run(cmd, cwd=workdir, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        # A single stuck trial must not crash the whole sweep.
+        return {"ok": False, "error": f"timed out after {timeout}s",
+                "wall_s": round(time.monotonic() - t0, 1), "tokens_in": 0, "tokens_out": 0,
+                "cost_usd": None, "turns": None}
     wall = round(time.monotonic() - t0, 1)
     try:
         j = json.loads(r.stdout)
@@ -140,7 +146,10 @@ def main():
     for tier in a.tiers.split(","):
         for arm in a.arms.split(","):
             for t in range(1, a.trials + 1):
-                run_trial(a.model, arm, tier, t, 0)
+                try:
+                    run_trial(a.model, arm, tier, t, 0)
+                except Exception as e:
+                    print(f"{a.model}.{tier}.{arm}.t{t}: UNCAUGHT ERROR {type(e).__name__}: {e}", flush=True)
     print("done", flush=True)
 
 

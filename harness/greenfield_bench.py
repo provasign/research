@@ -132,7 +132,15 @@ def run_mason(workdir: Path, prompt: str, model: str, no_engine: bool, cont: boo
         args.append("--continue")
     args.append(prompt)
     t0 = time.monotonic()
-    r = sh(*args, timeout=timeout, env=env)
+    try:
+        r = sh(*args, timeout=timeout, env=env)
+    except subprocess.TimeoutExpired:
+        # A single stuck trial must not crash the whole sweep — record it as
+        # a failed phase and let the caller move on (measured: an uncaught
+        # TimeoutExpired killed the entire remaining batch, local + cloud,
+        # losing every not-yet-cached trial in the run).
+        wall = time.monotonic() - t0
+        return {"ok": False, "error": f"timed out after {timeout}s", "wall_s": round(wall, 1)}
     wall = time.monotonic() - t0
     try:
         j = json.loads(r.stdout)
@@ -393,7 +401,13 @@ def main():
     for tier in a.tiers.split(","):
         for arm in a.arms.split(","):
             for t in range(1, a.trials + 1):
-                run_trial(a.model, arm, tier, t, a.max_turns)
+                try:
+                    run_trial(a.model, arm, tier, t, a.max_turns)
+                except Exception as e:
+                    # One trial's unexpected failure must not lose every
+                    # remaining trial in the batch (measured: an uncaught
+                    # subprocess timeout killed the whole run).
+                    print(f"{a.model}.{tier}.{arm}.t{t}: UNCAUGHT ERROR {type(e).__name__}: {e}", flush=True)
     print("done", flush=True)
 
 
