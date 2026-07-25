@@ -77,7 +77,33 @@ SCAFFOLD_LARGE = """Build a Python library-management system in this directory, 
 
 Two functions have MANDATORY multi-file fan-out and this is a real requirement: `auth.validate_member` must be called from checkout_book, return_book, renew_loan, register_member, and pay_fine (5 call sites across service.py and fines.py). `audit.log_event` must be called from checkout_book, return_book, renew_loan, register_member, pay_fine, apply_fine, notify_member, and overdue_report (8 call sites across 4+ files). Keep signatures consistent everywhere. When done, run the tests and confirm they pass. Report every function you defined and every file that calls validate_member and log_event."""
 
-TIERS = {"small": SCAFFOLD_SMALL, "medium": SCAFFOLD_MEDIUM, "large": SCAFFOLD_LARGE}
+SCAFFOLD_TINY = """Build a tiny Python app in this directory, 3 files:
+
+1. models.py — a Book class (title, isbn, available).
+2. service.py — checkout_book(book, member_name) and return_book(book) functions that operate on a Book (in-memory, no repository layer — just mutate the Book object directly).
+3. test_app.py — a couple of tests exercising checkout_book and return_book.
+
+Keep signatures consistent. When done, run the tests and confirm they pass. Report which functions you defined and where each is called from."""
+
+SCAFFOLD_XLARGE = """Build a Python library-management system in this directory, split into layers, each its own file:
+
+1. models.py — Book, Member, Loan, Fine, Reservation (member_id, book_isbn) — plain classes.
+2. repository.py — in-memory-list functions to add/find/update books, members, loans, fines, and reservations.
+3. audit.py — define ONE function `log_event(event_type: str, member_id: str, details: str)` (in-memory log list or print). This function MUST be called from checkout_book, return_book, renew_loan, register_member, pay_fine, apply_fine, notify_member, overdue_report, cancel_reservation, AND fulfill_reservation — 10 distinct call sites across at least 6 files. This is a real requirement.
+4. auth.py — define ONE function `validate_member(member_id: str) -> bool`, the guard called as the FIRST thing inside checkout_book, return_book, renew_loan, register_member, pay_fine, and reserve_book — 6 distinct call sites across service.py, fines.py, and reservations.py.
+5. service.py — checkout_book, return_book, renew_loan, register_member. Each calls repository.py, auth.validate_member(...), and audit.log_event(...).
+6. fines.py — calculate_fine(loan), pay_fine(member_id, amount), apply_fine(member_id, amount).
+7. notifications.py — notify_member(member_id, message), called from service.py's checkout_book/return_book, fines.py's apply_fine, and reservations.py's fulfill_reservation.
+8. reservations.py — reserve_book(member_id, isbn), cancel_reservation(reservation_id), fulfill_reservation(reservation_id) — each calls repository.py, and reserve_book calls auth.validate_member(...).
+9. reports.py — overdue_report() and reservation_report(), each scanning via repository.py.
+10. cli.py — a command-line entry point (main() is enough) demonstrating the full flow including a reservation.
+11. test_app.py — tests exercising the full flow through the service/fines/reservations layers.
+
+Two functions have MANDATORY multi-file fan-out (a real requirement, not optional): `audit.log_event` must be called from the 10 sites listed above across 6+ files; `auth.validate_member` must be called from the 6 sites listed above across 3 files. Keep signatures consistent everywhere. When done, run the tests and confirm they pass. Report every function you defined and every file that calls validate_member and log_event."""
+
+TIERS = {"tiny": SCAFFOLD_TINY, "small": SCAFFOLD_SMALL, "medium": SCAFFOLD_MEDIUM,
+         "large": SCAFFOLD_LARGE, "xlarge": SCAFFOLD_XLARGE}
+TIER_MANDATED_FILES = {"tiny": 3, "small": 5, "medium": 8, "large": 10, "xlarge": 11}
 
 REFACTOR_TMPL = """The `{fn}` function in {defn_file} needs a new REQUIRED parameter: `request_id: str`, inserted as the FIRST parameter (for logging/tracing — every call must now pass a request id string, e.g. "req-1").
 
@@ -278,6 +304,11 @@ def run_trial(model: str, arm: str, tier: str, trial: int, max_turns: int):
     rec["totalTokens"] = (rec["phase1"]["tokens_in"] or 0) + (rec["phase1"]["tokens_out"] or 0) + \
                           (rec["phase2"]["tokens_in"] or 0) + (rec["phase2"]["tokens_out"] or 0)
     rec["totalWallS"] = round((rec["phase1"]["wall_s"] or 0) + (rec["phase2"]["wall_s"] or 0), 1)
+
+    # Measured codebase size (the real x-axis) — captured before cleanup.
+    py_files = [f for f in workdir.rglob("*.py") if ".git" not in f.parts]
+    rec["codebaseFiles"] = len(py_files)
+    rec["codebaseLOC"] = sum(len(f.read_text(errors="replace").splitlines()) for f in py_files)
 
     outfile.write_text(json.dumps(rec, indent=1))
     print(f"{tag}: target={name} sites={n_sites} completeness={rec['completeness']} "
