@@ -77,13 +77,15 @@ SCAFFOLD_LARGE = """Build a Python library-management system in this directory, 
 
 Two functions have MANDATORY multi-file fan-out and this is a real requirement: `auth.validate_member` must be called from checkout_book, return_book, renew_loan, register_member, and pay_fine (5 call sites across service.py and fines.py). `audit.log_event` must be called from checkout_book, return_book, renew_loan, register_member, pay_fine, apply_fine, notify_member, and overdue_report (8 call sites across 4+ files). Keep signatures consistent everywhere. When done, run the tests and confirm they pass. Report every function you defined and every file that calls validate_member and log_event."""
 
-SCAFFOLD_TINY = """Build a tiny Python app in this directory, 3 files:
+SCAFFOLD_TINY = """Build a tiny Python app in this directory, 4 files:
 
 1. models.py — a Book class (title, isbn, available).
-2. service.py — checkout_book(book, member_name) and return_book(book) functions that operate on a Book (in-memory, no repository layer — just mutate the Book object directly).
-3. test_app.py — a couple of tests exercising checkout_book and return_book.
+2. log.py — define ONE function `log_action(action: str, detail: str)` that appends to an in-memory list (or prints). It must be a single real function, not a no-op.
+3. service.py — checkout_book(book, member_name) and return_book(book) functions that operate on a Book (in-memory, no repository layer — just mutate the Book object directly). BOTH functions MUST call log.log_action(...) to record what happened.
+4. cli.py — a small main() that calls checkout_book and return_book to demonstrate the flow, and ALSO calls log.log_action(...) directly once (e.g. to log that the app started).
+5. test_app.py — a couple of tests exercising checkout_book and return_book.
 
-Keep signatures consistent. When done, run the tests and confirm they pass. Report which functions you defined and where each is called from."""
+The `log_action` function must end up called from service.py (twice) and cli.py (at least once) — a real requirement. Keep signatures consistent. When done, run the tests and confirm they pass. Report which functions you defined and where each is called from, especially log_action."""
 
 SCAFFOLD_XLARGE = """Build a Python library-management system in this directory, split into layers, each its own file:
 
@@ -174,7 +176,14 @@ def scan_defs(workdir: Path):
     return out
 
 
-CALL_RE_TMPL = r"(?<![\w.]){name}\s*\("
+# (?<!\w) only, NOT (?<![\w.]) — a qualified call (`service.checkout_book(`)
+# is a REAL call site and must count; excluding '.' from the lookbehind was
+# rejecting every qualified call (measured: silently zeroed all call sites
+# for Sonnet's code, which used `import x; x.func()` throughout, vs the
+# local model's more frequent bare `from x import func; func()` style that
+# happened to survive the bug). Still correctly rejects `my_checkout_book(`
+# (preceded by a word char) as a different identifier.
+CALL_RE_TMPL = r"(?<!\w){name}\s*\("
 
 
 def scan_call_sites(workdir: Path, name: str):
