@@ -386,7 +386,12 @@ def run_trial(model: str, arm: str, tier: str, trial: int, max_turns: int):
     outfile.write_text(json.dumps(rec, indent=1))
     print(f"{tag}: target={name} sites={n_sites} completeness={rec['completeness']} "
           f"forgotten={forgotten} tokens={rec['totalTokens']} wall={rec['totalWallS']}s", flush=True)
-    shutil.rmtree(workdir, ignore_errors=True)
+    # NOT cleaned up: a flagged forgotten-file result must be inspectable
+    # after the fact — two real scanner bugs (multi-line calls, trailing
+    # commas) were only found by reading a trial's actual final code, and
+    # early cleanup here made that impossible for local trials. /tmp is
+    # ephemeral across reboots, so this is not a permanent leak; the caller
+    # can prune old greenfield-* dirs once results are confirmed trustworthy.
     return rec
 
 
