@@ -349,18 +349,19 @@ def run_trial(model: str, arm: str, tier: str, trial: int, max_turns: int):
     rec["phase1"] = {"ok": p1.get("ok"), "wall_s": p1.get("wall_s"),
                       "tokens_in": (p1.get("usage") or {}).get("inputTokens"),
                       "tokens_out": (p1.get("usage") or {}).get("outputTokens")}
+    # Failure branches deliberately do NOT write outfile — a harness/agent
+    # failure is not a completed trial, and NOT caching it means the next
+    # sweep launch retries this exact cell instead of silently treating it
+    # as permanently done (measured: a failed phase2 was being scored as a
+    # real completeness=0.0 result AND cached, so it could never be retried).
     if not p1.get("ok"):
-        rec["error"] = "phase1 failed: " + str(p1.get("error"))[:300]
-        outfile.write_text(json.dumps(rec, indent=1))
-        print(f"{tag}: PHASE1 FAILED {rec['error']}", flush=True)
-        return rec
+        print(f"{tag}: PHASE1 FAILED {str(p1.get('error'))[:300]}", flush=True)
+        return None
 
     target = pick_target_preferred(workdir)
     if target is None:
-        rec["error"] = "no usable target found after phase 1 (no function with >=2 caller files)"
-        outfile.write_text(json.dumps(rec, indent=1))
-        print(f"{tag}: NO TARGET — {rec['error']}", flush=True)
-        return rec
+        print(f"{tag}: NO TARGET — no usable function with >=2 caller files", flush=True)
+        return None
     name, defn_file, before_callers, n_sites = target
     rec["target"] = {"fn": name, "definedIn": defn_file, "callerFiles": list(before_callers.keys()), "totalSites": n_sites}
 
@@ -368,7 +369,16 @@ def run_trial(model: str, arm: str, tier: str, trial: int, max_turns: int):
     p2 = run_mason(workdir, prompt2, model, no_engine, cont=True, max_turns=max_turns)
     rec["phase2"] = {"ok": p2.get("ok"), "wall_s": p2.get("wall_s"),
                       "tokens_in": (p2.get("usage") or {}).get("inputTokens"),
-                      "tokens_out": (p2.get("usage") or {}).get("outputTokens")}
+                      "tokens_out": (p2.get("usage") or {}).get("outputTokens"),
+                      "error": (str(p2.get("error"))[:300] if p2.get("error") else None)}
+    if not p2.get("ok"):
+        # A failed phase2 is NOT a real "forgot everything" result — the
+        # agent may never have genuinely attempted the refactor. Don't
+        # score it as completeness=0.0 (measured: this happened — 269s/303k
+        # tokens vs the ~1000-1700s/500k-1.2M typical for this tier, phase2
+        # ok=False, and it still got reported as a 4-file miss).
+        print(f"{tag}: PHASE2 FAILED {rec['phase2']['error']}", flush=True)
+        return None
 
     fixed, forgotten = score_phase2(workdir, name, before_callers)
     rec["fixedFiles"] = fixed

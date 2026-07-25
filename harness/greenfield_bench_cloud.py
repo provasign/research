@@ -97,24 +97,26 @@ def run_trial(model: str, arm: str, tier: str, trial: int, max_turns_note: int):
     rec = {"model": model, "arm": arm, "tier": tier, "trial": trial, "workdir": str(workdir)}
     p1 = run_claude(workdir, TIERS[tier], model, arm, cont=False)
     rec["phase1"] = {k: p1[k] for k in ("ok", "wall_s", "tokens_in", "tokens_out", "cost_usd", "turns")}
+    # Failure branches deliberately do NOT cache — a harness/agent failure is
+    # not a completed trial, and not caching it means the next sweep launch
+    # retries this cell instead of treating it as permanently done.
     if not p1.get("ok"):
-        rec["error"] = "phase1 failed: " + str(p1.get("error"))[:300]
-        outfile.write_text(json.dumps(rec, indent=1))
-        print(f"{tag}: PHASE1 FAILED {rec['error']}", flush=True)
-        return rec
+        print(f"{tag}: PHASE1 FAILED {str(p1.get('error'))[:300]}", flush=True)
+        return None
 
     target = pick_target_preferred(workdir)
     if target is None:
-        rec["error"] = "no usable target found after phase 1 (no function with >=2 caller files)"
-        outfile.write_text(json.dumps(rec, indent=1))
-        print(f"{tag}: NO TARGET — {rec['error']}", flush=True)
-        return rec
+        print(f"{tag}: NO TARGET — no usable function with >=2 caller files", flush=True)
+        return None
     name, defn_file, before_callers, n_sites = target
     rec["target"] = {"fn": name, "definedIn": defn_file, "callerFiles": list(before_callers.keys()), "totalSites": n_sites}
 
     prompt2 = REFACTOR_TMPL.format(fn=name, defn_file=defn_file)
     p2 = run_claude(workdir, prompt2, model, arm, cont=True)
     rec["phase2"] = {k: p2[k] for k in ("ok", "wall_s", "tokens_in", "tokens_out", "cost_usd", "turns")}
+    if not p2.get("ok"):
+        print(f"{tag}: PHASE2 FAILED {str(p2.get('error'))[:300]}", flush=True)
+        return None
 
     fixed, forgotten = score_phase2(workdir, name, before_callers)
     rec["fixedFiles"] = fixed
