@@ -1,0 +1,228 @@
+<title>Greenfield token cost vs. codebase size</title>
+<style>
+  :root {
+    --bg: #f7f7f5;
+    --panel: #ffffff;
+    --ink: #1a1a18;
+    --ink-dim: #5c5c56;
+    --line: #dedcd4;
+    --grid: #e8e6de;
+    --accent-prism: #2f6f6b;
+    --accent-prism-fill: rgba(47,111,107,0.14);
+    --accent-noprism: #b5651d;
+    --accent-noprism-fill: rgba(181,101,29,0.14);
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: -apple-system, "Segoe UI", system-ui, sans-serif;
+  }
+  :root[data-theme="dark"] {
+    --bg: #16171a;
+    --panel: #1e2023;
+    --ink: #ececea;
+    --ink-dim: #9a9a94;
+    --line: #34363a;
+    --grid: #2a2c30;
+    --accent-prism: #5fb3ad;
+    --accent-prism-fill: rgba(95,179,173,0.14);
+    --accent-noprism: #e0954f;
+    --accent-noprism-fill: rgba(224,149,79,0.14);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #16171a;
+      --panel: #1e2023;
+      --ink: #ececea;
+      --ink-dim: #9a9a94;
+      --line: #34363a;
+      --grid: #2a2c30;
+      --accent-prism: #5fb3ad;
+      --accent-prism-fill: rgba(95,179,173,0.14);
+      --accent-noprism: #e0954f;
+      --accent-noprism-fill: rgba(224,149,79,0.14);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: var(--sans);
+    padding: 2.5rem 1.5rem 4rem;
+  }
+  main { max-width: 920px; margin: 0 auto; }
+  h1 {
+    font-size: 1.5rem; font-weight: 650; letter-spacing: -0.01em;
+    margin: 0 0 0.35rem; text-wrap: balance;
+  }
+  .subtitle { color: var(--ink-dim); font-size: 0.95rem; margin: 0 0 2rem; max-width: 62ch; line-height: 1.5; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 1.5rem 1.5rem 1.25rem; margin-bottom: 1.5rem;
+  }
+  .panel h2 {
+    font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--ink-dim); font-weight: 600; margin: 0 0 1rem;
+  }
+  .chart-wrap { overflow-x: auto; }
+  svg { display: block; font-family: var(--mono); }
+  .axis-line { stroke: var(--line); stroke-width: 1; }
+  .grid-line { stroke: var(--grid); stroke-width: 1; }
+  .axis-label { fill: var(--ink-dim); font-size: 11px; }
+  .axis-title { fill: var(--ink-dim); font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em; }
+  .legend-item { font-family: var(--sans); font-size: 12.5px; fill: var(--ink); }
+  .n-label { fill: var(--ink-dim); font-size: 9.5px; font-family: var(--mono); }
+  table {
+    width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+  }
+  th, td { text-align: right; padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--grid); }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--ink-dim); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; }
+  tr:last-child td { border-bottom: none; }
+  .tag {
+    display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px;
+    font-size: 11px; font-weight: 600; font-family: var(--sans);
+  }
+  .tag-prism { background: var(--accent-prism-fill); color: var(--accent-prism); }
+  .tag-noprism { background: var(--accent-noprism-fill); color: var(--accent-noprism); }
+  .caveats {
+    font-size: 0.88rem; color: var(--ink-dim); line-height: 1.6;
+  }
+  .caveats li { margin-bottom: 0.4rem; }
+  .caveats strong { color: var(--ink); }
+  code {
+    font-family: var(--mono); font-size: 0.85em; background: var(--grid);
+    padding: 0.1em 0.35em; border-radius: 4px;
+  }
+  footer { color: var(--ink-dim); font-size: 0.78rem; margin-top: 2rem; }
+</style>
+
+<main>
+  <h1>Greenfield build: token cost vs. codebase size</h1>
+  <p class="subtitle">
+    Same local agent (Mason + qwen3-coder:30b), same two-phase task — scaffold an app, then refactor a
+    function it just wrote across every file that calls it — run with Prism (graph + completeness gate)
+    and without (grep/read/write only). Completeness was <strong>1.000 in every cell</strong>; this chart
+    is about what each arm <em>cost</em> to get there.
+  </p>
+
+  <div class="panel">
+    <h2>Mean tokens per trial</h2>
+    <div class="chart-wrap" id="chart-tokens"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Mean wall-clock minutes per trial</h2>
+    <div class="chart-wrap" id="chart-wall"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Raw cell data</h2>
+    <table id="data-table"></table>
+  </div>
+
+  <div class="panel">
+    <h2>Read before citing</h2>
+    <ul class="caveats">
+      <li><strong>n=2–3 trials per cell.</strong> The small tier (n=3) and the crossover direction across
+        tiers are a real trend, not noise in sign — but medium/large need more trials before the exact
+        crossover point is a hard number.</li>
+      <li><strong>X-axis is mandated file count</strong>, not measured LOC — each scaffold prompt requires
+        an exact file list, and file count is the controlled variable across tiers. Tiny/xlarge tiers
+        (pending) additionally capture real measured LOC per trial.</li>
+      <li><strong>Completeness never broke in either arm</strong> at any tested size — the crossover here
+        is a cost signal, not a correctness one. Whether a real completeness gap opens at larger scale, or
+        after a context-compaction gap between phases, is unmeasured.</li>
+      <li><strong>Sonnet/Haiku arms are blocked</strong> on Anthropic API credits (account balance empty) —
+        this plot is local-model-only until credits are available.</li>
+    </ul>
+  </div>
+
+  <footer>Generated from research/harness/runs/greenfield · greenfield_bench.py · updated as more tiers land</footer>
+</main>
+
+<script>
+const DATA = __DATA__;
+
+const TIER_ORDER = ["tiny","small","medium","large","xlarge"];
+DATA.sort((a,b) => TIER_ORDER.indexOf(a.tier) - TIER_ORDER.indexOf(b.tier));
+
+function drawChart(containerId, yKey, yStdevKey, yLabel, yFmt) {
+  const el = document.getElementById(containerId);
+  const W = 820, H = 320, M = {top: 16, right: 24, bottom: 44, left: 64};
+  const iw = W - M.left - M.right, ih = H - M.top - M.bottom;
+
+  const byArm = {prism: DATA.filter(d => d.arm === "prism"), noprism: DATA.filter(d => d.arm === "noprism")};
+  const allFiles = [...new Set(DATA.map(d => d.files))].sort((a,b) => a-b);
+  const maxY = Math.max(...DATA.map(d => d[yKey] + (d[yStdevKey]||0))) * 1.12;
+  const minF = Math.min(...allFiles), maxF = Math.max(...allFiles);
+
+  const x = f => M.left + (maxF === minF ? iw/2 : (f - minF) / (maxF - minF) * iw);
+  const y = v => M.top + ih - (v / maxY) * ih;
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">`;
+
+  // gridlines + y ticks
+  const yTicks = 5;
+  for (let i = 0; i <= yTicks; i++) {
+    const v = maxY * i / yTicks;
+    const yy = y(v);
+    svg += `<line class="grid-line" x1="${M.left}" y1="${yy}" x2="${W-M.right}" y2="${yy}"/>`;
+    svg += `<text class="axis-label" x="${M.left-8}" y="${yy+3}" text-anchor="end">${yFmt(v)}</text>`;
+  }
+  // x axis
+  svg += `<line class="axis-line" x1="${M.left}" y1="${M.top+ih}" x2="${W-M.right}" y2="${M.top+ih}"/>`;
+  allFiles.forEach(f => {
+    const xx = x(f);
+    svg += `<line class="grid-line" x1="${xx}" y1="${M.top}" x2="${xx}" y2="${M.top+ih}"/>`;
+    svg += `<text class="axis-label" x="${xx}" y="${M.top+ih+18}" text-anchor="middle">${f} files</text>`;
+  });
+  svg += `<text class="axis-title" x="${M.left+iw/2}" y="${H-6}" text-anchor="middle">mandated codebase size (files)</text>`;
+  svg += `<text class="axis-title" transform="translate(14,${M.top+ih/2}) rotate(-90)" text-anchor="middle">${yLabel}</text>`;
+
+  function drawArm(rows, color, fill, dy) {
+    rows = rows.slice().sort((a,b) => a.files - b.files);
+    if (rows.length === 0) return;
+    let path = rows.map((d,i) => `${i===0?'M':'L'}${x(d.files)},${y(d[yKey])}`).join(" ");
+    svg += `<path d="${path}" fill="none" stroke="${color}" stroke-width="2.25"/>`;
+    rows.forEach(d => {
+      const cx = x(d.files), cy = y(d[yKey]);
+      const sd = d[yStdevKey] || 0;
+      if (sd > 0) {
+        svg += `<line x1="${cx}" y1="${y(d[yKey]-sd)}" x2="${cx}" y2="${y(d[yKey]+sd)}" stroke="${color}" stroke-width="1.25" opacity="0.55"/>`;
+        svg += `<line x1="${cx-4}" y1="${y(d[yKey]-sd)}" x2="${cx+4}" y2="${y(d[yKey]-sd)}" stroke="${color}" stroke-width="1.25" opacity="0.55"/>`;
+        svg += `<line x1="${cx-4}" y1="${y(d[yKey]+sd)}" x2="${cx+4}" y2="${y(d[yKey]+sd)}" stroke="${color}" stroke-width="1.25" opacity="0.55"/>`;
+      }
+      svg += `<circle cx="${cx}" cy="${cy}" r="4.5" fill="${fill}" stroke="${color}" stroke-width="2"/>`;
+      svg += `<text class="n-label" x="${cx}" y="${cy+dy}" text-anchor="middle">n=${d.n}</text>`;
+    });
+  }
+
+  drawArm(byArm.noprism, "var(--accent-noprism)", "var(--panel)", 20);
+  drawArm(byArm.prism, "var(--accent-prism)", "var(--panel)", -12);
+
+  // legend
+  const lx = M.left + 8, ly = M.top + 10;
+  svg += `<circle cx="${lx}" cy="${ly}" r="4.5" fill="var(--panel)" stroke="var(--accent-prism)" stroke-width="2"/>`;
+  svg += `<text class="legend-item" x="${lx+10}" y="${ly+4}">with Prism</text>`;
+  svg += `<circle cx="${lx+110}" cy="${ly}" r="4.5" fill="var(--panel)" stroke="var(--accent-noprism)" stroke-width="2"/>`;
+  svg += `<text class="legend-item" x="${lx+120}" y="${ly+4}">without Prism (grep only)</text>`;
+
+  svg += `</svg>`;
+  el.innerHTML = svg;
+}
+
+drawChart("chart-tokens", "tokMean", "tokStdev", "mean tokens", v => v >= 1000 ? Math.round(v/1000)+"k" : Math.round(v));
+drawChart("chart-wall", "wallMean", "wallStdev", "mean minutes", v => v.toFixed(0));
+
+// table
+const tbl = document.getElementById("data-table");
+let rows = `<tr><th>Tier</th><th>Arm</th><th>Files</th><th>n</th><th>Tokens (mean ± sd)</th><th>Minutes (mean ± sd)</th><th>Completeness</th></tr>`;
+DATA.forEach(d => {
+  const tag = d.arm === "prism" ? `<span class="tag tag-prism">prism</span>` : `<span class="tag tag-noprism">grep only</span>`;
+  rows += `<tr>
+    <td>${d.tier}</td><td>${tag}</td><td>${d.files}</td><td>${d.n}</td>
+    <td>${d.tokMean.toLocaleString()} ± ${d.tokStdev.toLocaleString()}</td>
+    <td>${d.wallMean} ± ${d.wallStdev}</td>
+    <td>${d.completeness.toFixed(3)}</td>
+  </tr>`;
+});
+tbl.innerHTML = rows;
+</script>

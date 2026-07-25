@@ -149,7 +149,14 @@ def arg_count(paramtext: str) -> int:
     paramtext = paramtext.strip()
     if not paramtext:
         return 0
-    depth, n, i = 0, 1, 0
+    # A trailing top-level comma (near-universal in multi-line/black-style
+    # calls: `f(\n    a,\n    b,\n)`) must not count as a 4th argument —
+    # measured: it inflated every multi-line call's count by one.
+    if paramtext.endswith(","):
+        paramtext = paramtext[:-1].rstrip()
+    if not paramtext:
+        return 0
+    depth, n = 0, 1
     for c in paramtext:
         if c in "([{":
             depth += 1
@@ -186,8 +193,35 @@ def scan_defs(workdir: Path):
 CALL_RE_TMPL = r"(?<!\w){name}\s*\("
 
 
+def _extract_call_args(text: str, open_paren_idx: int) -> str:
+    """Walk from an opening '(' to its matching ')' ACROSS THE WHOLE TEXT (not
+    one line) and return the raw argument text. A call spanning multiple
+    lines (very common once a refactor adds an argument and the formatter
+    wraps it) must still resolve correctly — a walker bounded to one line
+    silently truncates at end-of-line with depth>0, and arg_count() on the
+    truncated fragment previously returned 0 for EVERY such call, both
+    before and after a refactor, which is worse than a missed data point:
+    0==0 reads as 'unchanged' and produces a FALSE forgotten verdict on a
+    site that was actually fixed correctly (measured: reports.py's
+    log_event call, reformatted to 4 lines by black-style wrapping when the
+    new request_id argument was added, scored [0] before and after and was
+    wrongly flagged forgotten in 3/4 real Sonnet large-tier trials)."""
+    depth = 0
+    for i in range(open_paren_idx, len(text)):
+        c = text[i]
+        if c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+            if depth == 0:
+                return text[open_paren_idx + 1:i]
+    return text[open_paren_idx + 1:]  # unterminated — best effort
+
+
 def scan_call_sites(workdir: Path, name: str):
-    """file -> [arg_count at each call of name(...) NOT on a `def name(` line]."""
+    """file -> [arg_count at each call of name(...)], excluding the `def
+    name(` declaration line. Whole-file scan — a call's parens may span
+    multiple lines."""
     call_re = re.compile(CALL_RE_TMPL.format(name=re.escape(name)))
     out = {}
     for f in workdir.rglob("*.py"):
@@ -196,27 +230,49 @@ def scan_call_sites(workdir: Path, name: str):
             text = f.read_text(errors="replace")
         except Exception:
             continue
-        for ln in text.splitlines():
-            if DEF_RE.match(ln) and DEF_RE.match(ln).group(1) == name:
+        # Precompute which line each character index falls on, to exclude
+        # matches that land on a `def name(` declaration line.
+        decl_lines = {i for i, ln in enumerate(text.splitlines())
+                      if DEF_RE.match(ln) and DEF_RE.match(ln).group(1) == name}
+        line_starts = [0]
+        for ln in text.splitlines(keepends=True):
+            line_starts.append(line_starts[-1] + len(ln))
+        import bisect
+        for m in call_re.finditer(text):
+            line_no = bisect.bisect_right(line_starts, m.start()) - 1
+            if line_no in decl_lines:
                 continue
-            for m in call_re.finditer(ln):
-                i = m.end() - 1  # at the '('
-                depth, args_text, j = 0, [], i
-                for c in ln[i:]:
-                    if c == "(":
-                        depth += 1
-                        if depth > 1:
-                            args_text.append(c)
-                    elif c == ")":
-                        depth -= 1
-                        if depth == 0:
-                            break
-                        args_text.append(c)
-                    else:
-                        if depth >= 1:
-                            args_text.append(c)
-                out.setdefault(rel, []).append(arg_count("".join(args_text)))
+            open_idx = m.end() - 1  # at the '('
+            args_text = _extract_call_args(text, open_idx)
+            out.setdefault(rel, []).append(arg_count(args_text))
     return out
+
+
+def _selftest_scan_call_sites():
+    """Guard against silently reintroducing a call-site scanning bug —
+    every case here was a REAL false result measured in this harness."""
+    import tempfile as _tf
+    with _tf.TemporaryDirectory() as d:
+        wd = Path(d)
+        (wd / "a.py").write_text(
+            "import audit\n"
+            "\n"
+            "def f():\n"
+            "    audit.log_event(\n"
+            "        \"a\",\n"
+            "        \"b\",\n"
+            "        \"c\",\n"
+            "        \"d\",\n"
+            "    )\n"
+            "    audit.log_event(\"x\", \"y\")\n"
+            "    my_log_event(\"nope\")\n"
+        )
+        got = scan_call_sites(wd, "log_event")
+        assert got.get("a.py") == [4, 2], f"multi-line + qualified-call scan broken: {got}"
+    print("scan_call_sites self-test: PASS", file=sys.stderr)
+
+
+_selftest_scan_call_sites()
 
 
 
