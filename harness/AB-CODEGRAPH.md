@@ -119,23 +119,41 @@ tool available; oracle-scored (`ab_agentic_mcp.py`):
 |---|---|---:|---:|---:|---:|---:|
 | Haiku | prism      | 1.00 |  3 |   67k | $0.04 |  25 |
 | Haiku | baseline   | 0.75 | 25 |  954k | $0.28 |  96 |
-| Haiku | codegraph  | 0.00 | 31 | 1787k | $0.33 | 142 |
+| Haiku | codegraph  | 0.00 (single trial — see reproducibility note below) | 31 | 1787k | $0.33 | 142 |
 | Opus  | prism      | 1.00 |  3 |   60k | $0.14 |  17 |
 | Opus  | baseline   | 0.62 | 19 |  376k | $0.90 | 200 |
 | Opus  | codegraph  | 1.00 | 23 | 1428k | $2.38 | 523 |
 
 - **Prism is tier-invariant**: recall 1.00, 3 turns, ~60–67k tokens on both
-  tiers — the paper's tier-invariance result reproduced as a product-level
+  tiers, with zero variance across every repeat trial (see reproducibility
+  note) — the paper's tier-invariance result reproduced as a product-level
   agent A/B.
-- **CodeGraph needs the frontier**: 0.00 on Haiku (a weak model cannot
-  recover from incomplete context) → 1.00 on Opus, but at 23 turns / 1.43M
-  tokens / $2.38 — 8× turns, 24× tokens, 17× cost, 30× wall-time vs Prism at
-  equal correctness.
+- **CodeGraph is unstable on Haiku, not reliably at 0.00**: the single
+  published trial scored 0.00, but four repeat trials on the identical
+  task/model/arm scored 0.75, 1.00, 0.625, and 1.00 — recall swinging from
+  0% to 100% run to run. See the reproducibility note below before citing
+  any single CodeGraph+Haiku number. On Opus it reaches 1.00, but at 23
+  turns / 1.43M tokens / $2.38 — 8× turns, 24× tokens, 17× cost, 30×
+  wall-time vs Prism at equal correctness.
 - **The efficiency claim inverts on this task class**: with CodeGraph the
   agent used *more* tokens and turns than the plain-grep baseline (1.43M vs
   376k; 23 vs 19). Incomplete, source-heavy context makes a
   completeness-seeking agent work harder, not less.
 - Baseline grep never reaches completeness (0.75 / 0.62), even on Opus.
+
+**Reproducibility note (added after the fact, 2026-07-27).** The original
+Haiku/codegraph cell (recall 0.00) was a single trial on CodeGraph v1.4.1.
+Four additional trials were run to check stability: one on an unrecorded
+CodeGraph version (recall 0.75, found already on disk, uncommitted) and
+three fresh trials on CodeGraph v1.5.0 (recall 1.00, 0.625, 1.00). Across
+all 5 trials: **mean recall 0.675, range 0.00–1.00** — high variance, not a
+reliable zero. Prism/Haiku was re-checked the same way (3 trials, all
+recall 1.00 — no variance). Do not cite "CodeGraph scores 0.00 on Haiku" as
+a stable finding; the defensible claim is that CodeGraph's cheap-model
+recall is unstable/unreliable while Prism's is not. Raw trial files:
+`runs/ab-agentic/rc-trials/` (Prism) and `runs/ab-agentic/verify-rerun/`
+(CodeGraph). This note supersedes the single-trial framing below in
+sections 4 and 5 and the closing summary.
 
 ## 4 · Local tier — the $0 story
 
@@ -156,17 +174,19 @@ local model to the ceiling.
 | tier | Prism | CodeGraph | baseline (grep) |
 |---|---|---|---|
 | local 30B ($0)  | **1.00** | (weak tier: see Haiku) | — |
-| Haiku (cheap)   | **1.00** (3 turns, 67k tok, $0.04) | 0.00 (31 turns, 1.79M, $0.33) | 0.75 |
+| Haiku (cheap)   | **1.00** (3 turns, 67k tok, $0.04; 0 variance, n=3) | 0.00–1.00, mean 0.68 (n=5, unstable — see reproducibility note in §3) | 0.75 |
 | Opus (frontier) | **1.00** (3 turns, 60k tok, $0.14) | 1.00 (23 turns, 1.43M, $2.38) | 0.62 |
 
 The correctness-first verdict: at equal completeness, Prism is ~17× cheaper
 and the only arm that stays complete as the model gets cheaper — down to $0.
+On the cheap tier CodeGraph isn't reliably completing at all: its recall
+swings 0.00–1.00 across repeat trials, so no single number describes it.
 
 Note on the missing local CodeGraph arm: no neutral local agent exists to
 carry it (`claude -p` is Claude-only; mason is Prism-native; OpenCode and
 Continue.dev scored 0–1/9 driving *any* tool from a local model — see
 [`AB-LOCAL-CLIS.md`](AB-LOCAL-CLIS.md)). Haiku is the weak-tier proxy:
-CodeGraph 0.00.
+CodeGraph unstable (0.00–1.00 across trials), not reliably at zero.
 
 ## Honest scope & caveats
 
