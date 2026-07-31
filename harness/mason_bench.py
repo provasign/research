@@ -1,7 +1,7 @@
 """Mason e2e on the 9-task change-impact bed: the INTEGRATED product
 (mason harness + prism graph wall + completeness machinery) driving a free
 local model. Same tasks, same oracle scoring as every other arm."""
-import json, subprocess, sys
+import json, os, subprocess, sys
 from pathlib import Path
 HARNESS = Path.home()/"Projects/provasign/research/harness"
 sys.path.insert(0, str(HARNESS))
@@ -11,13 +11,16 @@ from score import score
 MASON = "/tmp/mason-bench"
 MODEL = sys.argv[1] if len(sys.argv) > 1 else "ollama:qwen3-coder:30b"
 LABEL = MODEL.replace(":", "_").replace("/", "_")
-OUT = HARNESS/"runs/mason-bench"; OUT.mkdir(parents=True, exist_ok=True)
+OUT = Path(os.environ["MASON_OUT"]) if os.environ.get("MASON_OUT") else HARNESS/"runs/mason-bench"; OUT.mkdir(parents=True, exist_ok=True)
 
 CONTRACT = ('When done, output ONLY a single JSON object: {"sites": ["<relpath>:<Symbol>", ...], '
             '"complete": true|false, "unresolved": []}. Use "<repo-relative-path>:<FunctionOrMethodName>" '
             'per site. A missed site is a broken fix; a false site wastes a review. No prose after the JSON.\n\nISSUE:\n')
 
-TASKS = ["tasks/jackson-jsonnode-get.json", "tasks/jackson-settable-set.json",
+if os.environ.get("MASON_TASKS"):
+    TASKS = [l.strip() for l in open(os.environ["MASON_TASKS"]) if l.strip()]
+else:
+    TASKS = ["tasks/jackson-jsonnode-get.json", "tasks/jackson-settable-set.json",
          "tasks/jackson-writetypeprefix.json", "tasks/jackson-serialize.json",
          "tasks/guava-forwarding-delegate.json", "tasks/grafana-checkhealth-impact.json",
          "tasks/grafana-querydata-impact.json", "tasks/typeorm-driver-escape.json",
@@ -32,9 +35,16 @@ for tp in TASKS:
         f = OUT/f"{task.id}.{LABEL}.t{trial}.json"
         if f.exists():
             print(f"cached {f.name}", flush=True); continue
-        r = subprocess.run([MASON, "--dir", str(corpus), "--model", MODEL, "--yes",
-                            "--json", "--max-turns", "20", CONTRACT + task.prompt],
-                           capture_output=True, text=True, timeout=1800)
+        try:
+            r = subprocess.run([MASON, "--dir", str(corpus), "--model", MODEL, "--yes",
+                                "--json", "--max-turns", "20", CONTRACT + task.prompt],
+                               capture_output=True, text=True, timeout=900)
+        except subprocess.TimeoutExpired:
+            rec = {"task": task.id, "model": MODEL, "trial": trial, "gt": len(task.ground_truth),
+                   "error": "timeout-900s", "recall": 0.0, "precision": 0.0}
+            f.write_text(json.dumps(rec, indent=1))
+            print(f"{task.id:28} t{trial}: TIMEOUT", flush=True)
+            continue
         rec = {"task": task.id, "model": MODEL, "trial": trial, "gt": len(task.ground_truth)}
         import re as _re
         # Mason's product answer for enumeration tasks is the NARRATED engine

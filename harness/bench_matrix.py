@@ -46,7 +46,11 @@ cloud.ARMS["baseline"]["guidance"] = (
     "the code; an unverified or guessed answer is wrong."
 )
 
-TASKS = [
+import os as _os
+if _os.environ.get("BENCH_TASKS"):
+    TASKS = [l.strip() for l in open(_os.environ["BENCH_TASKS"]) if l.strip()]
+else:
+    TASKS = [
     "tasks/jackson-jsonnode-get.json",       # java, 8
     "tasks/jackson-settable-set.json",       # java, 22
     "tasks/jackson-writetypeprefix.json",    # java, 38
