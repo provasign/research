@@ -41,7 +41,7 @@ for tp in TASKS:
         if f.exists():
             print(f"cached {f.name}"); continue
         rec = cloud.run_arm("unified", task, corpus, MODEL)
-        rec.update(task=task.id, model="haiku", trial=trial, gt=len(task.ground_truth))
+        rec.update(task=task.id, model=MODEL, trial=trial, gt=len(task.ground_truth))
         f.write_text(json.dumps(rec, indent=2))
         print(f"{task.id} t{trial}: recall={rec.get('recall')} prec={rec.get('precision')} "
               f"turns={rec.get('turns')} in={ (rec.get('tokens_in') or 0)//1000 }k "
