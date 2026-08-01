@@ -1,0 +1,65 @@
+diff --git a/src/main/java/org/apache/commons/lang3/ClassUtils.java b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+index 5c2cf099d..59a1d9b47 100644
+--- a/src/main/java/org/apache/commons/lang3/ClassUtils.java
++++ b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+@@ -1012,8 +1012,9 @@ public static String getShortCanonicalName(final String canonicalName) {
+      * Gets the class name minus the package name from a {@link Class}.
+      *
+      * <p>
+-     * This method simply gets the name using {@code Class.getName()} and then calls {@link #getShortClassName(String)}. See
+-     * relevant notes there.
++     * This method uses reflective metadata to determine the actual structure of the class, correctly preserving
++     * {@code $} characters that are part of valid class identifiers. For local and anonymous classes, it falls back
++     * to the string-based logic to preserve compiler-generated ordinal naming expected by existing tests.
+      * </p>
+      *
+      * @param cls the class to get the short name for.
+@@ -1024,7 +1025,47 @@ public static String getShortClassName(final Class<?> cls) {
+         if (cls == null) {
+             return StringUtils.EMPTY;
+         }
+-        return getShortClassName(cls.getName());
++
++        String arrayPrefix = "";
++        Class<?> componentType = cls;
++
++        if (cls.isArray()) {
++            int dimensions = 0;
++            while (componentType.isArray()) {
++                componentType = componentType.getComponentType();
++                dimensions++;
++            }
++            arrayPrefix = StringUtils.repeat("[]", dimensions);
++        }
++
++        if (componentType.isPrimitive()) {
++            return componentType.getName() + arrayPrefix;
++        }
++
++        String binaryName = componentType.getName();
++
++        if (componentType.isLocalClass() || componentType.isAnonymousClass()) {
++            return getShortClassName(binaryName) + arrayPrefix;
++        }
++
++        Class<?> enclosingClass = componentType.getEnclosingClass();
++        if (enclosingClass == null) {
++            final int lastDotIdx = binaryName.lastIndexOf(PACKAGE_SEPARATOR_CHAR);
++            return binaryName.substring(lastDotIdx + 1) + arrayPrefix;
++        }
++
++        StringBuilder result = new StringBuilder();
++        Class<?> current = componentType;
++
++        while (current != null) {
++            if (result.length() > 0) {
++                result.insert(0, PACKAGE_SEPARATOR_CHAR);
++            }
++            result.insert(0, current.getSimpleName());
++            current = current.getEnclosingClass();
++        }
++
++        return result.toString() + arrayPrefix;
+     }
+ 
+     /**

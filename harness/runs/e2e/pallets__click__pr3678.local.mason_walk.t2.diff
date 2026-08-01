@@ -1,0 +1,33 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index 6de4216..604295f 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -1142,7 +1142,11 @@ class Command:
+ 
+     def get_help_option_names(self, ctx: Context) -> list[str]:
+         """Returns the names for the help option."""
+-        all_names = set(ctx.help_option_names)
++        if ctx is not None:
++            all_names = set(ctx.help_option_names)
++        else:
++            # When ctx is None, fall back to default help option names
++            all_names = {"--help"}
+         for param in self.params:
+             all_names.difference_update(param.opts)
+             all_names.difference_update(param.secondary_opts)
+diff --git a/test_help.py b/test_help.py
+new file mode 100644
+index 0000000..b317f0f
+--- /dev/null
++++ b/test_help.py
+@@ -0,0 +1,9 @@
++import click
++
++@click.command()
++def my_command():
++    """A test command."""
++    pass
++
++if __name__ == "__main__":
++    my_command()
+\ No newline at end of file

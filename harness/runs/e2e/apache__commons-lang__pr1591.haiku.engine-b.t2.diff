@@ -1,0 +1,85 @@
+diff --git a/$trange.class b/$trange.class
+new file mode 100644
+index 000000000..3187ae290
+Binary files /dev/null and b/$trange.class differ
+diff --git a/OuterClass$$Inner.class b/OuterClass$$Inner.class
+new file mode 100644
+index 000000000..c7a140d28
+Binary files /dev/null and b/OuterClass$$Inner.class differ
+diff --git a/OuterClass$Inner$Ne$ted.class b/OuterClass$Inner$Ne$ted.class
+new file mode 100644
+index 000000000..072e3b7f9
+Binary files /dev/null and b/OuterClass$Inner$Ne$ted.class differ
+diff --git a/OuterClass$Inner.class b/OuterClass$Inner.class
+new file mode 100644
+index 000000000..c78ef3be4
+Binary files /dev/null and b/OuterClass$Inner.class differ
+diff --git a/OuterClass.class b/OuterClass.class
+new file mode 100644
+index 000000000..3d5ed45cf
+Binary files /dev/null and b/OuterClass.class differ
+diff --git a/Pa$$word.class b/Pa$$word.class
+new file mode 100644
+index 000000000..c5502ce08
+Binary files /dev/null and b/Pa$$word.class differ
+diff --git a/src/main/java/org/apache/commons/lang3/ClassUtils.java b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+index 5c2cf099d..cf2e93501 100644
+--- a/src/main/java/org/apache/commons/lang3/ClassUtils.java
++++ b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+@@ -1012,8 +1012,9 @@ public static String getShortCanonicalName(final String canonicalName) {
+      * Gets the class name minus the package name from a {@link Class}.
+      *
+      * <p>
+-     * This method simply gets the name using {@code Class.getName()} and then calls {@link #getShortClassName(String)}. See
+-     * relevant notes there.
++     * This method uses {@link Class} metadata to correctly handle {@code $} characters that are part of actual class
++     * identifiers, rather than treating all {@code $} as inner-class separators. For local and anonymous classes, it
++     * falls back to the string-based logic to preserve compiler-generated ordinal naming.
+      * </p>
+      *
+      * @param cls the class to get the short name for.
+@@ -1024,7 +1025,43 @@ public static String getShortClassName(final Class<?> cls) {
+         if (cls == null) {
+             return StringUtils.EMPTY;
+         }
+-        return getShortClassName(cls.getName());
++
++        // Handle primitives using Class.getName()
++        if (cls.isPrimitive()) {
++            return cls.getName();
++        }
++
++        // Handle arrays by extracting component type
++        if (cls.isArray()) {
++            final StringBuilder sb = new StringBuilder();
++            Class<?> componentType = cls.getComponentType();
++            // Keep stripping array levels until we reach a non-array
++            while (componentType.isArray()) {
++                sb.append("[]");
++                componentType = componentType.getComponentType();
++            }
++            return getShortClassName(componentType) + "[]" + sb;
++        }
++
++        // For local and anonymous classes, fall back to string-based logic
++        // This preserves compiler-generated ordinal naming (e.g., "ClassName.1", "ClassName.2Named")
++        if (cls.isLocalClass() || cls.isAnonymousClass()) {
++            return getShortClassName(cls.getName());
++        }
++
++        // For regular and member classes, use reflection to build the short name
++        final StringBuilder sb = new StringBuilder();
++        sb.append(cls.getSimpleName());
++
++        // Walk up the enclosing class hierarchy
++        Class<?> enclosing = cls.getEnclosingClass();
++        while (enclosing != null) {
++            sb.insert(0, PACKAGE_SEPARATOR_CHAR);
++            sb.insert(0, enclosing.getSimpleName());
++            enclosing = enclosing.getEnclosingClass();
++        }
++
++        return sb.toString();
+     }
+ 
+     /**

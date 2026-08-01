@@ -1,0 +1,27 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index 6de4216..267c663 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -1146,6 +1146,22 @@ class Command:
+         for param in self.params:
+             all_names.difference_update(param.opts)
+             all_names.difference_update(param.secondary_opts)
++
++            # Check if a parameter's name conflicts with any help option name.
++            # For arguments, param.opts contains just the name without dashes,
++            # so we need to extract the argument name from help option names
++            # and compare with the parameter's name.
++            for help_name in list(all_names):
++                # Extract the argument name from help option name
++                # e.g., '--help' -> 'help', '-h' -> 'h'
++                help_arg_name = help_name.lstrip('-')
++                # Normalize by replacing hyphens with underscores, as Click does
++                help_arg_name = help_arg_name.replace('-', '_').lower()
++
++                # Check if this normalized name matches the parameter's name
++                if help_arg_name == param.name:
++                    all_names.discard(help_name)
++
+         return list(all_names)
+ 
+     def get_help_option(self, ctx: Context) -> Option | None:

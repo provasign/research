@@ -1,0 +1,66 @@
+diff --git a/src/main/java/org/apache/commons/lang3/ClassUtils.java b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+index 5c2cf099d..22394cf09 100644
+--- a/src/main/java/org/apache/commons/lang3/ClassUtils.java
++++ b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+@@ -1024,7 +1024,60 @@ public static String getShortClassName(final Class<?> cls) {
+         if (cls == null) {
+             return StringUtils.EMPTY;
+         }
+-        return getShortClassName(cls.getName());
++
++        // Handle arrays
++        if (cls.isArray()) {
++            StringBuilder sb = new StringBuilder();
++            Class<?> componentType = cls;
++            int dimensions = 0;
++
++            while (componentType.isArray()) {
++                dimensions++;
++                componentType = componentType.getComponentType();
++            }
++
++            sb.append(getShortClassName(componentType));
++            for (int i = 0; i < dimensions; i++) {
++                sb.append("[]");
++            }
++
++            return sb.toString();
++        }
++
++        // Handle primitives
++        if (cls.isPrimitive()) {
++            return cls.getSimpleName();
++        }
++
++        // For local and anonymous classes, fall back to string method for compiler-generated names
++        if (cls.isLocalClass() || cls.isAnonymousClass()) {
++            return getShortClassName(cls.getName());
++        }
++
++        // Build the short name from the class hierarchy
++        StringBuilder sb = new StringBuilder();
++        Class<?> current = cls;
++
++        // Collect all enclosing classes
++        java.util.List<Class<?>> hierarchy = new java.util.ArrayList<>();
++        while (current != null) {
++            hierarchy.add(0, current);
++            current = current.getEnclosingClass();
++        }
++
++        // Build the name, skipping the package
++        boolean first = true;
++        for (Class<?> c : hierarchy) {
++            if (first) {
++                sb.append(c.getSimpleName());
++                first = false;
++            } else {
++                sb.append(".");
++                sb.append(c.getSimpleName());
++            }
++        }
++
++        return sb.toString();
+     }
+ 
+     /**

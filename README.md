@@ -46,7 +46,7 @@ tool: [github.com/provasign/prism](https://github.com/provasign/prism).
 All consolidated in [`RESULTS.md`](RESULTS.md): the with/without-Prism agent
 grid (recall 0.997 tier-invariant with Prism vs 0.76–0.95 without; 28×
 cheaper at the bottom tier), the ongoing cross-tool benchmarking program
-(first entry CodeGraph: 0.99 vs 0.52 engine completeness, and the agent A/B
+(first entry Engine B: 0.99 vs 0.52 engine completeness, and the agent A/B
 where the gap survives with 17× cost separation at equal correctness), the
 local-model result (recall 1.00 at $0), and the experiments whose numbers we
 measured and refuse to cite (SWE-bench contamination, PR-replay validity).
@@ -56,11 +56,11 @@ measured and refuse to cite (SWE-bench contamination, PR-replay validity).
 | Path | Contents |
 |---|---|
 | `paper/paper.tex` | The paper (builds with `tectonic paper.tex`) |
-| [`RESULTS.md`](RESULTS.md) | **Every headline number in one place** — with/without Prism, vs CodeGraph, agent A/Bs, and what we refuse to cite |
+| [`RESULTS.md`](RESULTS.md) | **Every headline number in one place** — with/without Prism, vs Engine B, agent A/Bs, and what we refuse to cite |
 | `harness/` | Arms runner, scorers, aggregators — see [`harness/README.md`](harness/README.md) |
 | `harness/tasks/*.json` | Task definitions incl. oracle-derived ground truth (self-contained; oracles are only needed to *regenerate* GT) |
 | `harness/runs/` | **All scored run logs** — `runs/<task>/<model>/<Arm>.t<n>.json` + full agent transcripts |
-| [`harness/AB-CODEGRAPH.md`](harness/AB-CODEGRAPH.md) | Cross-tool benchmarking (ongoing; first entry: CodeGraph) — engine completeness, efficiency next to recall, agent A/B, repro |
+| [`harness/AB-ENGINE-COMPARISON.md`](harness/AB-ENGINE-COMPARISON.md) | Cross-tool benchmarking (ongoing; first entry: Engine B) — engine completeness, efficiency next to recall, agent A/B, repro |
 | [`harness/AB-LOCAL-CLIS.md`](harness/AB-LOCAL-CLIS.md) | Local-model agentic coding across CLIs (OpenCode, Continue.dev, mason) |
 | `harness/java-oracle/` | Spoon type-resolution oracle (Java GT) |
 | `harness/ts-oracle/` | ts-morph oracle (TypeScript GT) |
@@ -213,7 +213,7 @@ The tools under test (all open source; Apache-2.0 / MIT):
 ## Citation
 
 ```bibtex
-@misc{pal2026codegraph,
+@misc{pal2026engine-b,
   title  = {When Does a Code Graph Help a Coding Agent? Blast Radius, Model
             Capability, and Tool Altitude in Change-Impact Tasks},
   author = {Pal, Tapabrata},

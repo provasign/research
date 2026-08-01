@@ -4,7 +4,7 @@ Design note. Status: arms defined (`ab_endtoend_arms.py`), runner + task set to
 build. This is the benchmark that answers the practical question the
 change-impact study does not: on the work a normal agent actually does — real
 bug fixes, mostly localized — does a code graph beat agent-only, and is it
-Prism's G/G* or CodeGraph?
+Prism's G/G* or Engine B?
 
 ## Why the existing benchmarks don't answer this
 
@@ -25,7 +25,7 @@ make the repo's own `fail→pass` test pass, with no `pass→fail` regression?
 - **agent-only** (grep/read) — the default in Claude Code / Cursor / Amp
 - **agent + Prism G** — primitives (agent orchestrates)
 - **agent + Prism G\*** — task altitude (agent reads whole answers)
-- **agent + CodeGraph** — its `explore`
+- **agent + Engine B** — its `explore`
 
 ## What makes it defensible
 
@@ -72,10 +72,10 @@ op only on task shape; never force `change_impact` on a localized fix.** The
 `G` arm, by contrast, gets only primitives and must assemble context itself —
 that contrast is the paper's altitude thesis, tested end-to-end.
 
-**CodeGraph's `explore` is the honest peer of `prism_query`** — both are one-call
-task context. So the codegraph arm sits at the same altitude as the G\* default,
-and Prism's G\* additionally carries the type-resolved tail ops CodeGraph lacks.
-That is the fair form of the Prism-vs-CodeGraph comparison: not "our recall
+**Engine B's `explore` is the honest peer of `prism_query`** — both are one-call
+task context. So the engine-b arm sits at the same altitude as the G\* default,
+and Prism's G\* additionally carries the type-resolved tail ops Engine B lacks.
+That is the fair form of the Prism-vs-Engine B comparison: not "our recall
 metric," but "on real bug fixes, whose one-call context tool helped the agent
 more."
 
@@ -92,7 +92,7 @@ itself, before scoring), and we report two numbers:
 
 - **aggregate** — does the graph help a *random* task? (possibly a wash)
 - **conditional** — does it help on the high-blast-radius quartile? (where the
-  mechanism predicts the gap, and where name-resolution CodeGraph should start
+  mechanism predicts the gap, and where name-resolution Engine B should start
   losing to type-resolution Prism)
 
 We also record, per task, **whether the agent used a graph op at all and which
@@ -113,7 +113,7 @@ counts is same-tools-same-engine, not same-harness-code:
 - **Local (qwen3-coder:30b)** — `run_local_agent.py`, a neutral OpenAI-compatible
   ReAct loop over ollama. **Validated**: qwen3-coder:30b did native
   tool-calling and fixed a planted bug end-to-end (grep→read→edit→build→finish,
-  8 turns, 21 s, correct diff). Context tools shell out to the `prism`/`codegraph`
+  8 turns, 21 s, correct diff). Context tools shell out to the `prism`/`engine-b`
   CLIs — same engine the cloud arms reach via MCP. No rate limit → never pauses.
 
 **Auto-pause / auto-resume** (per the requirement): the runner is cell-based
@@ -148,7 +148,7 @@ saved, in exchange for "clean by construction."
 2026 bug-fix candidates from one 80-PR scan of django** — each links an issue,
 touches source *and* tests, and is reasonably sized. Several are high-blast-
 radius (cross-file symbol moves) — the tail where the graph should help and
-where name-resolution CodeGraph should lose to type-resolution Prism.
+where name-resolution Engine B should lose to type-resolution Prism.
 
 **Pilot strategy to bound the Docker lift:** start with a *single* well-behaved
 pure-Python repo (pytest, pip-installable, fast suite) and mine many 2026 tasks

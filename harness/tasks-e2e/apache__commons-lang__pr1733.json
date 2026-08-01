@@ -1,0 +1,46 @@
+{
+  "instance_id": "apache__commons-lang__pr1733",
+  "repo": "apache/commons-lang",
+  "pr": 1733,
+  "base_commit": "c3e09d34864d434ad671944d693d67ee07206cfc",
+  "merge_commit": "aafee70bfdfc7617ed509b54e3971441a3a5f57d",
+  "patch": "diff --git a/src/main/java/org/apache/commons/lang3/math/NumberUtils.java b/src/main/java/org/apache/commons/lang3/math/NumberUtils.java\nindex 0637a5ac2..84b954bfd 100644\n--- a/src/main/java/org/apache/commons/lang3/math/NumberUtils.java\n+++ b/src/main/java/org/apache/commons/lang3/math/NumberUtils.java\n@@ -761,12 +761,7 @@ public static double max(final double... array) {\n         // Finds and returns max\n         double max = array[0];\n         for (int j = 1; j < array.length; j++) {\n-            if (Double.isNaN(array[j])) {\n-                return Double.NaN;\n-            }\n-            if (array[j] > max) {\n-                max = array[j];\n-            }\n+            max = Math.max(max, array[j]);\n         }\n         return max;\n     }\n@@ -804,12 +799,7 @@ public static float max(final float... array) {\n         // Finds and returns max\n         float max = array[0];\n         for (int j = 1; j < array.length; j++) {\n-            if (Float.isNaN(array[j])) {\n-                return Float.NaN;\n-            }\n-            if (array[j] > max) {\n-                max = array[j];\n-            }\n+            max = Math.max(max, array[j]);\n         }\n         return max;\n     }\n@@ -1042,12 +1032,7 @@ public static double min(final double... array) {\n         // Finds and returns min\n         double min = array[0];\n         for (int i = 1; i < array.length; i++) {\n-            if (Double.isNaN(array[i])) {\n-                return Double.NaN;\n-            }\n-            if (array[i] < min) {\n-                min = array[i];\n-            }\n+            min = Math.min(min, array[i]);\n         }\n         return min;\n     }\n@@ -1085,12 +1070,7 @@ public static float min(final float... array) {\n         // Finds and returns min\n         float min = array[0];\n         for (int i = 1; i < array.length; i++) {\n-            if (Float.isNaN(array[i])) {\n-                return Float.NaN;\n-            }\n-            if (array[i] < min) {\n-                min = array[i];\n-            }\n+            min = Math.min(min, array[i]);\n         }\n         return min;\n     }\n",
+  "test_patch": "diff --git a/src/test/java/org/apache/commons/lang3/math/NumberUtilsTest.java b/src/test/java/org/apache/commons/lang3/math/NumberUtilsTest.java\nindex dc0ac6450..ae8a45c7a 100644\n--- a/src/test/java/org/apache/commons/lang3/math/NumberUtilsTest.java\n+++ b/src/test/java/org/apache/commons/lang3/math/NumberUtilsTest.java\n@@ -1308,6 +1308,24 @@ void testLang381() {\n         assertTrue(Float.isNaN(NumberUtils.max(bF)));\n     }\n \n+    @Test\n+    void testMinMaxSignedZero() {\n+        // The varargs overloads must agree with Math.min/Math.max (and the three-argument\n+        // overloads, which delegate to them) on the sign of zero. -0.0 is distinct from 0.0,\n+        // e.g. 1 / -0.0 is -Infinity, so the raw bits are asserted here.\n+        assertEquals(Double.doubleToRawLongBits(0.0d), Double.doubleToRawLongBits(NumberUtils.max(-0.0d, 0.0d)));\n+        assertEquals(Double.doubleToRawLongBits(0.0d), Double.doubleToRawLongBits(NumberUtils.max(0.0d, -0.0d)));\n+        assertEquals(Double.doubleToRawLongBits(-0.0d), Double.doubleToRawLongBits(NumberUtils.min(-0.0d, 0.0d)));\n+        assertEquals(Double.doubleToRawLongBits(-0.0d), Double.doubleToRawLongBits(NumberUtils.min(0.0d, -0.0d)));\n+        assertEquals(Float.floatToRawIntBits(0.0f), Float.floatToRawIntBits(NumberUtils.max(-0.0f, 0.0f)));\n+        assertEquals(Float.floatToRawIntBits(0.0f), Float.floatToRawIntBits(NumberUtils.max(0.0f, -0.0f)));\n+        assertEquals(Float.floatToRawIntBits(-0.0f), Float.floatToRawIntBits(NumberUtils.min(-0.0f, 0.0f)));\n+        assertEquals(Float.floatToRawIntBits(-0.0f), Float.floatToRawIntBits(NumberUtils.min(0.0f, -0.0f)));\n+        // the varargs result matches the three-argument overload\n+        assertEquals(Double.doubleToRawLongBits(NumberUtils.max(-0.0d, 0.0d, 0.0d)), Double.doubleToRawLongBits(NumberUtils.max(-0.0d, 0.0d)));\n+        assertEquals(Double.doubleToRawLongBits(NumberUtils.min(0.0d, -0.0d, 0.0d)), Double.doubleToRawLongBits(NumberUtils.min(0.0d, -0.0d)));\n+    }\n+\n     @Test\n     void testLang747() {\n         assertEquals(Integer.valueOf(0x8000), NumberUtils.createNumber(\"0x8000\"));\n",
+  "test_classes": [
+    "org.apache.commons.lang3.math.NumberUtilsTest"
+  ],
+  "src_files": [
+    "src/main/java/org/apache/commons/lang3/math/NumberUtils.java"
+  ],
+  "test_modules": [
+    "src/test/java/org/apache/commons/lang3/math/NumberUtilsTest.java"
+  ],
+  "problem_statement": "Fix NumberUtils min/max varargs dropping the sign of zero\n\n`Repro`: `NumberUtils.max(-0.0d, 0.0d)` returns `-0.0` (so `1 / result` is `-Infinity`); `NumberUtils.min(0.0d, -0.0d)` returns `0.0`.\n\n`Cause`: the `double`/`float` varargs overloads pick the extreme with `<`/`>`, which rank `-0.0` and `0.0` as equal, so the sign held in the accumulator survives. `Math.max`/`Math.min`, the three-argument `min`/`max` overloads and `IEEE754rUtils` all return the other sign for these inputs.\n\n`Fix`: run the loop through `Math.max`/`Math.min` in the four `double`/`float` overloads, matching the three-argument versions. Those also propagate `NaN`, so the explicit `isNaN` check is no longer needed and the existing `NaN` results stay the same.",
+  "fail_to_pass": [
+    "org.apache.commons.lang3.math.NumberUtilsTest::testMaximumDouble"
+  ],
+  "pass_to_pass": [
+    "org.apache.commons.lang3.math.NumberUtilsTest::testBigIntegerToDoubleBigIntegerD",
+    "org.apache.commons.lang3.math.NumberUtilsTest::testConstructor",
+    "org.apache.commons.lang3.math.NumberUtilsTest::testCreateDouble",
+    "org.apache.commons.lang3.math.NumberUtilsTest::testCreateInteger",
+    "org.apache.commons.lang3.math.NumberUtilsTest::testIsParsableInfinityNegative",
+    "org.apache.commons.lang3.math.NumberUtilsTest::testIsParsableInfinityPositive",
+    "org.apache.commons.lang3.math.NumberUtilsTest::testMaxByte_nullArray",
+    "org.apache.commons.lang3.math.NumberUtilsTest::testMaxInt_nullArray",
+    "org.apache.commons.lang3.math.NumberUtilsTest::testMaximumFloat",
+    "org.apache.commons.lang3.math.NumberUtilsTest::testMaximumShort",
+    "org.apache.commons.lang3.math.NumberUtilsTest::testMinLong_emptyArray",
+    "org.apache.commons.lang3.math.NumberUtilsTest::testMinShort_nullArray",
+    "org.apache.commons.lang3.math.NumberUtilsTest::testStringCreateNumberEnsureNoPrecisionLoss",
+    "org.apache.commons.lang3.math.NumberUtilsTest::testStringToDoubleString",
+    "org.apache.commons.lang3.math.NumberUtilsTest::testStringToDoubleStringD",
+    "org.apache.commons.lang3.math.NumberUtilsTest::testToLongStringL",
+    "org.apache.commons.lang3.math.NumberUtilsTest::testToScaledBigDecimalStringIRM",
+    "org.apache.commons.lang3.math.NumberUtilsTest::testToShortString",
+    "org.apache.commons.lang3.math.NumberUtilsTest::testToShortStringI"
+  ],
+  "lang": "java",
+  "build": "maven",
+  "task_kind": "localized"
+}

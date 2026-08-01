@@ -1,0 +1,26 @@
+{
+  "instance_id": "FasterXML__jackson-databind__pr6052",
+  "repo": "FasterXML/jackson-databind",
+  "pr": 6052,
+  "base_commit": "7a5939d6e6c26fa03da8e90680518a3d62ae3a25",
+  "merge_commit": "eced97ee47852a7d814529c312c9181baa80ddff",
+  "patch": "diff --git a/src/main/java/tools/jackson/databind/DeserializationContext.java b/src/main/java/tools/jackson/databind/DeserializationContext.java\nindex 5526e9d8d..b07f39cc8 100644\n--- a/src/main/java/tools/jackson/databind/DeserializationContext.java\n+++ b/src/main/java/tools/jackson/databind/DeserializationContext.java\n@@ -1332,7 +1332,12 @@ public abstract class DeserializationContext\n \n     private TreeTraversingParser _treeAsTokens(JsonNode n)\n     {\n-        TreeTraversingParser p = new TreeTraversingParser(n, this);\n+        // [databind#1803]: link parent context (from the active parser, if any) so that\n+        // path (`pathAsPointer()`) and parent `currentValue()` survive tree conversion\n+        // instead of starting fresh at the converted subtree.\n+        final JsonParser src = _parser;\n+        final TokenStreamContext parent = (src == null) ? null : src.streamReadContext();\n+        TreeTraversingParser p = new TreeTraversingParser(n, this, parent);\n         // important: must initialize...\n         p.nextToken();\n         return p;\n",
+  "test_patch": "diff --git a/src/test/java/tools/jackson/databind/node/ReadTreeAsValueParentPath1803Test.java b/src/test/java/tools/jackson/databind/node/ReadTreeAsValueParentPath1803Test.java\nnew file mode 100644\nindex 000000000..e74488f90\n--- /dev/null\n+++ b/src/test/java/tools/jackson/databind/node/ReadTreeAsValueParentPath1803Test.java\n@@ -0,0 +1,70 @@\n+package tools.jackson.databind.node;\n+\n+import org.junit.jupiter.api.Test;\n+\n+import tools.jackson.core.*;\n+import tools.jackson.databind.*;\n+import tools.jackson.databind.annotation.JsonDeserialize;\n+import tools.jackson.databind.testutil.DatabindTestUtil;\n+\n+import static org.junit.jupiter.api.Assertions.assertEquals;\n+\n+// [databind#1803]: when a custom deserializer converts a buffered subtree via\n+// `ctxt.readTreeAsValue(...)`, the resulting parser should report the FULL document\n+// path (parent context linked) rather than one that restarts at the subtree.\n+public class ReadTreeAsValueParentPath1803Test\n+    extends DatabindTestUtil\n+{\n+    static class Outer {\n+        @JsonDeserialize(using = InnerDeserializer.class)\n+        public Inner inner;\n+    }\n+\n+    static class Inner {\n+        public String pathSeenByDeserializer;\n+        public int x;\n+    }\n+\n+    // Two-phase deserializer: read the value as a tree, then convert it back via\n+    // `readTreeAsValue`, capturing the path the nested deserialization observes.\n+    static class InnerDeserializer extends ValueDeserializer<Inner> {\n+        @Override\n+        public Inner deserialize(JsonParser p, DeserializationContext ctxt) {\n+            JsonNode node = ctxt.readTree(p);\n+            Inner result = ctxt.readTreeAsValue(node, InnerImpl.class);\n+            return result;\n+        }\n+    }\n+\n+    // Distinct type to avoid recursive use of InnerDeserializer; its own deserializer\n+    // records the path it sees while being read from the tree-traversing parser.\n+    @JsonDeserialize(using = InnerImplDeserializer.class)\n+    static class InnerImpl extends Inner { }\n+\n+    static class InnerImplDeserializer extends ValueDeserializer<InnerImpl> {\n+        @Override\n+        public InnerImpl deserialize(JsonParser p, DeserializationContext ctxt) {\n+            InnerImpl result = new InnerImpl();\n+            // Record path at the point the Object value starts being read\n+            result.pathSeenByDeserializer = p.streamReadContext().pathAsPointer().toString();\n+            // consume the object so parsing completes cleanly\n+            for (JsonToken t = p.currentToken(); t != null && t != JsonToken.END_OBJECT; t = p.nextToken()) {\n+                if (t == JsonToken.PROPERTY_NAME && \"x\".equals(p.currentName())) {\n+                    p.nextToken();\n+                    result.x = p.getIntValue();\n+                }\n+            }\n+            return result;\n+        }\n+    }\n+\n+    private final ObjectMapper MAPPER = newJsonMapper();\n+\n+    @Test\n+    void readTreeAsValueSeesFullParentPath() throws Exception {\n+        Outer outer = MAPPER.readValue(\"{\\\"inner\\\":{\\\"x\\\":42}}\", Outer.class);\n+        assertEquals(42, outer.inner.x);\n+        // With parent context linked, the nested deserializer sees \"/inner\" prefix.\n+        assertEquals(\"/inner\", outer.inner.pathSeenByDeserializer);\n+    }\n+}\n",
+  "test_classes": [
+    "tools.jackson.databind.node.ReadTreeAsValueParentPath1803Test"
+  ],
+  "src_files": [
+    "src/main/java/tools/jackson/databind/DeserializationContext.java"
+  ],
+  "problem_statement": "Fix #1803: `TreeTraversingParser` should allow passing of parent context\n\n",
+  "fail_to_pass": [
+    "tools.jackson.databind.node.ReadTreeAsValueParentPath1803Test::readTreeAsValueSeesFullParentPath"
+  ],
+  "pass_to_pass": [],
+  "lang": "java",
+  "build": "maven",
+  "task_kind": "localized",
+  "test_modules": [
+    "src/test/java/tools/jackson/databind/node/ReadTreeAsValueParentPath1803Test.java"
+  ]
+}

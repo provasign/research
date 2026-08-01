@@ -1,0 +1,25 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java b/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
+index 070c2df39..80eb42ce7 100644
+--- a/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
++++ b/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
+@@ -244,9 +244,19 @@ public class UnwrappedPropertyHandler
+         if (prop != null) {
+             ValueDeserializer<?> deser = prop.getValueDeserializer();
+             if (deser != null) {
++                int namesBefore = names.size();
+                 // Recursively collect property names
+             	deser.collectAllPropertyNamesTo(names);
+-                return deser.hasAnySetter();
++                boolean hasAnySetter = deser.hasAnySetter();
++                // [databind#6001]: If deserializer doesn't declare any properties
++                // in an unwrapped context, treat it as having an any-setter
++                // so that it receives all unwrapped properties. This handles custom
++                // deserializers that implement unwrappingDeserializer() but don't
++                // declare property names via collectAllPropertyNamesTo().
++                if (!hasAnySetter && names.size() == namesBefore) {
++                    hasAnySetter = true;
++                }
++                return hasAnySetter;
+             }
+         }
+         return false;

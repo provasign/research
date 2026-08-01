@@ -1,0 +1,35 @@
+{
+  "instance_id": "FasterXML__jackson-databind__pr6012",
+  "repo": "FasterXML/jackson-databind",
+  "pr": 6012,
+  "base_commit": "6cf84f42982b99a566b3ad65c220af015fb0e74e",
+  "merge_commit": "b5ed0447a0b6945a239069c8a03d6551895908ee",
+  "patch": "diff --git a/src/main/java/tools/jackson/databind/cfg/MapperBuilder.java b/src/main/java/tools/jackson/databind/cfg/MapperBuilder.java\nindex a8b840e49..1fe200452 100644\n--- a/src/main/java/tools/jackson/databind/cfg/MapperBuilder.java\n+++ b/src/main/java/tools/jackson/databind/cfg/MapperBuilder.java\n@@ -842,6 +842,7 @@ public abstract class MapperBuilder<M extends ObjectMapper,\n                 .enable(JsonNodeFeature.STRIP_TRAILING_BIGDECIMAL_ZEROES)\n                 .enable(MapperFeature.ALLOW_FINAL_FIELDS_AS_MUTATORS)\n                 .disable(MapperFeature.DETECT_PARAMETER_NAMES) // [databind#5314]\n+                .disable(MapperFeature.FIX_FIELD_NAME_UPPER_CASE_PREFIX) // [databind#6011]\n                 .disable(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY)\n                 .enable(MapperFeature.USE_GETTERS_AS_SETTERS)\n                 .enable(SerializationFeature.FAIL_ON_EMPTY_BEANS)\n",
+  "test_patch": "diff --git a/src/test/java/tools/jackson/databind/json/JsonMapperBuilderTest.java b/src/test/java/tools/jackson/databind/json/JsonMapperBuilderTest.java\nindex 454163d24..9f3aa045f 100644\n--- a/src/test/java/tools/jackson/databind/json/JsonMapperBuilderTest.java\n+++ b/src/test/java/tools/jackson/databind/json/JsonMapperBuilderTest.java\n@@ -35,6 +35,8 @@ public class JsonMapperBuilderTest extends DatabindTestUtil\n         assertTrue(mapper.isEnabled(MapperFeature.USE_GETTERS_AS_SETTERS));\n         assertTrue(mapper.isEnabled(MapperFeature.ALLOW_FINAL_FIELDS_AS_MUTATORS));\n         assertFalse(mapper.isEnabled(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY));\n+        // [databind#6011]\n+        assertFalse(mapper.isEnabled(MapperFeature.FIX_FIELD_NAME_UPPER_CASE_PREFIX));\n     }\n \n     // Test 1: Builder with stream read features\n",
+  "test_classes": [
+    "tools.jackson.databind.json.JsonMapperBuilderTest"
+  ],
+  "src_files": [
+    "src/main/java/tools/jackson/databind/cfg/MapperBuilder.java"
+  ],
+  "problem_statement": "Fix #6011\n\n",
+  "fail_to_pass": [
+    "tools.jackson.databind.json.JsonMapperBuilderTest::testBuilderWithJackson2Defaults"
+  ],
+  "pass_to_pass": [
+    "tools.jackson.databind.json.JsonMapperBuilderTest::testBuilderConfigurationChaining",
+    "tools.jackson.databind.json.JsonMapperBuilderTest::testBuilderCreatesIndependentMappers",
+    "tools.jackson.databind.json.JsonMapperBuilderTest::testBuilderWithJsonReadFeatures",
+    "tools.jackson.databind.json.JsonMapperBuilderTest::testBuilderWithJsonWriteFeatures",
+    "tools.jackson.databind.json.JsonMapperBuilderTest::testBuilderWithMapperFeatures",
+    "tools.jackson.databind.json.JsonMapperBuilderTest::testBuilderWithMultipleFeatures",
+    "tools.jackson.databind.json.JsonMapperBuilderTest::testBuilderWithStreamReadFeatures",
+    "tools.jackson.databind.json.JsonMapperBuilderTest::testBuilderWithStreamWriteFeatures"
+  ],
+  "lang": "java",
+  "build": "maven",
+  "task_kind": "localized",
+  "test_modules": [
+    "src/test/java/tools/jackson/databind/json/JsonMapperBuilderTest.java"
+  ]
+}

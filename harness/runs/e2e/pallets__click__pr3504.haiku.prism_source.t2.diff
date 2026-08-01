@@ -1,5 +1,5 @@
 diff --git a/src/click/shell_completion.py b/src/click/shell_completion.py
-index b01e290..af83e11 100644
+index b01e290..929d0ad 100644
 --- a/src/click/shell_completion.py
 +++ b/src/click/shell_completion.py
 @@ -181,18 +181,14 @@ function %(complete_func)s;
@@ -23,7 +23,7 @@ index b01e290..af83e11 100644
          end;
      end;
  end;
-@@ -422,20 +418,15 @@ class FishComplete(ShellComplete):
+@@ -422,20 +418,11 @@ class FishComplete(ShellComplete):
          return args, incomplete
  
      def format_completion(self, item: CompletionItem) -> str:
@@ -41,10 +41,6 @@ index b01e290..af83e11 100644
 -        value = item.value.replace("\n", r"\n")
 -        help_escaped = help_.replace("\n", r"\n")
 -        return f"{item.type}\n{value}\n{help_escaped}"
-+        # According to https://fishshell.com/docs/current/cmds/complete.html
-+        # Command substitutions found in ARGUMENTS should return a newline-
-+        # separated list of arguments, and each argument may optionally have a tab
-+        # character followed by the argument description.
 +        if item.help:
 +            help_ = item.help.replace("\n", "\\n").replace("\t", " ")
 +            return f"{item.type},{item.value}\t{help_}"

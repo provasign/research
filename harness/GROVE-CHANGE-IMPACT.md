@@ -63,7 +63,7 @@ confidence) on any conventionally-formatted Java codebase — not just this op.
 
 ## The op (where it lives)
 
-- `grove/internal/graph/changeimpact.go` — `CodeGraph.ChangeImpact(query)`:
+- `grove/internal/graph/changeimpact.go` — `Engine B.ChangeImpact(query)`:
   parse `Type.method(Params)` → resolve declaration via contains edges (+ param
   filter) → subtype closure over inbound extends/implements → family filtered
   by signature compatibility (type-parameter wildcards) → callers via inbound

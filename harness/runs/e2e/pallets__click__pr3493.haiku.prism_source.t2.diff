@@ -1,5 +1,17 @@
+diff --git a/CHANGES.rst b/CHANGES.rst
+index eb32cd8..d27b434 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -10,6 +10,7 @@ Unreleased
+ -   Zsh completion scripts parse correctly on Windows. :issue:`3277`
+ -   Shell completion of `Choice` `Enum` values produces a valid completion
+     result. :issue:`3015`
++-   Fix empty byte-string handling in echo. :issue:`3487`
+ 
+ Version 8.4.0
+ -------------
 diff --git a/src/click/utils.py b/src/click/utils.py
-index 223d6b8..4f1a9a0 100644
+index 223d6b8..43043e4 100644
 --- a/src/click/utils.py
 +++ b/src/click/utils.py
 @@ -294,7 +294,7 @@ def echo(
@@ -11,3 +23,11 @@ index 223d6b8..4f1a9a0 100644
          if isinstance(out, str):
              out += "\n"
          else:
+@@ -310,7 +310,6 @@ def echo(
+     # would expect. Eg: you can write to StringIO for other cases.
+     if isinstance(out, (bytes, bytearray)):
+         binary_file = _find_binary_writer(file)
+-
+         if binary_file is not None:
+             file.flush()
+             binary_file.write(out)

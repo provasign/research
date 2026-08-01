@@ -1,9 +1,9 @@
-"""Agentic A/B: does CodeGraph actually cut tool calls / tokens / time — and at
+"""Agentic A/B: does Engine B actually cut tool calls / tokens / time — and at
 what CORRECTNESS? Same agent (claude -p), same task, three arms differing ONLY
 in the tool available:
 
-  baseline  — grep/read only            (CodeGraph's claim is 'fewer calls than this')
-  codegraph — CodeGraph MCP (explore/impact/callers)
+  baseline  — grep/read only            (Engine B's claim is 'fewer calls than this')
+  engine-b — Engine B MCP (explore/impact/callers)
   prism     — Prism MCP (change_impact)
 
 Per arm we record recall (oracle-scored — the headline), num_turns (tool-call
@@ -27,8 +27,8 @@ CFG_DIR = Path("/tmp/ab-agentic-mcp")
 CFG_DIR.mkdir(exist_ok=True)
 
 # MCP server configs (stdio).
-(CFG_DIR / "codegraph.json").write_text(json.dumps({"mcpServers": {
-    "codegraph": {"type": "stdio", "command": str(HOME/".local/bin/codegraph"), "args": ["serve", "--mcp"]}}}))
+(CFG_DIR / "engine-b.json").write_text(json.dumps({"mcpServers": {
+    "engine-b": {"type": "stdio", "command": str(HOME/".local/bin/engine-b"), "args": ["serve", "--mcp"]}}}))
 (CFG_DIR / "prism.json").write_text(json.dumps({"mcpServers": {
     "prism": {"type": "stdio", "command": str(HOME/"bin/prism"), "args": ["mcp"]}}}))
 
@@ -49,12 +49,12 @@ ARMS = {
         "allowed": ["Read", "Grep", "Glob", "Bash(rg:*)", "Bash(grep:*)", "Bash(find:*)"],
         "mcp": None,
     },
-    "codegraph": {
-        "guidance": "TOOLS: the CodeGraph MCP server (its `codegraph_explore` returns "
+    "engine-b": {
+        "guidance": "TOOLS: the Engine B MCP server (its `engine_b_explore` returns "
                     "relevant symbols + call paths + blast radius in one call; also "
                     "`impact`/`callers`). Use it to find every site a change affects.",
-        "allowed": ["Read", "mcp__codegraph"],
-        "mcp": str(CFG_DIR / "codegraph.json"),
+        "allowed": ["Read", "mcp__engine-b"],
+        "mcp": str(CFG_DIR / "engine-b.json"),
     },
     "prism": {
         "guidance": "TOOLS: the Prism MCP server. `prism_change_impact` returns the "
@@ -101,7 +101,7 @@ def run_arm(arm: str, task: Task, corpus: Path, model: str) -> dict:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="opus")
-    ap.add_argument("--arms", default="baseline,codegraph,prism")
+    ap.add_argument("--arms", default="baseline,engine-b,prism")
     ap.add_argument("tasks", nargs="+")
     args = ap.parse_args()
 

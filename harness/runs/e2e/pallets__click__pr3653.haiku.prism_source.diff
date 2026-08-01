@@ -1,5 +1,5 @@
 diff --git a/src/click/termui.py b/src/click/termui.py
-index e5e9678..af8dada 100644
+index e5e9678..172451b 100644
 --- a/src/click/termui.py
 +++ b/src/click/termui.py
 @@ -11,6 +11,7 @@ from contextlib import AbstractContextManager
@@ -10,13 +10,22 @@ index e5e9678..af8dada 100644
  from ._compat import isatty
  from ._compat import strip_ansi
  from .exceptions import Abort
-@@ -267,6 +268,9 @@ def confirm(
-         "y/n" if default is None else ("Y/n" if default else "y/N"),
-     )
- 
-+    if _compat.should_strip_ansi(sys.stderr if err else sys.stdout):
-+        prompt = strip_ansi(prompt)
+@@ -83,7 +84,18 @@ def hidden_prompt_func(prompt: str) -> str:
+ def _readline_prompt(func: t.Callable[[str], str], text: str, err: bool) -> str:
+     """Call a prompt function, passing the full prompt on non-Windows so
+     readline can handle line editing and cursor positioning correctly.
 +
-     while True:
-         try:
-             value = _readline_prompt(visible_prompt_func, prompt, err).lower().strip()
++    The prompt is handed to *func* (such as :func:`input`) rather than
++    written through :func:`echo`, so it has to strip ANSI color and style
++    codes itself when the destination stream does not support them. Without
++    this the prompt would keep codes that :func:`echo` removes from the
++    rest of the output.
+     """
++    stream = sys.stderr if err else sys.stdout
++
++    if _compat.should_strip_ansi(stream, resolve_color_default()):
++        text = strip_ansi(text)
++
+     if err:
+         with redirect_stdout(sys.stderr):
+             return func(text)

@@ -2,7 +2,7 @@
 
 The question this benchmark answers: on the work a REGULAR coding agent does
 (real bug fixes / small features, most of them localized), does a code graph
-help the agent — and is it Prism's G/G* or CodeGraph? The oracle is the repo's
+help the agent — and is it Prism's G/G* or Engine B? The oracle is the repo's
 own test suite (fail->pass, no pass->fail regressions), run post-hoc in Docker;
 the agent never sees it. Tasks are POST-CUTOFF (merged after the model training
 cutoff) so memorization cannot substitute for tooling.
@@ -25,9 +25,9 @@ not just by prompt:
                       and would mismeasure the graph. This is the correction to
                       ab_agentic_mcp.py, whose Prism arm hard-wired change_impact.
 
-CodeGraph's `explore` is the true peer of prism_query -- both are one-call task
-context -- so the codegraph arm sits at the same altitude as the G* default,
-plus Prism's G* has the type-resolved tail ops CodeGraph does not.
+Engine B's `explore` is the true peer of prism_query -- both are one-call task
+context -- so the engine-b arm sits at the same altitude as the G* default,
+plus Prism's G* has the type-resolved tail ops Engine B does not.
 """
 from __future__ import annotations
 
@@ -38,8 +38,8 @@ HOME = Path.home()
 CFG_DIR = Path("/tmp/ab-endtoend")
 CFG_DIR.mkdir(exist_ok=True)
 
-(CFG_DIR / "codegraph.json").write_text(json.dumps({"mcpServers": {
-    "codegraph": {"type": "stdio", "command": str(HOME / ".local/bin/codegraph"),
+(CFG_DIR / "engine-b.json").write_text(json.dumps({"mcpServers": {
+    "engine-b": {"type": "stdio", "command": str(HOME / ".local/bin/engine-b"),
                   "args": ["serve", "--mcp"]}}}))
 (CFG_DIR / "prism.json").write_text(json.dumps({"mcpServers": {
     "prism": {"type": "stdio", "command": str(HOME / "bin/prism"), "args": ["mcp"]}}}))
@@ -163,14 +163,14 @@ ARMS = {
             "mcp__prism__prism_lookup", "mcp__prism__prism_edges"],
         "mcp": str(CFG_DIR / "prism.json"),
     },
-    # CodeGraph -- explore is the one-call peer of prism_query (same altitude).
-    "codegraph": {
-        "guidance": "CONTEXT TOOL: CodeGraph. codegraph_explore(task/symbol) "
+    # Engine B -- explore is the one-call peer of prism_query (same altitude).
+    "engine-b": {
+        "guidance": "CONTEXT TOOL: Engine B. engine_b_explore(task/symbol) "
                     "returns relevant symbols, call paths, and blast radius in one "
                     "call -- use it as your primary context tool; impact/callers "
                     "for follow-ups. Then edit and build.",
-        "allowed": _EDIT_AND_BUILD + ["mcp__codegraph"],
-        "mcp": str(CFG_DIR / "codegraph.json"),
+        "allowed": _EDIT_AND_BUILD + ["mcp__engine-b"],
+        "mcp": str(CFG_DIR / "engine-b.json"),
     },
 }
 
@@ -179,7 +179,7 @@ ARMS = {
 # graph arms. Baseline keeps grep (grep IS its tool / the control).
 _SEARCH = {"Grep", "Glob", "Bash(rg:*)", "Bash(grep:*)", "Bash(find:*)",
            "Bash(ls:*)", "Bash(cat:*)"}
-for _base in ("prism_g", "prism_gstar", "codegraph"):
+for _base in ("prism_g", "prism_gstar", "engine-b"):
     ARMS[_base + "_nogrep"] = {
         "guidance": ARMS[_base]["guidance"] +
                     "\nYou have NO grep/text-search tool. Discover all code THROUGH "
@@ -200,6 +200,6 @@ GRAPH_TOOL_PREFIXES = {
                     "mcp__prism__prism_missing_implementations",
                     "mcp__prism__prism_untested_surface",
                     "mcp__prism__prism_dead_code"),
-    "codegraph": ("mcp__codegraph",),
+    "engine-b": ("mcp__engine-b",),
     "baseline": (),
 }

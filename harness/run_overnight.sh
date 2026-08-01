@@ -8,7 +8,7 @@ cd "$(dirname "$0")"
 export E2E_WAIT_ON_LIMIT=1
 export E2E_LIMIT_SLEEP=1200
 M=tasks-e2e/manifest.pilot.json
-ARMS=baseline,prism_g,prism_gstar,codegraph
+ARMS=baseline,prism_g,prism_gstar,engine-b
 log(){ echo "[overnight $(date +%H:%M)] $*"; }
 
 log "waiting for the in-flight mason run to finish (produces the 5 local mason cells)"

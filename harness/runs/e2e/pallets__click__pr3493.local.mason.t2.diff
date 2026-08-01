@@ -1,5 +1,5 @@
 diff --git a/src/click/utils.py b/src/click/utils.py
-index 223d6b8..2169d11 100644
+index 223d6b8..f083187 100644
 --- a/src/click/utils.py
 +++ b/src/click/utils.py
 @@ -294,7 +294,7 @@ def echo(
@@ -11,3 +11,16 @@ index 223d6b8..2169d11 100644
          if isinstance(out, str):
              out += "\n"
          else:
+@@ -316,6 +316,12 @@ def echo(
+             binary_file.write(out)
+             binary_file.flush()
+             return
++        else:
++            # If we can't find a binary writer, convert bytes to string for text streams
++            if isinstance(out, bytes):
++                out = out.decode('utf-8', errors='replace')
++            elif isinstance(out, bytearray):
++                out = str(out)
+ 
+     # ANSI style code support. For no message or bytes, nothing happens.
+     # When outputting to a file instead of a terminal, strip codes.

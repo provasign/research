@@ -1,0 +1,30 @@
+diff --git a/src/main/java/org/apache/commons/lang3/ClassUtils.java b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+index 1e7a3b5e3..a8c7c700a 100644
+--- a/src/main/java/org/apache/commons/lang3/ClassUtils.java
++++ b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+@@ -596,6 +596,12 @@ public static Class<?> getClass(final ClassLoader classLoader, final String clas
+             try {
+                 final Class<?> clazz = getPrimitiveClass(next);
+                 return clazz != null ? clazz : Class.forName(toCleanName(next), initialize, classLoader);
++            } catch (final IllegalArgumentException ex) {
++                // Convert malformed array suffix errors to ClassNotFoundException
++                if ("Malformed array suffix in class name".equals(ex.getMessage())) {
++                    throw new ClassNotFoundException(className, ex);
++                }
++                throw ex;
+             } catch (final ClassNotFoundException ex) {
+                 lastDotIndex = next.lastIndexOf(PACKAGE_SEPARATOR_CHAR);
+                 if (lastDotIndex != -1) {
+@@ -1656,6 +1662,12 @@ private static String toCleanName(final String className) {
+                 classNameBuffer.append(encodedClassNameStart).append(canonicalName).append(encodedClassNameEnd);
+             }
+             canonicalName = classNameBuffer.toString();
++        } else if (!encodedName && (canonicalName.contains("[") || canonicalName.contains("]"))) {
++            // Check if it's a valid primitive array type like [I or [[Z
++            // Valid primitive types: Z(boolean), B(byte), C(char), S(short), I(int), J(long), F(float), D(double)
++            if (!canonicalName.matches("^\\[+[ZBCSIJFD]$")) {
++                throw new IllegalArgumentException("Malformed array suffix in class name");
++            }
+         }
+         return canonicalName;
+     }

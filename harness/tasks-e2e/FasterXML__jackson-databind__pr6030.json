@@ -1,0 +1,34 @@
+{
+  "instance_id": "FasterXML__jackson-databind__pr6030",
+  "repo": "FasterXML/jackson-databind",
+  "pr": 6030,
+  "base_commit": "2612b0644443e29bae166218d910db2b53185d0d",
+  "merge_commit": "a7062a263679f13860b01483287eda8d49800aa5",
+  "patch": "diff --git a/src/main/java/tools/jackson/databind/ser/bean/BeanSerializerBase.java b/src/main/java/tools/jackson/databind/ser/bean/BeanSerializerBase.java\nindex e626eb5dc..412ae9b44 100644\n--- a/src/main/java/tools/jackson/databind/ser/bean/BeanSerializerBase.java\n+++ b/src/main/java/tools/jackson/databind/ser/bean/BeanSerializerBase.java\n@@ -423,9 +423,10 @@ public abstract class BeanSerializerBase\n                 String name = innerProp.getName();\n                 if (!seenNames.add(name)) {\n                     ctxt.reportBadDefinition(_beanType, String.format(\n-\"Conflict between unwrapped property '%s' (of type %s)\"\n-+\" and another property with same name;\"\n+\"Conflict for type %s: unwrapped property '%s' (of type %s)\"\n++\" and another property have the same name;\"\n +\" consider using `@JsonUnwrapped(prefix=...)` to avoid name collision\",\n+                            ClassUtil.getTypeDescription(_beanType),\n                             name, ClassUtil.getTypeDescription(unwrapped.getType())));\n                 }\n             }\n",
+  "test_patch": "diff --git a/src/test/java/tools/jackson/databind/struct/UnwrappedPropertyConflict2883Test.java b/src/test/java/tools/jackson/databind/struct/UnwrappedPropertyConflict2883Test.java\nindex ee6620666..b0fe400db 100644\n--- a/src/test/java/tools/jackson/databind/struct/UnwrappedPropertyConflict2883Test.java\n+++ b/src/test/java/tools/jackson/databind/struct/UnwrappedPropertyConflict2883Test.java\n@@ -135,10 +135,12 @@ public class UnwrappedPropertyConflict2883Test extends DatabindTestUtil\n         InvalidDefinitionException ex = assertThrows(\n                 InvalidDefinitionException.class,\n                 () -> MAPPER.writeValueAsString(new OuterConflict()));\n-        verifyException(ex, \"Conflict between unwrapped property\");\n+        verifyException(ex, \"Conflict for type\");\n         verifyException(ex, \"'b'\");\n         // Error should also identify the offending unwrapped type\n         verifyException(ex, \"InnerC\");\n+        // [databind#6028]: ...as well as the type that declares the unwrapped mapping\n+        verifyException(ex, \"OuterConflict\");\n     }\n \n     @Test\n@@ -153,7 +155,7 @@ public class UnwrappedPropertyConflict2883Test extends DatabindTestUtil\n         InvalidDefinitionException ex = assertThrows(\n                 InvalidDefinitionException.class,\n                 () -> MAPPER.writeValueAsString(new TwoUnwrappedConflict()));\n-        verifyException(ex, \"Conflict between unwrapped property\");\n+        verifyException(ex, \"unwrapped property\");\n         verifyException(ex, \"'id'\");\n     }\n \n@@ -172,7 +174,7 @@ public class UnwrappedPropertyConflict2883Test extends DatabindTestUtil\n         InvalidDefinitionException ex = assertThrows(\n                 InvalidDefinitionException.class,\n                 () -> MAPPER.writeValueAsString(new OuterRenameConflict()));\n-        verifyException(ex, \"Conflict between unwrapped property\");\n+        verifyException(ex, \"unwrapped property\");\n         verifyException(ex, \"'id'\");\n     }\n \n@@ -186,7 +188,7 @@ public class UnwrappedPropertyConflict2883Test extends DatabindTestUtil\n         InvalidDefinitionException ex = assertThrows(\n                 InvalidDefinitionException.class,\n                 () -> mapper.writeValueAsString(new OuterNamingStrategyConflict()));\n-        verifyException(ex, \"Conflict between unwrapped property\");\n+        verifyException(ex, \"unwrapped property\");\n         verifyException(ex, \"'foo_bar'\");\n     }\n \ndiff --git a/src/test/java/tools/jackson/databind/struct/UnwrappedWithConverter6017Test.java b/src/test/java/tools/jackson/databind/struct/UnwrappedWithConverter6017Test.java\nindex f6ab101ec..a0cd0a6d5 100644\n--- a/src/test/java/tools/jackson/databind/struct/UnwrappedWithConverter6017Test.java\n+++ b/src/test/java/tools/jackson/databind/struct/UnwrappedWithConverter6017Test.java\n@@ -77,7 +77,7 @@ public class UnwrappedWithConverter6017Test extends DatabindTestUtil\n     public void testUnwrappedConverterPropertyConflictDetected() {\n         DatabindException e = assertThrows(DatabindException.class,\n                 () -> MAPPER.writeValueAsString(new OuterConflict()));\n-        assertTrue(e.getMessage().contains(\"Conflict between unwrapped property 'x'\"),\n+        assertTrue(e.getMessage().contains(\"unwrapped property 'x'\"),\n                 \"Unexpected message: \" + e.getMessage());\n     }\n }\n",
+  "test_classes": [
+    "tools.jackson.databind.struct.UnwrappedPropertyConflict2883Test",
+    "tools.jackson.databind.struct.UnwrappedWithConverter6017Test"
+  ],
+  "src_files": [
+    "src/main/java/tools/jackson/databind/ser/bean/BeanSerializerBase.java"
+  ],
+  "problem_statement": "Fix #6028: improve error message for unwrapped property conflict\n\n",
+  "fail_to_pass": [
+    "tools.jackson.databind.struct.UnwrappedPropertyConflict2883Test::testNoConflictWhenUnwrappedPropertyIsIgnored"
+  ],
+  "pass_to_pass": [
+    "tools.jackson.databind.struct.UnwrappedPropertyConflict2883Test::testNestedUnwrappedNoConflict",
+    "tools.jackson.databind.struct.UnwrappedPropertyConflict2883Test::testTwoUnwrappedConflictDetected",
+    "tools.jackson.databind.struct.UnwrappedWithConverter6017Test::testUnwrappedConverterPropertyConflictDetected",
+    "tools.jackson.databind.struct.UnwrappedWithConverter6017Test::testUnwrappedPrefixedWithConverter",
+    "tools.jackson.databind.struct.UnwrappedWithConverter6017Test::testUnwrappedWithConverter"
+  ],
+  "lang": "java",
+  "build": "maven",
+  "task_kind": "localized",
+  "test_modules": [
+    "src/test/java/tools/jackson/databind/struct/UnwrappedPropertyConflict2883Test.java",
+    "src/test/java/tools/jackson/databind/struct/UnwrappedWithConverter6017Test.java"
+  ]
+}

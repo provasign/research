@@ -1,0 +1,52 @@
+diff --git a/src/main/java/org/apache/commons/lang3/ClassUtils.java b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+index 5c2cf099d..5b5cf9265 100644
+--- a/src/main/java/org/apache/commons/lang3/ClassUtils.java
++++ b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+@@ -1012,8 +1012,14 @@ public static String getShortCanonicalName(final String canonicalName) {
+      * Gets the class name minus the package name from a {@link Class}.
+      *
+      * <p>
+-     * This method simply gets the name using {@code Class.getName()} and then calls {@link #getShortClassName(String)}. See
+-     * relevant notes there.
++     * This method uses {@link Class} metadata to correctly handle {@code $} characters in valid class identifiers,
++     * which may appear in top-level classes (e.g., {@code $trange}), member classes (e.g., {@code Outer.$Inner}),
++     * or nested identifiers (e.g., {@code Outer.Inner.Ne$ted}).
++     * </p>
++     *
++     * <p>
++     * For local and anonymous classes, this method falls back to string-based parsing to preserve compiler-generated
++     * ordinal naming expected by existing tests.
+      * </p>
+      *
+      * @param cls the class to get the short name for.
+@@ -1024,7 +1030,29 @@ public static String getShortClassName(final Class<?> cls) {
+         if (cls == null) {
+             return StringUtils.EMPTY;
+         }
+-        return getShortClassName(cls.getName());
++
++        // Handle array types using string-based logic
++        if (cls.isArray()) {
++            return getShortClassName(cls.getName());
++        }
++
++        // For local and anonymous classes, fall back to string-based logic
++        // to preserve compiler-generated ordinal naming
++        if (cls.isLocalClass() || cls.isAnonymousClass()) {
++            return getShortClassName(cls.getName());
++        }
++
++        // For top-level and member/nested classes, build using reflection metadata
++        final List<String> names = new ArrayList<>();
++        Class<?> current = cls;
++
++        while (current != null) {
++            names.add(current.getSimpleName());
++            current = current.getEnclosingClass();
++        }
++
++        Collections.reverse(names);
++        return String.join(".", names);
+     }
+ 
+     /**

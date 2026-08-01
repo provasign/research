@@ -1,0 +1,83 @@
+diff --git a/src/main/java/tools/jackson/databind/ser/bean/BeanSerializerBase.java b/src/main/java/tools/jackson/databind/ser/bean/BeanSerializerBase.java
+index 2a75d205b..b99e2eac7 100644
+--- a/src/main/java/tools/jackson/databind/ser/bean/BeanSerializerBase.java
++++ b/src/main/java/tools/jackson/databind/ser/bean/BeanSerializerBase.java
+@@ -351,6 +351,27 @@ public abstract class BeanSerializerBase
+         _verifyNoUnwrappedPropertyConflict(ctxt);
+     }
+ 
++    /**
++     * Helper method to extract the underlying {@link BeanSerializerBase} from
++     * a serializer, following the delegatee chain (via {@link ValueSerializer#getDelegatee()})
++     * to handle cases where the serializer is wrapped in delegating serializers like
++     * {@link StdConvertingSerializer}.
++     *
++     * @param ser Serializer to inspect
++     * @return The underlying {@link BeanSerializerBase}, or null if not found
++     *
++     * @since 3.2
++     */
++    private static BeanSerializerBase _asBeanSerializer(ValueSerializer<?> ser) {
++        for (int i = 0; i < 100 && ser != null; ++i) {
++            if (ser instanceof BeanSerializerBase) {
++                return (BeanSerializerBase) ser;
++            }
++            ser = ser.getDelegatee();
++        }
++        return null;
++    }
++
+     /**
+      * Called at end of {@link #resolve} to verify that no property produced by an
+      * unwrapped ({@code @JsonUnwrapped}) property collides with a regular property
+@@ -403,7 +424,10 @@ public abstract class BeanSerializerBase
+             }
+             // Inner serializer may be a custom (non-BeanSerializerBase) impl;
+             // without access to its effective property names we cannot check it.
+-            if (!(unwrapped.findUnwrappingSerializer(ctxt) instanceof BeanSerializerBase innerSer)) {
++            // Use helper to follow delegatee chain in case serializer is wrapped
++            ValueSerializer<?> unwrappingSerializer = unwrapped.findUnwrappingSerializer(ctxt);
++            BeanSerializerBase innerSer = _asBeanSerializer(unwrappingSerializer);
++            if (innerSer == null) {
+                 continue;
+             }
+             for (Iterator<PropertyWriter> it = innerSer.properties(); it.hasNext(); ) {
+diff --git a/src/main/java/tools/jackson/databind/ser/std/StdConvertingSerializer.java b/src/main/java/tools/jackson/databind/ser/std/StdConvertingSerializer.java
+index b4beda28a..c18fccd50 100644
+--- a/src/main/java/tools/jackson/databind/ser/std/StdConvertingSerializer.java
++++ b/src/main/java/tools/jackson/databind/ser/std/StdConvertingSerializer.java
+@@ -8,6 +8,7 @@ import tools.jackson.databind.jsontype.TypeSerializer;
+ import tools.jackson.databind.ser.impl.PropertySerializerMap;
+ import tools.jackson.databind.util.ClassUtil;
+ import tools.jackson.databind.util.Converter;
++import tools.jackson.databind.util.NameTransformer;
+ 
+ /**
+  * Serializer implementation where given Java type is first converted
+@@ -155,6 +156,26 @@ public class StdConvertingSerializer
+         return _delegateSerializer;
+     }
+ 
++    @Override
++    public ValueSerializer<Object> unwrappingSerializer(NameTransformer unwrapper) {
++        ValueSerializer<Object> delegatee = _delegateSerializer;
++        if (delegatee != null) {
++            ValueSerializer<Object> unwrappedDelegatee = delegatee.unwrappingSerializer(unwrapper);
++            if (unwrappedDelegatee != delegatee) {
++                return withDelegate(_converter, _delegateType, unwrappedDelegatee, _property);
++            }
++        }
++        return this;
++    }
++
++    @Override
++    public boolean isUnwrappingSerializer() {
++        if (_delegateSerializer != null) {
++            return _delegateSerializer.isUnwrappingSerializer();
++        }
++        return false;
++    }
++
+     /*
+     /**********************************************************************
+     /* Serialization

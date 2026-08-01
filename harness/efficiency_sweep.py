@@ -1,14 +1,14 @@
-"""Efficiency A/B: Prism vs CodeGraph — speed + tokens, reported NEXT TO recall.
+"""Efficiency A/B: Prism vs Engine B — speed + tokens, reported NEXT TO recall.
 
 Correctness first. Tokens/speed only matter at equal completeness — a cheaper
 incomplete answer is a faster broken build. So for the SAME one-call use case
 (get the change-impact/context for a symbol) we measure, per tool, per task:
-  recall     (completeness — from codegraph_vs_prism, the headline metric)
+  recall     (completeness — from engine_comparison, the headline metric)
   wall_ms    (speed — time to answer)
   out_tokens (context cost — len(stdout)//4)
 
 Two context-delivery shapes, both measured (no LLM):
-  - impact set:    prism `change-impact`     vs  codegraph `explore`
+  - impact set:    prism `change-impact`     vs  engine-b `explore`
   - (note) explore bundles verbatim SOURCE (to spare later file reads); prism
     change-impact returns a compact site list. So raw token counts are NOT
     like-for-like on the delivery axis — we report both numbers and say so.
@@ -21,11 +21,11 @@ import subprocess
 import time
 from pathlib import Path
 
-import codegraph_vs_prism as cg
+import engine_comparison as cg
 
 HOME = Path.home()
 # (task label, corpus, prism Type.method target, recall_prism, recall_cg) — recall
-# from the completeness sweep (codegraph-vs-prism-final.json), so this file only
+# from the completeness sweep (engine-b-vs-prism-final.json), so this file only
 # adds speed+tokens and never re-litigates correctness.
 CASES = [
     ("jackson-jsonnode-get",     HOME/"gvg-corpus/jackson-databind", "JsonNode.get(int)",                       1.00, 0.75),
@@ -54,9 +54,9 @@ def main() -> None:
             print(f"  {label:26} corpus absent"); continue
         # prism change-impact (compact impact set)
         pms, ptok, _ = timed([str(cg.PRISM), "change-impact", target, "."], corpus)
-        # codegraph explore (headline one-call context; bundles source)
+        # engine-b explore (headline one-call context; bundles source)
         bare = cg.bare_symbol(target)
-        cms, ctok, _ = timed([str(cg.CODEGRAPH), "explore", bare], corpus)
+        cms, ctok, _ = timed([str(cg.ENGINE_B), "explore", bare], corpus)
         agg["pms"].append(pms); agg["cms"].append(cms)
         agg["ptok"].append(ptok); agg["ctok"].append(ctok)
         print(f"  {label:26} {rp:.2f} {rc:.2f}   {pms:6} {cms:7}   {ptok:7} {ctok:8}")
@@ -65,7 +65,7 @@ def main() -> None:
         print(f"\n  {'MEAN':26} "
               f"          {sum(agg['pms'])//n:6} {sum(agg['cms'])//n:7}   "
               f"{sum(agg['ptok'])//n:7} {sum(agg['ctok'])//n:8}")
-        print("\nNote: prism change-impact = compact impact SET (no source). codegraph "
+        print("\nNote: prism change-impact = compact impact SET (no source). engine-b "
               "explore = impact + relationships + verbatim SOURCE. Explore's larger token "
               "count buys front-loaded reads; it is NOT wasted. The like-for-like token "
               "claim (agent tokens with vs without the tool) needs an agentic A/B (a model).")

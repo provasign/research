@@ -1,0 +1,60 @@
+diff --git a/src/main/java/org/apache/commons/lang3/ClassUtils.java b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+index 5c2cf099d..0a51c77da 100644
+--- a/src/main/java/org/apache/commons/lang3/ClassUtils.java
++++ b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+@@ -1012,8 +1012,14 @@ public static String getShortCanonicalName(final String canonicalName) {
+      * Gets the class name minus the package name from a {@link Class}.
+      *
+      * <p>
+-     * This method simply gets the name using {@code Class.getName()} and then calls {@link #getShortClassName(String)}. See
+-     * relevant notes there.
++     * Unlike {@link #getShortClassName(String)}, this method uses Class reflection metadata to correctly distinguish
++     * between package separators, outer classes, and inner classes. This avoids misinterpreting {@code $} characters
++     * that are part of legitimate Java identifiers (e.g., in top-level classes or nested classes whose names contain {@code $}).
++     * </p>
++     *
++     * <p>
++     * For local and anonymous classes, which have compiler-generated names, the method falls back to string-based parsing
++     * to preserve existing behavior for those special cases.
+      * </p>
+      *
+      * @param cls the class to get the short name for.
+@@ -1024,7 +1030,37 @@ public static String getShortClassName(final Class<?> cls) {
+         if (cls == null) {
+             return StringUtils.EMPTY;
+         }
+-        return getShortClassName(cls.getName());
++
++        // Handle primitives
++        if (cls.isPrimitive()) {
++            return cls.getName();
++        }
++
++        // Handle arrays: recursively get the component type, then append array notation
++        if (cls.isArray()) {
++            return getShortClassName(cls.getComponentType()) + "[]";
++        }
++
++        // For local and anonymous classes, fall back to string parsing
++        // since their names are compiler-generated with ordinal notation
++        if (cls.isLocalClass() || cls.isAnonymousClass()) {
++            return getShortClassName(cls.getName());
++        }
++
++        // For member and top-level classes, build the name from reflection metadata
++        // This correctly handles $ characters that are part of identifiers
++        final StringBuilder result = new StringBuilder();
++        Class<?> current = cls;
++
++        while (current != null) {
++            if (result.length() > 0) {
++                result.insert(0, '.');
++            }
++            result.insert(0, current.getSimpleName());
++            current = current.getEnclosingClass();
++        }
++
++        return result.toString();
+     }
+ 
+     /**

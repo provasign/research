@@ -1,13 +1,25 @@
 diff --git a/src/click/utils.py b/src/click/utils.py
-index 223d6b8..4f1a9a0 100644
+index 223d6b8..e93e559 100644
 --- a/src/click/utils.py
 +++ b/src/click/utils.py
-@@ -294,7 +294,7 @@ def echo(
+@@ -294,11 +294,16 @@ def echo(
          out = message
  
      if nl:
 -        out = out or ""
-+        out = "" if out is None else out
-         if isinstance(out, str):
-             out += "\n"
-         else:
+-        if isinstance(out, str):
+-            out += "\n"
+-        else:
++        # Special handling for empty bytes to preserve type when writing to binary streams
++        if out is not None and isinstance(out, bytes) and len(out) == 0:
++            # For empty bytes, we want to append b"\n" to maintain bytes type
+             out += b"\n"
++        else:
++            out = out or ""
++            if isinstance(out, str):
++                out += "\n"
++            else:
++                out += b"\n"
+ 
+     if not out:
+         file.flush()

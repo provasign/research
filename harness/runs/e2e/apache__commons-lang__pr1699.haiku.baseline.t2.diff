@@ -1,0 +1,50 @@
+diff --git a/TestOverflowFix.java b/TestOverflowFix.java
+new file mode 100644
+index 000000000..ee9f992fd
+--- /dev/null
++++ b/TestOverflowFix.java
+@@ -0,0 +1,18 @@
++import org.apache.commons.lang3.StringUtils;
++import org.apache.commons.lang3.text.StrBuilder;
++
++public class TestOverflowFix {
++    public static void main(String[] args) {
++        // Test StringUtils.mid() with Integer.MAX_VALUE
++        String result1 = StringUtils.mid("foobar", 3, Integer.MAX_VALUE);
++        System.out.println("StringUtils.mid(\"foobar\", 3, Integer.MAX_VALUE) = \"" + result1 + "\"");
++        assert result1.equals("bar") : "Expected 'bar' but got '" + result1 + "'";
++        
++        // Test StrBuilder.midString() with Integer.MAX_VALUE
++        String result2 = new StrBuilder("hello goodbye hello").midString(14, Integer.MAX_VALUE).toString();
++        System.out.println("StrBuilder.midString(14, Integer.MAX_VALUE) = \"" + result2 + "\"");
++        assert result2.equals("hello") : "Expected 'hello' but got '" + result2 + "'";
++        
++        System.out.println("All tests passed!");
++    }
++}
+diff --git a/src/main/java/org/apache/commons/lang3/StringUtils.java b/src/main/java/org/apache/commons/lang3/StringUtils.java
+index 79e130683..cff2e3c64 100644
+--- a/src/main/java/org/apache/commons/lang3/StringUtils.java
++++ b/src/main/java/org/apache/commons/lang3/StringUtils.java
+@@ -5377,7 +5377,7 @@ public static String mid(final String str, int pos, final int len) {
+         if (pos < 0) {
+             pos = 0;
+         }
+-        if (str.length() <= pos + len) {
++        if (str.length() - pos <= len) {
+             return str.substring(pos);
+         }
+         return str.substring(pos, pos + len);
+diff --git a/src/main/java/org/apache/commons/lang3/text/StrBuilder.java b/src/main/java/org/apache/commons/lang3/text/StrBuilder.java
+index 2b4259f52..45dd1e0a0 100644
+--- a/src/main/java/org/apache/commons/lang3/text/StrBuilder.java
++++ b/src/main/java/org/apache/commons/lang3/text/StrBuilder.java
+@@ -2479,7 +2479,7 @@ public String midString(int index, final int length) {
+         if (length <= 0 || index >= size) {
+             return StringUtils.EMPTY;
+         }
+-        if (size <= index + length) {
++        if (size - index <= length) {
+             return new String(buffer, index, size - index);
+         }
+         return new String(buffer, index, length);

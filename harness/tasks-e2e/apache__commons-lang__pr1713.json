@@ -1,0 +1,59 @@
+{
+  "instance_id": "apache__commons-lang__pr1713",
+  "repo": "apache/commons-lang",
+  "pr": 1713,
+  "base_commit": "78de8a9aa9ecb40c02888467a6514f6536f3669d",
+  "merge_commit": "53172785c29bb450479c5ba2c198102a5aa9a753",
+  "patch": "diff --git a/src/main/java/org/apache/commons/lang3/StringUtils.java b/src/main/java/org/apache/commons/lang3/StringUtils.java\nindex 4cc5ab75d..7dfc11ec4 100644\n--- a/src/main/java/org/apache/commons/lang3/StringUtils.java\n+++ b/src/main/java/org/apache/commons/lang3/StringUtils.java\n@@ -3002,6 +3002,12 @@ public static int indexOfDifference(final CharSequence... css) {\n                 break;\n             }\n         }\n+        if (firstDiff > 0 && Character.isLowSurrogate(css[0].charAt(firstDiff))\n+                && Character.isHighSurrogate(css[0].charAt(firstDiff - 1))) {\n+            // the difference splits a surrogate pair whose high half is common; report the start of the\n+            // pair so getCommonPrefix never slices it in half and leaves a stray high surrogate.\n+            firstDiff--;\n+        }\n         if (firstDiff == -1 && shortestStrLen != longestStrLen) {\n             // we compared all of the characters up to the length of the\n             // shortest string and didn't find a match, but the string lengths\n@@ -3048,6 +3054,12 @@ public static int indexOfDifference(final CharSequence cs1, final CharSequence c\n                 break;\n             }\n         }\n+        if (i > 0 && i < cs1.length() && i < cs2.length() && Character.isHighSurrogate(cs1.charAt(i - 1))\n+                && (Character.isLowSurrogate(cs1.charAt(i)) || Character.isLowSurrogate(cs2.charAt(i)))) {\n+            // the difference splits a surrogate pair whose high half is common; report the start of the\n+            // pair so difference does not return a string that begins with a stray low surrogate.\n+            i--;\n+        }\n         if (i < cs2.length() || i < cs1.length()) {\n             return i;\n         }\n",
+  "test_patch": "diff --git a/src/test/java/org/apache/commons/lang3/StringUtilsTest.java b/src/test/java/org/apache/commons/lang3/StringUtilsTest.java\nindex 9a32ce099..578d3117f 100644\n--- a/src/test/java/org/apache/commons/lang3/StringUtilsTest.java\n+++ b/src/test/java/org/apache/commons/lang3/StringUtilsTest.java\n@@ -543,6 +543,11 @@ void testDifference_StringString() {\n         assertEquals(\"robot\", StringUtils.difference(\"i am a machine\", \"i am a robot\"));\n         assertEquals(\"\", StringUtils.difference(\"abc\", \"abc\"));\n         assertEquals(\"you are a robot\", StringUtils.difference(\"i am a robot\", \"you are a robot\"));\n+        // 0x10400 and 0x10401 share the same high surrogate; the difference must not begin with a lone low surrogate\n+        final String cp10400 = new String(Character.toChars(0x10400));\n+        final String cp10401 = new String(Character.toChars(0x10401));\n+        assertEquals(cp10401, StringUtils.difference(cp10400, cp10401));\n+        assertEquals(\"Y\", StringUtils.difference(cp10400 + \"X\", cp10400 + \"Y\"));\n     }\n \n     @Test\n@@ -564,6 +569,11 @@ void testDifferenceAt_StringArray() {\n         assertEquals(0, StringUtils.indexOfDifference(\"abcde\", \"xyz\"));\n         assertEquals(0, StringUtils.indexOfDifference(\"xyz\", \"abcde\"));\n         assertEquals(7, StringUtils.indexOfDifference(\"i am a machine\", \"i am a robot\"));\n+        // a difference that falls inside a shared surrogate pair is reported at the start of the pair, not mid-pair\n+        final String cp10400 = new String(Character.toChars(0x10400));\n+        final String cp10401 = new String(Character.toChars(0x10401));\n+        assertEquals(0, StringUtils.indexOfDifference(new String[] {cp10400, cp10401}));\n+        assertEquals(2, StringUtils.indexOfDifference(new String[] {cp10400 + \"X\", cp10400 + \"Y\"}));\n     }\n \n     @Test\n@@ -577,6 +587,11 @@ void testDifferenceAt_StringString() {\n         assertEquals(7, StringUtils.indexOfDifference(\"i am a machine\", \"i am a robot\"));\n         assertEquals(-1, StringUtils.indexOfDifference(\"foo\", \"foo\"));\n         assertEquals(0, StringUtils.indexOfDifference(\"i am a robot\", \"you are a robot\"));\n+        // a difference that falls inside a shared surrogate pair is reported at the start of the pair, not mid-pair\n+        final String cp10400 = new String(Character.toChars(0x10400));\n+        final String cp10401 = new String(Character.toChars(0x10401));\n+        assertEquals(0, StringUtils.indexOfDifference(cp10400, cp10401));\n+        assertEquals(2, StringUtils.indexOfDifference(cp10400 + \"X\", cp10400 + \"Y\"));\n     }\n \n     /**\n@@ -680,6 +695,11 @@ void testGetCommonPrefix_StringArray() {\n         assertEquals(\"\", StringUtils.getCommonPrefix(\"abcde\", \"xyz\"));\n         assertEquals(\"\", StringUtils.getCommonPrefix(\"xyz\", \"abcde\"));\n         assertEquals(\"i am a \", StringUtils.getCommonPrefix(\"i am a machine\", \"i am a robot\"));\n+        // 0x10400 and 0x10401 share the high surrogate but differ; the common prefix must not be a lone high surrogate\n+        final String cp10400 = new String(Character.toChars(0x10400));\n+        final String cp10401 = new String(Character.toChars(0x10401));\n+        assertEquals(\"\", StringUtils.getCommonPrefix(cp10400, cp10401));\n+        assertEquals(cp10400, StringUtils.getCommonPrefix(cp10400 + \"X\", cp10400 + \"Y\"));\n     }\n \n     @Test\n",
+  "test_classes": [
+    "org.apache.commons.lang3.StringUtilsTest"
+  ],
+  "src_files": [
+    "src/main/java/org/apache/commons/lang3/StringUtils.java"
+  ],
+  "test_modules": [
+    "src/test/java/org/apache/commons/lang3/StringUtilsTest.java"
+  ],
+  "problem_statement": "Fix indexOfDifference splitting a surrogate pair\n\n`Repro:` `getCommonPrefix(\"\ud801\udc00\", \"\ud801\udc01\")` returns the lone high surrogate `\\uD801`, and `difference(\"\ud801\udc00\", \"\ud801\udc01\")` returns the lone low surrogate `\\uDC01`. Both are malformed UTF-16.\n`Cause:` both `indexOfDifference` overloads walk the inputs one `char` at a time, so when two strings share the high surrogate of a supplementary code point but differ in the low half, the reported index lands inside the pair (index `1` rather than `0`). `getCommonPrefix` then slices the pair in half and `difference` starts its result on the orphaned low half.\n`Fix:` when the difference falls on a low surrogate whose preceding (common) `char` is a high surrogate, report the start of the pair. `getCommonPrefix` and `difference` follow for free. BMP inputs never hit the new branch, so existing behaviour is unchanged.\n\n- [x] Read the [contribution guidelines](CONTRIBUTING.md) for this project.\n- [ ] Read the [ASF Generative Tooling Guidance](https://www.apache.org/legal/generative-tooling.html) if you use Artificial Intelligence (AI).\n- [ ] I used AI to create any part of, or all of, this pull request. Which AI tool was used to create this pull request, and to what extent did it contribute?\n- [x] Run a successful build using the default [Maven](https://maven.apache.org/) goal with `mvn`; that's `mvn` on the command line by itself.\n- [x] Write unit tests that match behavioral changes, where the tests fail if the changes to the runtime are not applied. This may not always be possible, but it is a best practice.\n- [x] Write a pull request description that is detailed enough to understand what the pull request does, how, and why.\n- [x] Each commit in the pull request should have a meaningful subject line and body.\n",
+  "fail_to_pass": [
+    "org.apache.commons.lang3.StringUtilsTest::testGetIfBlank_StringStringSupplier",
+    "org.apache.commons.lang3.StringUtilsTest::testRemoveStartString",
+    "org.apache.commons.lang3.StringUtilsTest::testSplit_String"
+  ],
+  "pass_to_pass": [
+    "org.apache.commons.lang3.StringUtilsTest::testCapitalize",
+    "org.apache.commons.lang3.StringUtilsTest::testCenter_StringIntString",
+    "org.apache.commons.lang3.StringUtilsTest::testConstructor",
+    "org.apache.commons.lang3.StringUtilsTest::testDefaultIfBlank_CharBuffers",
+    "org.apache.commons.lang3.StringUtilsTest::testGetFuzzyDistance_StringStringNull",
+    "org.apache.commons.lang3.StringUtilsTest::testIsMixedCase",
+    "org.apache.commons.lang3.StringUtilsTest::testJoin_ArrayOfBytes",
+    "org.apache.commons.lang3.StringUtilsTest::testJoin_ArrayOfChars",
+    "org.apache.commons.lang3.StringUtilsTest::testJoin_ArrayOfFloats",
+    "org.apache.commons.lang3.StringUtilsTest::testJoin_ArrayOfLongs",
+    "org.apache.commons.lang3.StringUtilsTest::testJoin_ArrayString_EmptyDelimiter",
+    "org.apache.commons.lang3.StringUtilsTest::testJoin_Objects",
+    "org.apache.commons.lang3.StringUtilsTest::testLeftPad_StringInt",
+    "org.apache.commons.lang3.StringUtilsTest::testPrependIfMissingIgnoreCase",
+    "org.apache.commons.lang3.StringUtilsTest::testReCapitalize",
+    "org.apache.commons.lang3.StringUtilsTest::testRemoveEnd",
+    "org.apache.commons.lang3.StringUtilsTest::testRemoveStartIgnoreCase",
+    "org.apache.commons.lang3.StringUtilsTest::testRepeat_CharInt",
+    "org.apache.commons.lang3.StringUtilsTest::testReplaceOnceIgnoreCase_StringStringString",
+    "org.apache.commons.lang3.StringUtilsTest::testReplace_StringStringArrayStringArrayBoolean",
+    "org.apache.commons.lang3.StringUtilsTest::testReplace_StringStringStringInt",
+    "org.apache.commons.lang3.StringUtilsTest::testRightPad_StringIntString",
+    "org.apache.commons.lang3.StringUtilsTest::testSplitByCharacterTypeCamelCase",
+    "org.apache.commons.lang3.StringUtilsTest::testSplit_StringChar",
+    "org.apache.commons.lang3.StringUtilsTest::testSplit_StringString_StringStringInt",
+    "org.apache.commons.lang3.StringUtilsTest::testSwapCase_String",
+    "org.apache.commons.lang3.StringUtilsTest::testTruncate_StringInt",
+    "org.apache.commons.lang3.StringUtilsTest::testTruncate_StringIntInt",
+    "org.apache.commons.lang3.StringUtilsTest::testUnwrap_StringString",
+    "org.apache.commons.lang3.StringUtilsTest::testWrap_StringChar"
+  ],
+  "lang": "java",
+  "build": "maven",
+  "task_kind": "localized"
+}

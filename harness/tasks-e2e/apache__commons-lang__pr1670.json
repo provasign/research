@@ -1,0 +1,27 @@
+{
+  "instance_id": "apache__commons-lang__pr1670",
+  "repo": "apache/commons-lang",
+  "pr": 1670,
+  "base_commit": "465c6a980aa783bd0fa82ab2742568c3f34c0d55",
+  "merge_commit": "28f46460d63b4c7806a2b9cce382b2b79ba6fd50",
+  "patch": "diff --git a/src/main/java/org/apache/commons/lang3/ClassUtils.java b/src/main/java/org/apache/commons/lang3/ClassUtils.java\nindex 1e7a3b5e3..c0ce2a726 100644\n--- a/src/main/java/org/apache/commons/lang3/ClassUtils.java\n+++ b/src/main/java/org/apache/commons/lang3/ClassUtils.java\n@@ -1643,6 +1643,13 @@ private static String toCleanName(final String className) {\n             throw new IllegalArgumentException(String.format(\"Class name greater than maxium length %,d\", MAX_CLASS_NAME_LENGTH));\n         }\n         if (canonicalName.endsWith(arrayMarker)) {\n+            // Reject malformed inputs like \"java.lang.String[]junk[]\" or\n+            // \"java.lang.String[]][]\" where the suffix is not composed of\n+            // repeated \"[]\" pairs.\n+            final String tail = canonicalName.substring(arrIdx);\n+            if (!tail.matches(\"(?:\\\\[\\\\])+\")) {\n+                throw new IllegalArgumentException(\"Malformed array name: \" + canonicalName);\n+            }\n             final int dims =  (canonicalName.length() - arrIdx) / 2;\n             if (dims > MAX_JVM_ARRAY_DIMENSION) {\n                 throw new IllegalArgumentException(\"Array dimension greater than JVM specification maximum of 255.\");\n",
+  "test_patch": "diff --git a/src/test/java/org/apache/commons/lang3/ClassUtilsTest.java b/src/test/java/org/apache/commons/lang3/ClassUtilsTest.java\nindex 200e814e5..8f18a2bc8 100644\n--- a/src/test/java/org/apache/commons/lang3/ClassUtilsTest.java\n+++ b/src/test/java/org/apache/commons/lang3/ClassUtilsTest.java\n@@ -1320,6 +1320,34 @@ void testGetClassRawPrimitives() throws ClassNotFoundException {\n         assertEquals(void.class, ClassUtils.getClass(\"void\"));\n     }\n \n+    /**\n+     * Pre-patch: getClass(\"java.lang.String[]junk[]\") silently returns String[][][][] (4 dims, because (24 - 16)/2 = 4 \u2014 junk is 4 chars). Post-patch: must\n+     * throw IllegalArgumentException.\n+     */\n+    @Test\n+    public void testGetClassStringMalformedMiddleJunkRejected() {\n+        assertThrows(IllegalArgumentException.class, () -> ClassUtils.getClass(\"java.lang.String[]junk[]\"));\n+    }\n+\n+    /**\n+     * Mutation control: suffix ends with \"[]\" so the array-branch is entered, and the suffix from arrIdx contains only '[' and ']' chars but NOT as well-formed\n+     * pairs (\"[]][]\"). A char-class-only patch would accept this; the correct pair-validating patch must reject. Without this case, a weaker patch would still\n+     * pass.\n+     */\n+    @Test\n+    public void testGetClassStringMalformedUnpairedBracketsRejected() {\n+        assertThrows(IllegalArgumentException.class, () -> ClassUtils.getClass(\"java.lang.String[]][]\"));\n+    }\n+\n+    /**\n+     * Negative control: well-formed multi-dim array still resolves. Confirms the fix is minimal and does not over-reject.\n+     */\n+    @Test\n+    public void testGetClassStringWellFormedArrayStillResolves() throws Exception {\n+        assertNotNull(ClassUtils.getClass(\"java.lang.String[]\"));\n+        assertNotNull(ClassUtils.getClass(\"java.lang.String[][]\"));\n+    }\n+\n     @Test\n     void testGetClassWithArrayClasses() throws Exception {\n         assertGetClassReturnsClass(String[].class);\n",
+  "test_classes": [
+    "org.apache.commons.lang3.ClassUtilsTest"
+  ],
+  "src_files": [
+    "src/main/java/org/apache/commons/lang3/ClassUtils.java"
+  ],
+  "test_modules": [
+    "src/test/java/org/apache/commons/lang3/ClassUtilsTest.java"
+  ],
+  "problem_statement": "ClassUtils.toCleanName(String) resolves malformed array suffixes\n\n`ClassUtils.toCleanName(String)` resolves malformed array suffixes instead of throwing.\r\n\r\nCalled by `ClassUtils.getClass(ClassLoader, String, boolean)`.\r\n\r\n- [x] Read the [contribution guidelines](CONTRIBUTING.md) for this project.\r\n- [x] Read the [ASF Generative Tooling Guidance](https://www.apache.org/legal/generative-tooling.html) if you use Artificial Intelligence (AI).\r\n- [x] OP used AI to create the original report.\r\n- [x] Run a successful build using the default [Maven](https://maven.apache.org/) goal with `mvn`; that's `mvn` on the command line by itself.\r\n- [x] Write unit tests that match behavioral changes, where the tests fail if the changes to the runtime are not applied. This may not always be possible, but it is a best practice.\r\n- [x] Write a pull request description that is detailed enough to understand what the pull request does, how, and why.\r\n- [x] Each commit in the pull request should have a meaningful subject line and body. Note that a maintainer may squash commits during the merge process.\r\n",
+  "fail_to_pass": [
+    "org.apache.commons.lang3.ClassUtilsTest::test_getClass",
+    "org.apache.commons.lang3.ClassUtilsTest::test_getShortClassName_Class"
+  ],
+  "pass_to_pass": [],
+  "lang": "java",
+  "build": "maven",
+  "task_kind": "localized"
+}

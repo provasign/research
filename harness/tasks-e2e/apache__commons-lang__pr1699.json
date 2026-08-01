@@ -1,0 +1,68 @@
+{
+  "instance_id": "apache__commons-lang__pr1699",
+  "repo": "apache/commons-lang",
+  "pr": 1699,
+  "base_commit": "e6b8bbd39505694012d869fa2107ef068b88d800",
+  "merge_commit": "2240c1f93e5f96b12a83ec8615c29dfac46258e9",
+  "patch": "diff --git a/src/main/java/org/apache/commons/lang3/StringUtils.java b/src/main/java/org/apache/commons/lang3/StringUtils.java\nindex 79e130683..cff2e3c64 100644\n--- a/src/main/java/org/apache/commons/lang3/StringUtils.java\n+++ b/src/main/java/org/apache/commons/lang3/StringUtils.java\n@@ -5377,7 +5377,7 @@ public static String mid(final String str, int pos, final int len) {\n         if (pos < 0) {\n             pos = 0;\n         }\n-        if (str.length() <= pos + len) {\n+        if (str.length() - pos <= len) {\n             return str.substring(pos);\n         }\n         return str.substring(pos, pos + len);\ndiff --git a/src/main/java/org/apache/commons/lang3/text/StrBuilder.java b/src/main/java/org/apache/commons/lang3/text/StrBuilder.java\nindex 2b4259f52..45dd1e0a0 100644\n--- a/src/main/java/org/apache/commons/lang3/text/StrBuilder.java\n+++ b/src/main/java/org/apache/commons/lang3/text/StrBuilder.java\n@@ -2479,7 +2479,7 @@ public String midString(int index, final int length) {\n         if (length <= 0 || index >= size) {\n             return StringUtils.EMPTY;\n         }\n-        if (size <= index + length) {\n+        if (size - index <= length) {\n             return new String(buffer, index, size - index);\n         }\n         return new String(buffer, index, length);\n",
+  "test_patch": "diff --git a/src/test/java/org/apache/commons/lang3/StringUtilsSubstringTest.java b/src/test/java/org/apache/commons/lang3/StringUtilsSubstringTest.java\nindex 89f2d5a2d..203327a20 100644\n--- a/src/test/java/org/apache/commons/lang3/StringUtilsSubstringTest.java\n+++ b/src/test/java/org/apache/commons/lang3/StringUtilsSubstringTest.java\n@@ -102,6 +102,9 @@ void testMid_String() {\n         assertEquals(BAR, StringUtils.mid(FOOBAR, 3, 80));\n         assertEquals(\"\", StringUtils.mid(FOOBAR, 9, 3));\n         assertEquals(FOO, StringUtils.mid(FOOBAR, -1, 3));\n+        // LANG: a len that overflows pos + len must still return the rest\n+        assertEquals(BAR, StringUtils.mid(FOOBAR, 3, Integer.MAX_VALUE));\n+        assertEquals(FOOBAR, StringUtils.mid(FOOBAR, 0, Integer.MAX_VALUE));\n     }\n \n     @Test\ndiff --git a/src/test/java/org/apache/commons/lang3/text/StrBuilderTest.java b/src/test/java/org/apache/commons/lang3/text/StrBuilderTest.java\nindex 04ef83eed..5d6b739c4 100644\n--- a/src/test/java/org/apache/commons/lang3/text/StrBuilderTest.java\n+++ b/src/test/java/org/apache/commons/lang3/text/StrBuilderTest.java\n@@ -1177,6 +1177,8 @@ void testMidString() {\n         assertEquals(\"\", sb.midString(0, -1));\n         assertEquals(\"\", sb.midString(20, 2));\n         assertEquals(\"hello\", sb.midString(14, 22));\n+        // a length that overflows index + length must still return the rest\n+        assertEquals(\"hello\", sb.midString(14, Integer.MAX_VALUE));\n     }\n \n     @Test\n",
+  "test_classes": [
+    "org.apache.commons.lang3.StringUtilsSubstringTest",
+    "org.apache.commons.lang3.text.StrBuilderTest"
+  ],
+  "src_files": [
+    "src/main/java/org/apache/commons/lang3/StringUtils.java",
+    "src/main/java/org/apache/commons/lang3/text/StrBuilder.java"
+  ],
+  "test_modules": [
+    "src/test/java/org/apache/commons/lang3/StringUtilsSubstringTest.java",
+    "src/test/java/org/apache/commons/lang3/text/StrBuilderTest.java"
+  ],
+  "problem_statement": "Fix int overflow in StringUtils.midString() and StrBuilder.midString() length handling\n\nRepro: `StringUtils.mid(\"foobar\", 3, Integer.MAX_VALUE)` and `new StrBuilder(\"hello goodbye hello\").midString(14, Integer.MAX_VALUE)`.\nExpected: the tail of the string (`\"bar\"`, `\"hello\"`), per the Javadoc that says the rest is returned when the length exceeds what is available.\nActual: `StringIndexOutOfBoundsException`.\nCause: both pick the \"return the rest\" branch with `pos + len` / `index + length`, which overflows to a negative `int` for a length near `Integer.MAX_VALUE`, so the guard is false and the code falls through to `substring`/`new String` with an out-of-range length. `WordUtils.wrap` already widens to `long` to avoid the same overflow.\nFix: compare with subtraction (`str.length() - pos <= len`, `size - index <= length`) so the check stays in range; the `substring(pos, pos + len)` branch now runs only when `len` is smaller than the remaining characters, so it cannot overflow.\n\n- [x] Read the [contribution guidelines](CONTRIBUTING.md) for this project.\n- [x] Write unit tests that match behavioral changes, where the tests fail if the changes to the runtime are not applied. Added overflow regressions to `StringUtilsSubstringTest` and `StrBuilderTest` (both fail before the change, pass after).\n- [x] Write a pull request description that is detailed enough to understand what the pull request does, how, and why.\n- [x] Each commit in the pull request should have a meaningful subject line and body.\n",
+  "fail_to_pass": [
+    "org.apache.commons.lang3.StringUtilsSubstringTest::testRight_String",
+    "org.apache.commons.lang3.StringUtilsSubstringTest::testSubstring_StringInt"
+  ],
+  "pass_to_pass": [
+    "org.apache.commons.lang3.text.StrBuilderTest::testAppendCharBuffer",
+    "org.apache.commons.lang3.text.StrBuilderTest::testAppendToCharBuffer",
+    "org.apache.commons.lang3.text.StrBuilderTest::testAppendToWriter",
+    "org.apache.commons.lang3.text.StrBuilderTest::testAsBuilder",
+    "org.apache.commons.lang3.text.StrBuilderTest::testCapacity",
+    "org.apache.commons.lang3.text.StrBuilderTest::testChaining",
+    "org.apache.commons.lang3.text.StrBuilderTest::testCharAt",
+    "org.apache.commons.lang3.text.StrBuilderTest::testContains_StrMatcher",
+    "org.apache.commons.lang3.text.StrBuilderTest::testDeleteAll_StrMatcher",
+    "org.apache.commons.lang3.text.StrBuilderTest::testDeleteFirst_char",
+    "org.apache.commons.lang3.text.StrBuilderTest::testEquals",
+    "org.apache.commons.lang3.text.StrBuilderTest::testGetCharsIntIntCharArrayInt",
+    "org.apache.commons.lang3.text.StrBuilderTest::testGetSetNewLineText",
+    "org.apache.commons.lang3.text.StrBuilderTest::testHashCode",
+    "org.apache.commons.lang3.text.StrBuilderTest::testIndexOf_StrMatcher",
+    "org.apache.commons.lang3.text.StrBuilderTest::testIndexOf_String",
+    "org.apache.commons.lang3.text.StrBuilderTest::testIndexOf_String_int",
+    "org.apache.commons.lang3.text.StrBuilderTest::testIndexOf_char_int",
+    "org.apache.commons.lang3.text.StrBuilderTest::testIsEmpty",
+    "org.apache.commons.lang3.text.StrBuilderTest::testLastIndexOf_StrMatcher_int",
+    "org.apache.commons.lang3.text.StrBuilderTest::testLastIndexOf_char",
+    "org.apache.commons.lang3.text.StrBuilderTest::testLeftString",
+    "org.apache.commons.lang3.text.StrBuilderTest::testLength",
+    "org.apache.commons.lang3.text.StrBuilderTest::testReadFromCharBufferAppendsToEnd",
+    "org.apache.commons.lang3.text.StrBuilderTest::testReadFromReader",
+    "org.apache.commons.lang3.text.StrBuilderTest::testReplaceAll_StrMatcher_String",
+    "org.apache.commons.lang3.text.StrBuilderTest::testReplace_StrMatcher_String_int_int_int_VaryMatcher",
+    "org.apache.commons.lang3.text.StrBuilderTest::testReplace_StrMatcher_String_int_int_int_VaryReplace",
+    "org.apache.commons.lang3.text.StrBuilderTest::testReplace_StrMatcher_String_int_int_int_VaryStartIndex",
+    "org.apache.commons.lang3.text.StrBuilderTest::testReverse",
+    "org.apache.commons.lang3.text.StrBuilderTest::testSetCharAt",
+    "org.apache.commons.lang3.text.StrBuilderTest::testSetLength",
+    "org.apache.commons.lang3.text.StrBuilderTest::testStartsWith",
+    "org.apache.commons.lang3.text.StrBuilderTest::testSubstringInt",
+    "org.apache.commons.lang3.text.StrBuilderTest::testToCharArrayIntInt",
+    "org.apache.commons.lang3.text.StrBuilderTest::testToStringBuffer",
+    "org.apache.commons.lang3.text.StrBuilderTest::test_LANG_1131_EqualsWithNullStrBuilder"
+  ],
+  "lang": "java",
+  "build": "maven",
+  "task_kind": "multi_site"
+}

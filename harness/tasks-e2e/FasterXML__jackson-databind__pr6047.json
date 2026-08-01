@@ -1,0 +1,38 @@
+{
+  "instance_id": "FasterXML__jackson-databind__pr6047",
+  "repo": "FasterXML/jackson-databind",
+  "pr": 6047,
+  "base_commit": "9e706a326565744dae0d5bd5fee0712070ada17b",
+  "merge_commit": "b21963c6640618911bd579f3f67d53e22d519c9d",
+  "patch": "diff --git a/src/main/java/tools/jackson/databind/deser/bean/BeanAsArrayDeserializer.java b/src/main/java/tools/jackson/databind/deser/bean/BeanAsArrayDeserializer.java\nindex 9efaa2541..ed480cf6f 100644\n--- a/src/main/java/tools/jackson/databind/deser/bean/BeanAsArrayDeserializer.java\n+++ b/src/main/java/tools/jackson/databind/deser/bean/BeanAsArrayDeserializer.java\n@@ -390,6 +390,18 @@ public class BeanAsArrayDeserializer\n         for (; p.nextToken() != JsonToken.END_ARRAY; ++i) {\n             SettableBeanProperty prop = (i < propCount) ? props[i] : null;\n             if (prop == null) { // we get null if there are extra elements; maybe otherwise too?\n+                // [databind#6043]: extra JSON Array elements past property count must\n+                // honor FAIL_ON_UNKNOWN_PROPERTIES, same as the non-creator path above.\n+                // Only genuinely-extra elements (past property count) count as \"unknown\":\n+                // in-bounds null slots (e.g. from renamed/unwrapped properties) are skipped,\n+                // matching the non-creator path's position-based check.\n+                if (i >= propCount\n+                        && !_ignoreAllUnknown && ctxt.isEnabled(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)) {\n+                    ctxt.reportWrongTokenException(this, JsonToken.END_ARRAY,\n+                            \"Unexpected JSON values; expected at most %d properties (in JSON Array)\",\n+                            propCount);\n+                    // never gets here\n+                }\n                 p.skipChildren();\n                 continue;\n             }\n",
+  "test_patch": "diff --git a/src/test/java/tools/jackson/databind/struct/POJOAsArrayTest.java b/src/test/java/tools/jackson/databind/struct/POJOAsArrayTest.java\nindex b47153ef4..3e1f81661 100644\n--- a/src/test/java/tools/jackson/databind/struct/POJOAsArrayTest.java\n+++ b/src/test/java/tools/jackson/databind/struct/POJOAsArrayTest.java\n@@ -256,6 +256,10 @@ public class POJOAsArrayTest extends DatabindTestUtil\n         public int getY() { return y; }\n     }\n \n+    // [databind#6043]\n+    @JsonFormat(shape = JsonFormat.Shape.ARRAY)\n+    record XYZParams(int x, int y, int z) { }\n+\n     @JsonFormat(shape=JsonFormat.Shape.ARRAY)\n     @JsonPropertyOrder({\"a\",\"b\",\"x\",\"y\"})\n     static class CreatorAsArrayShuffled\n@@ -968,4 +972,29 @@ public class POJOAsArrayTest extends DatabindTestUtil\n         assertEquals(v._x, 2);\n         assertEquals(v._y, 3);\n     }\n+\n+    // [databind#6043]: creator-based (e.g. record) POJOs-as-Array must also honor\n+    // FAIL_ON_UNKNOWN_PROPERTIES when the JSON Array has more elements than properties\n+    @Test\n+    public void testCreatorUnknownExtraProp() throws Exception\n+    {\n+        String json = \"[1, 2, 3, 4]\";\n+        try {\n+            MAPPER.readerFor(XYZParams.class)\n+                    .with(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)\n+                    .readValue(json);\n+            fail(\"should not pass with extra element\");\n+        } catch (MismatchedInputException e) {\n+            verifyException(e, \"Unexpected JSON values\");\n+        }\n+\n+        // but actually fine if skip-unknown set\n+        XYZParams v = MAPPER.readerFor(XYZParams.class)\n+                .without(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)\n+                .readValue(json);\n+        assertNotNull(v);\n+        assertEquals(1, v.x());\n+        assertEquals(2, v.y());\n+        assertEquals(3, v.z());\n+    }\n }\n",
+  "test_classes": [
+    "tools.jackson.databind.struct.POJOAsArrayTest"
+  ],
+  "src_files": [
+    "src/main/java/tools/jackson/databind/deser/bean/BeanAsArrayDeserializer.java"
+  ],
+  "problem_statement": "Fix #6043: honor FAIL_ON_UNKNOWN_PROPERTIES for creator-based POJOs-as-Array\n\nFixes #6043\n\n## Root cause\nFor POJOs serialized as JSON Arrays (`@JsonFormat(shape = ARRAY)`), the creator-based deserialization path `BeanAsArrayDeserializer._deserializeUsingPropertyBased` loops over array elements and, once it runs past the property count, hits the `prop == null` branch where it simply `skipChildren()` and continues. Unlike the non-creator paths (`deserialize`/`_deserializeNonVanilla`), it never consults `FAIL_ON_UNKNOWN_PROPERTIES`. As a result, extra array elements are silently ignored for creator-based types such as `record`s, even when the feature is enabled.\n\n## Change\nAdd the same `FAIL_ON_UNKNOWN_PROPERTIES` guard already used on the non-creator paths to the `prop == null` (extra-element) branch of the creator path, reporting `reportWrongTokenException` with the existing \"Unexpected JSON values; expected at most N properties\" message. Behavior is unchanged when the feature is disabled or `@JsonIgnoreProperties(ignoreUnknown = true)` applies.\n\n## Test evidence\nAdded `POJOAsArrayTest.testCreatorUnknownExtraProp` using the issue's reproduction (a `record XYZParams(int x, int y, int z)` annotated `@JsonFormat(shape = ARRAY)` reading `[1, 2, 3, 4]`). It fails before the fix (no exception thrown \u2014 \"should not pass with extra element\") and passes after, and also asserts the value still deserializes correctly when the feature is disabled. Full `POJOAsArrayTest` (27 tests) passes.\n\nVerification done: ran `./mvnw test -Dtest=POJOAsArrayTest` (27/27 pass with fix); reverted the source change and confirmed the new test fails (assertion \"should not pass with extra element\"), then restored.",
+  "fail_to_pass": [
+    "tools.jackson.databind.struct.POJOAsArrayTest::testReadSimpleRootValue"
+  ],
+  "pass_to_pass": [
+    "tools.jackson.databind.struct.POJOAsArrayTest::testBeanAsArrayUnwrapped",
+    "tools.jackson.databind.struct.POJOAsArrayTest::testBuilderWithUpdate",
+    "tools.jackson.databind.struct.POJOAsArrayTest::testMedaItemRoundtrip",
+    "tools.jackson.databind.struct.POJOAsArrayTest::testNullColumn",
+    "tools.jackson.databind.struct.POJOAsArrayTest::testSerializeArrayWithAnyGetterWithWrapper",
+    "tools.jackson.databind.struct.POJOAsArrayTest::testSerializeAsArrayWithSingleProperty",
+    "tools.jackson.databind.struct.POJOAsArrayTest::testUnknownExtraProp",
+    "tools.jackson.databind.struct.POJOAsArrayTest::testWithCreator",
+    "tools.jackson.databind.struct.POJOAsArrayTest::testWithCreatorsOrdered",
+    "tools.jackson.databind.struct.POJOAsArrayTest::testWithCreatorsShuffled",
+    "tools.jackson.databind.struct.POJOAsArrayTest::testWriteSimpleRootValue"
+  ],
+  "lang": "java",
+  "build": "maven",
+  "task_kind": "localized",
+  "test_modules": [
+    "src/test/java/tools/jackson/databind/struct/POJOAsArrayTest.java"
+  ]
+}

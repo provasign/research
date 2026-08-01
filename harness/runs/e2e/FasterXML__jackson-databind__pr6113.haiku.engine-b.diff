@@ -1,0 +1,34 @@
+diff --git a/src/main/java/tools/jackson/databind/ext/DOMSerializer.java b/src/main/java/tools/jackson/databind/ext/DOMSerializer.java
+index 90349063b..7a1ee24e4 100644
+--- a/src/main/java/tools/jackson/databind/ext/DOMSerializer.java
++++ b/src/main/java/tools/jackson/databind/ext/DOMSerializer.java
+@@ -9,9 +9,12 @@ import javax.xml.transform.stream.StreamResult;
+ import org.w3c.dom.Node;
+ 
+ import tools.jackson.core.*;
++import tools.jackson.core.JsonToken;
++import tools.jackson.core.type.WritableTypeId;
+ import tools.jackson.databind.JavaType;
+ import tools.jackson.databind.SerializationContext;
+ import tools.jackson.databind.jsonFormatVisitors.JsonFormatVisitorWrapper;
++import tools.jackson.databind.jsontype.TypeSerializer;
+ import tools.jackson.databind.ser.std.StdSerializer;
+ 
+ public class DOMSerializer extends StdSerializer<Node>
+@@ -49,6 +52,16 @@ public class DOMSerializer extends StdSerializer<Node>
+         }
+     }
+ 
++    @Override
++    public void serializeWithType(Node value, JsonGenerator g, SerializationContext ctxt,
++            TypeSerializer typeSer) throws JacksonException
++    {
++        WritableTypeId typeIdDef = typeSer.writeTypePrefix(g, ctxt,
++                typeSer.typeId(value, Node.class, JsonToken.VALUE_STRING));
++        serialize(value, g, ctxt);
++        typeSer.writeTypeSuffix(g, ctxt, typeIdDef);
++    }
++
+     @Override
+     public void acceptJsonFormatVisitor(JsonFormatVisitorWrapper visitor, JavaType typeHint) {
+         if (visitor != null) visitor.expectAnyFormat(typeHint);

@@ -1,0 +1,54 @@
+diff --git a/simple_test.py b/simple_test.py
+new file mode 100644
+index 0000000..4f8f92a
+--- /dev/null
++++ b/simple_test.py
+@@ -0,0 +1,22 @@
++import sys
++from io import StringIO
++
++# Test the current behavior of strip_ansi function
++from click._compat import strip_ansi, should_strip_ansi
++
++# Test what strip_ansi does to a string with ANSI codes
++test_string = "Hello \033[31mWorld\033[0m"
++print(f"Original: {repr(test_string)}")
++stripped = strip_ansi(test_string)
++print(f"Stripped: {repr(stripped)}")
++
++# Test should_strip_ansi with different parameters
++s = StringIO()
++print("Testing should_strip_ansi:")
++print(f"should_strip_ansi(s, None): {should_strip_ansi(s, None)}")
++print(f"should_strip_ansi(s, True): {should_strip_ansi(s, True)}")
++print(f"should_strip_ansi(s, False): {should_strip_ansi(s, False)}")
++
++# Test with sys.stdout (if it's a TTY)
++print(f"should_strip_ansi(sys.stdout, None): {should_strip_ansi(sys.stdout, None)}")
++print(f"should_strip_ansi(sys.stdout, True): {should_strip_ansi(sys.stdout, True)}")
+\ No newline at end of file
+diff --git a/test_ansi_issue.py b/test_ansi_issue.py
+new file mode 100644
+index 0000000..06885e6
+--- /dev/null
++++ b/test_ansi_issue.py
+@@ -0,0 +1,18 @@
++import sys
++from io import StringIO
++from click.utils import echo
++
++# Test case: echo with StringIO that is not a TTY but color=True
++s = StringIO()
++echo("Hello \033[31mWorld\033[0m", file=s, color=True)
++result = s.getvalue()
++print(f"Result: {repr(result)}")
++
++# Test case: echo with StringIO that is not a TTY and color=None (default)
++s2 = StringIO()
++echo("Hello \033[31mWorld\033[0m", file=s2, color=None)
++result2 = s2.getvalue()
++print(f"Result2: {repr(result2)}")
++
++# Test case: echo with sys.stdout that is a TTY (if it is) and color=True
++echo("Hello \033[31mWorld\033[0m", file=sys.stdout, color=True)
+\ No newline at end of file

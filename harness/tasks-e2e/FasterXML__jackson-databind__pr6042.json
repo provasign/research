@@ -1,0 +1,28 @@
+{
+  "instance_id": "FasterXML__jackson-databind__pr6042",
+  "repo": "FasterXML/jackson-databind",
+  "pr": 6042,
+  "base_commit": "c25c2a5a2397e3ca86c5277c8ddcdc7ac1ded035",
+  "merge_commit": "93a315d523ce8e065595984bad86e9547658245a",
+  "patch": "diff --git a/src/main/java/tools/jackson/databind/deser/jdk/StringCollectionDeserializer.java b/src/main/java/tools/jackson/databind/deser/jdk/StringCollectionDeserializer.java\nindex 405dab1b6..10a471521 100644\n--- a/src/main/java/tools/jackson/databind/deser/jdk/StringCollectionDeserializer.java\n+++ b/src/main/java/tools/jackson/databind/deser/jdk/StringCollectionDeserializer.java\n@@ -248,8 +248,12 @@ public final class StringCollectionDeserializer\n                             // custom) one, can hard-code empty String\n                             value = \"\";\n                         } else {\n-                            // Fail case: delegate to _parseString which will throw proper error\n-                            value = _parseString(p, ctxt, _nullProvider);\n+                            // [databind#6040]: Fail case: report error against the\n+                            // START_ARRAY token (not the END_ARRAY we just advanced to),\n+                            // for consistency with other Array-to-String coercion failures\n+                            value = (String) ctxt.handleUnexpectedToken(\n+                                    ctxt.constructType(String.class),\n+                                    JsonToken.START_ARRAY, p, null);\n                         }\n                     } else {\n                         // Non-empty array: delegate to _parseString which will throw proper error\n",
+  "test_patch": "diff --git a/src/test/java/tools/jackson/databind/convert/CoerceArrayToStringToken6040Test.java b/src/test/java/tools/jackson/databind/convert/CoerceArrayToStringToken6040Test.java\nnew file mode 100644\nindex 000000000..e0bd54416\n--- /dev/null\n+++ b/src/test/java/tools/jackson/databind/convert/CoerceArrayToStringToken6040Test.java\n@@ -0,0 +1,69 @@\n+package tools.jackson.databind.convert;\n+\n+import java.util.List;\n+import java.util.Map;\n+\n+import org.junit.jupiter.api.Test;\n+\n+import tools.jackson.databind.JavaType;\n+import tools.jackson.databind.cfg.CoercionAction;\n+import tools.jackson.databind.cfg.CoercionInputShape;\n+import tools.jackson.databind.exc.MismatchedInputException;\n+import tools.jackson.databind.json.JsonMapper;\n+import tools.jackson.databind.type.TypeFactory;\n+\n+import static org.junit.jupiter.api.Assertions.fail;\n+\n+import static tools.jackson.databind.testutil.DatabindTestUtil.*;\n+\n+/**\n+ * Tests for [databind#6040]: when an (empty) JSON Array is encountered where a\n+ * String is expected, and coercion is disallowed, the failure should be reported\n+ * against the {@code START_ARRAY} token (as with other Array-to-String coercions),\n+ * not the {@code END_ARRAY} token.\n+ */\n+public class CoerceArrayToStringToken6040Test\n+{\n+    static class Wrapper6040<T> {\n+        public T field;\n+    }\n+\n+    private final JsonMapper MAPPER = JsonMapper.builder()\n+            .withCoercionConfigDefaults(cfg ->\n+                    cfg.setCoercion(CoercionInputShape.String, CoercionAction.Fail))\n+            .build();\n+\n+    private final TypeFactory TF = TypeFactory.createDefaultInstance();\n+\n+    // Plain String target: was already correct\n+    @Test\n+    public void arrayForString() throws Exception {\n+        JavaType t = TF.constructParametricType(Wrapper6040.class, String.class);\n+        _verifyStartArrayFailure(\"{ \\\"field\\\": [] }\", t);\n+    }\n+\n+    // [databind#6040]: String as Collection element used to report END_ARRAY\n+    @Test\n+    public void arrayForStringCollectionElement() throws Exception {\n+        JavaType inner = TF.constructParametricType(List.class, String.class);\n+        JavaType t = TF.constructParametricType(Wrapper6040.class, inner);\n+        _verifyStartArrayFailure(\"{ \\\"field\\\": [ [] ] }\", t);\n+    }\n+\n+    // String as Map value: was already correct\n+    @Test\n+    public void arrayForStringMapValue() throws Exception {\n+        JavaType inner = TF.constructParametricType(Map.class, String.class, String.class);\n+        JavaType t = TF.constructParametricType(Wrapper6040.class, inner);\n+        _verifyStartArrayFailure(\"{ \\\"field\\\": { \\\"field\\\": [] } }\", t);\n+    }\n+\n+    private void _verifyStartArrayFailure(String json, JavaType targetType) throws Exception {\n+        try {\n+            MAPPER.readValue(json, targetType);\n+            fail(\"Should not pass\");\n+        } catch (MismatchedInputException e) {\n+            verifyException(e, \"from Array value (token `JsonToken.START_ARRAY`)\");\n+        }\n+    }\n+}\n",
+  "test_classes": [
+    "tools.jackson.databind.convert.CoerceArrayToStringToken6040Test"
+  ],
+  "src_files": [
+    "src/main/java/tools/jackson/databind/deser/jdk/StringCollectionDeserializer.java"
+  ],
+  "problem_statement": "Fix #6040\n\n",
+  "fail_to_pass": [
+    "tools.jackson.databind.convert.CoerceArrayToStringToken6040Test::arrayForString"
+  ],
+  "pass_to_pass": [
+    "tools.jackson.databind.convert.CoerceArrayToStringToken6040Test::arrayForStringMapValue"
+  ],
+  "lang": "java",
+  "build": "maven",
+  "task_kind": "localized",
+  "test_modules": [
+    "src/test/java/tools/jackson/databind/convert/CoerceArrayToStringToken6040Test.java"
+  ]
+}

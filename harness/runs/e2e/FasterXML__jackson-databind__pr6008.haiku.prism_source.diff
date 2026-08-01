@@ -1,0 +1,37 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java b/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
+index 070c2df39..ceaf367db 100644
+--- a/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
++++ b/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
+@@ -246,9 +246,31 @@ public class UnwrappedPropertyHandler
+             if (deser != null) {
+                 // Recursively collect property names
+             	deser.collectAllPropertyNamesTo(names);
+-                return deser.hasAnySetter();
++                // [databind#6001]: If deserializer has custom unwrappingDeserializer(),
++                // treat it as "any setter" so all unwrapped properties are buffered for it
++                if (deser.hasAnySetter()) {
++                    return true;
++                }
++                // Check if this deserializer implements custom unwrapping logic
++                return _hasCustomUnwrappingDeserializer(deser);
+             }
+         }
+         return false;
+     }
++
++    /**
++     * Helper method to detect if a deserializer has custom unwrapping logic.
++     *
++     * @since 3.1
++     */
++    private boolean _hasCustomUnwrappingDeserializer(ValueDeserializer<?> deser) {
++        // If unwrappingDeserializer() returns a different instance, it has custom logic
++        try {
++            ValueDeserializer<?> unwrapped = deser.unwrappingDeserializer(null, null);
++            return unwrapped != deser;
++        } catch (Exception e) {
++            // Defensive: if anything goes wrong, assume no custom unwrapping
++            return false;
++        }
++    }
+ }

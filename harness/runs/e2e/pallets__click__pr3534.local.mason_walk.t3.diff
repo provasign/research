@@ -1,0 +1,18 @@
+diff --git a/src/click/termui.py b/src/click/termui.py
+index 91ef6e1..4d30226 100644
+--- a/src/click/termui.py
++++ b/src/click/termui.py
+@@ -344,8 +344,11 @@ def echo_via_pager(
+     text_generator = (el if isinstance(el, str) else str(el) for el in i)
+ 
+     with get_pager_file(color=color) as pager:
+-        for text in itertools.chain(text_generator, "\n"):
+-            pager.write(text)
++        # Write each chunk from the generator incrementally to allow
++        # early output when using generators
++        for chunk in text_generator:
++            pager.write(chunk)
++        pager.write("\n")
+ 
+ 
+ @t.overload

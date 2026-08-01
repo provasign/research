@@ -1,0 +1,232 @@
+diff --git a/debug_help.py b/debug_help.py
+new file mode 100644
+index 0000000..31f3e71
+--- /dev/null
++++ b/debug_help.py
+@@ -0,0 +1,65 @@
++#!/usr/bin/env python3
++
++import sys
++sys.path.insert(0, '/private/var/folders/pz/cmyjc37x5dz39wxf73my55k80000gn/T/e2e-run-yum4e_09/src')
++
++import click
++
++# Test 1: Simple command with help argument
++print("=== Test 1: Command with help argument ===")
++try:
++    @click.command()
++    @click.argument('help')
++    def cli1(help):
++        return f"help={help}"
++    
++    # Try to get help - this should work
++    print("About to call cli1(['--help'])")
++    try:
++        cli1(['--help'], prog_name='test1')
++        print("No error occurred")
++    except SystemExit as e:
++        print(f"SystemExit with code {e.code}")
++except Exception as e:
++    print(f"Error in Test 1: {e}")
++    import traceback
++    traceback.print_exc()
++
++print("\n=== Test 2: Command with help option ===")
++try:
++    @click.command()
++    @click.option('--help', is_flag=True)
++    def cli2(help):
++        return f"help={help}"
++    
++    # Try to get help - this should work  
++    print("About to call cli2(['--help'])")
++    try:
++        cli2(['--help'], prog_name='test2')
++        print("No error occurred")
++    except SystemExit as e:
++        print(f"SystemExit with code {e.code}")
++except Exception as e:
++    print(f"Error in Test 2: {e}")
++    import traceback
++    traceback.print_exc()
++
++print("\n=== Test 3: Command with both help argument and help option ===")
++try:
++    @click.command()
++    @click.argument('help')
++    @click.option('--verbose', is_flag=True)
++    def cli3(help, verbose):
++        return f"help={help}, verbose={verbose}"
++    
++    # Try to get help - this should work
++    print("About to call cli3(['--help'])")
++    try:
++        cli3(['--help'], prog_name='test3')
++        print("No error occurred")
++    except SystemExit as e:
++        print(f"SystemExit with code {e.code}")
++except Exception as e:
++    print(f"Error in Test 3: {e}")
++    import traceback
++    traceback.print_exc()
+\ No newline at end of file
+diff --git a/debug_method.py b/debug_method.py
+new file mode 100644
+index 0000000..26690d9
+--- /dev/null
++++ b/debug_method.py
+@@ -0,0 +1,30 @@
++#!/usr/bin/env python3
++
++import sys
++sys.path.insert(0, '/private/var/folders/pz/cmyjc37x5dz39wxf73my55k80000gn/T/e2e-run-yum4e_09/src')
++
++import click
++
++# Let's debug what exactly happens in get_help_option_names
++print("=== Creating a command with help argument ===")
++
++@click.command()
++@click.argument('help')
++def cli(help):
++    return f"help={help}"
++
++print("Command created")
++print(f"cli.params = {cli.params}")
++
++# Now let's manually call the method to see what happens
++ctx = click.Context(cli)
++print(f"ctx.help_option_names = {ctx.help_option_names}")
++
++# Let's see what get_help_option_names returns
++try:
++    help_names = cli.get_help_option_names(ctx)
++    print(f"get_help_option_names returned: {help_names}")
++except Exception as e:
++    print(f"Error in get_help_option_names: {e}")
++    import traceback
++    traceback.print_exc()
+\ No newline at end of file
+diff --git a/reproduce_bug.py b/reproduce_bug.py
+new file mode 100644
+index 0000000..a81b518
+--- /dev/null
++++ b/reproduce_bug.py
+@@ -0,0 +1,24 @@
++#!/usr/bin/env python3
++
++import sys
++sys.path.insert(0, '/private/var/folders/pz/cmyjc37x5dz39wxf73my55k80000gn/T/e2e-run-yum4e_09/src')
++
++import click
++
++# Test the issue described in the bug report
++@click.command()
++@click.argument('help')
++def cli(help):
++    return f"help={help}"
++
++if __name__ == '__main__':
++    try:
++        # This should work but might fail with the current implementation
++        result = cli(['--help'], prog_name='test')
++        print("Success:", result)
++    except SystemExit as e:
++        print("SystemExit (expected):", e.code)
++    except Exception as e:
++        print("Error:", e)
++        import traceback
++        traceback.print_exc()
+\ No newline at end of file
+diff --git a/reproduce_issue.py b/reproduce_issue.py
+new file mode 100644
+index 0000000..e8bf668
+--- /dev/null
++++ b/reproduce_issue.py
+@@ -0,0 +1,42 @@
++#!/usr/bin/env python3
++
++import sys
++sys.path.insert(0, '/private/var/folders/pz/cmyjc37x5dz39wxf73my55k80000gn/T/e2e-run-yum4e_09/src')
++
++# Let's try to understand the exact issue by creating a minimal reproduction
++import click
++
++print("Testing help option names...")
++
++# Create a command with an argument named 'help'
++@click.command()
++@click.argument('help')
++def cmd_with_help_arg(help):
++    return f"help={help}"
++
++print("Created command with help argument")
++print(f"Command params: {cmd_with_help_arg.params}")
++
++# Test the get_help_option_names method directly
++ctx = click.Context(cmd_with_help_arg)
++print(f"Context help option names: {ctx.help_option_names}")
++
++try:
++    help_names = cmd_with_help_arg.get_help_option_names(ctx)
++    print(f"get_help_option_names result: {help_names}")
++except Exception as e:
++    print(f"Error in get_help_option_names: {e}")
++    import traceback
++    traceback.print_exc()
++
++# Now let's test what happens when we try to use the command with --help
++print("\nTesting help usage...")
++
++try:
++    # This should work - calling with --help should show help
++    result = cmd_with_help_arg(['--help'])
++    print("Help command worked")
++except Exception as e:
++    print(f"Error in help command: {e}")
++    import traceback
++    traceback.print_exc()
+\ No newline at end of file
+diff --git a/test_help_conflict.py b/test_help_conflict.py
+new file mode 100644
+index 0000000..e9cb27f
+--- /dev/null
++++ b/test_help_conflict.py
+@@ -0,0 +1,36 @@
++import click
++import pytest
++
++
++def test_help_option_conflict():
++    """Test that when an argument named 'help' is defined, it doesn't break help resolution."""
++    
++    @click.command()
++    @click.argument('help')
++    @click.option('--verbose', is_flag=True)
++    def cli(help, verbose):
++        return f"help={help}, verbose={verbose}"
++    
++    # This should work without raising an error
++    with pytest.raises(SystemExit):
++        cli(['--help'], prog_name='test')
++
++
++def test_help_option_conflict_with_custom_names():
++    """Test that when an argument named 'help' is defined, custom help option names work."""
++    
++    @click.command()
++    @click.argument('help')
++    @click.option('--verbose', is_flag=True)
++    def cli(help, verbose):
++        return f"help={help}, verbose={verbose}"
++    
++    # This should work without raising an error
++    with pytest.raises(SystemExit):
++        cli(['-h'], prog_name='test')
++
++
++if __name__ == '__main__':
++    test_help_option_conflict()
++    test_help_option_conflict_with_custom_names()
++    print("Tests passed!")
+\ No newline at end of file

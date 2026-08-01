@@ -1,0 +1,41 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java b/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
+index 070c2df39..19dda6e49 100644
+--- a/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
++++ b/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
+@@ -244,8 +244,16 @@ public class UnwrappedPropertyHandler
+         if (prop != null) {
+             ValueDeserializer<?> deser = prop.getValueDeserializer();
+             if (deser != null) {
++                // Track initial size to see if this deserializer contributes any names
++                int initialSize = names.size();
+                 // Recursively collect property names
+             	deser.collectAllPropertyNamesTo(names);
++                // [databind#6001]: If deserializer contributes no names but has unwrappingDeserializer
++                // implementation (custom unwrapper), treat it as having any setter so unknown
++                // properties are passed to it
++                if (names.size() == initialSize) {
++                    return true;
++                }
+                 return deser.hasAnySetter();
+             }
+         }
+diff --git a/src/test/java/tools/jackson/databind/tofix/UnwrappedCustomDeserCreator6001Test.java b/src/test/java/tools/jackson/databind/tofix/UnwrappedCustomDeserCreator6001Test.java
+index c9e57e142..5f5e492e2 100644
+--- a/src/test/java/tools/jackson/databind/tofix/UnwrappedCustomDeserCreator6001Test.java
++++ b/src/test/java/tools/jackson/databind/tofix/UnwrappedCustomDeserCreator6001Test.java
+@@ -17,7 +17,6 @@ import tools.jackson.databind.ValueDeserializer;
+ import tools.jackson.databind.annotation.JsonDeserialize;
+ import tools.jackson.databind.node.ObjectNode;
+ import tools.jackson.databind.testutil.DatabindTestUtil;
+-import tools.jackson.databind.testutil.failure.JacksonTestFailureExpected;
+ import tools.jackson.databind.util.NameTransformer;
+ 
+ import static org.junit.jupiter.api.Assertions.assertEquals;
+@@ -93,7 +92,6 @@ class UnwrappedCustomDeserCreator6001Test extends DatabindTestUtil
+ 
+     private final ObjectMapper MAPPER = newJsonMapper();
+ 
+-    @JacksonTestFailureExpected
+     @Test
+     void unwrappedRecordCreatorPropertiesShouldReceiveFlattenedFields()
+     {

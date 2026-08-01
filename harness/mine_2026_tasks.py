@@ -20,6 +20,7 @@ import argparse
 import json
 import re
 import subprocess
+from pathlib import Path
 
 BUG_RE = re.compile(r"\b(fix(e[sd])?|close[sd]?|resolve[sd]?)\b\s+#\d+", re.I)
 TEST_RE = re.compile(r"(^|/)(tests?|testing)/|_test\.py$|test_.*\.py$", re.I)
@@ -72,10 +73,13 @@ if __name__ == "__main__":
     ap.add_argument("repo", help="owner/name")
     ap.add_argument("--scan", type=int, default=60, help="how many recent merged PRs to scan")
     ap.add_argument("--year", default="2026")
+    ap.add_argument("--json-out", dest="json_out", default="")
     a = ap.parse_args()
     cands = candidates(a.repo, a.scan, a.year)
     print(f"# {len(cands)} candidate {a.year} tasks in {a.repo} (of {a.scan} scanned)\n")
     for c in cands:
         print(f"  [{c['kind']:7}] pr#{c['pr']:<6} churn={c['churn']:<4} "
               f"{c['merged_at'][:10]}  {c['title'][:64]}")
-    print(json.dumps(cands, indent=2)) if False else None
+    if a.json_out:
+        Path(a.json_out).write_text(json.dumps(cands, indent=2))
+        print(f"\n# wrote {len(cands)} candidates -> {a.json_out}")

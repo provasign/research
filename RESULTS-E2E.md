@@ -1,13 +1,13 @@
 # End-to-end benchmark — pilot results & morning summary (2026-07-14)
 
 **Question:** on the work a regular coding agent actually does — real, localized
-bug fixes — does a code graph help, and is it Prism-G/G\* or CodeGraph? Measured
+bug fixes — does a code graph help, and is it Prism-G/G\* or Engine B? Measured
 end-to-end: the agent edits a throwaway worktree, and the repo's own test suite
 scores it in Docker (`FAIL_TO_PASS` passes, no `PASS_TO_PASS` regression).
 
 **TL;DR — the pilot's headline is methodological, not a scoreboard.** It did
 exactly what a pilot is for: it surfaced a design flaw at n=5, before spending on
-scale. Do **not** read the numbers below as "CodeGraph beats Prism."
+scale. Do **not** read the numbers below as "Engine B beats Prism."
 
 ---
 
@@ -26,13 +26,13 @@ A complete, reproducible, **contamination-free** benchmark pipeline:
 
 ## Raw resolve rate (read with the confound below)
 
-| model | baseline | prism_g | prism_gstar | codegraph | mason |
+| model | baseline | prism_g | prism_gstar | engine-b | mason |
 |---|---|---|---|---|---|
 | haiku  | 0/5 | 0/5 | 0/5 | **2/5** | – |
 | sonnet | 0/5 | 0/5 | 0/5 | **2/5** | – |
 | local  | (stage crashed — bug fixed) | | | | 0/5 (all timed out) |
 
-CodeGraph resolved the same 2 tasks (pr3493, pr3534) on both cloud models.
+Engine B resolved the same 2 tasks (pr3493, pr3534) on both cloud models.
 
 ## The confound that makes the arm comparison invalid (primary finding)
 
@@ -44,12 +44,12 @@ grep and barely touched the graph.** Measured tool usage (local cells, pr3493):
 | baseline    | 0 | 12 | 26 |
 | prism_g     | 4 | 11 | 13 |
 | prism_gstar | **1** | **12** | 15 |
-| codegraph   | 2 | 13 | 20 |
+| engine-b   | 2 | 13 | 20 |
 
 Every arm ran a grep-dominated loop. `prism_gstar` called `prism_query` **once**
-and grep **twelve** times; even the CodeGraph arm called `explore` twice against
+and grep **twelve** times; even the Engine B arm called `explore` twice against
 grep thirteen. So the graph arms collapsed toward baseline behavior, and the
-resolve-rate differences **cannot be attributed to the graph.** CodeGraph's 2/5
+resolve-rate differences **cannot be attributed to the graph.** Engine B's 2/5
 is a weak, grep-confounded signal at n=1 per cell — not evidence the graph helped.
 
 ## What we *can* honestly say

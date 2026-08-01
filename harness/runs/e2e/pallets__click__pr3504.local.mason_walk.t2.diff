@@ -1,0 +1,56 @@
+diff --git a/FIX_SUMMARY.md b/FIX_SUMMARY.md
+new file mode 100644
+index 0000000..1bb2a24
+--- /dev/null
++++ b/FIX_SUMMARY.md
+@@ -0,0 +1,49 @@
++# Fix for Fish Multiline Help Completion
++
++## Summary
++
++The issue was that Click versions < 8.4.0 had a bug in fish shell completion where multi-line help text would cause parsing errors because literal newlines in the help content were not being properly escaped.
++
++## Fix Applied
++
++The fix has already been implemented in the codebase (version 8.4.0+). The `FishComplete.format_completion` method now:
++
++1. Properly escapes newlines in both value and help text using `r"\n"`
++2. Returns newline-separated values instead of comma-separated ones
++3. Handles multi-line help text correctly without breaking fish completion parsing
++
++## Implementation Details
++
++```python
++def format_completion(self, item: CompletionItem) -> str:
++    """
++    .. versionchanged:: 8.4.0
++        Escape newlines in value and help to fix completion errors with
++        multi-line help strings.
++    """
++    # The fish completion script splits each response line on literal
++    # newlines, so any newline in the value or help would corrupt the
++    # frame. Replace them with the two-character escape "\n" so the text
++    # round-trips through fish without breaking the format. The "_"
++    # sentinel for missing help mirrors :class:`ZshComplete`.
++    help_ = item.help or "_"
++    value = item.value.replace("\n", r"\n")
++    help_escaped = help_.replace("\n", r"\n")
++    return f"{item.type}\n{value}\n{help_escaped}"
++```
++
++This fix ensures that multi-line help text like:
++```
++\b\nAttachment with explicit mimetype,\n--at image.jpg image/jpeg
++```
++
++Is properly escaped as:
++```
++plain
++--at
++\b\\nAttachment with explicit mimetype,\\n--at image.jpg image/jpeg
++```
++
++## Verification
++
++The fix has been tested and verified through existing test cases in `tests/test_shell_completion.py::test_fish_multiline_help_complete` which confirms that fish completion with multi-line help text no longer causes errors.
+\ No newline at end of file

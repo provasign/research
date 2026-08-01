@@ -1,0 +1,43 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/CreatorProperty.java b/src/main/java/tools/jackson/databind/deser/CreatorProperty.java
+index 330b232f7..49ad67b81 100644
+--- a/src/main/java/tools/jackson/databind/deser/CreatorProperty.java
++++ b/src/main/java/tools/jackson/databind/deser/CreatorProperty.java
+@@ -3,6 +3,7 @@ package tools.jackson.databind.deser;
+ import java.lang.annotation.Annotation;
+ 
+ import com.fasterxml.jackson.annotation.JacksonInject;
++import com.fasterxml.jackson.annotation.JsonTypeInfo;
+ 
+ import tools.jackson.core.JacksonException;
+ import tools.jackson.core.JsonParser;
+@@ -90,6 +91,8 @@ public class CreatorProperty
+         _creatorIndex = index;
+         _injectableValue = injectable;
+         _fallbackSetter = null;
++
++        _validateTypeDeserializer();
+     }
+ 
+     /**
+@@ -370,6 +373,21 @@ public class CreatorProperty
+         }
+     }
+ 
++    private void _validateTypeDeserializer() {
++        if (_valueTypeDeserializer != null) {
++            final JsonTypeInfo.As typeInclusion = _valueTypeDeserializer.getTypeInclusion();
++            if (typeInclusion == JsonTypeInfo.As.EXTERNAL_PROPERTY && _type.isContainerType()) {
++                String clsDesc = (_annotated == null) ? "UNKNOWN TYPE"
++                        : ClassUtil.getClassDescription(_annotated.getOwner().getDeclaringClass());
++                final String msg = String.format(
++                        "Cannot use EXTERNAL_PROPERTY type inclusion for creator parameter %s (of %s); "
++                        +"this does not work with container types (like List, Set, Map, arrays)",
++                        ClassUtil.name(getName()), clsDesc);
++                throw InvalidDefinitionException.from((JsonParser) null, msg, getType());
++            }
++        }
++    }
++
+     private void _reportMissingSetter(JsonParser p, DeserializationContext ctxt)
+             throws JacksonException
+     {

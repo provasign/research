@@ -28,11 +28,33 @@ import time
 from pathlib import Path
 
 import docker_eval
+import java_eval
 import run_local_agent
 from ab_endtoend_arms import ARMS
 
 OUT = Path("runs/e2e")
 OUT.mkdir(parents=True, exist_ok=True)
+
+
+def _is_java(task) -> bool:
+    return task.get("lang") == "java"
+
+
+def _repo_for(task) -> Path:
+    """Java tasks live in java_eval.REPO_DIR (e.g. ~/gvg-corpus/jackson-databind);
+    Python tasks use docker_eval's e2e-2026 clone convention."""
+    if _is_java(task):
+        return java_eval.REPO_DIR[task["repo"]]
+    return docker_eval._repo_dir(task)
+
+
+def _score(task, diff: str) -> dict:
+    """Language-aware fail->pass scoring."""
+    if not diff.strip():
+        return {"resolved": False, "empty_diff": True}
+    if _is_java(task):
+        return java_eval.score(java_eval.REPO_DIR[task["repo"]], task, diff)
+    return docker_eval.score(task, diff)
 RATE_HINTS = ("rate limit", "usage limit", "429", "too many requests",
               "overloaded", "please try again later")
 
@@ -42,7 +64,7 @@ class RateLimited(Exception):
 
 
 def _worktree(task):
-    repo = docker_eval._repo_dir(task)
+    repo = _repo_for(task)
     wt = Path(tempfile.mkdtemp(prefix="e2e-run-"))
     docker_eval._sh("git", "-C", str(repo), "worktree", "add", "--force",
                     "--detach", str(wt), task["base_commit"], timeout=300)
@@ -53,7 +75,7 @@ def _worktree(task):
 # excluded from the agent diff: git apply is atomic, so a single binary stub
 # (e.g. .grove/grove.db) makes the whole patch unappliable and silently zeroes
 # the score (this invalidated every prism-arm cell before 2026-07-14).
-TOOL_ARTIFACTS = (".grove", ".codegraph", ".prism", "prism.yaml", ".p.diff",
+TOOL_ARTIFACTS = (".grove", ".engine-b", ".prism", "prism.yaml", ".p.diff",
                   ".shale")  # mason's evidence trail
 
 
@@ -68,9 +90,23 @@ def _agent_diff(wt: Path, task) -> str:
 
 def _index_graph(wt: Path, arm: str):
     if arm.startswith("prism"):
-        subprocess.run(["prism", "index", str(wt)], capture_output=True, timeout=300)
-    if arm.startswith("codegraph"):
-        subprocess.run(["codegraph", "index", str(wt)], capture_output=True, timeout=300)
+        r = subprocess.run(["prism", "index", str(wt)], capture_output=True,
+                            text=True, timeout=300)
+        if r.returncode != 0:
+            print(f"  [index] WARN prism index rc={r.returncode}: {r.stderr[-200:]}")
+    if arm.startswith("engine-b"):
+        # engine-b requires `init` to CREATE the index; `index` only rebuilds an
+        # already-initialized one and errors out on a fresh worktree ("Run
+        # engine-b init first"). With capture_output that failure is silent and
+        # the arm degrades to grep-only — a crippled strawman. Use init, and fail
+        # loudly if the .engine-b index did not materialize so a broken cell is
+        # never scored as a real engine-b result.
+        r = subprocess.run(["engine-b", "init", str(wt)], capture_output=True,
+                           text=True, timeout=300)
+        if not (wt / ".engine-b").exists():
+            raise RuntimeError(
+                f"engine-b init did not create .engine-b in {wt} "
+                f"(rc={r.returncode}): {r.stdout[-200:]} {r.stderr[-200:]}")
 
 
 TASK_TAIL = ("\n\nFix the SOURCE code in this repository so the issue is resolved "
@@ -101,20 +137,34 @@ def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
     return rec
 
 
-def _run_mason(wt: Path, task) -> dict:
+def _run_mason(wt: Path, task, arm: str = "mason") -> dict:
     """The competent-local-harness arm: mason (Prism baked in, self-indexes).
     Output is teed to a visible per-cell log; capped at 30 min — the SAME
     budget the cloud arms get (subprocess timeout 1800). The old 600s cap
     killed 11/15 mason v0.28 cells mid-flight: the completeness gate and
     prepare obligations do strictly more engine work per task, and a slow
-    local model pays for it in wall-clock, not correctness."""
+    local model pays for it in wall-clock, not correctness.
+
+    Two arms share this driver so the ONLY variable is context delivery:
+      - "mason":       default (code_context whole-neighborhood dump)
+      - "mason_walk":  MASON_WALK=1 (graph_focus part-by-part walk)
+    MASON_BIN selects the binary (default "mason") so an experimental build can
+    be A/B'd against the released one."""
+    import os as _os
     prompt = task["problem_statement"] + TASK_TAIL
-    log = OUT / f"{task['instance_id']}.mason.transcript.txt"
+    log = OUT / f"{task['instance_id']}.{arm}.transcript.txt"
+    binary = _os.environ.get("MASON_BIN", "mason")
+    env = dict(_os.environ)
+    if arm == "mason_walk":
+        env["MASON_WALK"] = "1"
+    else:
+        env.pop("MASON_WALK", None)
     t0 = time.monotonic()
     timed_out = False
     with open(log, "w") as fh:
-        p = subprocess.Popen(["mason", "--yes", "--model", "ollama:qwen3-coder:30b",
-                              prompt], cwd=wt, stdout=fh, stderr=subprocess.STDOUT, text=True)
+        p = subprocess.Popen([binary, "--yes", "--model", "ollama:qwen3-coder:30b",
+                              prompt], cwd=wt, stdout=fh, stderr=subprocess.STDOUT,
+                             text=True, env=env)
         try:
             p.wait(timeout=1800)
         except subprocess.TimeoutExpired:
@@ -132,13 +182,13 @@ def _save_diff(task, model: str, arm: str, tag: str, diff: str):
 def run_cell(task: dict, arm: str, model: str, tag: str = "") -> dict:
     repo, wt = _worktree(task)
     try:
-        if arm == "mason":
-            meta = _run_mason(wt, task)
+        if arm in ("mason", "mason_walk"):
+            meta = _run_mason(wt, task, arm)
             diff = _agent_diff(wt, task)
             _save_diff(task, model, arm, tag, diff)
             docker_eval._sh("git", "-C", str(repo), "worktree", "remove",
                             "--force", str(wt), check=False)
-            sc = docker_eval.score(task, diff) if diff.strip() else {"resolved": False, "empty_diff": True}
+            sc = _score(task, diff)
             return {"task": task["instance_id"], "arm": arm, "model": model,
                     "kind": task.get("kind"), "resolved": sc.get("resolved"),
                     "diff_lines": diff.count("\n"), **meta, "score": sc}
@@ -155,7 +205,7 @@ def run_cell(task: dict, arm: str, model: str, tag: str = "") -> dict:
     finally:
         docker_eval._sh("git", "-C", str(repo), "worktree", "remove", "--force",
                         str(wt), check=False)
-    sc = docker_eval.score(task, diff) if diff.strip() else {"resolved": False, "empty_diff": True}
+    sc = _score(task, diff)
     return {"task": task["instance_id"], "arm": arm, "model": model,
             "kind": task.get("kind"), "resolved": sc.get("resolved"),
             "diff_lines": diff.count("\n"), **meta, "score": sc}
@@ -165,7 +215,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("manifest")
     ap.add_argument("--models", default="local,haiku,sonnet")
-    ap.add_argument("--arms", default="baseline,prism_g,prism_gstar,codegraph")
+    ap.add_argument("--arms", default="baseline,prism_g,prism_gstar,engine-b")
     ap.add_argument("--trials", type=int, default=1,
                     help="trials per cell; trial 1 keeps the unsuffixed cell name "
                          "(cache-compatible), trials 2..N write .t<n>.json")
@@ -197,6 +247,16 @@ def main():
                             print(f"  RATE-LIMITED at {f.name}; sleeping {sleep_s}s then retrying",
                                   flush=True)
                             time.sleep(sleep_s)
+                        except Exception as e:  # noqa: BLE001
+                            # Fault-isolate a single bad cell (engine-b index failure,
+                            # maven timeout, apply reject) so a 30h unattended run does
+                            # not die on one task. Record the error and move on.
+                            import traceback
+                            rec = {"task": task["instance_id"], "arm": arm, "model": model,
+                                   "resolved": False, "error": f"{type(e).__name__}: {str(e)[:200]}"}
+                            print(f"  ERROR {f.name}: {type(e).__name__}: {str(e)[:120]}", flush=True)
+                            traceback.print_exc()
+                            break
                     (OUT / "PAUSED.json").unlink(missing_ok=True)
                     rec["trial"] = trial
                     f.write_text(json.dumps(rec, indent=2))

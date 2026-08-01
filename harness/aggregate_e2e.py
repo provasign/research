@@ -11,8 +11,8 @@ import json
 from pathlib import Path
 
 OUT = Path("runs/e2e")
-ARMS = ["baseline", "prism_g", "prism_gstar", "prism_explore", "codegraph", "mason",
-        "prism_g_nogrep", "prism_gstar_nogrep", "prism_explore_nogrep", "codegraph_nogrep"]
+ARMS = ["baseline", "prism_g", "prism_gstar", "prism_explore", "engine-b", "mason",
+        "prism_g_nogrep", "prism_gstar_nogrep", "prism_explore_nogrep", "engine_b_nogrep"]
 
 
 def load():

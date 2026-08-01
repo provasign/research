@@ -1,32 +1,80 @@
 diff --git a/src/click/termui.py b/src/click/termui.py
-index 91ef6e1..3adea76 100644
+index 91ef6e1..9e640ac 100644
 --- a/src/click/termui.py
 +++ b/src/click/termui.py
-@@ -340,12 +340,22 @@ def echo_via_pager(
+@@ -334,18 +334,39 @@ def echo_via_pager(
+     """
+ 
+     if inspect.isgeneratorfunction(text_or_generator):
+-        i = t.cast("t.Callable[[], cabc.Iterable[str]]", text_or_generator)()
++        # For generator functions, we need to iterate through them one by one
++        # to allow for proper yielding behavior
++        gen = t.cast("t.Callable[[], cabc.Iterable[str]]", text_or_generator)()
++        with get_pager_file(color=color) as pager:
++            try:
++                for text in gen:
++                    pager.write(text)
++                pager.write("\n")
++            except StopIteration:
++                # Handle the case where generator is exhausted
++                pass
+     elif isinstance(text_or_generator, str):
+         i = [text_or_generator]
++        # convert every element of i to a text type if necessary
++        text_generator = (el if isinstance(el, str) else str(el) for el in i)
++        with get_pager_file(color=color) as pager:
++            try:
++                for text in itertools.chain(text_generator, "\n"):
++                    pager.write(text)
++            except StopIteration:
++                # Handle the case where generator is exhausted
++                pass
      else:
          i = iter(t.cast("cabc.Iterable[str]", text_or_generator))
- 
+-
 -    # convert every element of i to a text type if necessary
 -    text_generator = (el if isinstance(el, str) else str(el) for el in i)
 -
-     with get_pager_file(color=color) as pager:
+-    with get_pager_file(color=color) as pager:
 -        for text in itertools.chain(text_generator, "\n"):
 -            pager.write(text)
-+        # For generators, we need to write each yielded value immediately
-+        # to support the case where a generator yields some values and then
-+        # raises an exception (the yielded values should be written before
-+        # the exception propagates)
-+        if inspect.isgeneratorfunction(text_or_generator):
-+            for el in i:
-+                # convert element to text type if necessary
-+                text = el if isinstance(el, str) else str(el)
-+                pager.write(text)
-+        else:
-+            # For non-generator iterables, we can use the original approach
-+            # convert every element of i to a text type if necessary
-+            text_generator = (el if isinstance(el, str) else str(el) for el in i)
-+            for text in itertools.chain(text_generator, "\n"):
-+                pager.write(text)
++        # convert every element of i to a text type if necessary
++        text_generator = (el if isinstance(el, str) else str(el) for el in i)
++        with get_pager_file(color=color) as pager:
++            try:
++                for text in itertools.chain(text_generator, "\n"):
++                    pager.write(text)
++            except StopIteration:
++                # Handle the case where generator is exhausted
++                pass
  
  
  @t.overload
+diff --git a/test_generator_fix.py b/test_generator_fix.py
+new file mode 100644
+index 0000000..a2bfbc4
+--- /dev/null
++++ b/test_generator_fix.py
+@@ -0,0 +1,21 @@
++#!/usr/bin/env python3
++
++import sys
++import os
++sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
++
++import click
++import time
++
++def count():
++    for i in range(5):
++        time.sleep(0.1)
++        yield f"count {i}\n"
++
++print("Testing echo_via_pager with generator function...")
++try:
++    # This should now work properly, yielding values one by one
++    click.echo_via_pager(count())
++    print("Success: Generator function handled correctly")
++except Exception as e:
++    print(f"Error: {e}")
+\ No newline at end of file

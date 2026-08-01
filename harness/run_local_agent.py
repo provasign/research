@@ -8,7 +8,7 @@ OpenAI-compatible endpoint. The model is the only variable; per-arm tool
 exposure is controlled here exactly as `claude -p --allowedTools` controls the
 cloud arms, so local numbers are comparable to Sonnet/Haiku.
 
-Context tools shell out to the prism / codegraph CLIs -- the SAME engine the
+Context tools shell out to the prism / engine-b CLIs -- the SAME engine the
 cloud arms reach via MCP, so the graph answer is identical; only the transport
 differs. Arms mirror ab_endtoend_arms.py.
 
@@ -34,8 +34,8 @@ def _prism(*args: str, cwd: str) -> str:
     return (r.stdout or r.stderr)[:6000]
 
 
-def _codegraph(*args: str, cwd: str) -> str:
-    r = subprocess.run(["codegraph", *args], cwd=cwd,
+def _engine_b(*args: str, cwd: str) -> str:
+    r = subprocess.run(["engine-b", *args], cwd=cwd,
                        capture_output=True, text=True, timeout=120)
     return (r.stdout or r.stderr)[:6000]
 
@@ -110,9 +110,9 @@ def _ctx_tools(arm: str) -> dict:
             "prism_change_impact": (lambda cwd, method="", **_: _prism("change-impact", method, cwd=cwd), {"method": "str"}, "ONLY for a signature/type change: every affected site."),
             "prism_rename_plan":   (lambda cwd, method="", newName="", **_: _prism("rename-plan", method, newName, cwd=cwd), {"method": "str", "newName": "str"}, "ONLY for a rename."),
         }
-    if arm == "codegraph":
+    if arm == "engine-b":
         return {
-            "codegraph_explore": (lambda cwd, query="", **_: _codegraph("explore", query, cwd=cwd), {"query": "str"}, "PRIMARY: relevant symbols, call paths, blast radius in one call."),
+            "engine_b_explore": (lambda cwd, query="", **_: _engine_b("explore", query, cwd=cwd), {"query": "str"}, "PRIMARY: relevant symbols, call paths, blast radius in one call."),
         }
     raise ValueError(arm)
 
@@ -123,7 +123,7 @@ GUIDANCE = {
     "prism_gstar": ("START with prism_query(task, terms) -- it returns relevant code, callers, tests, and gaps in one call; "
                     "for most bugs it is the only context call you need. Use prism_change_impact / prism_rename_plan ONLY if the "
                     "task is that specific shape -- never force change_impact on a localized fix. Then edit and build."),
-    "codegraph": "Use codegraph_explore as your primary context tool, then edit and build.",
+    "engine-b": "Use engine_b_explore as your primary context tool, then edit and build.",
 }
 
 
@@ -190,7 +190,7 @@ def run(model: str, arm: str, repo: str, task_prompt: str) -> dict:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="qwen3-coder:30b")
-    ap.add_argument("--arm", required=True, choices=["baseline", "prism_g", "prism_gstar", "codegraph"])
+    ap.add_argument("--arm", required=True, choices=["baseline", "prism_g", "prism_gstar", "engine-b"])
     ap.add_argument("--repo", required=True)
     ap.add_argument("--task", required=True)
     a = ap.parse_args()

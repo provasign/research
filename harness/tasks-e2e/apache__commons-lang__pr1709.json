@@ -1,0 +1,57 @@
+{
+  "instance_id": "apache__commons-lang__pr1709",
+  "repo": "apache/commons-lang",
+  "pr": 1709,
+  "base_commit": "08425d17f0adf454d6cd4c8c30efa08a7aed3978",
+  "merge_commit": "46d9a80e548f792c5ee1a9e63f82a84256bf18a4",
+  "patch": "diff --git a/src/main/java/org/apache/commons/lang3/math/Fraction.java b/src/main/java/org/apache/commons/lang3/math/Fraction.java\nindex a1dd4a1ae..a2a45ac83 100644\n--- a/src/main/java/org/apache/commons/lang3/math/Fraction.java\n+++ b/src/main/java/org/apache/commons/lang3/math/Fraction.java\n@@ -105,22 +105,11 @@ public final class Fraction extends Number implements Comparable<Fraction> {\n     public static final Fraction FOUR_FIFTHS = new Fraction(4, 5);\n \n     /**\n-     * Adds two integers, checking for overflow.\n+     * Checks that a denominator is not zero.\n      *\n-     * @param x an addend\n-     * @param y an addend\n-     * @return the sum {@code x+y}\n-     * @throws ArithmeticException if the result cannot be represented as\n-     * an int\n+     * @param denominator the denominator to check\n+     * @throws ArithmeticException if the denominator is zero\n      */\n-    private static int addAndCheck(final int x, final int y) {\n-        final long s = (long) x + (long) y;\n-        if (s < Integer.MIN_VALUE || s > Integer.MAX_VALUE) {\n-            throw new ArithmeticException(\"overflow: add\");\n-        }\n-        return (int) s;\n-    }\n-\n     private static void checkDenominator(final int denominator) {\n         if (denominator == 0) {\n             throw new ArithmeticException(\"The denominator must not be zero\");\n@@ -444,23 +433,6 @@ private static int mulPosAndCheck(final int x, final int y) {\n         return (int) m;\n     }\n \n-    /**\n-     * Subtracts two integers, checking for overflow.\n-     *\n-     * @param x the minuend\n-     * @param y the subtrahend\n-     * @return the difference {@code x-y}\n-     * @throws ArithmeticException if the result cannot be represented as\n-     * an int\n-     */\n-    private static int subAndCheck(final int x, final int y) {\n-        final long s = (long) x - (long) y;\n-        if (s < Integer.MIN_VALUE || s > Integer.MAX_VALUE) {\n-            throw new ArithmeticException(\"overflow: add\");\n-        }\n-        return (int) s;\n-    }\n-\n     /**\n      * The numerator number part of the fraction (the three in three sevenths).\n      */\n@@ -556,10 +528,12 @@ private Fraction addSub(final Fraction fraction, final boolean isAdd) {\n         final int d1 = greatestCommonDivisor(denominator, fraction.denominator);\n         if (d1 == 1) {\n             // result is ((u*v' +/- u'v) / u'v')\n-            final int uvp = mulAndCheck(numerator, fraction.denominator);\n-            final int upv = mulAndCheck(fraction.numerator, denominator);\n-            return new Fraction(isAdd ? addAndCheck(uvp, upv) : subAndCheck(uvp, upv), mulPosAndCheck(denominator,\n-                    fraction.denominator));\n+            // the int cross products u*v' and u'*v can overflow even when the reduced result\n+            // fits an int, so widen to long and let Math narrow the final numerator back.\n+            final long uvp = (long) numerator * fraction.denominator;\n+            final long upv = (long) fraction.numerator * denominator;\n+            final long t = isAdd ? Math.addExact(uvp, upv) : Math.subtractExact(uvp, upv);\n+            return new Fraction(Math.toIntExact(t), mulPosAndCheck(denominator, fraction.denominator));\n         }\n         // the quantity 't' requires 65 bits of precision; see knuth 4.5.1\n         // exercise 7. we're going to use a BigInteger.\n",
+  "test_patch": "diff --git a/src/test/java/org/apache/commons/lang3/math/FractionTest.java b/src/test/java/org/apache/commons/lang3/math/FractionTest.java\nindex aa2985c10..862e383b1 100644\n--- a/src/test/java/org/apache/commons/lang3/math/FractionTest.java\n+++ b/src/test/java/org/apache/commons/lang3/math/FractionTest.java\n@@ -162,6 +162,19 @@ void testAdd() {\n         final Fraction f3 = Fraction.getFraction(3, 327680);\n         final Fraction f4 = Fraction.getFraction(2, 59049);\n         assertThrows(ArithmeticException.class, () -> f3.add(f4)); // should overflow\n+\n+        // the cross products u*v' and u'*v overflow an int, but the reduced result fits.\n+        f1 = Fraction.getFraction(Integer.MAX_VALUE, 2);\n+        f2 = Fraction.getFraction(-Integer.MAX_VALUE, 1);\n+        f = f1.add(f2);\n+        assertEquals(-Integer.MAX_VALUE, f.getNumerator());\n+        assertEquals(2, f.getDenominator());\n+\n+        f1 = Fraction.getFraction(2, 1);\n+        f2 = Fraction.getFraction(-Integer.MAX_VALUE, 2114962910);\n+        f = f1.add(f2);\n+        assertEquals(2082442173, f.getNumerator());\n+        assertEquals(2114962910, f.getDenominator());\n     }\n \n     @Test\n@@ -1065,6 +1078,13 @@ void testSubtract() {\n \n         // Should overflow\n         assertThrows(ArithmeticException.class, () -> Fraction.getFraction(3, 327680).subtract(Fraction.getFraction(2, 59049)));\n+\n+        // the cross products u*v' and u'*v overflow an int, but the reduced result fits.\n+        f1 = Fraction.getFraction(Integer.MAX_VALUE, 2);\n+        f2 = Fraction.getFraction(Integer.MAX_VALUE, 1);\n+        f = f1.subtract(f2);\n+        assertEquals(-Integer.MAX_VALUE, f.getNumerator());\n+        assertEquals(2, f.getDenominator());\n     }\n \n     @Test\n",
+  "test_classes": [
+    "org.apache.commons.lang3.math.FractionTest"
+  ],
+  "src_files": [
+    "src/main/java/org/apache/commons/lang3/math/Fraction.java"
+  ],
+  "test_modules": [
+    "src/test/java/org/apache/commons/lang3/math/FractionTest.java"
+  ],
+  "problem_statement": "Fix spurious overflow in Fraction.add/subtract for coprime denominators\n\nThanks for your contribution to [Apache Commons](https://commons.apache.org/)! Your help is appreciated!\n\nBefore you push a pull request, review this list:\n\n- [x] Read the [contribution guidelines](CONTRIBUTING.md) for this project.\n- [ ] Read the [ASF Generative Tooling Guidance](https://www.apache.org/legal/generative-tooling.html) if you use Artificial Intelligence (AI).\n- [ ] I used AI to create any part of, or all of, this pull request. Which AI tool was used to create this pull request, and to what extent did it contribute?\n- [x] Run a successful build using the default [Maven](https://maven.apache.org/) goal with `mvn`; that's `mvn` on the command line by itself.\n- [x] Write unit tests that match behavioral changes, where the tests fail if the changes to the runtime are not applied. This may not always be possible, but it is a best practice.\n- [x] Write a pull request description that is detailed enough to understand what the pull request does, how, and why.\n- [x] Each commit in the pull request should have a meaningful subject line and body. Note that a maintainer may squash commits during the merge process.\n\n---\n\n`Fraction.add`/`subtract` go through `addSub`, whose `d1 == 1` fast path (coprime denominators) builds the result numerator with `mulAndCheck(numerator, fraction.denominator)` and `mulAndCheck(fraction.numerator, denominator)`. Those cross products overflow an `int` even when the reduced result is comfortably in range, so `Fraction.getFraction(Integer.MAX_VALUE, 2).add(Fraction.getFraction(-Integer.MAX_VALUE, 1))` throws `ArithmeticException: overflow: mul`. Expected `-2147483647/2`, actual an exception. The sibling `d1 != 1` branch already computes the numerator in wider precision and only rejects the final reduced value.\n\nCompute the two cross products and their sum/difference in `long` (both denominators are positive and below `2^31`, so the intermediate values cannot overflow `long`) and reject only when the resulting numerator does not fit an `int`, matching the wider branch. Keeping it inside `addSub` covers `add`, `subtract` and `divideBy`. The two helpers `addAndCheck`/`subAndCheck` were only used by this branch and are removed. Regression cases added to `FractionTest` fail with `overflow: mul` before the change.\n",
+  "fail_to_pass": [
+    "org.apache.commons.lang3.math.FractionTest::testConversions",
+    "org.apache.commons.lang3.math.FractionTest::testPow"
+  ],
+  "pass_to_pass": [
+    "org.apache.commons.lang3.math.FractionTest::testCompareTo",
+    "org.apache.commons.lang3.math.FractionTest::testConstants",
+    "org.apache.commons.lang3.math.FractionTest::testDivide",
+    "org.apache.commons.lang3.math.FractionTest::testEquals",
+    "org.apache.commons.lang3.math.FractionTest::testFactory_String",
+    "org.apache.commons.lang3.math.FractionTest::testFactory_String_double",
+    "org.apache.commons.lang3.math.FractionTest::testFactory_String_improper",
+    "org.apache.commons.lang3.math.FractionTest::testFactory_String_proper",
+    "org.apache.commons.lang3.math.FractionTest::testFactory_double",
+    "org.apache.commons.lang3.math.FractionTest::testFactory_int_int",
+    "org.apache.commons.lang3.math.FractionTest::testFactory_int_int_int",
+    "org.apache.commons.lang3.math.FractionTest::testGets",
+    "org.apache.commons.lang3.math.FractionTest::testHashCode",
+    "org.apache.commons.lang3.math.FractionTest::testHashCodeNotEquals(int, int, int, int)[10]",
+    "org.apache.commons.lang3.math.FractionTest::testHashCodeNotEquals(int, int, int, int)[1]",
+    "org.apache.commons.lang3.math.FractionTest::testHashCodeNotEquals(int, int, int, int)[2]",
+    "org.apache.commons.lang3.math.FractionTest::testHashCodeNotEquals(int, int, int, int)[3]",
+    "org.apache.commons.lang3.math.FractionTest::testHashCodeNotEquals(int, int, int, int)[4]",
+    "org.apache.commons.lang3.math.FractionTest::testHashCodeNotEquals(int, int, int, int)[5]",
+    "org.apache.commons.lang3.math.FractionTest::testHashCodeNotEquals(int, int, int, int)[6]",
+    "org.apache.commons.lang3.math.FractionTest::testHashCodeNotEquals(int, int, int, int)[7]",
+    "org.apache.commons.lang3.math.FractionTest::testHashCodeNotEquals(int, int, int, int)[8]",
+    "org.apache.commons.lang3.math.FractionTest::testHashCodeNotEquals(int, int, int, int)[9]",
+    "org.apache.commons.lang3.math.FractionTest::testInvert",
+    "org.apache.commons.lang3.math.FractionTest::testMultiply",
+    "org.apache.commons.lang3.math.FractionTest::testNegate",
+    "org.apache.commons.lang3.math.FractionTest::testReduce",
+    "org.apache.commons.lang3.math.FractionTest::testToProperString",
+    "org.apache.commons.lang3.math.FractionTest::testToString"
+  ],
+  "lang": "java",
+  "build": "maven",
+  "task_kind": "localized"
+}

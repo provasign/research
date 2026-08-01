@@ -1,0 +1,85 @@
+diff --git a/src/main/java/tools/jackson/databind/ser/bean/BeanSerializerBase.java b/src/main/java/tools/jackson/databind/ser/bean/BeanSerializerBase.java
+index 2a75d205b..c0e9f3188 100644
+--- a/src/main/java/tools/jackson/databind/ser/bean/BeanSerializerBase.java
++++ b/src/main/java/tools/jackson/databind/ser/bean/BeanSerializerBase.java
+@@ -403,7 +403,9 @@ public abstract class BeanSerializerBase
+             }
+             // Inner serializer may be a custom (non-BeanSerializerBase) impl;
+             // without access to its effective property names we cannot check it.
+-            if (!(unwrapped.findUnwrappingSerializer(ctxt) instanceof BeanSerializerBase innerSer)) {
++            // Also follow delegatee chain (for delegating serializers like StdConvertingSerializer).
++            BeanSerializerBase innerSer = _asBeanSerializer(unwrapped.findUnwrappingSerializer(ctxt));
++            if (innerSer == null) {
+                 continue;
+             }
+             for (Iterator<PropertyWriter> it = innerSer.properties(); it.hasNext(); ) {
+@@ -428,6 +430,30 @@ public abstract class BeanSerializerBase
+         }
+     }
+ 
++    /**
++     * Helper method that tries to extract a {@link BeanSerializerBase} from the given serializer,
++     * following the delegatee chain if necessary (for delegating serializers like
++     * {@link StdConvertingSerializer}). Traverses up to 100 levels deep to avoid infinite loops.
++     *
++     * @param ser The serializer to check
++     * @return The extracted {@link BeanSerializerBase}, or null if not found
++     *
++     * @since 3.2
++     */
++    private BeanSerializerBase _asBeanSerializer(ValueSerializer<?> ser) {
++        for (int i = 0; i < 100; i++) {
++            if (ser instanceof BeanSerializerBase bean) {
++                return bean;
++            }
++            ValueSerializer<?> delegatee = ser.getDelegatee();
++            if (delegatee == null || delegatee == ser) {
++                return null;
++            }
++            ser = delegatee;
++        }
++        return null;
++    }
++
+     /**
+      * Helper method that can be used to see if specified property is annotated
+      * to indicate use of a converter for property value (in case of container types,
+diff --git a/src/main/java/tools/jackson/databind/ser/std/StdConvertingSerializer.java b/src/main/java/tools/jackson/databind/ser/std/StdConvertingSerializer.java
+index b4beda28a..df51eba9b 100644
+--- a/src/main/java/tools/jackson/databind/ser/std/StdConvertingSerializer.java
++++ b/src/main/java/tools/jackson/databind/ser/std/StdConvertingSerializer.java
+@@ -8,6 +8,7 @@ import tools.jackson.databind.jsontype.TypeSerializer;
+ import tools.jackson.databind.ser.impl.PropertySerializerMap;
+ import tools.jackson.databind.util.ClassUtil;
+ import tools.jackson.databind.util.Converter;
++import tools.jackson.databind.util.NameTransformer;
+ 
+ /**
+  * Serializer implementation where given Java type is first converted
+@@ -155,6 +156,26 @@ public class StdConvertingSerializer
+         return _delegateSerializer;
+     }
+ 
++    @Override
++    public ValueSerializer<Object> unwrappingSerializer(NameTransformer unwrapper) {
++        ValueSerializer<Object> delegateUnwrapping = null;
++        if (_delegateSerializer != null) {
++            delegateUnwrapping = (ValueSerializer<Object>) _delegateSerializer.unwrappingSerializer(unwrapper);
++            if (delegateUnwrapping == _delegateSerializer) {
++                delegateUnwrapping = null;
++            }
++        }
++        if (delegateUnwrapping != null) {
++            return withDelegate(_converter, _delegateType, delegateUnwrapping, _property);
++        }
++        return this;
++    }
++
++    @Override
++    public boolean isUnwrappingSerializer() {
++        return _delegateSerializer != null && _delegateSerializer.isUnwrappingSerializer();
++    }
++
+     /*
+     /**********************************************************************
+     /* Serialization

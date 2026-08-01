@@ -1,0 +1,53 @@
+diff --git a/src/main/java/org/apache/commons/lang3/ClassUtils.java b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+index 1e7a3b5e3..693ef5452 100644
+--- a/src/main/java/org/apache/commons/lang3/ClassUtils.java
++++ b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+@@ -596,6 +596,12 @@ public static Class<?> getClass(final ClassLoader classLoader, final String clas
+             try {
+                 final Class<?> clazz = getPrimitiveClass(next);
+                 return clazz != null ? clazz : Class.forName(toCleanName(next), initialize, classLoader);
++            } catch (final IllegalArgumentException ex) {
++                // Only convert malformed array suffix errors to ClassNotFoundException
++                if (ex.getMessage() != null && ex.getMessage().startsWith("Invalid class name")) {
++                    throw new ClassNotFoundException(className, ex);
++                }
++                throw ex;
+             } catch (final ClassNotFoundException ex) {
+                 lastDotIndex = next.lastIndexOf(PACKAGE_SEPARATOR_CHAR);
+                 if (lastDotIndex != -1) {
+@@ -1643,12 +1649,18 @@ private static String toCleanName(final String className) {
+             throw new IllegalArgumentException(String.format("Class name greater than maxium length %,d", MAX_CLASS_NAME_LENGTH));
+         }
+         if (canonicalName.endsWith(arrayMarker)) {
++            if (arrIdx < 0) {
++                throw new IllegalArgumentException(String.format("Invalid class name %s", className));
++            }
+             final int dims =  (canonicalName.length() - arrIdx) / 2;
+             if (dims > MAX_JVM_ARRAY_DIMENSION) {
+                 throw new IllegalArgumentException("Array dimension greater than JVM specification maximum of 255.");
+             }
+             final StringBuilder classNameBuffer = new StringBuilder(StringUtils.repeat(encodedArrayOpen, dims));
+             canonicalName = canonicalName.substring(0, arrIdx);
++            if (canonicalName.isEmpty()) {
++                throw new IllegalArgumentException(String.format("Invalid class name %s", className));
++            }
+             final String abbreviation = ABBREVIATION_MAP.get(canonicalName);
+             if (abbreviation != null) {
+                 classNameBuffer.append(abbreviation);
+@@ -1656,6 +1668,16 @@ private static String toCleanName(final String className) {
+                 classNameBuffer.append(encodedClassNameStart).append(canonicalName).append(encodedClassNameEnd);
+             }
+             canonicalName = classNameBuffer.toString();
++        } else if (!encodedName) {
++            // For non-encoded names, check for malformed bracket patterns
++            // Valid patterns: no brackets, or primitive array like [I or [[Z
++            if (canonicalName.contains("[") || canonicalName.contains("]")) {
++                // Check if it's a valid primitive array descriptor
++                // Valid primitive abbreviations: Z(boolean), B(byte), C(char), S(short), I(int), J(long), F(float), D(double)
++                if (!canonicalName.matches("\\[+[ZBCSIJFD]")) {
++                    throw new IllegalArgumentException(String.format("Invalid class name %s", className));
++                }
++            }
+         }
+         return canonicalName;
+     }

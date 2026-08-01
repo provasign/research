@@ -1,0 +1,37 @@
+{
+  "instance_id": "FasterXML__jackson-databind__pr6061",
+  "repo": "FasterXML/jackson-databind",
+  "pr": 6061,
+  "base_commit": "74d181c24f518428605f9511091314eb03f5178a",
+  "merge_commit": "728a2950acea3349e8e752fad6bbb53afb043806",
+  "patch": "diff --git a/src/main/java/tools/jackson/databind/node/TreeBuildingGenerator.java b/src/main/java/tools/jackson/databind/node/TreeBuildingGenerator.java\nindex 24b0e1731..285b68493 100644\n--- a/src/main/java/tools/jackson/databind/node/TreeBuildingGenerator.java\n+++ b/src/main/java/tools/jackson/databind/node/TreeBuildingGenerator.java\n@@ -463,8 +463,13 @@ public class TreeBuildingGenerator\n         //    but for now let's follow what `TokenBuffer` does and by default\n         //    fully serialize given Java value... unless it's one of a small\n         //    number of \"well-known\" types to preserve.\n-        final Class<?> raw = value.getClass();\n-        if (raw == byte[].class || (value instanceof RawValue)) {\n+        // 26-Jun-2026, tatu: [databind#6059] `byte[]` must become `BinaryNode`,\n+        //    not `POJONode`, to match the `writeBinary()` path\n+        if (value instanceof byte[] bytes) {\n+            _tokenWriteContext.writeBinary(bytes);\n+            return this;\n+        }\n+        if (value instanceof RawValue) {\n             _tokenWriteContext.writePOJO(value);\n             return this;\n         }\n@@ -498,7 +503,9 @@ public class TreeBuildingGenerator\n         // 12-Jan-2021, tatu: Should we try to preserve the variant? Depends a\n         //   lot on whether this during read (no need to retain probably) or\n         //   write (probably important)\n-        return writePOJO(Arrays.copyOfRange(data, offset, offset + len));\n+        // 26-Jun-2026, tatu: [databind#6059] Must create `BinaryNode`, not `POJONode`\n+        _tokenWriteContext.writeBinary(Arrays.copyOfRange(data, offset, offset + len));\n+        return this;\n     }\n \n     /**\n@@ -542,6 +549,11 @@ public class TreeBuildingGenerator\n     public JsonGenerator writeEmbeddedObject(Object object) {\n         // 02-Mar-2021, tatu: Bit tricky, this one; should we try to\n         //   auto-detect types or something?\n+        // 26-Jun-2026, tatu: [databind#6059] Preserve `byte[]` as `BinaryNode`\n+        if (object instanceof byte[] bytes) {\n+            _tokenWriteContext.writeBinary(bytes);\n+            return this;\n+        }\n         _tokenWriteContext.writePOJO(object);\n         return this;\n     }\n",
+  "test_patch": "diff --git a/src/test/java/tools/jackson/databind/node/JsonNodeConversionsTest.java b/src/test/java/tools/jackson/databind/node/JsonNodeConversionsTest.java\nindex 512a55938..6ad3a3a51 100644\n--- a/src/test/java/tools/jackson/databind/node/JsonNodeConversionsTest.java\n+++ b/src/test/java/tools/jackson/databind/node/JsonNodeConversionsTest.java\n@@ -447,4 +447,58 @@ public class JsonNodeConversionsTest extends DatabindTestUtil\n         assertNull(r.treeToValue(MAPPER.nullNode(), Object.class));\n         assertNull(r.treeToValue(MAPPER.missingNode(), Object.class));\n     }\n+\n+    // [databind#6059]: `byte[]` should convert to `BinaryNode`, not `POJONode`\n+    @Test\n+    public void byteArrayToTree6059() {\n+        final byte[] bytes = { 1, 2, 3 };\n+        JsonNode node = MAPPER.valueToTree(bytes);\n+\n+        // Must be a `BinaryNode` (not `POJONode`, as it was prior to fix)...\n+        assertInstanceOf(BinaryNode.class, node);\n+        assertTrue(node.isBinary());\n+        // ... with contents preserved...\n+        assertArrayEquals(bytes, node.binaryValue());\n+\n+        // ... and, the actual regression reported, equal to a node built\n+        // from a separate-but-equal array (`BinaryNode` compares by content,\n+        // `POJONode` only by identity):\n+        JsonNode node2 = MAPPER.valueToTree(new byte[] { 1, 2, 3 });\n+        assertEquals(node, node2);\n+\n+        // Empty array, too (from the original report):\n+        assertEquals(MAPPER.valueToTree(new byte[0]),\n+                MAPPER.valueToTree(new byte[0]));\n+    }\n+\n+    // [databind#6059]: also when `byte[]` is nested within Object/Array contexts\n+    @Test\n+    public void nestedByteArrayToTree6059() {\n+        final byte[] bytes = { 4, 5, 6 };\n+\n+        // As a value within an Object (Map):\n+        JsonNode objNode = MAPPER.valueToTree(Collections.singletonMap(\"b\", bytes));\n+        JsonNode objBinary = objNode.get(\"b\");\n+        assertInstanceOf(BinaryNode.class, objBinary);\n+        assertArrayEquals(bytes, objBinary.binaryValue());\n+\n+        // As an element within an Array (List):\n+        JsonNode arrNode = MAPPER.valueToTree(Collections.singletonList(bytes));\n+        JsonNode arrBinary = arrNode.get(0);\n+        assertInstanceOf(BinaryNode.class, arrBinary);\n+        assertArrayEquals(bytes, arrBinary.binaryValue());\n+    }\n+\n+    // [databind#6059]: also when `byte[]` reaches the tree via `TokenBuffer`\n+    // replay (`writeEmbeddedObject()` path), not just the direct `writeBinary()`\n+    @Test\n+    public void byteArrayViaTokenBufferToTree6059() {\n+        final byte[] bytes = { 7, 8, 9 };\n+        TokenBuffer buf = TokenBuffer.forGeneration();\n+        buf.writeBinary(bytes);\n+\n+        JsonNode node = MAPPER.valueToTree(buf);\n+        assertInstanceOf(BinaryNode.class, node);\n+        assertArrayEquals(bytes, node.binaryValue());\n+    }\n }\n",
+  "test_classes": [
+    "tools.jackson.databind.node.JsonNodeConversionsTest"
+  ],
+  "src_files": [
+    "src/main/java/tools/jackson/databind/node/TreeBuildingGenerator.java"
+  ],
+  "problem_statement": "Fix #6059\n\n",
+  "fail_to_pass": [
+    "tools.jackson.databind.node.JsonNodeConversionsTest::byteArrayViaTokenBufferToTree6059",
+    "tools.jackson.databind.node.JsonNodeConversionsTest::testBigDecimalAsPlainStringTreeConversion",
+    "tools.jackson.databind.node.JsonNodeConversionsTest::testValueToTree"
+  ],
+  "pass_to_pass": [
+    "tools.jackson.databind.node.JsonNodeConversionsTest::testAsBoolean",
+    "tools.jackson.databind.node.JsonNodeConversionsTest::testBase64Text",
+    "tools.jackson.databind.node.JsonNodeConversionsTest::testBufferedLongViaCoercion",
+    "tools.jackson.databind.node.JsonNodeConversionsTest::testEmbeddedByteArray",
+    "tools.jackson.databind.node.JsonNodeConversionsTest::testIssue709",
+    "tools.jackson.databind.node.JsonNodeConversionsTest::testNodeConvert",
+    "tools.jackson.databind.node.JsonNodeConversionsTest::testTreeToValueNullInput",
+    "tools.jackson.databind.node.JsonNodeConversionsTest::testTreeToValueWithPOJO"
+  ],
+  "lang": "java",
+  "build": "maven",
+  "task_kind": "localized",
+  "test_modules": [
+    "src/test/java/tools/jackson/databind/node/JsonNodeConversionsTest.java"
+  ]
+}

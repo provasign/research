@@ -2,8 +2,8 @@
 
 Every number below is oracle-scored and reproducible from the run logs in
 this repository without an LLM. Sources: the paper
-([`paper/paper.tex`](paper/paper.tex)), the CodeGraph comparison
-([`harness/AB-CODEGRAPH.md`](harness/AB-CODEGRAPH.md)), and the
+([`paper/paper.tex`](paper/paper.tex)), the Engine B comparison
+([`harness/AB-ENGINE-COMPARISON.md`](harness/AB-ENGINE-COMPARISON.md)), and the
 negative-result reports linked in §5.
 
 Arms shorthand: **T** = text search only (rg/grep/read) — *the "without
@@ -40,11 +40,11 @@ allowlists. Mean recall / cost per task / agent turns:
 For transparency we continuously benchmark Prism against other open-source
 context tools under one standing rule set (same oracles, same scorer,
 strongest surface, goals stated fairly, raw runs published). First entry:
-CodeGraph. Both engines, same oracle, same scorer, 10 tasks, 4 languages,
+Engine B. Both engines, same oracle, same scorer, 10 tasks, 4 languages,
 blast radius 8→310 sites. Full table and fairness protocol:
-[`harness/AB-CODEGRAPH.md`](harness/AB-CODEGRAPH.md).
+[`harness/AB-ENGINE-COMPARISON.md`](harness/AB-ENGINE-COMPARISON.md).
 
-| | Prism | CodeGraph (its headline `explore`) |
+| | Prism | Engine B (its headline `explore`) |
 |---|---:|---:|
 | mean recall (n=10) | **0.99** | 0.52 |
 | java (n=7) | 0.997 | 0.46 |
@@ -53,23 +53,23 @@ blast radius 8→310 sites. Full table and fairness protocol:
 | py (n=1) | 1.00 | 0.25 |
 
 Efficiency at the raw-tool level (reported next to recall, never alone):
-CodeGraph is ~2× faster on average — by doing less; its lower token counts
+Engine B is ~2× faster on average — by doing less; its lower token counts
 on large tasks coincide with recall 0.17/0.00. Where both are complete
 (gin), Prism is faster.
 
-## 3 · Prism vs CodeGraph vs grep — the agent A/B (with agent numbers)
+## 3 · Prism vs Engine B vs grep — the agent A/B (with agent numbers)
 
 Same agent (`claude -p`), same task, arms differ only in the tool; recall to
 reach a complete change-set and what it cost:
 
-| tier | Prism | CodeGraph | baseline (grep) |
+| tier | Prism | Engine B | baseline (grep) |
 |---|---|---|---|
 | local 30B ($0)  | **1.00** | (weak tier: see Haiku) | — |
 | Haiku (cheap)   | **1.00** · 3 turns · 67k tok · $0.04 | 0.00 · 31 turns · 1.79M · $0.33 | 0.75 |
 | Opus (frontier) | **1.00** · 3 turns · 60k tok · $0.14 | 1.00 · 23 turns · 1.43M · $2.38 | 0.62 |
 
 - At equal correctness (Opus row), Prism is **~17× cheaper and ~30× faster**.
-- CodeGraph requires a frontier model to become complete; on the cheap tier
+- Engine B requires a frontier model to become complete; on the cheap tier
   it delivered 0.00 while spending more tokens than grep.
 - Prism is the only arm that stays complete as the model gets cheaper —
   down to a free local 30B.
@@ -230,10 +230,10 @@ are ready the moment a credited agent diff stream exists.
 |---|---|---|
 | With/without-Prism agent grid | paper §Results I–II | `harness/runs/<task>/<model>/` |
 | Engine ceiling 0.993/0.948 | paper §"engine ceiling" | `harness/engine_ceiling.py` output |
-| Prism 0.99 vs CodeGraph 0.52 | `harness/AB-CODEGRAPH.md` §1 | `harness/runs/codegraph-engine/` |
-| Efficiency sweep | `harness/AB-CODEGRAPH.md` §2 | `harness/efficiency_sweep.py` |
-| Agent A/B incl. CodeGraph | `harness/AB-CODEGRAPH.md` §3 | `harness/runs/ab-agentic/` |
-| Local-tier result (change_impact) | `harness/AB-CODEGRAPH.md` §4 | `harness/runs/*/qwen3-coder-30b-gstar/` |
+| Prism 0.99 vs Engine B 0.52 | `harness/AB-ENGINE-COMPARISON.md` §1 | `harness/runs/engine-comparison/` |
+| Efficiency sweep | `harness/AB-ENGINE-COMPARISON.md` §2 | `harness/efficiency_sweep.py` |
+| Agent A/B incl. Engine B | `harness/AB-ENGINE-COMPARISON.md` §3 | `harness/runs/ab-agentic/` |
+| Local-tier result (change_impact) | `harness/AB-ENGINE-COMPARISON.md` §4 | `harness/runs/*/qwen3-coder-30b-gstar/` |
 | Local CLIs (OpenCode/Continue) | `harness/AB-LOCAL-CLIS.md` | `harness/runs/` |
 | Contamination measurement | `harness/SWEBENCH-AB-RESULTS.md` | `harness/runs/swebench-20/` |
 | Unified-tool 3-tier grid | §7 above | `harness/runs/ab-unified/` |

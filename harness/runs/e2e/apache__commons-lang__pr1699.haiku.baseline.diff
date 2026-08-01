@@ -1,0 +1,58 @@
+diff --git a/TestFix.java b/TestFix.java
+new file mode 100644
+index 000000000..c0df795f9
+--- /dev/null
++++ b/TestFix.java
+@@ -0,0 +1,26 @@
++import org.apache.commons.lang3.StringUtils;
++import org.apache.commons.lang3.text.StrBuilder;
++
++public class TestFix {
++    public static void main(String[] args) {
++        System.out.println("Testing StringUtils.mid() with Integer.MAX_VALUE:");
++        try {
++            String result = StringUtils.mid("foobar", 3, Integer.MAX_VALUE);
++            System.out.println("  Result: \"" + result + "\"");
++            System.out.println("  Expected: \"bar\"");
++            System.out.println("  Pass: " + "bar".equals(result));
++        } catch (Exception e) {
++            System.out.println("  ERROR: " + e.getMessage());
++        }
++        
++        System.out.println("\nTesting StrBuilder.midString() with Integer.MAX_VALUE:");
++        try {
++            String result = new StrBuilder("hello goodbye hello").midString(14, Integer.MAX_VALUE);
++            System.out.println("  Result: \"" + result + "\"");
++            System.out.println("  Expected: \"hello\"");
++            System.out.println("  Pass: " + "hello".equals(result));
++        } catch (Exception e) {
++            System.out.println("  ERROR: " + e.getMessage());
++        }
++    }
++}
+diff --git a/src/main/java/org/apache/commons/lang3/StringUtils.java b/src/main/java/org/apache/commons/lang3/StringUtils.java
+index 79e130683..cff2e3c64 100644
+--- a/src/main/java/org/apache/commons/lang3/StringUtils.java
++++ b/src/main/java/org/apache/commons/lang3/StringUtils.java
+@@ -5377,7 +5377,7 @@ public static String mid(final String str, int pos, final int len) {
+         if (pos < 0) {
+             pos = 0;
+         }
+-        if (str.length() <= pos + len) {
++        if (str.length() - pos <= len) {
+             return str.substring(pos);
+         }
+         return str.substring(pos, pos + len);
+diff --git a/src/main/java/org/apache/commons/lang3/text/StrBuilder.java b/src/main/java/org/apache/commons/lang3/text/StrBuilder.java
+index 2b4259f52..45dd1e0a0 100644
+--- a/src/main/java/org/apache/commons/lang3/text/StrBuilder.java
++++ b/src/main/java/org/apache/commons/lang3/text/StrBuilder.java
+@@ -2479,7 +2479,7 @@ public String midString(int index, final int length) {
+         if (length <= 0 || index >= size) {
+             return StringUtils.EMPTY;
+         }
+-        if (size <= index + length) {
++        if (size - index <= length) {
+             return new String(buffer, index, size - index);
+         }
+         return new String(buffer, index, length);
