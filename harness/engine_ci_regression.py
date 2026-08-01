@@ -16,7 +16,20 @@ from score import score
 PRISM = os.environ.get("PRISM_BIN", "/tmp/prism-rip")
 
 
+# Canonical query overrides, keyed by task id. Needed when the oracle tag is a
+# BARE member name that is genuinely ambiguous in the corpus: gin's tag is
+# "oracle:Render", but 20 types implement Render, so prism (correctly) refuses
+# to guess which one rather than silently answering about the wrong symbol.
+# The oracle means the interface member Render.Render. Kept here rather than in
+# the task JSON because schema.Task rejects unknown fields.
+IMPACT_QUERY = {
+    "gin-render-impact": "Render.Render",
+}
+
+
 def prism_query(task):
+    if q := IMPACT_QUERY.get(task.id):
+        return q
     fqn = task.pr.split(":", 1)[1]
     if "#" in fqn:
         type_part, mspec = fqn.split("#", 1)
