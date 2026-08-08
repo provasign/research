@@ -15,7 +15,13 @@ agent*.
 
 Change-impact tasks ("list every site this signature change breaks"),
 jackson-databind, 8→108 sites, independent Spoon oracle, enforced tool
-allowlists. Mean recall / cost per task / agent turns:
+allowlists. Mean recall / cost per task / agent turns.
+
+**Measured 2026-07; the frontier row no longer holds.** Re-run on 2026-08-08
+(§9), Opus WITHOUT Prism reaches recall 1.000 on the same task family — the
+0.952 here reflects the model of the time, not a standing property of text
+search. The cheap-tier rows have not been re-measured. Cite §9 for any
+current frontier claim.
 
 | tier | without Prism (T) | graph primitives (G) | **with Prism (G\*)** |
 |---|---|---|---|
@@ -152,7 +158,16 @@ Positioning: trust the verdict AND the site list.
 
 **mason v0.27.0 + qwen3-coder:30b (local, $0): mean recall 0.989, median
 1.000, mean input 16k tokens** — above every measured cloud arm (best:
-Opus+unified 0.983 @ 113k). Scoring is the narrated engine relay — mason's
+Opus+unified 0.983 @ 113k).
+
+**The 16k token figure is NOT reproducible on current mason and must not be
+cited (audited 2026-08-08, §9.2).** Recall survives re-measurement; the token
+count does not. Two causes, one of them ours: a prism v0.37.0 delivery
+pointer dropped the group keys mason reads (fixed in v0.37.1, worth ~3×), and
+mason v0.28+ added a `graph_focus` walk tool that the model uses AFTER
+change_impact has already answered (worth roughly the rest). On guava the
+same task went 1.7k → 45.6k input tokens for an identical 0.997-recall
+answer. The number described a mason that no longer exists. Scoring is the narrated engine relay — mason's
 payload isolation keeps graph payloads out of the model's context by design,
 and the model's own JSON recitation hallucinates paths when asked to retype
 the list (measured; that failure is what payload isolation exists to
@@ -398,6 +413,46 @@ verify's sweet spot, pattern-replication sweeps its blind spot.
   file-level precision from 0.51 to 0.91 against compiler oracles.
 - The gate (8.3): works within scope on real agent output.
 
+## 9 · 2026-08-08 — current numbers on prism v0.37.x
+
+### 9.1 Opus with and without Prism (the citable frontier number)
+
+6 change-impact tasks, 8–310 sites, Java/Python/TypeScript, oracle-scored,
+2 arms, prism v0.37.0. Raw: `harness/runs/ab-agentic/*.opus.{baseline,prism}.json`
+(pre-v0.37 cells archived alongside).
+
+| arm | recall | turns | tokens in | cost/task | wall |
+|---|---|---|---|---|---|
+| Opus, grep + file reads | **1.000** | 26.8 | 836k | $1.66 | 271s |
+| Opus + Prism | 0.987 | **4.2** | **90k** | **$0.27** | **40s** |
+
+**6.4× fewer turns, 9.3× fewer tokens, 6.1× cheaper, 6.7× faster, at the same
+answer.** Total grid spend $9.97 vs $1.64.
+
+Read it honestly: a 2026-08 frontier model no longer needs a graph to be
+complete on this task family — it greps its way there. What Prism changes is
+the cost of getting there. Prism's 0.987 is three tasks at 1.000 plus engine
+residuals already pinned as invariant baselines (serialize 0.982, guava 0.997
+at 310 sites, typeorm 0.946) — not regressions.
+
+### 9.2 The mason token claim is retired
+
+See the correction in §7. mason v0.31.1 + qwen3-coder:30b re-measured on
+guava: recall 0.997 (unchanged from July), input tokens 1.7k → 45.6k. The
+recall property holds; the token property does not, and the cause is split
+between a prism bug we shipped and fixed (v0.37.1) and a deliberate mason
+change (`graph_focus`). No current mason token figure is published until the
+walk-after-answer behaviour is settled.
+
+### 9.3 What is true about the mechanism (no agent in the loop)
+
+From §8.2.2, restated because it is the load-bearing claim: the graph finds
+**nothing** grep misses (0 graph-only resolved references across 127 symbols,
+6 repos, 4 languages). It filters — ~30% of whole-word grep hits are not
+resolved references, and file-level precision against compiler oracles goes
+0.51 (grep) → 0.91 (change-impact). Any claim that Prism finds code grep
+cannot is false and should not be published.
+
 ## 6 · Where each result comes from
 
 | claim | source | raw data |
@@ -419,3 +474,5 @@ verify's sweet spot, pattern-replication sweeps its blind spot.
 | Verify on real agent diffs (8.3) | §8 above | `harness/runs/fanout-verify-replay.json` |
 | e2e methodology postmortem (8.2.1) | §8 above | `harness/fanout_eval.py`, `harness/seeded_refactor.py` (built, then discarded — see 8.2.1 item 3) |
 | Grep-vs-graph mechanism (8.2.2) | §8 above | `harness/runs/grep-vs-graph-gap.json`, `harness/runs/impact-vs-grep.json` |
+| Opus ± Prism on v0.37.0 (9.1) | §9 above | `harness/runs/ab-agentic/*.opus.{baseline,prism}.json` |
+| mason token retirement (9.2) | §7, §9 above | `harness/runs/mason-bench/`, `archive-v0.37.0-broken/` |
