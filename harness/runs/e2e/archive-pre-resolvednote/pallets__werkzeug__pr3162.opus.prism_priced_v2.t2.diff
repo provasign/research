@@ -1,0 +1,38 @@
+diff --git a/CHANGES.rst b/CHANGES.rst
+index 88fff09f..286c2789 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -24,6 +24,8 @@ Version 3.2.0
+ -   The ``accept_charsets`` header property on ``Request``, and the
+     ``CharsetAccept`` class, are deprecated. The header has not been used for a
+     long time. :pr:`3161`
++-   The ``Content-Security-Policy-Report-Only`` header is set with consistent
++    capitalization.
+ -   ``redirect`` returns a ``303`` status code by default instead of ``302``.
+     This tells the client to always switch to ``GET``, rather than only
+     switching ``POST`` to ``GET``. This preserves the current behavior of
+diff --git a/src/werkzeug/sansio/response.py b/src/werkzeug/sansio/response.py
+index ead6f840..8a8a7f69 100644
+--- a/src/werkzeug/sansio/response.py
++++ b/src/werkzeug/sansio/response.py
+@@ -711,7 +711,7 @@ class Response:
+             if not csp:
+                 del self.headers["content-security-policy-report-only"]
+             else:
+-                self.headers["Content-Security-policy-report-only"] = csp.to_header()
++                self.headers["Content-Security-Policy-Report-Only"] = csp.to_header()
+ 
+         rv = parse_csp_header(
+             self.headers.get("content-security-policy-report-only"), on_update
+@@ -727,9 +727,9 @@ class Response:
+         if not value:
+             del self.headers["content-security-policy-report-only"]
+         elif isinstance(value, str):
+-            self.headers["Content-Security-policy-report-only"] = value
++            self.headers["Content-Security-Policy-Report-Only"] = value
+         else:
+-            self.headers["Content-Security-policy-report-only"] = value.to_header()
++            self.headers["Content-Security-Policy-Report-Only"] = value.to_header()
+ 
+     # CORS
+ 

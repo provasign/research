@@ -1,0 +1,70 @@
+diff --git a/src/main/java/org/apache/commons/collections4/map/CompositeMap.java b/src/main/java/org/apache/commons/collections4/map/CompositeMap.java
+index 640bb7498..897274b1e 100644
+--- a/src/main/java/org/apache/commons/collections4/map/CompositeMap.java
++++ b/src/main/java/org/apache/commons/collections4/map/CompositeMap.java
+@@ -462,6 +462,65 @@ public class CompositeMap<K, V> extends AbstractIterableMap<K, V> implements Ser
+         mutator.putAll(this, composite, map);
+     }
+ 
++    /**
++     * {@inheritDoc}
++     * <p>
++     * This implementation correctly handles the case where a key doesn't exist
++     * in any of the composited maps by creating a new collection for that key.
++     * </p>
++     */
++    @Override
++    public boolean putAll(final K key, final Iterable<? extends V> values) {
++        Objects.requireNonNull(values, "values");
++
++        if (values instanceof Collection<?>) {
++            @SuppressWarnings("unchecked")
++            final Collection<? extends V> valueCollection = (Collection<? extends V>) values;
++            if (valueCollection.isEmpty()) {
++                return false;
++            }
++            // Get the collection for this key, creating it if necessary
++            final Collection<V> coll = get(key);
++            if (coll == null) {
++                // If no collection exists for this key, we need to add it via mutator
++                if (mutator == null) {
++                    throw new UnsupportedOperationException("No mutator specified");
++                }
++                // We can't directly create a collection here, so we'll use put to add each element
++                boolean changed = false;
++                for (final V value : valueCollection) {
++                    changed |= put(key, value) != null;
++                }
++                return changed;
++            }
++            return coll.addAll(valueCollection);
++        }
++        
++        // For non-Collection iterables, we need to iterate and add one by one
++        final Iterator<? extends V> it = values.iterator();
++        if (!it.hasNext()) {
++            return false;
++        }
++        
++        // Get the collection for this key, creating it if necessary
++        final Collection<V> coll = get(key);
++        if (coll == null) {
++            // If no collection exists for this key, we need to add it via mutator
++            if (mutator == null) {
++                throw new UnsupportedOperationException("No mutator specified");
++            }
++            // We can't directly create a collection here, so we'll use put to add each element
++            boolean changed = false;
++            while (it.hasNext()) {
++                final V value = it.next();
++                changed |= put(key, value) != null;
++            }
++            return changed;
++        }
++        
++        return CollectionUtils.addAll(coll, it);
++    }
++
+     /**
+      * Removes the mapping for this key from this map if it is present
+      * (optional operation).   More formally, if this map contains a mapping

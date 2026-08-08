@@ -1,0 +1,75 @@
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/impl/BeanPropertyMap.java b/src/main/java/com/fasterxml/jackson/databind/deser/impl/BeanPropertyMap.java
+index ac4a7ede8..b2388e161 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/impl/BeanPropertyMap.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/impl/BeanPropertyMap.java
+@@ -40,6 +40,35 @@ public class BeanPropertyMap
+      * @since 2.5
+      */
+     protected final boolean _caseInsensitive;
++    
++    /**
++     * @since 2.18
++     */
++    private final Set<String> _ignoredPropertyNames = new HashSet<>();
++    
++    /**
++     * @since 2.18
++     */   
++    private final Set<String> _ignoredPropertyNames = new HashSet<>();
++    
++    /**
++     * @since 2.18
++     */
++    private boolean _isIgnoredProperty(String name) {
++        if (_ignoredPropertyNames.isEmpty()) {
++            return false;
++        }
++        if (!_caseInsensitive) {
++            return _ignoredPropertyNames.contains(name);
++        }
++        // Case insensitive check
++        for (String ignored : _ignoredPropertyNames) {
++            if (ignored.equalsIgnoreCase(name)) {
++                return true;
++            }
++        }
++        return false;
++    }
+ 
+     private int _hashMask;
+ 
+@@ -90,19 +119,25 @@ public class BeanPropertyMap
+     private final Locale _locale;
+ 
+     /**
+-     * @since 2.11
++     * @since 2.18
+      */
+     public BeanPropertyMap(boolean caseInsensitive, Collection<SettableBeanProperty> props,
+-            Map<String,List<PropertyName>> aliasDefs,
+-            Locale locale)
++            Map<String,List<PropertyName>> aliasDefs, Locale locale,
++            Set<String> ignoredProperties)
+     {
+-        _caseInsensitive = caseInsensitive;
+-        _propsInOrder = props.toArray(new SettableBeanProperty[props.size()]);
+-        _aliasDefs = aliasDefs;
+-        _locale = locale;
+-        _aliasMapping = _buildAliasMapping(aliasDefs, caseInsensitive, locale);
+-        init(props);
++        this(caseInsensitive, props, aliasDefs, locale);
++        _ignoredPropertyNames.addAll(ignoredProperties);
++    }
+ 
++    /**
++     * @since 2.18
++     */
++    public BeanPropertyMap(boolean caseInsensitive, Collection<SettableBeanProperty> props,
++            Map<String,List<PropertyName>> aliasDefs, Locale locale,
++            Set<String> ignoredProperties)
++    {
++        this(caseInsensitive, props, aliasDefs, locale);
++        _ignoredPropertyNames.addAll(ignoredProperties);
+     }
+ 
+     /**

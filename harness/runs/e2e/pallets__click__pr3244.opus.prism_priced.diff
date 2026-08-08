@@ -1,0 +1,73 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..a6cec6c 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -102,11 +102,33 @@ class StreamMixer:
+ 
+ class _NamedTextIOWrapper(io.TextIOWrapper):
+     def __init__(
+-        self, buffer: t.BinaryIO, name: str, mode: str, **kwargs: t.Any
++        self,
++        buffer: t.BinaryIO,
++        name: str,
++        mode: str,
++        real_stream: t.IO[t.Any] | None = None,
++        **kwargs: t.Any,
+     ) -> None:
+         super().__init__(buffer, **kwargs)
+         self._name = name
+         self._mode = mode
++        self._real_stream = real_stream
++
++    def fileno(self) -> int:
++        """Return the file descriptor of the real stream this one replaced.
++
++        The underlying buffer is an in-memory ``BytesIO``, which has no
++        descriptor. Code that hands ``sys.stdout``/``sys.stderr`` to
++        ``subprocess`` or another API needing a real descriptor would
++        fail during isolation, so fall back to the stream that was
++        replaced. Its output is not captured by the runner.
++
++        .. versionadded:: 8.3.2
++        """
++        if self._real_stream is not None:
++            return self._real_stream.fileno()
++
++        return super().fileno()
+ 
+     def close(self) -> None:
+         """
+@@ -327,7 +349,11 @@ class CliRunner:
+             )
+ 
+         sys.stdin = text_input = _NamedTextIOWrapper(
+-            bytes_input, encoding=self.charset, name="<stdin>", mode="r"
++            bytes_input,
++            encoding=self.charset,
++            name="<stdin>",
++            mode="r",
++            real_stream=old_stdin,
+         )
+ 
+         if self.echo_stdin:
+@@ -336,7 +362,11 @@ class CliRunner:
+             text_input._CHUNK_SIZE = 1  # type: ignore
+ 
+         sys.stdout = _NamedTextIOWrapper(
+-            stream_mixer.stdout, encoding=self.charset, name="<stdout>", mode="w"
++            stream_mixer.stdout,
++            encoding=self.charset,
++            name="<stdout>",
++            mode="w",
++            real_stream=old_stdout,
+         )
+ 
+         sys.stderr = _NamedTextIOWrapper(
+@@ -344,6 +374,7 @@ class CliRunner:
+             encoding=self.charset,
+             name="<stderr>",
+             mode="w",
++            real_stream=old_stderr,
+             errors="backslashreplace",
+         )
+ 

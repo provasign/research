@@ -1,0 +1,20 @@
+diff --git a/src/test/java/tools/jackson/databind/tofix/UnwrappedCustomDeserCreator6001Test.java b/src/test/java/tools/jackson/databind/tofix/UnwrappedCustomDeserCreator6001Test.java
+index c9e57e142..f1e2c4db4 100644
+--- a/src/test/java/tools/jackson/databind/tofix/UnwrappedCustomDeserCreator6001Test.java
++++ b/src/test/java/tools/jackson/databind/tofix/UnwrappedCustomDeserCreator6001Test.java
+@@ -89,6 +89,15 @@ class UnwrappedCustomDeserCreator6001Test extends DatabindTestUtil
+                 DeserializationContext context, NameTransformer unwrapper) {
+             return new CapturingUnwrappedValueDeserializer(unwrapper);
+         }
++        
++        @Override
++        public void collectAllPropertyNamesTo(Set<String> names) {
++            // Custom deserializers for unwrapped properties should contribute property name prefixes
++            if (unwrapper != null) {
++                // Add the prefix that this deserializer would expect to process
++                names.add(UnwrappedPropertyHandler.JSON_UNWRAPPED_NAME_PREFIX);
++            }
++        }
+     }
+ 
+     private final ObjectMapper MAPPER = newJsonMapper();

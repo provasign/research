@@ -1,0 +1,98 @@
+diff --git a/src/main/java/tools/jackson/databind/ValueDeserializer.java b/src/main/java/tools/jackson/databind/ValueDeserializer.java
+index 34d1ff850..74436b873 100644
+--- a/src/main/java/tools/jackson/databind/ValueDeserializer.java
++++ b/src/main/java/tools/jackson/databind/ValueDeserializer.java
+@@ -487,7 +487,26 @@ public abstract class ValueDeserializer<T>
+      * @since 3.2
+      */
+     public void collectAllPropertyNamesTo(Set<String> names) { }
+-    
++
++    /**
++     * Introspection method for checking whether this deserializer is able to
++     * enumerate all property names it can handle, via
++     * {@link #collectAllPropertyNamesTo}.
++     *<p>
++     * This matters for {@code @JsonUnwrapped} handling: if a deserializer cannot
++     * enumerate names it may accept (which is the case for custom deserializers
++     * that only implement {@code unwrappingDeserializer()}), caller has to pass
++     * all otherwise unknown properties to it, same as with "any setter".
++     *<p>
++     * Default implementation returns {@code false}.
++     *
++     * @since 3.2
++     */
++    public boolean canCollectAllPropertyNames() {
++        return false;
++    }
++
++
+     /**
+      * Method to check whether deserializer has "any-setter" style matching
+      * of any and all properties for an Object value.
+diff --git a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializerBase.java b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializerBase.java
+index 6cb875c15..ff552642e 100644
+--- a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializerBase.java
++++ b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializerBase.java
+@@ -1385,6 +1385,11 @@ ClassUtil.getTypeDescription(ct));
+         return names;
+     }
+ 
++    @Override
++    public boolean canCollectAllPropertyNames() {
++        return true;
++    }
++
+     @Override
+     public void collectAllPropertyNamesTo(Set<String> names) {
+         for (SettableBeanProperty prop : _beanProperties) {
+diff --git a/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java b/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
+index 070c2df39..483a47596 100644
+--- a/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
++++ b/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
+@@ -246,7 +246,10 @@ public class UnwrappedPropertyHandler
+             if (deser != null) {
+                 // Recursively collect property names
+             	deser.collectAllPropertyNamesTo(names);
+-                return deser.hasAnySetter();
++                // [databind#6001]: custom (unwrapping) deserializers cannot enumerate
++                //   names they accept; must pass all otherwise-unknown properties to
++                //   them, same as with "any setter"
++                return deser.hasAnySetter() || !deser.canCollectAllPropertyNames();
+             }
+         }
+         return false;
+diff --git a/src/main/java/tools/jackson/databind/deser/std/DelegatingDeserializer.java b/src/main/java/tools/jackson/databind/deser/std/DelegatingDeserializer.java
+index fd2b09469..8a291afb7 100644
+--- a/src/main/java/tools/jackson/databind/deser/std/DelegatingDeserializer.java
++++ b/src/main/java/tools/jackson/databind/deser/std/DelegatingDeserializer.java
+@@ -184,7 +184,12 @@ public abstract class DelegatingDeserializer
+     public void collectAllPropertyNamesTo(Set<String> names) {
+     	_delegatee.collectAllPropertyNamesTo(names);
+     }
+-    
++
++    @Override
++    public boolean canCollectAllPropertyNames() {
++    	return _delegatee.canCollectAllPropertyNames();
++    }
++
+     @Override
+     public boolean hasAnySetter() {
+     	return _delegatee.hasAnySetter();
+diff --git a/src/main/java/tools/jackson/databind/deser/std/ReferenceTypeDeserializer.java b/src/main/java/tools/jackson/databind/deser/std/ReferenceTypeDeserializer.java
+index 24b2ea773..4a5cf9dc3 100644
+--- a/src/main/java/tools/jackson/databind/deser/std/ReferenceTypeDeserializer.java
++++ b/src/main/java/tools/jackson/databind/deser/std/ReferenceTypeDeserializer.java
+@@ -98,6 +98,11 @@ public abstract class ReferenceTypeDeserializer<T>
+         }
+     }
+ 
++    @Override
++    public boolean canCollectAllPropertyNames() {
++        return (_valueDeserializer != null) && _valueDeserializer.canCollectAllPropertyNames();
++    }
++
+     @Override
+     public boolean hasAnySetter() {
+         return (_valueDeserializer != null) && _valueDeserializer.hasAnySetter();

@@ -1,0 +1,94 @@
+diff --git a/changelog/2577.bugfix.rst b/changelog/2577.bugfix.rst
+new file mode 100644
+index 00000000..44288dd5
+--- /dev/null
++++ b/changelog/2577.bugfix.rst
+@@ -0,0 +1,4 @@
++Fixed proxies using ``ssl_context`` instead of ``proxy_ssl_context`` when
++establishing the TLS connection to an HTTPS proxy in forwarding mode. Passing
++``ssl_context`` together with ``use_forwarding_for_https=True`` now raises a
++``ValueError``, use ``proxy_ssl_context`` instead.
+diff --git a/docs/advanced-usage.rst b/docs/advanced-usage.rst
+index 3ab4fcf3..aa4ab14f 100644
+--- a/docs/advanced-usage.rst
++++ b/docs/advanced-usage.rst
+@@ -226,7 +226,9 @@ For HTTPS proxies we also support forwarding your requests to HTTPS destinations
+ an `absolute URI <https://datatracker.ietf.org/doc/html/rfc9112#name-absolute-form>`_ if the
+ ``use_forwarding_for_https`` argument is set to ``True``. We strongly recommend you
+ **only use this option with trusted or corporate proxies** as the proxy will have
+-full visibility of your requests.
++full visibility of your requests. In this mode the only TLS connection is the one
++with the proxy, so it must be configured with ``proxy_ssl_context``: passing
++``ssl_context`` raises a :class:`ValueError`.
+ 
+ .. _https_proxy_error_http_proxy:
+ 
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 84e1dab9..118416d5 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -780,6 +780,19 @@ class HTTPSConnection(HTTPConnection):
+             if self.server_hostname is not None:
+                 server_hostname = self.server_hostname
+ 
++            # When forwarding to an HTTPS proxy the TLS handshake we're about to
++            # do is with the proxy, not with the target origin, so the proxy's
++            # TLS configuration must be used instead of the origin's.
++            # See: https://github.com/urllib3/urllib3/issues/2577
++            if self.proxy_is_forwarding and self.proxy_config is not None:
++                ssl_context = self.proxy_config.ssl_context
++                assert_hostname = self.proxy_config.assert_hostname
++                assert_fingerprint = self.proxy_config.assert_fingerprint
++            else:
++                ssl_context = self.ssl_context
++                assert_hostname = self.assert_hostname
++                assert_fingerprint = self.assert_fingerprint
++
+             is_time_off = datetime.date.today() < RECENT_DATE
+             if is_time_off:
+                 warnings.warn(
+@@ -806,10 +819,10 @@ class HTTPSConnection(HTTPConnection):
+                 key_file=self.key_file,
+                 key_password=self.key_password,
+                 server_hostname=server_hostname_rm_dot,
+-                ssl_context=self.ssl_context,
++                ssl_context=ssl_context,
+                 tls_in_tls=tls_in_tls,
+-                assert_hostname=self.assert_hostname,
+-                assert_fingerprint=self.assert_fingerprint,
++                assert_hostname=assert_hostname,
++                assert_fingerprint=assert_fingerprint,
+             )
+             self.sock = sock_and_verified.socket
+ 
+diff --git a/src/urllib3/poolmanager.py b/src/urllib3/poolmanager.py
+index 3914dec2..178cb582 100644
+--- a/src/urllib3/poolmanager.py
++++ b/src/urllib3/poolmanager.py
+@@ -585,6 +585,26 @@ class ProxyManager(PoolManager):
+             port = port_by_scheme.get(proxy.scheme, 80)
+             proxy = proxy._replace(port=port)
+ 
++        # In forwarding mode the TLS connection is established with the proxy,
++        # so 'ssl_context' (which configures the connection to the target
++        # origin) must not be used to connect to the proxy.
++        # See: https://github.com/urllib3/urllib3/issues/2577
++        if (
++            use_forwarding_for_https
++            and connection_pool_kw.get("ssl_context") is not None
++        ):
++            if proxy_ssl_context is not None:
++                raise ValueError(
++                    "Can't specify both 'ssl_context' and 'proxy_ssl_context' when "
++                    "'use_forwarding_for_https=True', the connection to the proxy is "
++                    "configured with 'proxy_ssl_context'"
++                )
++            raise ValueError(
++                "Can't specify 'ssl_context' when 'use_forwarding_for_https=True', "
++                "use 'proxy_ssl_context' instead to configure the TLS connection "
++                "to the proxy"
++            )
++
+         self.proxy = proxy
+         self.proxy_headers = proxy_headers or {}
+         self.proxy_ssl_context = proxy_ssl_context

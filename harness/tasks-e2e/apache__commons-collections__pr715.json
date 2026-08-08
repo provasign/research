@@ -1,0 +1,73 @@
+{
+  "instance_id": "apache__commons-collections__pr715",
+  "repo": "apache/commons-collections",
+  "pr": 715,
+  "base_commit": "541936df69ca55bd7981b1e73d95fb9fd6c2b7e0",
+  "merge_commit": "5b7ca64b122fade798413a14bfb5276a770aaec1",
+  "patch": "diff --git a/src/main/java/org/apache/commons/collections4/CollectionUtils.java b/src/main/java/org/apache/commons/collections4/CollectionUtils.java\nindex 1d72094..966d323 100644\n--- a/src/main/java/org/apache/commons/collections4/CollectionUtils.java\n+++ b/src/main/java/org/apache/commons/collections4/CollectionUtils.java\n@@ -481,12 +481,14 @@ public class CollectionUtils {\n         }\n         final ArrayList<O> mergedList = new ArrayList<>(totalSize);\n         O lastItem = null;\n+        boolean first = true;\n         while (iterator.hasNext()) {\n             final O item = iterator.next();\n-            if (lastItem == null || !lastItem.equals(item)) {\n+            if (first || !Objects.equals(lastItem, item)) {\n                 mergedList.add(item);\n             }\n             lastItem = item;\n+            first = false;\n         }\n         mergedList.trimToSize();\n         return mergedList;\n",
+  "test_patch": "diff --git a/src/test/java/org/apache/commons/collections4/CollectionUtilsTest.java b/src/test/java/org/apache/commons/collections4/CollectionUtilsTest.java\nindex 4607cc2..99ddfa3 100644\n--- a/src/test/java/org/apache/commons/collections4/CollectionUtilsTest.java\n+++ b/src/test/java/org/apache/commons/collections4/CollectionUtilsTest.java\n@@ -647,6 +647,17 @@ class CollectionUtilsTest extends MockTestCase {\n         assertEquals(combinedList, result2, \"Merge two lists 2 - ignore duplicates\");\n     }\n \n+    @Test\n+    void testCollateIgnoreDuplicatesWithNullElements() {\n+        final Comparator<String> nullsFirst = Comparator.nullsFirst(Comparator.<String>naturalOrder());\n+        final List<String> left = Arrays.asList(null, \"a\");\n+        final List<String> right = Arrays.asList(null, \"a\");\n+        // a null element is a legal, sorted value here, so consecutive nulls must\n+        // collapse just like any other duplicate when includeDuplicates is false\n+        assertEquals(Arrays.asList(null, \"a\"), CollectionUtils.collate(left, right, nullsFirst, false));\n+        assertEquals(Arrays.asList(null, null, \"a\", \"a\"), CollectionUtils.collate(left, right, nullsFirst, true));\n+    }\n+\n     @Test\n     void testCollect() {\n         final Transformer<Number, Long> transformer = TransformerUtils.constantTransformer(2L);\n",
+  "test_classes": [
+    "org.apache.commons.collections4.CollectionUtilsTest"
+  ],
+  "src_files": [
+    "src/main/java/org/apache/commons/collections4/CollectionUtils.java"
+  ],
+  "test_modules": [
+    "src/test/java/org/apache/commons/collections4/CollectionUtilsTest.java"
+  ],
+  "problem_statement": "Fix CollectionUtils collate keeping duplicate nulls when includeDuplicates is false\n\n`collate` used `lastItem == null` as its first-iteration sentinel, so a real null element (legal when a null-tolerant `Comparator` like `Comparator.nullsFirst` is supplied) was treated as unseen and re-added, leaving duplicate nulls in the result when `includeDuplicates` is false; found while tracing the merge dedup path with null-permitting comparators.\n\n- [x] Read the [contribution guidelines](CONTRIBUTING.md) for this project.\n- [ ] Read the [ASF Generative Tooling Guidance](https://www.apache.org/legal/generative-tooling.html) if you use Artificial Intelligence (AI).\n- [ ] I used AI to create any part of, or all of, this pull request. Which AI tool was used to create this pull request, and to what extent did it contribute?\n- [x] Run a successful build using the default [Maven](https://maven.apache.org/) goal with `mvn`; that's `mvn` on the command line by itself.\n- [x] Write unit tests that match behavioral changes, where the tests fail if the changes to the runtime are not applied. This may not always be possible, but it is a best practice.\n- [x] Write a pull request description that is detailed enough to understand what the pull request does, how, and why.\n- [x] Each commit in the pull request should have a meaningful subject line and body. Note that a maintainer may squash commits during the merge process.\n",
+  "kind": "bug",
+  "fail_to_pass": [
+    "org.apache.commons.collections4.CollectionUtilsTest::testContainsAnyInArray"
+  ],
+  "pass_to_pass": [
+    "org.apache.commons.collections4.CollectionUtilsTest::forAllButLastDoIterator",
+    "org.apache.commons.collections4.CollectionUtilsTest::forAllDoFailure",
+    "org.apache.commons.collections4.CollectionUtilsTest::testAddAllForEnumeration",
+    "org.apache.commons.collections4.CollectionUtilsTest::testAddAllForIterable",
+    "org.apache.commons.collections4.CollectionUtilsTest::testAddIgnoreNullNullColl",
+    "org.apache.commons.collections4.CollectionUtilsTest::testCollateException0",
+    "org.apache.commons.collections4.CollectionUtilsTest::testCollateException1",
+    "org.apache.commons.collections4.CollectionUtilsTest::testCollateException2",
+    "org.apache.commons.collections4.CollectionUtilsTest::testContainsAnyInArrayNullArray",
+    "org.apache.commons.collections4.CollectionUtilsTest::testContainsAnyInArrayNullColl1",
+    "org.apache.commons.collections4.CollectionUtilsTest::testContainsAnyInArrayNullColl2",
+    "org.apache.commons.collections4.CollectionUtilsTest::testDisjunctionAsSymmetricDifference",
+    "org.apache.commons.collections4.CollectionUtilsTest::testFilter",
+    "org.apache.commons.collections4.CollectionUtilsTest::testFilterNullParameters",
+    "org.apache.commons.collections4.CollectionUtilsTest::testGetFromLinkedHashMap",
+    "org.apache.commons.collections4.CollectionUtilsTest::testGetFromTreeMap",
+    "org.apache.commons.collections4.CollectionUtilsTest::testIntersection",
+    "org.apache.commons.collections4.CollectionUtilsTest::testIsEmpty",
+    "org.apache.commons.collections4.CollectionUtilsTest::testIsEqualCollectionNullEquator",
+    "org.apache.commons.collections4.CollectionUtilsTest::testIsEqualCollectionToSelf",
+    "org.apache.commons.collections4.CollectionUtilsTest::testIsFull",
+    "org.apache.commons.collections4.CollectionUtilsTest::testIsNotEmptyWithEmptyCollection",
+    "org.apache.commons.collections4.CollectionUtilsTest::testIsNotEmptyWithNonEmptyCollection",
+    "org.apache.commons.collections4.CollectionUtilsTest::testMatchesAll",
+    "org.apache.commons.collections4.CollectionUtilsTest::testPermutations",
+    "org.apache.commons.collections4.CollectionUtilsTest::testRemoveAll",
+    "org.apache.commons.collections4.CollectionUtilsTest::testRemoveAllNullBaseColl",
+    "org.apache.commons.collections4.CollectionUtilsTest::testRemoveAllWithEquator",
+    "org.apache.commons.collections4.CollectionUtilsTest::testRemoveRangeNull",
+    "org.apache.commons.collections4.CollectionUtilsTest::testRemoveRangeStartIndexNegative",
+    "org.apache.commons.collections4.CollectionUtilsTest::testRetainAllNullSubColl",
+    "org.apache.commons.collections4.CollectionUtilsTest::testSelect",
+    "org.apache.commons.collections4.CollectionUtilsTest::testSizeIsEmpty_Array",
+    "org.apache.commons.collections4.CollectionUtilsTest::testSizeIsEmpty_Iterator",
+    "org.apache.commons.collections4.CollectionUtilsTest::testSizeIsEmpty_Other",
+    "org.apache.commons.collections4.CollectionUtilsTest::testSize_Array",
+    "org.apache.commons.collections4.CollectionUtilsTest::testSize_Enumeration",
+    "org.apache.commons.collections4.CollectionUtilsTest::testSize_Iterator",
+    "org.apache.commons.collections4.CollectionUtilsTest::testSize_List",
+    "org.apache.commons.collections4.CollectionUtilsTest::testSize_Map",
+    "org.apache.commons.collections4.CollectionUtilsTest::testSize_Other",
+    "org.apache.commons.collections4.CollectionUtilsTest::testTransform1",
+    "org.apache.commons.collections4.CollectionUtilsTest::testTransform2",
+    "org.apache.commons.collections4.CollectionUtilsTest::testTransformingCollectionNullTransformer",
+    "org.apache.commons.collections4.CollectionUtilsTest::testUnmodifiableCollection"
+  ],
+  "lang": "java",
+  "build": "maven",
+  "task_kind": "bug"
+}

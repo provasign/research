@@ -1,0 +1,71 @@
+diff --git a/release-notes/VERSION b/release-notes/VERSION
+index 8d661702e..de04b4818 100644
+--- a/release-notes/VERSION
++++ b/release-notes/VERSION
+@@ -221,6 +221,8 @@ Versions: 3.x (for earlier see VERSION-2.x)
+  (fix by Lee Jiwon)
+ #6010: `WRITE_ENUMS_TO_LOWERCASE` must use `Locale.ROOT` for case folding
+  (fix by Lee Jiwon)
++#6017: Support delegating `@JsonUnwrapped` serializer (from
++  `StdConvertingSerializer` to serializer of converted value)
+ - Remove project-specific Android SDK compatibility level, use shared;
+   no change level itself (stillAndroid SDK 34)
+ 
+diff --git a/src/main/java/tools/jackson/databind/ser/std/StdConvertingSerializer.java b/src/main/java/tools/jackson/databind/ser/std/StdConvertingSerializer.java
+index b4beda28a..876a5d1e6 100644
+--- a/src/main/java/tools/jackson/databind/ser/std/StdConvertingSerializer.java
++++ b/src/main/java/tools/jackson/databind/ser/std/StdConvertingSerializer.java
+@@ -8,6 +8,7 @@ import tools.jackson.databind.jsontype.TypeSerializer;
+ import tools.jackson.databind.ser.impl.PropertySerializerMap;
+ import tools.jackson.databind.util.ClassUtil;
+ import tools.jackson.databind.util.Converter;
++import tools.jackson.databind.util.NameTransformer;
+ 
+ /**
+  * Serializer implementation where given Java type is first converted
+@@ -140,12 +141,45 @@ public class StdConvertingSerializer
+         return withDelegate(_converter, delegateType, delSer, property);
+     }
+ 
++    /*
++    /**********************************************************************
++    /* Mutant factories
++    /**********************************************************************
++     */
++
++    /**
++     * Overridden to support {@code @JsonUnwrapped} by delegating unwrapping to the
++     * serializer of the converted ("delegate") value: if that serializer supports
++     * unwrapping, so does this one.
++     *
++     * @since 3.2
++     */
++    @Override
++    public ValueSerializer<Object> unwrappingSerializer(NameTransformer unwrapper) {
++        // For "dynamic" case (delegate type only known at runtime) we have nothing
++        // to delegate to, so cannot unwrap
++        if (_delegateSerializer == null) {
++            return this;
++        }
++        ValueSerializer<Object> unwrappingDelegate = _delegateSerializer.unwrappingSerializer(unwrapper);
++        if (unwrappingDelegate == _delegateSerializer) {
++            return this;
++        }
++        return withDelegate(_converter, _delegateType, unwrappingDelegate, _property);
++    }
++
+     /*
+     /**********************************************************************
+     /* Accessors
+     /**********************************************************************
+      */
+ 
++    // @since 3.2
++    @Override
++    public boolean isUnwrappingSerializer() {
++        return (_delegateSerializer != null) && _delegateSerializer.isUnwrappingSerializer();
++    }
++
+     public Converter<Object, ?> getConverter() {
+         return _converter;
+     }

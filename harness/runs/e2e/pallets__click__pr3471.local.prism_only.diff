@@ -1,0 +1,29 @@
+diff --git a/src/click/types.py b/src/click/types.py
+index 556f20f..65bff79 100644
+--- a/src/click/types.py
++++ b/src/click/types.py
+@@ -167,7 +167,23 @@ class ParamType(t.Generic[ParamTypeValue], abc.ABC):
+ 
+         .. versionadded:: 8.0
+         """
+-        return []
++        from .shell_completion import CompletionItem
++        
++        items = []
++        normalized_mapping = self._normalized_mapping(ctx=ctx)
++        
++        for choice in self.choices:
++            # For enum values, we want to show just the name component
++            if isinstance(choice, enum.Enum):
++                display_name = choice.name
++            else:
++                display_name = str(choice)
++            
++            # Check if it matches the incomplete text
++            if not incomplete or display_name.startswith(incomplete):
++                items.append(CompletionItem(display_name, value=display_name))
++        
++        return items
+ 
+ 
+ class CompositeParamType(ParamType[ParamTypeValue]):

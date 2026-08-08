@@ -1,0 +1,30 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java
+index 439adb8d47..816e9ca1fd 100644
+--- a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java
++++ b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java
+@@ -735,6 +735,10 @@ public class BeanDeserializer
+         final boolean skipUnknown = _shouldSkipUnknowns(ctxt);
+         JsonToken t = p.currentToken();
+         List<BeanReferring> referrings = null;
++        // [databind#5980]: need to remember Object context of the value being built,
++        //   to know whether it is still active once value has been constructed
++        final TokenStreamContext valueCtxt = (t == JsonToken.PROPERTY_NAME)
++                ? p.streamReadContext() : null;
+ 
+         for (; t == JsonToken.PROPERTY_NAME; t = p.nextToken()) {
+             String propName = p.currentName();
+@@ -885,7 +889,13 @@ public class BeanDeserializer
+             }
+         }
+ 
+-        p.assignCurrentValue(bean);
++        // [databind#631]: Assign current value, to be accessible by custom deserializers
++        // [databind#5980]: ... but only if parser still points within the Object value
++        //   being deserialized: usually it does not (END_OBJECT closed the context) and
++        //   assigning would override current value of the parent context
++        if ((valueCtxt != null) && (valueCtxt == p.streamReadContext())) {
++            p.assignCurrentValue(bean);
++        }
+         // [databind#4938] Since 2.19, allow returning `null` from creator,
+         //  but if so, need to skip all possibly relevant content
+         if (bean == null) {

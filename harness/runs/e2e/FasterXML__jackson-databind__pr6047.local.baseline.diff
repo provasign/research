@@ -1,0 +1,15 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/bean/BeanAsArrayDeserializer.java b/src/main/java/tools/jackson/databind/deser/bean/BeanAsArrayDeserializer.java
+index 9efaa2541..847f4d933 100644
+--- a/src/main/java/tools/jackson/databind/deser/bean/BeanAsArrayDeserializer.java
++++ b/src/main/java/tools/jackson/databind/deser/bean/BeanAsArrayDeserializer.java
+@@ -157,6 +157,10 @@ public class BeanAsArrayDeserializer
+                     wrapAndThrow(e, bean, prop.getName(), ctxt);
+                 }
+             } else {
++                if (ctxt.isEnabled(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)) {
++                    ctxt.reportWrongTokenException(this, JsonToken.END_ARRAY,
++                            "Unexpected JSON values; expected at most %d properties", _orderedProperties.length);
++                }
+                 p.skipChildren();
+             }
+         }

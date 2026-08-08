@@ -188,6 +188,23 @@ Continue.dev scored 0–1/9 driving *any* tool from a local model — see
 [`AB-LOCAL-CLIS.md`](AB-LOCAL-CLIS.md)). Haiku is the weak-tier proxy:
 Engine B unstable (0.00–1.00 across trials), not reliably at zero.
 
+## Update 2026-08-08 — binary renamed, and a non-result to record
+
+Engine B ships as `codegraph` since v1.5.0 (`~/.local/bin/codegraph serve
+--mcp`); the harness paths here referenced the old `engine-b` name and would
+have failed at startup. Fixed in `ab_agentic_mcp.py` and
+`ab_endtoend_arms.py`.
+
+An attempt to measure it on the e2e fan-out bed (RESULTS.md §8.2) produced
+**no codegraph measurement at all**: with its MCP server connected and
+`codegraph_explore` visible and permitted (verified by asking the agent to
+list its tools), the agent chose file reads and shell commands instead — 0
+tool calls across 6 cells. The cells are named `*.opus.codegraph.json` for the
+arm that was configured, not the tool that was used, and must not be cited as
+its performance in either direction. It is a finding about tool adoption, and
+the same one this repo already recorded when agents preferred grep 12:1 over
+an offered graph.
+
 ## Honest scope & caveats
 
 - Engine B does **not** claim compiler-grade completeness; its claims are

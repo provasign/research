@@ -1,0 +1,15 @@
+diff --git a/src/main/java/org/apache/commons/lang3/RandomStringUtils.java b/src/main/java/org/apache/commons/lang3/RandomStringUtils.java
+index 40a5dc744..9a7b5b9cf 100644
+--- a/src/main/java/org/apache/commons/lang3/RandomStringUtils.java
++++ b/src/main/java/org/apache/commons/lang3/RandomStringUtils.java
+@@ -296,7 +296,9 @@ public static String random(int count, int start, int end, final boolean letters
+             if (letters && digits && start <= ASCII_0 && end >= ASCII_z + 1) {
+                 return random(count, 0, 0, false, false, ALPHANUMERICAL_CHARS, random);
+             }
+-            if (digits && end <= ASCII_0 || letters && end <= ASCII_A) {
++            // Only reject when none of the requested categories is reachable: requesting an extra
++            // category can only widen the accepted set, never empty it.
++            if ((letters || digits) && (!digits || end <= ASCII_0) && (!letters || end <= ASCII_A)) {
+                 throw new IllegalArgumentException(
+                         String.format("Parameter end (%,d) must be greater than (%,d) for generating digits or greater than (%,d) for generating letters.", end,
+                                 ASCII_0, ASCII_A));

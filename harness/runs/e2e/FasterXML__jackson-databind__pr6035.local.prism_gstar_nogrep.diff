@@ -1,0 +1,53 @@
+diff --git a/src/main/java/tools/jackson/databind/introspect/JacksonAnnotationIntrospector.java b/src/main/java/tools/jackson/databind/introspect/JacksonAnnotationIntrospector.java
+index 98f4a4a64..1dd793293 100644
+--- a/src/main/java/tools/jackson/databind/introspect/JacksonAnnotationIntrospector.java
++++ b/src/main/java/tools/jackson/databind/introspect/JacksonAnnotationIntrospector.java
+@@ -46,7 +46,8 @@ public class JacksonAnnotationIntrospector
+         JsonRawValue.class,
+         JsonUnwrapped.class,
+         JsonBackReference.class,
+-        JsonManagedReference.class
++        JsonManagedReference.class,
++        JsonAlias.class
+     };
+ 
+     @SuppressWarnings("unchecked")
+@@ -60,7 +61,8 @@ public class JacksonAnnotationIntrospector
+         JsonUnwrapped.class,
+         JsonBackReference.class,
+         JsonManagedReference.class,
+-        JsonMerge.class
++        JsonMerge.class,
++        JsonIgnore.class
+     };
+ 
+     // NOTE: To avoid mandatory Module dependency to "java.beans", support for 2
+@@ -166,6 +168,28 @@ public class JacksonAnnotationIntrospector
+         return b.booleanValue();
+     }
+ 
++    /*
++    /**********************************************************************
++    /* Property annotations
++    /**********************************************************************
++     */
++
++    @Override
++    public String findPropertyAlias(BeanPropertyDefinition propDef) {
++        JsonAlias alias = propDef.getAnnotation(JsonAlias.class);
++        if (alias != null) {
++            String[] aliases = alias.value();
++            return (aliases.length > 0) ? aliases[0] : null;
++        }
++        return null;
++    }
++
++    @Override
++    public boolean hasIgnoreMarker(BeanPropertyDefinition propDef) {
++        JsonIgnore ignore = propDef.getAnnotation(JsonIgnore.class);
++        return (ignore != null);
++    }
++
+     /*
+     /**********************************************************************
+     /* General annotations

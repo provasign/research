@@ -1,0 +1,202 @@
+diff --git a/CHANGES.md b/CHANGES.md
+index c808c22..9953cf6 100644
+--- a/CHANGES.md
++++ b/CHANGES.md
+@@ -11,6 +11,9 @@ Unreleased
+   This stripping was lost in `8.4.0` when {pr}`2969` began writing the
+   prompt with `input()` directly. {issue}`3572` {pr}`3653`
+ - Fix test failures when using pytest >= 9.1. {pr}`3656`
++- Add built-in shell completion support for PowerShell through
++  {class}`~click.shell_completion.PowerShellComplete`, registered under the
++  `powershell` name. {issue}`2117`
+ - Add {func}`custom_version_option`, a `--version` option whose output is
+   produced by a callback, covering cases {func}`version_option` intentionally
+   does not. The feature set of {func}`version_option` is now frozen; see
+diff --git a/docs/shell-completion.md b/docs/shell-completion.md
+index a8bc941..570a97c 100644
+--- a/docs/shell-completion.md
++++ b/docs/shell-completion.md
+@@ -5,8 +5,9 @@
+ ```{currentmodule} click.shell_completion
+ ```
+ 
+-Click provides tab completion support for Bash (version 4.4 and up), Zsh, and Fish. It is possible to add support for
+-other shells too, and suggestions can be customized at multiple levels.
++Click provides tab completion support for Bash (version 4.4 and up), Zsh, Fish, and PowerShell (Windows PowerShell 5.1
++and up, and PowerShell 7 and up). It is possible to add support for other shells too, and suggestions can be customized
++at multiple levels.
+ 
+ Shell completion suggests command names, option names, and values for choice, file, and path parameter types. Options
+ are only listed if at least a dash has been entered. Hidden commands and options are not shown.
+@@ -29,7 +30,7 @@ depending on the shell you are using. Click will output it when called with `_{F
+ `{shell}_source`. `{FOO_BAR}` is the executable name in uppercase with dashes replaced by underscores. It is
+ conventional but not strictly required for environment variable names to be in upper case. This convention helps
+ distinguish environment variables from regular shell variables and commands, making scripts and configuration files more
+-readable and easier to maintain. The built-in shells are `bash`, `zsh`, and `fish`.
++readable and easier to maintain. The built-in shells are `bash`, `zsh`, `fish`, and `powershell`.
+ 
+ Provide your users with the following instructions customized to your program name. This uses `foo-bar` as an example.
+ 
+@@ -62,6 +63,16 @@ Provide your users with the following instructions customized to your program na
+ 
+         This is the same file used for the activation script method
+         below. For Fish it's probably always easier to use that method.
++
++    .. group-tab:: PowerShell
++
++        Add this to your profile (``$PROFILE``):
++
++        .. code-block:: powershell
++
++            $env:_FOO_BAR_COMPLETE = "powershell_source"
++            foo-bar | Out-String | Invoke-Expression
++            Remove-Item Env:\_FOO_BAR_COMPLETE
+ ```
+ 
+ Using `eval` means that the command is invoked and evaluated every time a shell is started, which can delay shell
+@@ -106,6 +117,22 @@ of time and distribute them with your program to save your users a step.
+         .. code-block:: fish
+ 
+             _FOO_BAR_COMPLETE=fish_source foo-bar > ~/.config/fish/completions/foo-bar.fish
++
++    .. group-tab:: PowerShell
++
++        Save the script somewhere.
++
++        .. code-block:: powershell
++
++            $env:_FOO_BAR_COMPLETE = "powershell_source"
++            foo-bar | Out-File -Encoding utf8 ~/foo-bar-complete.ps1
++            Remove-Item Env:\_FOO_BAR_COMPLETE
++
++        Source the file in your profile (``$PROFILE``).
++
++        .. code-block:: powershell
++
++            . ~/foo-bar-complete.ps1
+ ```
+ 
+ After modifying the shell config, you need to start a new shell in order for the changes to be loaded.
+diff --git a/src/click/shell_completion.py b/src/click/shell_completion.py
+index 5652214..d84361c 100644
+--- a/src/click/shell_completion.py
++++ b/src/click/shell_completion.py
+@@ -207,6 +207,64 @@ complete --no-files --command %(prog_name)s --arguments \
+ """
+ 
+ 
++_SOURCE_POWERSHELL = """\
++Register-ArgumentCompleter -Native -CommandName %(prog_name)s -ScriptBlock {
++    param($wordToComplete, $commandAst, $cursorPosition)
++
++    $prev_complete = $env:%(complete_var)s
++    $prev_words = $env:COMP_WORDS
++    $prev_cword = $env:COMP_CWORD
++
++    $env:%(complete_var)s = 'powershell_complete'
++    $env:COMP_WORDS = $commandAst.ToString()
++    if ($wordToComplete) {
++        $env:COMP_CWORD = $commandAst.CommandElements.Count - 1
++    } else {
++        $env:COMP_CWORD = $commandAst.CommandElements.Count
++    }
++
++    try {
++        $response = & %(prog_name)s 2>$null
++    } finally {
++        $env:%(complete_var)s = $prev_complete
++        $env:COMP_WORDS = $prev_words
++        $env:COMP_CWORD = $prev_cword
++    }
++
++    if (-not $response) { return }
++
++    $prefix = "$wordToComplete*"
++    $lines = $response -split "`n"
++    for ($i = 0; $i + 2 -lt $lines.Count; $i += 3) {
++        $type = $lines[$i]
++        $value = $lines[$i + 1]
++        $descr = $lines[$i + 2]
++        if (-not $type) { continue }
++
++        if ($type -eq 'plain') {
++            $tip = if ($descr -and $descr -ne '_') { $descr } else { $value }
++            [System.Management.Automation.CompletionResult]::new(
++                $value, $value, 'ParameterValue', $tip)
++        } elseif ($type -eq 'dir') {
++            Get-ChildItem -Directory -Path $prefix -ErrorAction SilentlyContinue |
++                ForEach-Object {
++                    [System.Management.Automation.CompletionResult]::new(
++                        $_.FullName, $_.Name, 'ProviderContainer', $_.FullName)
++                }
++        } elseif ($type -eq 'file') {
++            Get-ChildItem -Path $prefix -ErrorAction SilentlyContinue |
++                ForEach-Object {
++                    $kind = 'ProviderItem'
++                    if ($_.PSIsContainer) { $kind = 'ProviderContainer' }
++                    [System.Management.Automation.CompletionResult]::new(
++                        $_.FullName, $_.Name, $kind, $_.FullName)
++                }
++        }
++    }
++}
++"""
++
++
+ class _SourceVarsDict(t.TypedDict):
+     complete_func: str
+     complete_var: str
+@@ -456,9 +514,42 @@ class FishComplete(ShellComplete):
+         return f"{item.type},{item.value}"
+ 
+ 
++class PowerShellComplete(ShellComplete):
++    """Shell completion for PowerShell (Windows PowerShell 5.1+ and pwsh 7+).
++
++    .. versionadded:: 8.5
++    """
++
++    name: t.ClassVar[str] = "powershell"
++    source_template: t.ClassVar[str] = _SOURCE_POWERSHELL
++
++    def get_completion_args(self) -> tuple[list[str], str]:
++        cwords = split_arg_string(os.environ["COMP_WORDS"])
++        cword = int(os.environ["COMP_CWORD"])
++        args = cwords[1:cword]
++
++        try:
++            incomplete = cwords[cword]
++        except IndexError:
++            incomplete = ""
++
++        return args, incomplete
++
++    def format_completion(self, item: CompletionItem[str]) -> str:
++        # Each item is sent as three lines, so the help text must not
++        # contain any line breaks of its own.
++        if item.help:
++            help_ = item.help.replace("\r", " ").replace("\n", " ")
++        else:
++            help_ = "_"
++
++        return f"{item.type}\n{item.value}\n{help_}"
++
++
+ _available_shells: t.Final[dict[str, type[ShellComplete]]] = {
+     "bash": BashComplete,
+     "fish": FishComplete,
++    "powershell": PowerShellComplete,
+     "zsh": ZshComplete,
+ }
+ 
+@@ -492,6 +583,10 @@ def get_completion_class(shell: t.Literal["fish"]) -> type[FishComplete]: ...
+ @t.overload
+ def get_completion_class(shell: t.Literal["zsh"]) -> type[ZshComplete]: ...
+ @t.overload
++def get_completion_class(
++    shell: t.Literal["powershell"],
++) -> type[PowerShellComplete]: ...
++@t.overload
+ def get_completion_class(shell: str) -> type[ShellComplete] | None: ...
+ def get_completion_class(shell: str) -> type[ShellComplete] | None:
+     """Look up a registered :class:`ShellComplete` subclass by the name

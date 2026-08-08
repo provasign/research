@@ -1,0 +1,46 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java b/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
+index 070c2df39..2f9531150 100644
+--- a/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
++++ b/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
+@@ -38,8 +38,11 @@ public class UnwrappedPropertyHandler
+     protected final Set<String> _unwrappedPropertyNames;
+ 
+     /**
+-     * Flag that indicates if any of the unwrapped value deserializers
+-     * has an "any setter" (see {@link com.fasterxml.jackson.annotation.JsonAnySetter})
++     * Flag that indicates if any of the unwrapped value deserializers may accept
++     * arbitrary property names: either because it has an "any setter"
++     * (see {@link com.fasterxml.jackson.annotation.JsonAnySetter}), or because it
++     * does not expose the set of names it handles (custom deserializers that do
++     * not implement {@link ValueDeserializer#collectAllPropertyNamesTo}).
+      *
+      * @since 3.1
+      */
+@@ -234,7 +237,10 @@ public class UnwrappedPropertyHandler
+     /**
+      * Helper method to collect property names from a property's deserializer.
+      *
+-     * @return {@code true} if the property deserializer has AnySetter.
++     * @return {@code true} if the property deserializer may match any and all
++     *    property names: either due to "any setter", or because it did not
++     *    contribute any names at all (in which case we cannot tell what it
++     *    accepts, so must buffer everything).
+      *
+      * @since 3.1
+      */
+@@ -245,8 +251,13 @@ public class UnwrappedPropertyHandler
+             ValueDeserializer<?> deser = prop.getValueDeserializer();
+             if (deser != null) {
+                 // Recursively collect property names
+-            	deser.collectAllPropertyNamesTo(names);
+-                return deser.hasAnySetter();
++                Set<String> propNames = new HashSet<>();
++                deser.collectAllPropertyNamesTo(propNames);
++                names.addAll(propNames);
++                // [databind#6001]: custom unwrapping deserializers need not implement
++                // `collectAllPropertyNamesTo()`; if we got no names, we have no idea what
++                // the deserializer handles so must let all properties through.
++                return deser.hasAnySetter() || propNames.isEmpty();
+             }
+         }
+         return false;

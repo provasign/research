@@ -1,0 +1,68 @@
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java b/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java
+index 3e63a4a6b..df1d25f38 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java
+@@ -894,7 +894,10 @@ ClassUtil.nameOf(handledType()), ClassUtil.name(propName)));
+             // 16-May-2016, tatu: How about per-property case-insensitivity?
+             Boolean B = format.getFeature(JsonFormat.Feature.ACCEPT_CASE_INSENSITIVE_PROPERTIES);
+             if (B != null) {
+-                BeanPropertyMap propsOrig = _beanProperties;
++                // [databind#5962]: must rebuild from the (possibly filtered) contextual
++                // BeanPropertyMap so that per-property @JsonIgnoreProperties exclusions
++                // applied by _handleByNameInclusion() above are preserved.
++                BeanPropertyMap propsOrig = contextual._beanProperties;
+                 BeanPropertyMap props = propsOrig.withCaseInsensitivity(B.booleanValue());
+                 if (props != propsOrig) {
+                     contextual = contextual.withBeanProperties(props);
+@@ -1773,6 +1776,33 @@ ClassUtil.name(refName), ClassUtil.getTypeDescription(backRefType),
+         return bean;
+     }
+ 
++    /**
++     * Helper method for checking whether given (unmatched) property should be
++     * quietly ignored, considering "ignorable" and "includable" property names.
++     *<p>
++     * NOTE: [databind#5962]: if case-insensitive property matching is enabled,
++     * ignorals need to be matched case-insensitively as well; otherwise a
++     * differently-cased variant of an ignored property would be reported as an
++     * unknown property.
++     *
++     * @since 2.18.9
++     */
++    protected boolean _shouldIgnoreProperty(String propName)
++    {
++        if (IgnorePropertiesUtil.shouldIgnore(propName, _ignorableProps, _includableProps)) {
++            return true;
++        }
++        if ((_ignorableProps != null) && (_beanProperties != null)
++                && _beanProperties.isCaseInsensitive()) {
++            for (String ignorable : _ignorableProps) {
++                if (ignorable.equalsIgnoreCase(propName)) {
++                    return true;
++                }
++            }
++        }
++        return false;
++    }
++
+     /**
+      * Helper method called for an unknown property, when using "vanilla"
+      * processing.
+@@ -1785,7 +1815,7 @@ ClassUtil.name(refName), ClassUtil.getTypeDescription(backRefType),
+             Object beanOrBuilder, String propName)
+         throws IOException
+     {
+-        if (IgnorePropertiesUtil.shouldIgnore(propName, _ignorableProps, _includableProps)) {
++        if (_shouldIgnoreProperty(propName)) {
+             handleIgnoredProperty(p, ctxt, beanOrBuilder, propName);
+         } else if (_anySetter != null) {
+             try {
+@@ -1813,7 +1843,7 @@ ClassUtil.name(refName), ClassUtil.getTypeDescription(backRefType),
+             p.skipChildren();
+             return;
+         }
+-        if (IgnorePropertiesUtil.shouldIgnore(propName, _ignorableProps, _includableProps)) {
++        if (_shouldIgnoreProperty(propName)) {
+             handleIgnoredProperty(p, ctxt, beanOrClass, propName);
+         }
+         // Otherwise use default handling (call handler(s); if not

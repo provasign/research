@@ -1,0 +1,60 @@
+diff --git a/src/main/java/org/apache/commons/lang3/text/WordUtils.java b/src/main/java/org/apache/commons/lang3/text/WordUtils.java
+index ae59a34e3..e19377d67 100644
+--- a/src/main/java/org/apache/commons/lang3/text/WordUtils.java
++++ b/src/main/java/org/apache/commons/lang3/text/WordUtils.java
+@@ -648,15 +648,21 @@ public static String wrap(final String str, int wrapLength, String newLineStr, f
+ 
+         while (offset < inputLineLength) {
+             int spaceToWrapAt = -1;
++            int wrapOnEnd = -1;
+             Matcher matcher = patternToWrapOn.matcher(
+                 str.substring(offset, Math.min((int) Math.min(Integer.MAX_VALUE, offset + wrapLength + 1L), inputLineLength)));
+             if (matcher.find()) {
+                 if (matcher.start() == 0) {
+-                    // If the match is zero-width, advance by at least 1 to avoid infinite loop.
+-                    offset += matcher.end() > 0 ? matcher.end() : 1;
+-                    continue;
++                    if (matcher.end() > 0) {
++                        // skip the whole leading separator, whatever its length
++                        offset += matcher.end();
++                        continue;
++                    }
++                    // a zero-width match at the current offset separates nothing, look for the next one
++                } else {
++                    spaceToWrapAt = matcher.start() + offset;
++                    wrapOnEnd = matcher.end() + offset;
+                 }
+-                spaceToWrapAt = matcher.start() + offset;
+             }
+             // only last line without leading spaces is left
+             if (inputLineLength - offset <= wrapLength) {
+@@ -664,12 +670,13 @@ public static String wrap(final String str, int wrapLength, String newLineStr, f
+             }
+             while (matcher.find()) {
+                 spaceToWrapAt = matcher.start() + offset;
++                wrapOnEnd = matcher.end() + offset;
+             }
+             if (spaceToWrapAt >= offset) {
+                 // normal case
+                 wrappedLine.append(str, offset, spaceToWrapAt);
+                 wrappedLine.append(newLineStr);
+-                offset = spaceToWrapAt + 1;
++                offset = wrapOnEnd;
+ 
+             } else // really long word or URL
+             if (wrapLongWords) {
+@@ -682,12 +689,13 @@ public static String wrap(final String str, int wrapLength, String newLineStr, f
+                 matcher = patternToWrapOn.matcher(str.substring(offset + wrapLength));
+                 if (matcher.find()) {
+                     spaceToWrapAt = matcher.start() + offset + wrapLength;
++                    wrapOnEnd = matcher.end() + offset + wrapLength;
+                 }
+ 
+                 if (spaceToWrapAt >= 0) {
+                     wrappedLine.append(str, offset, spaceToWrapAt);
+                     wrappedLine.append(newLineStr);
+-                    offset = spaceToWrapAt + 1;
++                    offset = wrapOnEnd;
+                 } else {
+                     wrappedLine.append(str, offset, str.length());
+                     offset = inputLineLength;

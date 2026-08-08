@@ -1,0 +1,18 @@
+diff --git a/src/werkzeug/sansio/multipart.py b/src/werkzeug/sansio/multipart.py
+index 279b25e7..07b5bad4 100644
+--- a/src/werkzeug/sansio/multipart.py
++++ b/src/werkzeug/sansio/multipart.py
+@@ -286,8 +286,11 @@ class MultipartDecoder:
+                 data_end = del_index = self.last_newline(data[data_start:]) + data_start
+             more_data = match is None
+ 
+-        # Keep \r\n sequence intact rather than splitting across chunks.
+-        if data_end > data_start and data[data_end - 1] == 0x0D:
++        # Keep \r\n sequence intact rather than splitting across chunks. Only when
++        # more data is expected, as a trailing \r may be the first half of a \r\n
++        # that continues in the next chunk. If the boundary was found, the part is
++        # complete and a trailing \r is part of the data.
++        if more_data and data_end > data_start and data[data_end - 1] == 0x0D:
+             data_end -= 1
+             del_index -= 1
+ 

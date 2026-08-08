@@ -1,0 +1,51 @@
+diff --git a/TestReproduceIssue.java b/TestReproduceIssue.java
+new file mode 100644
+index 000000000..42b55e636
+--- /dev/null
++++ b/TestReproduceIssue.java
+@@ -0,0 +1,44 @@
++import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
++import com.fasterxml.jackson.databind.ObjectMapper;
++import com.fasterxml.jackson.databind.DeserializationFeature;
++
++public class TestReproduceIssue {
++    public static void main(String[] args) throws Exception {
++        ObjectMapper mapper = new ObjectMapper();
++        mapper.enable(DeserializationFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES);
++        
++        // This should work - case insensitive property handling
++        String json1 = "{\"name\":\"test\", \"Name\":\"test2\"}";
++        try {
++            TestClass obj1 = mapper.readValue(json1, TestClass.class);
++            System.out.println("Object 1: " + obj1);
++        } catch (Exception e) {
++            System.out.println("Error with case insensitive: " + e.getMessage());
++        }
++        
++        // This should work - ignore properties
++        String json2 = "{\"name\":\"test\", \"ignoredProp\":\"value\"}";
++        try {
++            TestClassWithIgnore obj2 = mapper.readValue(json2, TestClassWithIgnore.class);
++            System.out.println("Object 2: " + obj2);
++        } catch (Exception e) {
++            System.out.println("Error with ignore properties: " + e.getMessage());
++        }
++    }
++    
++    static class TestClass {
++        public String name;
++        public String getName() { return name; }
++        public void setName(String name) { this.name = name; }
++    }
++    
++    @JsonIgnoreProperties({"ignoredProp"})
++    static class TestClassWithIgnore {
++        public String name;
++        public String ignoredProp;
++        public String getName() { return name; }
++        public void setName(String name) { this.name = name; }
++        public String getIgnoredProp() { return ignoredProp; }
++        public void setIgnoredProp(String ignoredProp) { this.ignoredProp = ignoredProp; }
++    }
++}
+\ No newline at end of file

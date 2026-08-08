@@ -1,0 +1,28 @@
+diff --git a/src/main/java/org/apache/commons/lang3/ClassUtils.java b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+index 5c2cf099d..d89509aad 100644
+--- a/src/main/java/org/apache/commons/lang3/ClassUtils.java
++++ b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+@@ -1024,7 +1024,22 @@ public static String getShortClassName(final Class<?> cls) {
+         if (cls == null) {
+             return StringUtils.EMPTY;
+         }
+-        return getShortClassName(cls.getName());
++        if (cls.isArray()) {
++            return getShortClassName(cls.getComponentType()) + "[]";
++        }
++        // Local and anonymous classes have no reliable simple name, fall back to the binary name heuristics.
++        if (cls.isLocalClass() || cls.isAnonymousClass()) {
++            return getShortClassName(cls.getName());
++        }
++        // Use reflective metadata so that a '$' that is part of an identifier is not mistaken for a separator.
++        final StringBuilder builder = new StringBuilder(cls.getSimpleName());
++        for (Class<?> enclosing = cls.getEnclosingClass(); enclosing != null; enclosing = enclosing.getEnclosingClass()) {
++            if (enclosing.isLocalClass() || enclosing.isAnonymousClass()) {
++                return getShortClassName(cls.getName());
++            }
++            builder.insert(0, PACKAGE_SEPARATOR_CHAR).insert(0, enclosing.getSimpleName());
++        }
++        return builder.toString();
+     }
+ 
+     /**

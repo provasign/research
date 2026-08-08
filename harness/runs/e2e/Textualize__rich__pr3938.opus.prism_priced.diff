@@ -1,0 +1,28 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index a3b06bd..ef82f77 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
+ - Fixed extraneous blank line on non-interactive disabled `Progress` https://github.com/Textualize/rich/pull/3905
+ - Fixed extra padding on first cell in columns https://github.com/Textualize/rich/pull/3935
+ - Fixed trailing whitespace removed when soft_wrap=True https://github.com/Textualize/rich/pull/3937
++- Fixed background color carrying over to the following line when soft_wrap=True https://github.com/Textualize/rich/issues/3938
+ 
+ ### Added
+ 
+diff --git a/rich/segment.py b/rich/segment.py
+index edcb52d..65f610c 100644
+--- a/rich/segment.py
++++ b/rich/segment.py
+@@ -208,8 +208,10 @@ class Segment(NamedTuple):
+         result_segments = segments
+         if style:
+             apply = style.__add__
++            # New lines are not styled, otherwise the background color could
++            # carry over to the following line when the terminal scrolls.
+             result_segments = (
+-                cls(text, None if control else apply(_style), control)
++                cls(text, None if control or text == "\n" else apply(_style), control)
+                 for text, _style, control in result_segments
+             )
+         if post_style:

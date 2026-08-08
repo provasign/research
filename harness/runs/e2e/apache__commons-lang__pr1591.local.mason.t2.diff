@@ -1,0 +1,97 @@
+diff --git a/SimpleTest.java b/SimpleTest.java
+new file mode 100644
+index 000000000..43a512a25
+--- /dev/null
++++ b/SimpleTest.java
+@@ -0,0 +1,15 @@
++public class SimpleTest {
++    public static void main(String[] args) {
++        // Test what Map.Entry.getName() returns
++        System.out.println("Map.Entry.getName(): " + java.util.Map.Entry.class.getName());
++        System.out.println("Map.Entry.getSimpleName(): " + java.util.Map.Entry.class.getSimpleName());
++        System.out.println("Map.Entry.getCanonicalName(): " + java.util.Map.Entry.class.getCanonicalName());
++        
++        // Test what happens with a real inner class
++        class InnerClass {
++            // empty
++        }
++        System.out.println("InnerClass.getName(): " + InnerClass.class.getName());
++        System.out.println("InnerClass.getSimpleName(): " + InnerClass.class.getSimpleName());
++    }
++}
+\ No newline at end of file
+diff --git a/TestAnalysis.java b/TestAnalysis.java
+new file mode 100644
+index 000000000..8141afa0c
+--- /dev/null
++++ b/TestAnalysis.java
+@@ -0,0 +1,27 @@
++public class TestAnalysis {
++    public static void main(String[] args) {
++        // Let's trace through what happens with "java.util.Map$Entry"
++        String className = "java.util.Map$Entry";
++        
++        System.out.println("Input: " + className);
++        
++        final char PACKAGE_SEPARATOR_CHAR = '.';
++        final char INNER_CLASS_SEPARATOR_CHAR = '$';
++        
++        final int lastDotIdx = className.lastIndexOf(PACKAGE_SEPARATOR_CHAR);
++        System.out.println("lastDotIdx: " + lastDotIdx); // Should be 10 (position of last dot before "Map$Entry")
++        
++        final int innerIdx = className.indexOf(INNER_CLASS_SEPARATOR_CHAR, lastDotIdx == -1 ? 0 : lastDotIdx + 1);
++        System.out.println("innerIdx: " + innerIdx); // Should be 13 (position of $)
++        
++        String out = className.substring(lastDotIdx + 1);
++        System.out.println("out before replacement: " + out); // Should be "Map$Entry"
++        
++        if (innerIdx != -1) {
++            out = out.replace(INNER_CLASS_SEPARATOR_CHAR, PACKAGE_SEPARATOR_CHAR);
++            System.out.println("out after replacement: " + out); // Should be "Map.Entry"
++        }
++        
++        System.out.println("Final result: " + out);
++    }
++}
+\ No newline at end of file
+diff --git a/TestGetShortClassName.java b/TestGetShortClassName.java
+new file mode 100644
+index 000000000..919913b26
+--- /dev/null
++++ b/TestGetShortClassName.java
+@@ -0,0 +1,20 @@
++import org.apache.commons.lang3.ClassUtils;
++
++public class TestGetShortClassName {
++    public static void main(String[] args) {
++        // Test with Map.Entry which has a $ in its name
++        System.out.println("Map.Entry.class.getName(): " + java.util.Map.Entry.class.getName());
++        System.out.println("getShortClassName(Map.Entry.class): " + ClassUtils.getShortClassName(java.util.Map.Entry.class));
++        System.out.println("getShortClassName(Map.Entry.class.getName()): " + ClassUtils.getShortClassName(java.util.Map.Entry.class.getName()));
++        
++        // Test with a class that has $ in its name but is not an inner class
++        try {
++            Class<?> clazz = Class.forName("java.util.HashMap$Entry");
++            System.out.println("HashMap$Entry.class.getName(): " + clazz.getName());
++            System.out.println("getShortClassName(HashMap$Entry.class): " + ClassUtils.getShortClassName(clazz));
++            System.out.println("getShortClassName(HashMap$Entry.class.getName()): " + ClassUtils.getShortClassName(clazz.getName()));
++        } catch (Exception e) {
++            System.out.println("HashMap$Entry not found: " + e.getMessage());
++        }
++    }
++}
+\ No newline at end of file
+diff --git a/src/main/java/org/apache/commons/lang3/ClassUtils.java b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+index 5c2cf099d..24cd3bb2c 100644
+--- a/src/main/java/org/apache/commons/lang3/ClassUtils.java
++++ b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+@@ -1012,8 +1012,7 @@ public static String getShortCanonicalName(final String canonicalName) {
+      * Gets the class name minus the package name from a {@link Class}.
+      *
+      * <p>
+-     * This method simply gets the name using {@code Class.getName()} and then calls {@link #getShortClassName(String)}. See
+-     * relevant notes there.
++     * This method simply gets the name using {@code Class.getName()} and then calls {@link #getShortClassName(String)}.
+      * </p>
+      *
+      * @param cls the class to get the short name for.

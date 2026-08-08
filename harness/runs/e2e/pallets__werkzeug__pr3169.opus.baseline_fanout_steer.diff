@@ -1,0 +1,199 @@
+diff --git a/CHANGES.rst b/CHANGES.rst
+index 21af9107..3d4b3f6e 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -31,6 +31,9 @@ Version 3.2.0
+ -   The ``accept_charsets`` header property on ``Request``, and the
+     ``CharsetAccept`` class, are deprecated. The header has not been used for a
+     long time. :pr:`3161`
++-   The ``parameter_storage_class``, ``dict_storage_class``, and
++    ``list_storage_class`` attributes on ``Request`` are deprecated. Override the
++    attributes that use them instead. :pr:`3169`
+ -   ``redirect`` returns a ``303`` status code by default instead of ``302``.
+     This tells the client to always switch to ``GET``, rather than only
+     switching ``POST`` to ``GET``. This preserves the current behavior of
+diff --git a/src/werkzeug/sansio/request.py b/src/werkzeug/sansio/request.py
+index 17e66576..6ed7cf49 100644
+--- a/src/werkzeug/sansio/request.py
++++ b/src/werkzeug/sansio/request.py
+@@ -61,18 +61,22 @@ class Request:
+     .. versionadded:: 2.0
+     """
+ 
+-    #: the class to use for `args` and `form`.  The default is an
+-    #: :class:`~werkzeug.datastructures.ImmutableMultiDict` which supports
+-    #: multiple values per key. A :class:`~werkzeug.datastructures.ImmutableDict`
+-    #: is faster but only remembers the last key. It is also
+-    #: possible to use mutable structures, but this is not recommended.
++    #: The class to use for :attr:`args` and ``form``. Defaults to
++    #: :class:`~werkzeug.datastructures.ImmutableMultiDict`.
++    #:
++    #: .. deprecated:: 3.2
++    #:     Will be removed in Werkzeug 3.3. Override the attributes that use it
++    #:     instead.
+     #:
+     #: .. versionadded:: 0.6
+     parameter_storage_class: type[MultiDict[str, t.Any]] = ImmutableMultiDict
+ 
+-    #: The type to be used for dict values from the incoming WSGI
+-    #: environment. (For example for :attr:`cookies`.) By default an
+-    #: :class:`~werkzeug.datastructures.ImmutableMultiDict` is used.
++    #: The class to use for :attr:`cookies`. Defaults to
++    #: :class:`~werkzeug.datastructures.ImmutableMultiDict`.
++    #:
++    #: .. deprecated:: 3.2
++    #:     Will be removed in Werkzeug 3.3. Override the attributes that use it
++    #:     instead.
+     #:
+     #: .. versionchanged:: 1.0.0
+     #:     Changed to ``ImmutableMultiDict`` to support multiple values.
+@@ -80,13 +84,39 @@ class Request:
+     #: .. versionadded:: 0.6
+     dict_storage_class: type[MultiDict[str, t.Any]] = ImmutableMultiDict
+ 
+-    #: the type to be used for list values from the incoming WSGI environment.
+-    #: By default an :class:`~werkzeug.datastructures.ImmutableList` is used
+-    #: (for example for :attr:`access_list`).
++    #: The class to use for :attr:`access_route`. Defaults to
++    #: :class:`~werkzeug.datastructures.ImmutableList`.
++    #:
++    #: .. deprecated:: 3.2
++    #:     Will be removed in Werkzeug 3.3. Override the attributes that use it
++    #:     instead.
+     #:
+     #: .. versionadded:: 0.6
+     list_storage_class: type[list[t.Any]] = ImmutableList
+ 
++    def _get_storage_class(self, name: str, default: type[t.Any]) -> type[t.Any]:
++        """Get one of the deprecated ``*_storage_class`` attributes, warning if
++        it has been changed from its default value.
++
++        :meta private:
++
++        .. deprecated:: 3.2
++            Will be removed in Werkzeug 3.3.
++        """
++        cls: type[t.Any] = getattr(type(self), name)
++
++        if cls is not default:
++            import warnings
++
++            warnings.warn(
++                f"The '{name}' attribute is deprecated and will be removed in"
++                " Werkzeug 3.3. Override the attributes that use it instead.",
++                DeprecationWarning,
++                stacklevel=3,
++            )
++
++        return cls
++
+     user_agent_class: type[UserAgent] = UserAgent
+     """The class used and returned by the :attr:`user_agent` property to
+     parse the header. Defaults to
+@@ -157,14 +187,16 @@ class Request:
+ 
+         By default an
+         :class:`~werkzeug.datastructures.ImmutableMultiDict`
+-        is returned from this function.  This can be changed by setting
+-        :attr:`parameter_storage_class` to a different type.  This might
+-        be necessary if the order of the form data is important.
++        is returned from this function.
++
++        .. versionchanged:: 3.2
++            The ``parameter_storage_class`` attribute is deprecated.
+ 
+         .. versionchanged:: 2.3
+             Invalid bytes remain percent encoded.
+         """
+-        return self.parameter_storage_class(
++        cls = self._get_storage_class("parameter_storage_class", ImmutableMultiDict)
++        return cls(  # type: ignore[no-any-return]
+             parse_qsl(
+                 self.query_string.decode(),
+                 keep_blank_values=True,
+@@ -176,14 +208,17 @@ class Request:
+     def access_route(self) -> list[str]:
+         """If a forwarded header exists this is a list of all ip addresses
+         from the client ip to the last proxy server.
++
++        .. versionchanged:: 3.2
++            The ``list_storage_class`` attribute is deprecated.
+         """
++        cls = self._get_storage_class("list_storage_class", ImmutableList)
++
+         if "X-Forwarded-For" in self.headers:
+-            return self.list_storage_class(
+-                parse_list_header(self.headers["X-Forwarded-For"])
+-            )
++            return cls(parse_list_header(self.headers["X-Forwarded-For"]))  # type: ignore[no-any-return]
+         elif self.remote_addr is not None:
+-            return self.list_storage_class([self.remote_addr])
+-        return self.list_storage_class()
++            return cls([self.remote_addr])  # type: ignore[no-any-return]
++        return cls()  # type: ignore[no-any-return]
+ 
+     @cached_property
+     def full_path(self) -> str:
+@@ -236,10 +271,15 @@ class Request:
+     @cached_property
+     def cookies(self) -> ImmutableMultiDict[str, str]:
+         """A :class:`dict` with the contents of all cookies transmitted with
+-        the request."""
++        the request.
++
++        .. versionchanged:: 3.2
++            The ``dict_storage_class`` attribute is deprecated.
++        """
+         wsgi_combined_cookie = ";".join(self.headers.getlist("Cookie"))
+         return parse_cookie(  # type: ignore
+-            wsgi_combined_cookie, cls=self.dict_storage_class
++            wsgi_combined_cookie,
++            cls=self._get_storage_class("dict_storage_class", ImmutableMultiDict),
+         )
+ 
+     # Common Descriptors
+diff --git a/src/werkzeug/wrappers/request.py b/src/werkzeug/wrappers/request.py
+index d97d22f9..a9a5c99b 100644
+--- a/src/werkzeug/wrappers/request.py
++++ b/src/werkzeug/wrappers/request.py
+@@ -248,7 +248,7 @@ class Request(_SansIORequest):
+             max_form_memory_size=self.max_form_memory_size,
+             max_content_length=self.max_content_length,
+             max_form_parts=self.max_form_parts,
+-            cls=self.parameter_storage_class,
++            cls=self._get_storage_class("parameter_storage_class", ImmutableMultiDict),
+         )
+ 
+     def _load_form_data(self) -> None:
+@@ -273,11 +273,8 @@ class Request(_SansIORequest):
+                 self.mimetype_params,
+             )
+         else:
+-            data = (
+-                self.stream,
+-                self.parameter_storage_class(),
+-                self.parameter_storage_class(),
+-            )
++            cls = self._get_storage_class("parameter_storage_class", ImmutableMultiDict)
++            data = (self.stream, cls(), cls())
+ 
+         # inject the values into the instance dict so that we bypass
+         # our cached_property non-data descriptor.
+@@ -428,13 +425,14 @@ class Request(_SansIORequest):
+     def form(self) -> ImmutableMultiDict[str, str]:
+         """The form parameters.  By default an
+         :class:`~werkzeug.datastructures.ImmutableMultiDict`
+-        is returned from this function.  This can be changed by setting
+-        :attr:`parameter_storage_class` to a different type.  This might
+-        be necessary if the order of the form data is important.
++        is returned from this function.
+ 
+         Please keep in mind that file uploads will not end up here, but instead
+         in the :attr:`files` attribute.
+ 
++        .. versionchanged:: 3.2
++            The ``parameter_storage_class`` attribute is deprecated.
++
+         .. versionchanged:: 0.9
+ 
+             Previous to Werkzeug 0.9 this would only contain form data for POST

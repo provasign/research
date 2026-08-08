@@ -1,0 +1,31 @@
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 443cb01b..3fece3e1 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -45,6 +45,7 @@ from ._version import __version__
+ from .exceptions import (
+     ConnectTimeoutError,
+     HeaderParsingError,
++    InvalidHeader,
+     NameResolutionError,
+     NewConnectionError,
+     ProxyError,
+@@ -616,7 +617,17 @@ class HTTPConnection(_HTTPConnection):
+                 exc_info=True,
+             )
+ 
+-        headers = HTTPHeaderDict(httplib_response.msg.items())
++        headers = HTTPHeaderDict()
++        for name, value in httplib_response.msg.items():
++            # Header names must be a valid RFC 9110 token: no whitespace and no
++            # control or separator characters.
++            if not name or _CONTAINS_CONTROL_CHAR_RE.search(name):
++                raise InvalidHeader(f"Invalid header name: {name!r}")
++            # A CR or LF surviving in a value means the response used obsolete
++            # line folding or attempted header injection.
++            if "\r" in value or "\n" in value:
++                raise InvalidHeader(f"Invalid header value for {name}: {value!r}")
++            headers.add(name, value)
+ 
+         response = HTTPResponse(
+             body=httplib_response,

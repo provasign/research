@@ -1,0 +1,129 @@
+mason dev-eb61ed89bfd7 · ollama:qwen3-coder:30b · /private/var/folders/pz/cmyjc37x5dz39wxf73my55k80000gn/T/e2e-run-2tlfboso
+prism: repo not indexed yet — building the index (one-time)
+
+I'll analyze this issue step by step to understand what needs to be fixed.
+
+First, let me identify the relevant classes mentioned in the problem description:
+  ◆ search_symbols query=AbstractMultiValuedMap
+
+── search_symbols ─────────────────────────────
+symbols (10):
+  src/main/java/org/apache/commons/collections4/multimap/AbstractMultiValuedMap.java  AbstractMultiValuedMap
+  src/main/java/org/apache/commons/collections4/multimap/AbstractMultiValuedMap.java  AbstractMultiValuedMap.AbstractMultiValuedMap
+  src/main/java/org/apache/commons/collections4/multimap/AbstractMultiValuedMap.java  AbstractMultiValuedMap.AbstractMultiValuedMap
+  src/main/java/org/apache/commons/collections4/multimap/AbstractMultiValuedMap.java  AbstractMultiValuedMap.AsMap
+  src/main/java/org/apache/commons/collections4/multimap/AbstractMultiValuedMap.java  AbstractMultiValuedMap.AsMap.AsMapEntrySet
+  src/main/java/org/apache/commons/collections4/multimap/AbstractMultiValuedMap.java  AbstractMultiValuedMap.AsMap.AsMapEntrySet.clear
+  src/main/java/org/apache/commons/collections4/multimap/AbstractMultiValuedMap.java  AbstractMultiValuedMap.AsMap.AsMapEntrySet.contains
+  src/main/java/org/apache/commons/collections4/multimap/AbstractMultiValuedMapDecorator.java  AbstractMultiValuedMapDecorator
+  src/main/java/org/apache/commons/collections4/multimap/AbstractMultiValuedMapDecorator.java  AbstractMultiValuedMapDecorator.AbstractMultiValuedMapDecorator
+  src/test/java/org/apache/commons/collections4/multimap/AbstractMultiValuedMapTest.java  AbstractMultiValuedMapTest
+  ◆ search_symbols query=AbstractListValuedMap
+
+── search_symbols ─────────────────────────────
+symbols (10):
+  src/main/java/org/apache/commons/collections4/multimap/AbstractListValuedMap.java  AbstractListValuedMap
+  src/main/java/org/apache/commons/collections4/multimap/AbstractListValuedMap.java  AbstractListValuedMap.AbstractListValuedMap
+  src/main/java/org/apache/commons/collections4/multimap/AbstractListValuedMap.java  AbstractListValuedMap.AbstractListValuedMap
+  src/main/java/org/apache/commons/collections4/multimap/AbstractListValuedMap.java  AbstractListValuedMap.ValuesListIterator
+  src/main/java/org/apache/commons/collections4/multimap/AbstractListValuedMap.java  AbstractListValuedMap.ValuesListIterator.ValuesListIterator
+  src/main/java/org/apache/commons/collections4/multimap/AbstractListValuedMap.java  AbstractListValuedMap.ValuesListIterator.ValuesListIterator
+  src/main/java/org/apache/commons/collections4/multimap/AbstractListValuedMap.java  AbstractListValuedMap.ValuesListIterator.add
+  src/main/java/org/apache/commons/collections4/multimap/AbstractListValuedMap.java  AbstractListValuedMap.ValuesListIterator.iterator
+  src/main/java/org/apache/commons/collections4/multimap/AbstractListValuedMap.java  AbstractListValuedMap.ValuesListIterator.key
+  src/main/java/org/apache/commons/collections4/multimap/AbstractListValuedMap.java  AbstractListValuedMap.ValuesListIterator.values
+
+Let me look at the specific classes and their WrappedCollection implementations:
+  · code_context task=Find WrappedCollection and its addAll method in AbstractMult… terms=[AbstractMultiValuedMap.WrappedCollection addAll]
+
+Now let me look at the AbstractListValuedMap to understand the issue with `add(int, value)`:
+  · code_context task=Find WrappedList and its add method in AbstractListValuedMap terms=[AbstractListValuedMap.WrappedList add]
+
+Now I understand the issue. Let me look at how `put` works correctly to see what the fix should be:
+  · code_context task=Find put method in AbstractMultiValuedMap to see correct imp… terms=[AbstractMultiValuedMap.put]
+
+Now I understand the problem clearly. Looking at the `put` method in AbstractMultiValuedMap, it correctly follows this pattern:
+1. Create a new collection 
+2. Add to that collection first
+3. Only store it in the map if something was actually added (the add changed something)
+
+But in `WrappedCollection.addAll()` and `WrappedList.add(int, value)`, the code does:
+1. Create a new collection
+2. Store it in the map immediately
+3. Then add to that collection
+
+This means if the add operation is a no-op or fails, we still end up with an empty collection in the map.
+
+Let me fix both issues:
+  ✎ src/main/java/org/apache/commons/collections4/multimap/AbstractMultiValuedMap.java
+    - @Override
+    -         public boolean addAll(final Collection<? extends V> other) {
+    -             Collection<V> coll = getMapping();
+    -             if (coll == null) {
+    -                 coll = createCollection();
+    -                 AbstractMultiValuedMap.this.map.put(key, coll);
+    -             }
+    -             return coll.addAll(other);
+    -         }
+    + @Override
+    +         public boolean addAll(final Collection<? extends V> other) {
+    +             Collection<V> coll = getMapping();
+    +             if (coll == null) {
+    +                 coll = createCollection();
+    +                 final boolean changed = coll.addAll(other);
+    +                 if (changed) {
+    +                     AbstractMultiValuedMap.this.map.put(key, coll);
+    +                 }
+    +                 return changed;
+    +             }
+    +             return coll.addAll(other);
+    +         }
+
+Now I need to fix the `WrappedList.add(int, value)` method as well:
+  ✎ src/main/java/org/apache/commons/collections4/multimap/AbstractListValuedMap.java
+    - @Override
+    -         public void add(final int index, final V value) {
+    -             List<V> list = getMapping();
+    -             if (list == null) {
+    -                 list = createCollection();
+    -                 getMap().put(key, list);
+    -             }
+    -             list.add(index, value);
+    -         }
+    + @Override
+    +         public void add(final int index, final V value) {
+    +             List<V> list = getMapping();
+    +             if (list == null) {
+    +                 list = createCollection();
+    +                 list.add(index, value);
+    +                 getMap().put(key, list);
+    +             } else {
+    +                 list.add(index, value);
+    +             }
+    +         }
+
+Now let me run the tests to make sure my changes don't break anything:
+  $ mvn test
+
+The tests are running and taking some time. Let me wait for them to complete, then check if there are any specific tests related to multimap functionality that I should focus on:
+  $ mvn test -Dtest="*MultiValuedMap*Test"
+
+Great! All the multimap tests are passing. Let me also run some specific list-valued map tests to make sure my changes to WrappedList work correctly:
+  $ mvn test -Dtest="*ListValuedMap*Test"
+
+Let me check what list-valued map test classes exist:
+  $ find . -name "*ListValuedMap*Test*.java" -type f
+
+Let me search for list-valued map test files more broadly:
+  $ find . -name "*List*Test*.java" -type f | head -10
+
+Let me run the ArrayListValuedHashMap tests which would test the WrappedList functionality:
+  $ mvn test -Dtest="ArrayListValuedHashMapTest"
+
+Perfect! All tests are passing. Let me also run a few more related multimap tests to make sure everything is working correctly:
+  $ mvn test -Dtest="*MultiMapUtils*Test"
+
+Excellent! All tests are passing. Let me also run a broader test to make sure I haven't broken anything else in the collections:
+  $ mvn test -Dtest="*Collection*Test" | grep -E "(Tests run|BUILD SUCCESS|BUILD FAILURE)"
+
+Perfect! All collection tests are passing as well. Let me also verify that my changes work correctly by creating a simple test to demonstrate the fix:

@@ -1,0 +1,47 @@
+diff --git a/release-notes/CREDITS b/release-notes/CREDITS
+index 681125097..c7eb888d2 100644
+--- a/release-notes/CREDITS
++++ b/release-notes/CREDITS
+@@ -376,3 +376,7 @@ Dmitry Sulman (@dmitrysulman)
+  * Suggested #6011: 6011: Add `MapperFeature.FIX_FIELD_NAME_UPPER_CASE_PREFIX` in
+   `MapperBuilder.configureForJackson2()`
+   [3.1.4]
++
++João Guerra (@joca-bt)
++ * Reported #6040: Inconsistency in current token on invalid type coercion for `List<String>`
++  [3.1.5]
+diff --git a/release-notes/VERSION b/release-notes/VERSION
+index d7899d09d..a390b063f 100644
+--- a/release-notes/VERSION
++++ b/release-notes/VERSION
+@@ -9,6 +9,11 @@ Versions: 3.x (for earlier see VERSION-2.x)
+ 
+ No changes since 3.1
+ 
++3.1.5 (not yet released)
++
++#6040: Inconsistency in current token on invalid type coercion for `List<String>`
++ (reported by João G)
++
+ 3.1.4 (29-May-2026)
+ 
+ #5950: Improve `UUIDDeserializer` error handling
+diff --git a/src/main/java/tools/jackson/databind/deser/jdk/StringCollectionDeserializer.java b/src/main/java/tools/jackson/databind/deser/jdk/StringCollectionDeserializer.java
+index 405dab1b6..10a471521 100644
+--- a/src/main/java/tools/jackson/databind/deser/jdk/StringCollectionDeserializer.java
++++ b/src/main/java/tools/jackson/databind/deser/jdk/StringCollectionDeserializer.java
+@@ -248,8 +248,12 @@ public final class StringCollectionDeserializer
+                             // custom) one, can hard-code empty String
+                             value = "";
+                         } else {
+-                            // Fail case: delegate to _parseString which will throw proper error
+-                            value = _parseString(p, ctxt, _nullProvider);
++                            // [databind#6040]: Fail case: report error against the
++                            // START_ARRAY token (not the END_ARRAY we just advanced to),
++                            // for consistency with other Array-to-String coercion failures
++                            value = (String) ctxt.handleUnexpectedToken(
++                                    ctxt.constructType(String.class),
++                                    JsonToken.START_ARRAY, p, null);
+                         }
+                     } else {
+                         // Non-empty array: delegate to _parseString which will throw proper error

@@ -1,0 +1,17 @@
+diff --git a/src/werkzeug/sansio/multipart.py b/src/werkzeug/sansio/multipart.py
+index 279b25e7..def8b62d 100644
+--- a/src/werkzeug/sansio/multipart.py
++++ b/src/werkzeug/sansio/multipart.py
+@@ -286,8 +286,10 @@ class MultipartDecoder:
+                 data_end = del_index = self.last_newline(data[data_start:]) + data_start
+             more_data = match is None
+ 
+-        # Keep \r\n sequence intact rather than splitting across chunks.
+-        if data_end > data_start and data[data_end - 1] == 0x0D:
++        # Keep \r\n sequence intact rather than splitting across chunks. Only
++        # when more data is expected, as a \r before a terminating boundary is
++        # part of the data, not the start of a split line break.
++        if more_data and data_end > data_start and data[data_end - 1] == 0x0D:
+             data_end -= 1
+             del_index -= 1
+ 

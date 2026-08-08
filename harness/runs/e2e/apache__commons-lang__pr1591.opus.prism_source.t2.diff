@@ -1,0 +1,42 @@
+diff --git a/src/main/java/org/apache/commons/lang3/ClassUtils.java b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+index 5c2cf099d..c42a57bbf 100644
+--- a/src/main/java/org/apache/commons/lang3/ClassUtils.java
++++ b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+@@ -1012,8 +1012,10 @@ public static String getShortCanonicalName(final String canonicalName) {
+      * Gets the class name minus the package name from a {@link Class}.
+      *
+      * <p>
+-     * This method simply gets the name using {@code Class.getName()} and then calls {@link #getShortClassName(String)}. See
+-     * relevant notes there.
++     * This method uses the reflective metadata of the given {@link Class} rather than parsing its binary name, so a {@code $}
++     * (dollar) character that is part of a class identifier is preserved instead of being mistaken for an inner class
++     * separator. Local and anonymous classes fall back to {@link #getShortClassName(String)} in order to keep the
++     * compiler-generated ordinal in the returned name; see relevant notes there.
+      * </p>
+      *
+      * @param cls the class to get the short name for.
+@@ -1024,7 +1026,23 @@ public static String getShortClassName(final Class<?> cls) {
+         if (cls == null) {
+             return StringUtils.EMPTY;
+         }
+-        return getShortClassName(cls.getName());
++        final StringBuilder arraySuffix = new StringBuilder();
++        Class<?> type = cls;
++        while (type.isArray()) {
++            type = type.getComponentType();
++            arraySuffix.append("[]");
++        }
++        if (type.isLocalClass() || type.isAnonymousClass()) {
++            return getShortClassName(cls.getName());
++        }
++        final StringBuilder builder = new StringBuilder(type.getSimpleName());
++        for (Class<?> enclosing = type.getEnclosingClass(); enclosing != null; enclosing = enclosing.getEnclosingClass()) {
++            if (enclosing.isLocalClass() || enclosing.isAnonymousClass()) {
++                return getShortClassName(cls.getName());
++            }
++            builder.insert(0, PACKAGE_SEPARATOR_CHAR).insert(0, enclosing.getSimpleName());
++        }
++        return builder.append(arraySuffix).toString();
+     }
+ 
+     /**

@@ -1,0 +1,23 @@
+diff --git a/src/main/java/org/apache/commons/lang3/StringUtils.java b/src/main/java/org/apache/commons/lang3/StringUtils.java
+index 4cc5ab75d..b5ea25afc 100644
+--- a/src/main/java/org/apache/commons/lang3/StringUtils.java
++++ b/src/main/java/org/apache/commons/lang3/StringUtils.java
+@@ -3049,6 +3049,18 @@ public static int indexOfDifference(final CharSequence cs1, final CharSequence c
+             }
+         }
+         if (i < cs2.length() || i < cs1.length()) {
++            // Check if we're at a surrogate pair boundary and adjust
++            if (i > 0 && Character.isLowSurrogate(cs2.charAt(i - 1)) && 
++                Character.isHighSurrogate(cs2.charAt(i))) {
++                // If the previous character is a low surrogate and current is high surrogate,
++                // we should return the index of the high surrogate to avoid splitting a surrogate pair
++                return i - 1;
++            }
++            if (i > 0 && Character.isLowSurrogate(cs1.charAt(i - 1)) && 
++                Character.isHighSurrogate(cs1.charAt(i))) {
++                // Same check for cs1
++                return i - 1;
++            }
+             return i;
+         }
+         return INDEX_NOT_FOUND;

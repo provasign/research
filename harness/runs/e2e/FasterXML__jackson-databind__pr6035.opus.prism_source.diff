@@ -1,0 +1,32 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java b/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java
+index 926c06d33..d4a32b4dd 100644
+--- a/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java
++++ b/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java
+@@ -580,7 +580,27 @@ public class BeanDeserializerFactory
+         // explicitly marked as ignored. getIgnoredPropertyNames() returns the
+         // already-merged set with the [databind#2001] creator-rename rescue
+         // applied to per-property names only — class-level names remain absolute.
++        // ... except that [databind#6031]: an explicit `@JsonAlias` on a Creator
++        // property must not be shadowed by ignoral of a same-named (ignored)
++        // accessor of some other property.
++        Set<String> creatorAliases = null;
++        if (hasCreatorProps) {
++            for (SettableBeanProperty prop : creatorProps) {
++                if ((prop == null) || prop.isIgnorable()) {
++                    continue;
++                }
++                for (PropertyName alias : prop.findAliases(ctxt.getConfig())) {
++                    if (creatorAliases == null) {
++                        creatorAliases = new HashSet<>();
++                    }
++                    creatorAliases.add(alias.getSimpleName());
++                }
++            }
++        }
+         for (String propName : beanDesc.getIgnoredPropertyNames()) {
++            if ((creatorAliases != null) && creatorAliases.contains(propName)) {
++                continue;
++            }
+             builder.addIgnorable(propName);
+         }
+         final boolean useGettersAsSetters = ctxt.isEnabled(MapperFeature.USE_GETTERS_AS_SETTERS);

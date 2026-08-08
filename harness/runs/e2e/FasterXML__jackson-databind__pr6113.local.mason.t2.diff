@@ -1,0 +1,70 @@
+diff --git a/src/main/java/tools/jackson/databind/ext/DOMSerializer.java b/src/main/java/tools/jackson/databind/ext/DOMSerializer.java
+index 90349063b..6f75aa0b0 100644
+--- a/src/main/java/tools/jackson/databind/ext/DOMSerializer.java
++++ b/src/main/java/tools/jackson/databind/ext/DOMSerializer.java
+@@ -12,6 +12,7 @@ import tools.jackson.core.*;
+ import tools.jackson.databind.JavaType;
+ import tools.jackson.databind.SerializationContext;
+ import tools.jackson.databind.jsonFormatVisitors.JsonFormatVisitorWrapper;
++import tools.jackson.databind.jsontype.TypeSerializer;
+ import tools.jackson.databind.ser.std.StdSerializer;
+ 
+ public class DOMSerializer extends StdSerializer<Node>
+@@ -49,6 +50,24 @@ public class DOMSerializer extends StdSerializer<Node>
+         }
+     }
+ 
++    @Override
++    public void serializeWithType(Node value, JsonGenerator g, SerializationContext ctxt,
++            TypeSerializer typeSer) throws JacksonException
++    {
++        // 16-Aug-2021, tatu: as per [databind#3217] we cannot simply delegate
++        //    as that would produce wrong Type Id altogether. So redefine
++        //    implementation from `StdScalarSerializer`
++
++        // Need not really be string; just indicates "scalar of some kind"
++        // (and so numeric timestamp is fine as well):
++        WritableTypeId typeIdDef = typeSer.writeTypePrefix(g, ctxt,
++                // important! Pass value AND type to use
++                typeSer.typeId(value, Node.class, JsonToken.VALUE_STRING));
++        // note: serialize() will convert to delegate value
++        serialize(value, g, ctxt);
++        typeSer.writeTypeSuffix(g, ctxt, typeIdDef);
++    }
++
+     @Override
+     public void acceptJsonFormatVisitor(JsonFormatVisitorWrapper visitor, JavaType typeHint) {
+         if (visitor != null) visitor.expectAnyFormat(typeHint);
+diff --git a/tmp_test_polymorphic.java b/tmp_test_polymorphic.java
+new file mode 100644
+index 000000000..64acf466f
+--- /dev/null
++++ b/tmp_test_polymorphic.java
+@@ -0,0 +1,26 @@
++import java.io.StringReader;
++
++import javax.xml.parsers.DocumentBuilderFactory;
++import org.junit.jupiter.api.Test;
++import org.w3c.dom.*;
++import org.xml.sax.InputSource;
++
++import tools.jackson.databind.ObjectMapper;
++import tools.jackson.databind.jsonMapperBuilder;
++import tools.jackson.databind.jsontype.DefaultTyping;
++import tools.jackson.databind.jsontype.TypeResolverBuilder;
++import tools.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
++
++public class TestPolymorphicDOM {
++    @Test
++    public void testPolymorphicDOMDocument() throws Exception {
++        ObjectMapper polyMapper = jsonMapperBuilder()
++                .activateDefaultTyping(LaissezFaireSubTypeValidator.instance, DefaultTyping.NON_FINAL)
++                .build();
++        Document doc = DocumentBuilderFactory.newInstance().newDocumentBuilder()
++                .parse(new InputSource(new StringReader("<root xmlns='http://foo'/>")));
++        String json = polyMapper.writeValueAsString(doc); // Should not throw InvalidDefinitionException
++        Object result = polyMapper.readValue(json, Object.class);
++        assertNotNull(result);
++    }
++}
+\ No newline at end of file

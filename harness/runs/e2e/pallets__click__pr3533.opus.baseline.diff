@@ -1,0 +1,44 @@
+diff --git a/src/click/_termui_impl.py b/src/click/_termui_impl.py
+index 3336c37..1e8d793 100644
+--- a/src/click/_termui_impl.py
++++ b/src/click/_termui_impl.py
+@@ -472,7 +472,8 @@ def _pipepager(
+     # Split the command into the invoked CLI and its parameters.
+     if not cmd_parts:
+         stdout = _default_text_stdout() or StringIO()
+-        yield stdout, "utf-8", False
++        # Don't close the fallback stream, it is owned by the caller.
++        yield _SkipClose(stdout), "utf-8", False  # type: ignore[misc]
+         return
+ 
+     import shutil
+@@ -483,7 +484,8 @@ def _pipepager(
+     cmd_filepath = shutil.which(cmd)
+     if not cmd_filepath:
+         stdout = _default_text_stdout() or StringIO()
+-        yield stdout, "utf-8", False
++        # Don't close the fallback stream, it is owned by the caller.
++        yield _SkipClose(stdout), "utf-8", False  # type: ignore[misc]
+         return
+ 
+     # Produces a normalized absolute path string.
+@@ -572,7 +574,8 @@ def _tempfilepager(
+     # Split the command into the invoked CLI and its parameters.
+     if not cmd_parts:
+         stdout = _default_text_stdout() or StringIO()
+-        yield stdout, "utf-8", False
++        # Don't close the fallback stream, it is owned by the caller.
++        yield _SkipClose(stdout), "utf-8", False  # type: ignore[misc]
+         return
+ 
+     import shutil
+@@ -583,7 +586,8 @@ def _tempfilepager(
+     cmd_filepath = shutil.which(cmd)
+     if not cmd_filepath:
+         stdout = _default_text_stdout() or StringIO()
+-        yield stdout, "utf-8", False
++        # Don't close the fallback stream, it is owned by the caller.
++        yield _SkipClose(stdout), "utf-8", False  # type: ignore[misc]
+         return
+ 
+     # Produces a normalized absolute path string.

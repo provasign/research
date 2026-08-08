@@ -27,8 +27,11 @@ CFG_DIR = Path("/tmp/ab-agentic-mcp")
 CFG_DIR.mkdir(exist_ok=True)
 
 # MCP server configs (stdio).
+# The vendor renamed the binary engine-b -> codegraph (v1.5.0); the old path
+# no longer exists, so this arm died at startup until fixed.
 (CFG_DIR / "engine-b.json").write_text(json.dumps({"mcpServers": {
-    "engine-b": {"type": "stdio", "command": str(HOME/".local/bin/engine-b"), "args": ["serve", "--mcp"]}}}))
+    "codegraph": {"type": "stdio", "command": str(HOME/".local/bin/codegraph"),
+                  "args": ["serve", "--mcp"]}}}))
 (CFG_DIR / "prism.json").write_text(json.dumps({"mcpServers": {
     "prism": {"type": "stdio", "command": str(HOME/"bin/prism"), "args": ["mcp"]}}}))
 
@@ -53,7 +56,7 @@ ARMS = {
         "guidance": "TOOLS: the Engine B MCP server (its `engine_b_explore` returns "
                     "relevant symbols + call paths + blast radius in one call; also "
                     "`impact`/`callers`). Use it to find every site a change affects.",
-        "allowed": ["Read", "mcp__engine-b"],
+        "allowed": ["Read", "mcp__codegraph"],
         "mcp": str(CFG_DIR / "engine-b.json"),
     },
     "prism": {
@@ -71,9 +74,10 @@ def run_arm(arm: str, task: Task, corpus: Path, model: str) -> dict:
     spec = ARMS[arm]
     prompt = spec["guidance"] + "\n" + CONTRACT.format(prompt=task.prompt)
     cmd = ["claude", "-p", prompt, "--model", model, "--output-format", "json",
-           "--dangerously-skip-permissions", "--allowedTools", *spec["allowed"]]
+           "--dangerously-skip-permissions", "--strict-mcp-config",
+           "--allowedTools", *spec["allowed"]]
     if spec["mcp"]:
-        cmd += ["--mcp-config", spec["mcp"], "--strict-mcp-config"]
+        cmd += ["--mcp-config", spec["mcp"]]
     t0 = time.monotonic()
     r = subprocess.run(cmd, cwd=corpus, capture_output=True, text=True, timeout=1200)
     wall = round(time.monotonic() - t0, 1)

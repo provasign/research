@@ -1,0 +1,30 @@
+diff --git a/src/main/java/tools/jackson/databind/ser/bean/BeanSerializerBase.java b/src/main/java/tools/jackson/databind/ser/bean/BeanSerializerBase.java
+index e626eb5dc..2608ecc92 100644
+--- a/src/main/java/tools/jackson/databind/ser/bean/BeanSerializerBase.java
++++ b/src/main/java/tools/jackson/databind/ser/bean/BeanSerializerBase.java
+@@ -422,11 +422,23 @@ public abstract class BeanSerializerBase
+                 }
+                 String name = innerProp.getName();
+                 if (!seenNames.add(name)) {
++                    // Find which existing property has the same name to make error more informative
++                    String existingPropName = null;
++                    for (BeanPropertyWriter bpw : _props) {
++                        if (bpw instanceof UnwrappingBeanPropertyWriter || bpw instanceof AnyGetterWriter) {
++                            continue;
++                        }
++                        if (name.equals(bpw.getName())) {
++                            existingPropName = bpw.getName();
++                            break;
++                        }
++                    }
+                     ctxt.reportBadDefinition(_beanType, String.format(
+ "Conflict between unwrapped property '%s' (of type %s)"
+-+" and another property with same name;"
+++" and another property with same name '%s';"
+ +" consider using `@JsonUnwrapped(prefix=...)` to avoid name collision",
+-                            name, ClassUtil.getTypeDescription(unwrapped.getType())));
++                            name, ClassUtil.getTypeDescription(unwrapped.getType()), 
++                            existingPropName != null ? existingPropName : "unknown"));
+                 }
+             }
+         }

@@ -1,0 +1,31 @@
+diff --git a/changelog/3401.bugfix.rst b/changelog/3401.bugfix.rst
+new file mode 100644
+index 00000000..df26f7c5
+--- /dev/null
++++ b/changelog/3401.bugfix.rst
+@@ -0,0 +1,3 @@
++Fixed a ``ValueError`` when using a ``proxy_ssl_context`` that verifies certificates
++together with an ``ssl_context`` that does not: the connection's ``cert_reqs`` no
++longer overrides the verification settings of the proxy's own SSL context.
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 8a89488d..34d92add 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -915,9 +915,16 @@ class HTTPSConnection(HTTPConnection):
+         # `_connect_tls_proxy` is called when self._tunnel_host is truthy.
+         proxy_config = typing.cast(ProxyConfig, self.proxy_config)
+         ssl_context = proxy_config.ssl_context
++        # If the proxy has its own SSL context its verification settings apply
++        # to the proxy connection: the connection's own ``cert_reqs`` describes
++        # the target, not the proxy, so it must not leak into the handshake.
++        if ssl_context is not None:
++            cert_reqs: int | str | None = ssl_context.verify_mode
++        else:
++            cert_reqs = self.cert_reqs
+         sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+             sock,
+-            cert_reqs=self.cert_reqs,
++            cert_reqs=cert_reqs,
+             ssl_version=self.ssl_version,
+             ssl_minimum_version=self.ssl_minimum_version,
+             ssl_maximum_version=self.ssl_maximum_version,

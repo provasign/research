@@ -1,0 +1,37 @@
+diff --git a/src/main/java/tools/jackson/databind/ext/DOMSerializer.java b/src/main/java/tools/jackson/databind/ext/DOMSerializer.java
+index 90349063b..cc3e19af3 100644
+--- a/src/main/java/tools/jackson/databind/ext/DOMSerializer.java
++++ b/src/main/java/tools/jackson/databind/ext/DOMSerializer.java
+@@ -9,9 +9,11 @@ import javax.xml.transform.stream.StreamResult;
+ import org.w3c.dom.Node;
+ 
+ import tools.jackson.core.*;
++import tools.jackson.core.type.WritableTypeId;
+ import tools.jackson.databind.JavaType;
+ import tools.jackson.databind.SerializationContext;
+ import tools.jackson.databind.jsonFormatVisitors.JsonFormatVisitorWrapper;
++import tools.jackson.databind.jsontype.TypeSerializer;
+ import tools.jackson.databind.ser.std.StdSerializer;
+ 
+ public class DOMSerializer extends StdSerializer<Node>
+@@ -49,6 +51,20 @@ public class DOMSerializer extends StdSerializer<Node>
+         }
+     }
+ 
++    @Override
++    public void serializeWithType(Node value, JsonGenerator g, SerializationContext ctxt,
++            TypeSerializer typeSer)
++        throws JacksonException
++    {
++        // DOM `Node` is written out as a String (XML text), so need scalar type id,
++        // similar to `StdScalarSerializer`; but with nominal type of `Node`
++        // (and not, say, the actual `Document` implementation type)
++        WritableTypeId typeIdDef = typeSer.writeTypePrefix(g, ctxt,
++                typeSer.typeId(value, Node.class, JsonToken.VALUE_STRING));
++        serialize(value, g, ctxt);
++        typeSer.writeTypeSuffix(g, ctxt, typeIdDef);
++    }
++
+     @Override
+     public void acceptJsonFormatVisitor(JsonFormatVisitorWrapper visitor, JavaType typeHint) {
+         if (visitor != null) visitor.expectAnyFormat(typeHint);

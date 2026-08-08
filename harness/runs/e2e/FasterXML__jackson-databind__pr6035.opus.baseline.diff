@@ -1,0 +1,75 @@
+diff --git a/release-notes/VERSION b/release-notes/VERSION
+index a27cfe034c..31eb34c820 100644
+--- a/release-notes/VERSION
++++ b/release-notes/VERSION
+@@ -17,6 +17,8 @@ No changes since 3.2
+ #6028: Verification of unwrapped fields should mention type containing unwrapped POJO
+  (reported by Oliver D)
+  (fix by @cowtowncoder, w/ Claude code)
++#6031: `@JsonAlias` on Creator property not honored if alias matches name of
++  a `@JsonIgnore`d property
+ 
+ 3.2.0 (08-Jun-2026)
+ 
+diff --git a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java
+index 9cfe2c379e..8f6e656b54 100644
+--- a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java
++++ b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java
+@@ -380,7 +380,7 @@ public class BeanDeserializer
+                     continue;
+                 }
+                 // [databind#5966] Honor @JsonIgnoreProperties on creator parameters
+-                if (IgnorePropertiesUtil.shouldIgnore(propName, _ignorableProps, _includableProps)) {
++                if (_shouldIgnoreCreatorProperty(creatorProp)) {
+                     handleIgnoredProperty(p, ctxt, handledType(), propName);
+                     continue;
+                 }
+@@ -760,7 +760,9 @@ public class BeanDeserializer
+                 // [databind#4629] Need to check for ignored properties for Creator properties since
+                 // Records (and POJOs with @JsonCreator) will have a valid 'creatorProp',
+                 // so if we don't check for ignore first, the ignore configuration will be bypassed.
+-                if (IgnorePropertiesUtil.shouldIgnore(propName, _ignorableProps, _includableProps)) {
++                // [databind#6031] NOTE: check by Creator property name, not incoming name
++                //   (which may have matched via `@JsonAlias`)
++                if (_shouldIgnoreCreatorProperty(creatorProp)) {
+                     handleIgnoredProperty(p, ctxt, handledType(), propName);
+                     continue;
+                 }
+@@ -1267,7 +1269,9 @@ public class BeanDeserializer
+                 // [databind#4629] Need to check for ignored properties for Creator properties since
+                 // Records (and POJOs with @JsonCreator) will have a valid 'creatorProp',
+                 // so if we don't check for ignore first, the ignore configuration will be bypassed.
+-                if (IgnorePropertiesUtil.shouldIgnore(propName, _ignorableProps, _includableProps)) {
++                // [databind#6031] NOTE: check by Creator property name, not incoming name
++                //   (which may have matched via `@JsonAlias`)
++                if (_shouldIgnoreCreatorProperty(creatorProp)) {
+                     handleIgnoredProperty(p, ctxt, handledType(), propName);
+                     continue;
+                 }
+diff --git a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializerBase.java b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializerBase.java
+index 6cb875c15d..272320165d 100644
+--- a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializerBase.java
++++ b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializerBase.java
+@@ -1983,6 +1983,22 @@ ClassUtil.getTypeDescription(ct));
+                 && !ctxt.isEnabled(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+     }
+ 
++    /**
++     * Helper method for checking whether value of an incoming property that did match
++     * a Creator parameter should nonetheless be ignored (as per {@code [databind#4629]}).
++     *<p>
++     * Matching is done against the name of the Creator property itself, and not the
++     * incoming property name: the latter may have matched via {@code @JsonAlias}
++     * ({@code [databind#6031]}), in which case ignoral of an unrelated property that
++     * happens to have the same name as the alias must not block the Creator property.
++     *
++     * @since 3.2
++     */
++    protected boolean _shouldIgnoreCreatorProperty(SettableBeanProperty creatorProp) {
++        return IgnorePropertiesUtil.shouldIgnore(creatorProp.getName(),
++                _ignorableProps, _includableProps);
++    }
++
+     /**
+      * Helper method called for an unknown property, when using "vanilla"
+      * processing.

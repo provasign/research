@@ -1,0 +1,15 @@
+diff --git a/src/main/java/tools/jackson/databind/ser/jackson/JsonValueSerializer.java b/src/main/java/tools/jackson/databind/ser/jackson/JsonValueSerializer.java
+index 3fbdbdc15..9ff570f41 100644
+--- a/src/main/java/tools/jackson/databind/ser/jackson/JsonValueSerializer.java
++++ b/src/main/java/tools/jackson/databind/ser/jackson/JsonValueSerializer.java
+@@ -156,6 +156,10 @@ public class JsonValueSerializer
+     public ValueSerializer<?> createContextual(SerializationContext ctxt,
+             BeanProperty property)
+     {
++        // Create a new property that wraps the JsonValue accessor
++        // This allows access to any annotations declared on the accessor itself (like @JsonInclude)
++        BeanProperty jsonValueProperty = new JsonValueProperty(_accessor, _valueType);
++        
+         TypeSerializer vts = _valueTypeSerializer;
+         if (vts != null) {
+             vts = vts.forProperty(ctxt, property);

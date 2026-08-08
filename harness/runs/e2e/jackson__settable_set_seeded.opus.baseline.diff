@@ -1,0 +1,138 @@
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/CreatorProperty.java b/src/main/java/com/fasterxml/jackson/databind/deser/CreatorProperty.java
+index 7e35555ce..4cb2cab1a 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/CreatorProperty.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/CreatorProperty.java
+@@ -268,7 +268,7 @@ public class CreatorProperty
+             Object instance) throws IOException
+     {
+         _verifySetter();
+-        _fallbackSetter.set(instance, deserialize(p, ctxt));
++        _fallbackSetter.set(instance, deserialize(p, ctxt), ctxt);
+     }
+ 
+     @Override
+@@ -280,10 +280,10 @@ public class CreatorProperty
+     }
+ 
+     @Override
+-    public void set(Object instance, Object value) throws IOException
++    public void set(Object instance, Object value, DeserializationContext ctxt) throws IOException
+     {
+         _verifySetter();
+-        _fallbackSetter.set(instance, value);
++        _fallbackSetter.set(instance, value, ctxt);
+     }
+ 
+     @Override
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/SettableBeanProperty.java b/src/main/java/com/fasterxml/jackson/databind/deser/SettableBeanProperty.java
+index 6335e27df..a14a82fbd 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/SettableBeanProperty.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/SettableBeanProperty.java
+@@ -505,7 +505,7 @@ public abstract class SettableBeanProperty
+      * implementations, creator-backed properties for example do not
+      * support this method.
+      */
+-    public abstract void set(Object instance, Object value) throws IOException;
++    public abstract void set(Object instance, Object value, DeserializationContext ctxt) throws IOException;
+ 
+     /**
+      * Method called to assign given value to this property, on
+@@ -790,8 +790,8 @@ public abstract class SettableBeanProperty
+         }
+ 
+         @Override
+-        public void set(Object instance, Object value) throws IOException {
+-            delegate.set(instance, value);
++        public void set(Object instance, Object value, DeserializationContext ctxt) throws IOException {
++            delegate.set(instance, value, ctxt);
+         }
+ 
+         @Override
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/impl/FieldProperty.java b/src/main/java/com/fasterxml/jackson/databind/deser/impl/FieldProperty.java
+index 6f34b5fd6..04aa03a11 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/impl/FieldProperty.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/impl/FieldProperty.java
+@@ -184,7 +184,7 @@ public final class FieldProperty
+     }
+ 
+     @Override
+-    public void set(Object instance, Object value) throws IOException
++    public void set(Object instance, Object value, DeserializationContext ctxt) throws IOException
+     {
+         if (value == null) {
+             if (_skipNulls) {
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/impl/ManagedReferenceProperty.java b/src/main/java/com/fasterxml/jackson/databind/deser/impl/ManagedReferenceProperty.java
+index a3f241a0b..872b21f1a 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/impl/ManagedReferenceProperty.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/impl/ManagedReferenceProperty.java
+@@ -59,7 +59,7 @@ public final class ManagedReferenceProperty
+     @Override
+     public void deserializeAndSet(JsonParser p, DeserializationContext ctxt, Object instance)
+             throws IOException {
+-        set(instance, delegate.deserialize(p, ctxt));
++        set(instance, delegate.deserialize(p, ctxt), ctxt);
+     }
+ 
+     @Override
+@@ -69,7 +69,7 @@ public final class ManagedReferenceProperty
+     }
+ 
+     @Override
+-    public final void set(Object instance, Object value) throws IOException {
++    public final void set(Object instance, Object value, DeserializationContext ctxt) throws IOException {
+         setAndReturn(instance, value);
+     }
+ 
+@@ -83,22 +83,22 @@ public final class ManagedReferenceProperty
+             if (_isContainer) { // ok, this gets ugly... but has to do for now
+                 if (value instanceof Object[]) {
+                     for (Object ob : (Object[]) value) {
+-                        if (ob != null) { _backProperty.set(ob, instance); }
++                        if (ob != null) { _backProperty.set(ob, instance, null); }
+                     }
+                 } else if (value instanceof Collection<?>) {
+                     for (Object ob : (Collection<?>) value) {
+-                        if (ob != null) { _backProperty.set(ob, instance); }
++                        if (ob != null) { _backProperty.set(ob, instance, null); }
+                     }
+                 } else if (value instanceof Map<?,?>) {
+                     for (Object ob : ((Map<?,?>) value).values()) {
+-                        if (ob != null) { _backProperty.set(ob, instance); }
++                        if (ob != null) { _backProperty.set(ob, instance, null); }
+                     }
+                 } else {
+                     throw new IllegalStateException("Unsupported container type ("+value.getClass().getName()
+                             +") when resolving reference '"+_referenceName+"'");
+                 }
+             } else {
+-                _backProperty.set(value, instance);
++                _backProperty.set(value, instance, null);
+             }
+         }
+         // and then the forward reference itself
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/impl/MergingSettableBeanProperty.java b/src/main/java/com/fasterxml/jackson/databind/deser/impl/MergingSettableBeanProperty.java
+index db9fda775..339079f5c 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/impl/MergingSettableBeanProperty.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/impl/MergingSettableBeanProperty.java
+@@ -82,7 +82,7 @@ public class MergingSettableBeanProperty
+         if (newValue != oldValue) {
+             // 18-Apr-2017, tatu: Null handling should occur within delegate, which may
+             //     set/skip/transform it, or throw an exception.
+-            delegate.set(instance, newValue);
++            delegate.set(instance, newValue, ctxt);
+         }
+     }
+ 
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/impl/MethodProperty.java b/src/main/java/com/fasterxml/jackson/databind/deser/impl/MethodProperty.java
+index ec94d5093..24908d1ef 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/impl/MethodProperty.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/impl/MethodProperty.java
+@@ -176,7 +176,7 @@ public final class MethodProperty
+     }
+ 
+     @Override
+-    public final void set(Object instance, Object value) throws IOException
++    public final void set(Object instance, Object value, DeserializationContext ctxt) throws IOException
+     {
+         if (value == null) {
+             if (_skipNulls) {

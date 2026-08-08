@@ -1,0 +1,32 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index b422bd4..05d557f 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -3458,6 +3458,7 @@ class Argument(Parameter):
+         self,
+         param_decls: cabc.Sequence[str],
+         required: bool | None = None,
++        help: str | None = None,
+         **attrs: t.Any,
+     ) -> None:
+         # Auto-detect the requirement status of the argument if not explicitly set.
+@@ -3474,6 +3475,7 @@ class Argument(Parameter):
+             raise TypeError("__init__() got an unexpected keyword argument 'multiple'.")
+ 
+         super().__init__(param_decls, required=required, **attrs)
++        self.help = help
+ 
+     @property
+     def human_readable_name(self) -> str:
+@@ -3522,6 +3524,11 @@ class Argument(Parameter):
+             return f"'{self.make_metavar(ctx)}'"
+         return f"'{self.human_readable_name}'"
+ 
++    def get_help_record(self, ctx: Context) -> tuple[str, str] | None:
++        if self.help is None:
++            return None
++        return self.make_metavar(ctx), self.help
++
+     def add_to_parser(self, parser: _OptionParser, ctx: Context) -> None:
+         parser.add_argument(dest=self.name, nargs=self.nargs, obj=self)
+ 

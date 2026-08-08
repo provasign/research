@@ -1,0 +1,103 @@
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java b/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java
+index 3e63a4a6b..07db1a1b0 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java
+@@ -894,7 +894,10 @@ ClassUtil.nameOf(handledType()), ClassUtil.name(propName)));
+             // 16-May-2016, tatu: How about per-property case-insensitivity?
+             Boolean B = format.getFeature(JsonFormat.Feature.ACCEPT_CASE_INSENSITIVE_PROPERTIES);
+             if (B != null) {
+-                BeanPropertyMap propsOrig = _beanProperties;
++                // 30-Jul-2025, tatu: [databind#5962] MUST use properties of the
++                //   contextual instance: `this` may still contain properties that
++                //   `_handleByNameInclusion()` above just removed
++                BeanPropertyMap propsOrig = contextual._beanProperties;
+                 BeanPropertyMap props = propsOrig.withCaseInsensitivity(B.booleanValue());
+                 if (props != propsOrig) {
+                     contextual = contextual.withBeanProperties(props);
+@@ -1785,7 +1788,7 @@ ClassUtil.name(refName), ClassUtil.getTypeDescription(backRefType),
+             Object beanOrBuilder, String propName)
+         throws IOException
+     {
+-        if (IgnorePropertiesUtil.shouldIgnore(propName, _ignorableProps, _includableProps)) {
++        if (_shouldIgnoreUnknown(propName)) {
+             handleIgnoredProperty(p, ctxt, beanOrBuilder, propName);
+         } else if (_anySetter != null) {
+             try {
+@@ -1813,7 +1816,7 @@ ClassUtil.name(refName), ClassUtil.getTypeDescription(backRefType),
+             p.skipChildren();
+             return;
+         }
+-        if (IgnorePropertiesUtil.shouldIgnore(propName, _ignorableProps, _includableProps)) {
++        if (_shouldIgnoreUnknown(propName)) {
+             handleIgnoredProperty(p, ctxt, beanOrClass, propName);
+         }
+         // Otherwise use default handling (call handler(s); if not
+@@ -1821,6 +1824,19 @@ ClassUtil.name(refName), ClassUtil.getTypeDescription(backRefType),
+         super.handleUnknownProperty(p, ctxt, beanOrClass, propName);
+     }
+ 
++    /**
++     * Helper method for checking whether an otherwise unmatched property is one
++     * explicitly ignored (or not included) by name; if properties are matched
++     * case-insensitively, ignoral/inclusion definitions are matched that way too
++     * (see [databind#5962]).
++     *
++     * @since 2.18.5
++     */
++    private boolean _shouldIgnoreUnknown(String propName) {
++        return IgnorePropertiesUtil.shouldIgnore(propName, _ignorableProps, _includableProps,
++                _beanProperties.isCaseInsensitive());
++    }
++
+     /**
+      * Method called when an explicitly ignored property (one specified with a
+      * name to match, either by property annotation or class annotation) is encountered.
+diff --git a/src/main/java/com/fasterxml/jackson/databind/util/IgnorePropertiesUtil.java b/src/main/java/com/fasterxml/jackson/databind/util/IgnorePropertiesUtil.java
+index 81bcafa79..bd6dc924b 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/util/IgnorePropertiesUtil.java
++++ b/src/main/java/com/fasterxml/jackson/databind/util/IgnorePropertiesUtil.java
+@@ -30,6 +30,44 @@ public class IgnorePropertiesUtil
+         return !toInclude.contains(value) || toIgnore.contains(value);
+     }
+ 
++    /**
++     * Variant of {@link #shouldIgnore(Object, Collection, Collection)} that, when
++     * {@code caseInsensitive} is enabled, matches property names without regard to
++     * case: needed so that properties ignored (or included) by name are handled the
++     * same way as properties are matched.
++     *
++     * @since 2.18.5
++     */
++    public static boolean shouldIgnore(String value, Collection<String> toIgnore,
++            Collection<String> toInclude, boolean caseInsensitive) {
++        if (!caseInsensitive) {
++            return shouldIgnore(value, toIgnore, toInclude);
++        }
++        if (toIgnore == null && toInclude == null) {
++            return false;
++        }
++        if (toInclude == null) {
++            return _containsIgnoreCase(toIgnore, value);
++        }
++        if (toIgnore == null) {
++            return !_containsIgnoreCase(toInclude, value);
++        }
++        // NOTE: conflict between both, JsonIncludeProperties will take priority.
++        return !_containsIgnoreCase(toInclude, value) || _containsIgnoreCase(toIgnore, value);
++    }
++
++    private static boolean _containsIgnoreCase(Collection<String> names, String value) {
++        if (names.contains(value)) {
++            return true;
++        }
++        for (String name : names) {
++            if ((name != null) && name.equalsIgnoreCase(value)) {
++                return true;
++            }
++        }
++        return false;
++    }
++
+     /**
+      * Factory method for creating and return a {@link Checker} instance if (and only if)
+      * one needed.

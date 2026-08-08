@@ -1,0 +1,101 @@
+diff --git a/CHANGES.rst b/CHANGES.rst
+index 1c4e997..7a279ae 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -11,6 +11,10 @@ Unreleased
+ -   Fix ``TypeError`` when rendering help for an option whose default value is
+     an object that doesn't support equality comparison with strings, such as
+     ``semver.Version``. :issue:`3298` :pr:`3299`
++-   ``CliRunner`` isolation streams support ``fileno()``, backed by a temporary
++    file whose contents are copied into the captured output. This makes
++    ``subprocess.run(..., stdout=sys.stdout)`` work under ``CliRunner``
++    instead of raising ``io.UnsupportedOperation``. :issue:`2461`
+ -   Fix pager test pollution under parallel execution by using pytest's
+     ``tmp_path`` fixture instead of a shared temporary file path. :pr:`3238`
+ -   Patch ``pdb.Pdb`` in ``CliRunner`` isolation so ``pdb.set_trace()``,
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..a77aaed 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -107,6 +107,48 @@ class _NamedTextIOWrapper(io.TextIOWrapper):
+         super().__init__(buffer, **kwargs)
+         self._name = name
+         self._mode = mode
++        self._fd_file: t.IO[bytes] | None = None
++        self._fd_pos = 0
++
++    def fileno(self) -> int:
++        """Return a real file descriptor for this stream.
++
++        The underlying buffer is an :class:`io.BytesIO`, which has no file
++        descriptor, so code such as ``subprocess.run(..., stdout=sys.stdout)``
++        would fail with ``io.UnsupportedOperation``. A temporary file provides
++        a real descriptor instead; whatever is written to it is copied into the
++        captured stream by :meth:`_drain_fd`.
++
++        .. versionadded:: 8.3.3
++        """
++        if self._fd_file is None:
++            self._fd_file = tempfile.TemporaryFile("w+b")
++
++        return self._fd_file.fileno()
++
++    def _drain_fd(self) -> None:
++        """Copy anything written to the descriptor from :meth:`fileno` into
++        the captured stream.
++        """
++        if self._fd_file is None:
++            return
++
++        self._fd_file.seek(self._fd_pos)
++        data = self._fd_file.read()
++        self._fd_pos = self._fd_file.tell()
++
++        if data:
++            super().flush()
++            self.buffer.write(data)
++
++    def flush(self) -> None:
++        super().flush()
++        self._drain_fd()
++
++    def write(self, s: str) -> int:
++        # Keep descriptor writes roughly in order with writes to this stream.
++        self._drain_fd()
++        return super().write(s)
+ 
+     def close(self) -> None:
+         """
+@@ -335,11 +377,11 @@ class CliRunner:
+             # large chunk which is echoed early.
+             text_input._CHUNK_SIZE = 1  # type: ignore
+ 
+-        sys.stdout = _NamedTextIOWrapper(
++        sys.stdout = text_output = _NamedTextIOWrapper(
+             stream_mixer.stdout, encoding=self.charset, name="<stdout>", mode="w"
+         )
+ 
+-        sys.stderr = _NamedTextIOWrapper(
++        sys.stderr = text_error = _NamedTextIOWrapper(
+             stream_mixer.stderr,
+             encoding=self.charset,
+             name="<stderr>",
+@@ -461,6 +503,18 @@ class CliRunner:
+                         pass
+                 else:
+                     os.environ[key] = value
++            # Copy anything a subprocess wrote to a real file descriptor
++            # into the captured streams before they are handed back.
++            for text_stream in (text_output, text_error):
++                try:
++                    text_stream.flush()
++                finally:
++                    if text_stream._fd_file is not None:
++                        text_stream._fd_file.close()
++
++            if text_input._fd_file is not None:
++                text_input._fd_file.close()
++
+             sys.stdout = old_stdout
+             sys.stderr = old_stderr
+             sys.stdin = old_stdin

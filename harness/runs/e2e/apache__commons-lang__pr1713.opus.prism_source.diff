@@ -1,0 +1,31 @@
+diff --git a/src/main/java/org/apache/commons/lang3/StringUtils.java b/src/main/java/org/apache/commons/lang3/StringUtils.java
+index 4cc5ab75d..9ec8f1938 100644
+--- a/src/main/java/org/apache/commons/lang3/StringUtils.java
++++ b/src/main/java/org/apache/commons/lang3/StringUtils.java
+@@ -3008,6 +3008,14 @@ public static int indexOfDifference(final CharSequence... css) {
+             // vary, so return the length of the shortest string.
+             return shortestStrLen;
+         }
++        if (firstDiff > 0 && Character.isHighSurrogate(css[0].charAt(firstDiff - 1))) {
++            // the difference falls inside a surrogate pair; report the start of the pair
++            for (final CharSequence cs : css) {
++                if (Character.isLowSurrogate(cs.charAt(firstDiff))) {
++                    return firstDiff - 1;
++                }
++            }
++        }
+         return firstDiff;
+     }
+ 
+@@ -3049,6 +3057,11 @@ public static int indexOfDifference(final CharSequence cs1, final CharSequence c
+             }
+         }
+         if (i < cs2.length() || i < cs1.length()) {
++            if (i > 0 && i < cs1.length() && i < cs2.length() && Character.isHighSurrogate(cs1.charAt(i - 1))
++                    && (Character.isLowSurrogate(cs1.charAt(i)) || Character.isLowSurrogate(cs2.charAt(i)))) {
++                // the difference falls inside a surrogate pair; report the start of the pair
++                return i - 1;
++            }
+             return i;
+         }
+         return INDEX_NOT_FOUND;

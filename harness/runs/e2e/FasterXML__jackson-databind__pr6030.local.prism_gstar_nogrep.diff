@@ -1,0 +1,35 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/bean/BeanPropertyMap.java b/src/main/java/tools/jackson/databind/deser/bean/BeanPropertyMap.java
+index 7c90a4cff..58fa863b6 100644
+--- a/src/main/java/tools/jackson/databind/deser/bean/BeanPropertyMap.java
++++ b/src/main/java/tools/jackson/databind/deser/bean/BeanPropertyMap.java
+@@ -147,6 +147,30 @@ public class BeanPropertyMap
+         final String key = newProp.getName();
+         for (int i = 0, end = _propsInOrder.length; i < end; ++i) {
+             if (_propsInOrder[i].getName().equals(key)) {
++                // Check for wrapper conflicts
++                SettableBeanProperty existingProp = _propsInOrder[i];
++                if (newProp.getWrapperName() != null && existingProp.getWrapperName() != null) {
++                    // Both have wrappers - could be conflict if they're different
++                    if (!newProp.getWrapperName().equals(existingProp.getWrapperName())) {
++                        throw new IllegalArgumentException(String.format(
++                            "Conflicting property definitions: both '%s' and '%s' are defined with wrapper name '%s'",
++                            existingProp.getName(), newProp.getName(), existingProp.getWrapperName()));
++                    }
++                } else if (newProp.getWrapperName() == null && existingProp.getWrapperName() != null) {
++                    // New prop is not wrapped but existing one is - this could be conflict if names match
++                    if (key.equals(existingProp.getWrapperName().getSimpleName())) {
++                        throw new IllegalArgumentException(String.format(
++                            "Conflicting property definitions: property '%s' has both wrapper definition and unwrapped definition",
++                            key));
++                    }
++                } else if (newProp.getWrapperName() != null && existingProp.getWrapperName() == null) {
++                    // New prop is wrapped but existing one is not - this could be conflict if names match
++                    if (key.equals(newProp.getWrapperName().getSimpleName())) {
++                        throw new IllegalArgumentException(String.format(
++                            "Conflicting property definitions: property '%s' has both wrapper definition and unwrapped definition",
++                            key));
++                    }
++                }
+                 _propsInOrder[i] = newProp;
+                 return this;
+             }

@@ -1,0 +1,20 @@
+diff --git a/src/main/java/org/apache/commons/lang3/text/WordUtils.java b/src/main/java/org/apache/commons/lang3/text/WordUtils.java
+index ae59a34e3..650624ae9 100644
+--- a/src/main/java/org/apache/commons/lang3/text/WordUtils.java
++++ b/src/main/java/org/apache/commons/lang3/text/WordUtils.java
+@@ -653,7 +653,14 @@ public static String wrap(final String str, int wrapLength, String newLineStr, f
+             if (matcher.find()) {
+                 if (matcher.start() == 0) {
+                     // If the match is zero-width, advance by at least 1 to avoid infinite loop.
+-                    offset += matcher.end() > 0 ? matcher.end() : 1;
++                    // But we must be careful not to advance by more than what's available
++                    int advance = matcher.end() > 0 ? matcher.end() : 1;
++                    if (offset + advance > inputLineLength) {
++                        // If advancing would go beyond the string, just advance by 1
++                        offset += 1;
++                    } else {
++                        offset += advance;
++                    }
+                     continue;
+                 }
+                 spaceToWrapAt = matcher.start() + offset;

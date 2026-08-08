@@ -20,6 +20,7 @@ cloud.
 from __future__ import annotations
 
 import argparse
+import os
 import json
 import subprocess
 import sys
@@ -28,6 +29,8 @@ import time
 from pathlib import Path
 
 import docker_eval
+import fanout_eval
+import seeded_refactor
 import java_eval
 import run_local_agent
 from ab_endtoend_arms import ARMS
@@ -49,9 +52,14 @@ def _repo_for(task) -> Path:
 
 
 def _score(task, diff: str) -> dict:
-    """Language-aware fail->pass scoring."""
+    """Kind- and language-aware scoring: fanout tasks are scored on
+    green + gold-file coverage (fanout_eval); the rest on fail->pass."""
     if not diff.strip():
         return {"resolved": False, "empty_diff": True}
+    if task.get("kind") == "fanout":
+        return fanout_eval.score(task, diff)
+    if task.get("kind") == "seeded_refactor":
+        return seeded_refactor.score(_repo_for(task), task, diff)
     if _is_java(task):
         return java_eval.score(java_eval.REPO_DIR[task["repo"]], task, diff)
     return docker_eval.score(task, diff)
@@ -79,7 +87,7 @@ TOOL_ARTIFACTS = (".grove", ".engine-b", ".prism", "prism.yaml", ".p.diff",
                   ".shale")  # mason's evidence trail
 
 
-def _agent_diff(wt: Path, task) -> str:
+def _agent_diff(wt: Path, task) -> str:  # noqa: D401
     """The agent's change to NON-test files (test_patch is the harness's job)."""
     docker_eval._sh("git", "-C", str(wt), "add", "-A", check=False)
     excludes = [f":(exclude){m}" for m in task["test_modules"]]
@@ -94,19 +102,19 @@ def _index_graph(wt: Path, arm: str):
                             text=True, timeout=300)
         if r.returncode != 0:
             print(f"  [index] WARN prism index rc={r.returncode}: {r.stderr[-200:]}")
-    if arm.startswith("engine-b"):
+    if arm.startswith("engine-b") or arm.startswith("codegraph"):
         # engine-b requires `init` to CREATE the index; `index` only rebuilds an
         # already-initialized one and errors out on a fresh worktree ("Run
         # engine-b init first"). With capture_output that failure is silent and
         # the arm degrades to grep-only — a crippled strawman. Use init, and fail
         # loudly if the .engine-b index did not materialize so a broken cell is
         # never scored as a real engine-b result.
-        r = subprocess.run(["engine-b", "init", str(wt)], capture_output=True,
-                           text=True, timeout=300)
-        if not (wt / ".engine-b").exists():
+        r = subprocess.run(["codegraph", "init", str(wt)], capture_output=True,
+                           text=True, timeout=600)
+        if not (wt / ".codegraph").exists():
             raise RuntimeError(
-                f"engine-b init did not create .engine-b in {wt} "
-                f"(rc={r.returncode}): {r.stdout[-200:]} {r.stderr[-200:]}")
+                f"codegraph init did not create .codegraph in {wt} "
+                f"(rc={r.returncode}): {r.stdout[-300:]} {r.stderr[-300:]}")
 
 
 TASK_TAIL = ("\n\nFix the SOURCE code in this repository so the issue is resolved "
@@ -114,13 +122,27 @@ TASK_TAIL = ("\n\nFix the SOURCE code in this repository so the issue is resolve
              "any test files. Make the smallest change that works, then stop.")
 
 
+# A seeded refactor needs its own closing instruction: the generic tail
+# ("make the SMALLEST change that works, then stop") tells an agent facing a
+# deliberately wide change to do the minimum — measured, the first baseline
+# cell stopped after 4 turns. It also promises a test run that never happens
+# here; the oracle is `mvn compile` over main sources only.
+SEEDED_TAIL = ("\n\nUpdate the source so the project COMPILES again. Every "
+               "implementation of the changed method and every call site must be "
+               "updated — the change is deliberately wide, so do not stop at the "
+               "first few. Verify with `mvn -q compile`. Edit main sources only; "
+               "do not modify test files.")
+
+
 def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
     spec = ARMS[arm]
-    prompt = spec["guidance"] + "\n\nISSUE:\n" + task["problem_statement"] + TASK_TAIL
+    tail = SEEDED_TAIL if task.get("kind") == "seeded_refactor" else TASK_TAIL
+    prompt = spec["guidance"] + "\n\nISSUE:\n" + task["problem_statement"] + tail
     cmd = ["claude", "-p", prompt, "--model", model, "--output-format", "json",
-           "--dangerously-skip-permissions", "--allowedTools", *spec["allowed"]]
+           "--dangerously-skip-permissions", "--strict-mcp-config",
+           "--allowedTools", *spec["allowed"]]
     if spec["mcp"]:
-        cmd += ["--mcp-config", spec["mcp"], "--strict-mcp-config"]
+        cmd += ["--mcp-config", spec["mcp"]]
     t0 = time.monotonic()
     r = subprocess.run(cmd, cwd=wt, capture_output=True, text=True, timeout=1800)
     blob = (r.stdout + r.stderr).lower()
@@ -134,7 +156,85 @@ def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
         if any(h in blob for h in RATE_HINTS):
             raise RateLimited(blob[-300:])
         rec["agent_error"] = (r.stderr or r.stdout)[-200:]
+    rec["tool_trace"] = _tool_trace_for(wt)
     return rec
+
+
+def _tool_trace_for(wt: Path) -> dict:
+    """Tool-call counts for the session that just ran in worktree wt, mined
+    from the claude CLI's own transcript (~/.claude/projects/<cwd-slug>/).
+    The -p JSON output carries no per-tool trace; without this the routing
+    question ('did the agent grep or graph?') needs manual excavation —
+    measured, it was the most useful column of the 2026-08-06 analysis.
+    Best-effort: {} when the transcript is not found."""
+    # macOS: mkdtemp returns /var/... but the claude CLI records the RESOLVED
+    # cwd (/private/var/...) — try both slugs (measured: the unresolved slug
+    # matched nothing and every cell's trace came back empty).
+    # Match by the worktree's BASENAME, not a computed slug: the CLI rewrites
+    # more than slashes (temp names containing "_" come back hyphenated), so
+    # any slug we compute here can silently miss. Globbing the basename is
+    # robust to whatever transformation it applies to the prefix.
+    base = Path(wt).name.replace("_", "-")
+    hits = sorted(Path.home().glob(f".claude/projects/*{base}"),
+                  key=lambda d: d.stat().st_mtime, reverse=True)
+    if hits:
+        pdir = hits[0]
+        counts: dict = {}
+        scope_text = 0
+        for f in pdir.glob("*.jsonl"):
+            for line in f.open():
+                try:
+                    j = json.loads(line)
+                except Exception:
+                    continue
+                if j.get("type") != "assistant":
+                    continue
+                for c in ((j.get("message") or {}).get("content") or []):
+                    if isinstance(c, dict) and c.get("type") == "tool_use":
+                        counts[c["name"]] = counts.get(c["name"], 0) + 1
+                        if c["name"].endswith("prism_search") and \
+                                (c.get("input") or {}).get("scope") == "text":
+                            scope_text += 1
+        if scope_text:
+            counts["_prism_search_scope_text"] = scope_text
+        if counts:
+            return counts
+    candidates = [str(wt), str(Path(wt).resolve()), "/private" + str(wt)]
+    # The CLI flushes its session transcript asynchronously, so a read the
+    # instant the process exits can find nothing (measured: 2 cells came back
+    # with an empty trace and were briefly misread as "the agent made no
+    # searches"). Retry briefly before giving up.
+    pdir = None
+    for _ in range(10):
+        for c in candidates:
+            d = Path.home() / ".claude" / "projects" / c.replace("/", "-")
+            if d.exists() and any(d.glob("*.jsonl")):
+                pdir = d
+                break
+        if pdir:
+            break
+        time.sleep(1)
+    if pdir is None:
+        return {"_trace_unavailable": 1}
+    counts: dict = {}
+    scope_text = 0
+    for f in pdir.glob("*.jsonl"):
+        for line in f.open():
+            try:
+                j = json.loads(line)
+            except Exception:
+                continue
+            if j.get("type") != "assistant":
+                continue
+            for c in ((j.get("message") or {}).get("content") or []):
+                if isinstance(c, dict) and c.get("type") == "tool_use":
+                    counts[c["name"]] = counts.get(c["name"], 0) + 1
+                    if c["name"].endswith("prism_search") and \
+                            (c.get("input") or {}).get("scope") == "text":
+                        scope_text += 1
+    if scope_text:
+        counts["_prism_search_scope_text"] = scope_text
+    return counts
 
 
 def _run_mason(wt: Path, task, arm: str = "mason") -> dict:
@@ -192,10 +292,15 @@ def run_cell(task: dict, arm: str, model: str, tag: str = "") -> dict:
             return {"task": task["instance_id"], "arm": arm, "model": model,
                     "kind": task.get("kind"), "resolved": sc.get("resolved"),
                     "diff_lines": diff.count("\n"), **meta, "score": sc}
+        if task.get("kind") == "seeded_refactor":
+            # The agent starts from the broken build, not from base.
+            seeded_refactor.apply_mutation(wt, task["mutation"])
         _index_graph(wt, arm)
         if model == "local":
             prompt = task["problem_statement"] + TASK_TAIL
-            res = run_local_agent.run("qwen3-coder:30b", arm, str(wt), prompt)
+            res = run_local_agent.run(
+                os.environ.get("LOCAL_MODEL", "qwen3-coder-ctx16k"),
+                arm, str(wt), prompt)
             meta = {"turns": res.get("turns"), "wall_s": res.get("wall_s"),
                     "trace": res.get("trace"), "agent_error": res.get("error")}
         else:

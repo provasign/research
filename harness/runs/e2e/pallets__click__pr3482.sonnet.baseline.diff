@@ -1,0 +1,20 @@
+diff --git a/src/click/_termui_impl.py b/src/click/_termui_impl.py
+index 1d23026..c75b6cb 100644
+--- a/src/click/_termui_impl.py
++++ b/src/click/_termui_impl.py
+@@ -395,6 +395,15 @@ class MaybeStripAnsi(io.TextIOWrapper):
+             text = strip_ansi(text)
+         return super().write(text)
+ 
++    def close(self) -> None:
++        # This wrapper doesn't own the underlying binary buffer (it may be
++        # shared with, e.g., sys.stdout), so only detach from it instead of
++        # closing it. Otherwise, when this wrapper is garbage collected,
++        # TextIOWrapper's __del__ would close the shared buffer out from
++        # under whoever else is using it.
++        self.flush()
++        self.detach()
++
+ 
+ def _pager_contextmanager(
+     color: bool | None = None,

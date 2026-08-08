@@ -1,0 +1,83 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..a41ef19 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -100,13 +100,43 @@ class StreamMixer:
+         self.stderr: io.BytesIO = BytesIOCopy(copy_to=self.output)
+ 
+ 
++def _get_fileno(stream: t.IO[t.Any] | None) -> int | None:
++    """Return the file descriptor of ``stream``, or ``None`` if it does
++    not have one (it may already be an in-memory stream).
++    """
++    try:
++        return stream.fileno()  # type: ignore[union-attr]
++    except (AttributeError, OSError, ValueError, io.UnsupportedOperation):
++        return None
++
++
+ class _NamedTextIOWrapper(io.TextIOWrapper):
+     def __init__(
+-        self, buffer: t.BinaryIO, name: str, mode: str, **kwargs: t.Any
++        self,
++        buffer: t.BinaryIO,
++        name: str,
++        mode: str,
++        fileno: int | None = None,
++        **kwargs: t.Any,
+     ) -> None:
+         super().__init__(buffer, **kwargs)
+         self._name = name
+         self._mode = mode
++        self._fileno = fileno
++
++    def fileno(self) -> int:
++        """The wrapped buffer is an in-memory stream with no file
++        descriptor. Fall back to the descriptor of the real stream this
++        one replaced, so that code passing ``sys.stdout``/``sys.stderr``
++        to APIs that need a descriptor (such as ``subprocess.run``)
++        keeps working under isolation.
++
++        .. versionadded:: 8.3.2
++        """
++        if self._fileno is None:
++            return super().fileno()
++
++        return self._fileno
+ 
+     def close(self) -> None:
+         """
+@@ -327,7 +357,11 @@ class CliRunner:
+             )
+ 
+         sys.stdin = text_input = _NamedTextIOWrapper(
+-            bytes_input, encoding=self.charset, name="<stdin>", mode="r"
++            bytes_input,
++            encoding=self.charset,
++            name="<stdin>",
++            mode="r",
++            fileno=_get_fileno(old_stdin),
+         )
+ 
+         if self.echo_stdin:
+@@ -336,7 +370,11 @@ class CliRunner:
+             text_input._CHUNK_SIZE = 1  # type: ignore
+ 
+         sys.stdout = _NamedTextIOWrapper(
+-            stream_mixer.stdout, encoding=self.charset, name="<stdout>", mode="w"
++            stream_mixer.stdout,
++            encoding=self.charset,
++            name="<stdout>",
++            mode="w",
++            fileno=_get_fileno(old_stdout),
+         )
+ 
+         sys.stderr = _NamedTextIOWrapper(
+@@ -345,6 +383,7 @@ class CliRunner:
+             name="<stderr>",
+             mode="w",
+             errors="backslashreplace",
++            fileno=_get_fileno(old_stderr),
+         )
+ 
+         @_pause_echo(echo_input)  # type: ignore

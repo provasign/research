@@ -1,0 +1,20 @@
+diff --git a/src/click/_termui_impl.py b/src/click/_termui_impl.py
+index 1d23026..1696391 100644
+--- a/src/click/_termui_impl.py
++++ b/src/click/_termui_impl.py
+@@ -395,6 +395,15 @@ class MaybeStripAnsi(io.TextIOWrapper):
+             text = strip_ansi(text)
+         return super().write(text)
+ 
++    def __del__(self) -> None:
++        # The wrapped buffer belongs to some other object (e.g. the
++        # process' real stdout). Detach instead of closing so that buffer
++        # stays usable after this wrapper is garbage collected.
++        try:
++            self.detach()
++        except Exception:
++            pass
++
+ 
+ def _pager_contextmanager(
+     color: bool | None = None,

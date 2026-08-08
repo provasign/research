@@ -224,6 +224,180 @@ gated behind API credits. Seeded-edit recall (88%) remains the standing
 number; the instruments (miner + MASON_SKIP_VERIFY_GATE + verify replay)
 are ready the moment a credited agent diff stream exists.
 
+## 8 · 2026-08-05..07 — day-to-day coding: parity, cost-neutrality, and a
+## retracted fan-out claim
+
+Three benchmarks on real post-cutoff PRs, Opus, Docker fail->pass or
+gold-coverage scored. Beds and scripts: `harness/mine_meaningful_tasks.py`,
+`harness/mine_fanout_tasks.py`, `harness/fanout_eval.py`,
+`harness/tasks-e2e-meaningful/` (13 tasks, 5 repos),
+`harness/tasks-e2e-fanout/` (3 tasks). Raw: `harness/runs/e2e/`.
+
+### 8.1 Ordinary bug fixes: capability parity, and cost parity once the
+### agent prices its own requests
+
+13 tasks x 3 arms x 2 trials (~140 cells incl. tiebreakers). Arms differ only
+in the context tool; `prism_native`/`prism_priced` have grep/rg/find REMOVED
+(Prism v0.31+ runs a real rg/grep pass inside `prism_search`/`prism_query`,
+so removing grep removes a routing choice, not a capability).
+
+| arm | resolved | cost |
+|---|---|---|
+| baseline (grep/read) | 5/26 | $24.20 |
+| prism, rich-by-default | 7/26 | $29.80 (+23%) |
+| prism, agent-priced (`scope="text"` knob) | 4/26 | $24.67 (**+2%**) |
+
+10 of 13 tasks resolved identically by all three arms in both trials. The
+three that differed are ~10-20% tasks: 6 further trials each put native at
+4/18 and priced at 2/18 (n.s.; both 2/6 on the one task with a real resolve
+rate). **No arm resolves anything another arm cannot.** Fixing is
+model-limited, not context-limited -- the same boundary the mason+local e2e
+run found (§7).
+
+The cost line is the result worth keeping: letting the agent ASK for a pure
+grep (`prism_search(scope="text")`) instead of always paying for enriched
+delivery took the single-tool deployment from +46% (5-task pilot) to +23%
+to **+2%**. Prism-as-only-tool is free on ordinary work.
+
+### 8.2 RETRACTED: "the graph completes fan-out work agents leave half-done"
+
+An earlier draft of this section claimed the first e2e separation: on
+deprecation-campaign tasks (6-10 file blast radius, brief never mentions
+fan-out), prism arms covered 0.72-0.75 of gold-touched files vs 0.39-0.50
+for baseline. **That claim is withdrawn.** It did not survive its control.
+
+| arm (3 tasks x 2 trials) | graph calls | mean gold-file coverage |
+|---|---:|---|
+| grep/read, find-and-fix steering | 0 | 0.35 |
+| grep/read, blast-radius steering | 0 | 0.56 |
+| grep/read, codegraph offered but NEVER CALLED (see note) | 0 | 0.66 |
+| prism, grep removed, tool used 2-5x/cell | 2-5 | 0.52 |
+
+**There is NO codegraph measurement on this bed.** The third arm ran with
+codegraph's MCP server connected and `codegraph_explore` visible and
+permitted (verified by asking the agent to list its tools); the agent chose
+file reads and shell commands instead, 0 calls in 6 cells. That row is a
+THIRD grep/read steering variant, not a tool result, and must not be cited
+as codegraph's performance in either direction. Its run files are named
+`*.opus.codegraph.json` for the arm that was configured, not the tool that
+was used.
+
+Three of the four arms therefore used no graph tool at all. The best of them
+scored highest; Prism, the only arm that used its tool, scored BELOW the
+no-tool control. The spread among the three no-tool arms (0.35-0.66) exceeds
+the gap between Prism and any of them. **On this bed the
+code graph has no detectable effect; steering wording explains the
+variation.** Prompt phrasing moved coverage 0.21 between two arms with
+identical tools -- any future arm comparison needs MATCHED steering or the
+tool effect is unmeasurable. That methodological error is what produced the
+retracted claim.
+
+Worse than inconclusive: **the metric itself does not work.** Gold-diff
+coverage assumes one correct file set. Re-reading the low-scoring cells shows
+click#3695's brief ("make these unimported utilities explicitly private") was
+solved two different valid ways -- the maintainer renamed five files' worth of
+symbols with underscore prefixes; one agent added Sphinx `:meta private:`
+markers in a single file. The second is a legitimate reading of the same
+sentence, and coverage scored it as "missed 5 sites". An oracle that cannot
+distinguish *forgot* from *chose differently* cannot measure completeness, so
+no arm comparison on this bed supports a conclusion in either direction.
+(Doc/changelog files were also in the denominator, capping click#3695 at 0.67
+and werkzeug#3169 at 0.83 for any agent that skipped a changelog entry; those
+are excluded now, which shifted cells but not the ordering.)
+
+Also weak by construction: blast radii are 6-10 files, far below the 50-310
+site range where the direct-call advantage was measured (§1-2); werkzeug#3162's
+brief is satisfied by a minimal 1-file edit; and Opus with file reads is strong
+enough at this scale to leave no headroom. Mining 2026 PRs across 12 repos
+yielded only 3 validated fan-out tasks, none large.
+
+### 8.2.1 Why an e2e test of this class of tool is hard (methodology)
+
+Four attempts at an e2e oracle failed in four different ways, and the pattern
+is structural, not incidental:
+
+1. **Wrong state measured.** Prism acts on the agent's INFORMATION state; an
+   e2e test measures the task's OUTCOME state. The agent compensates for poor
+   information with effort (more turns, more reads, iterating on compile
+   errors), so the tool's contribution is absorbed rather than expressed.
+   Measured: cost moved 46% -> 2% and turns 31 -> 3 while resolve rate moved
+   not at all.
+2. **The treatment is endogenous.** The agent decides what to consume. The
+   codegraph arm never called codegraph (0 calls / 6 cells); the prism arm
+   used only Prism's grep passthrough (every `prism_search` was
+   `scope="text"`, `change_impact` never). You cannot A/B a tool an adaptive
+   agent declines to use, and forcing it changes the deployment under test.
+3. **Oracle quality and task informativeness are inversely correlated.** An
+   unambiguous oracle needs a mechanically determined answer -- and if the
+   answer is mechanical, the agent can run the mechanism instead of
+   reasoning. A seeded signature change scored by javac was built and then
+   discarded for exactly this: `mvn compile` prints every required site, so
+   the compiler is a better change-impact engine than any graph and the
+   search task evaporates. Tests only cover what someone wrote a test for;
+   refactors usually have none. Gold diffs encode one implementation.
+4. **Prompt effects dominate tool effects.** Identical tools, different
+   steering: 0.35 -> 0.56 mean coverage. Any tool effect at this scale is
+   smaller than the wording effect, and matched steering is impossible across
+   tools with different affordances.
+
+Corollary: the direct-call benchmarks (§1-2) are not a weak proxy for an e2e
+test -- they are the CORRECT instrument for a tool that acts on information
+state, which is why their numbers were stable across the week while every e2e
+attempt collapsed. The defensible claim is about information delivery, not
+outcomes.
+
+The one e2e design that survives the analysis: cap the agent's turns or tokens
+on a task with a large required set. Under a binding budget the agent cannot
+substitute effort for information, so information quality maps to outcome.
+Untested; noted for whoever picks this up.
+
+### 8.2.2 Graph vs grep, measured directly (no agent)
+
+Since e2e resisted measurement, the mechanism was measured on its own
+(`harness/grep_vs_graph_gap.py`, `harness/impact_vs_grep.py`):
+
+- **The graph finds nothing grep misses.** 127 symbols, 6 repos, 4 languages:
+  resolved references the graph knew and a whole-word grep did not = **0**.
+  Near-tautological in hindsight (a reference to `foo` sits on a line
+  containing `foo`), and it kills the "grep-invisible sites" framing at line
+  granularity.
+- **What it does is filter.** ~30% of whole-word grep hits are not resolved
+  references: 18% jackson-databind, 23% werkzeug, 27% guava, 35% django, 50%
+  gin, 98% typeorm (`DataSource.createQueryBuilder`: 372 hits, 1 real).
+- **Against the compiler oracles, at file granularity:** grep recall 1.00 /
+  precision 0.51; change-impact recall 0.98 / precision 0.91 (excluding one
+  harness query-construction failure). Extremes: settable-set 137 files for
+  14 real; jsonnode-get 166 for 5.
+
+So the honest mechanism is noise reduction, not discovery: telling you which
+14 of 137 files matter. Both earlier claims ("finds what grep can't",
+"delivers the complete set") are the same claim seen from two ends.
+
+### 8.3 Verify on real agent diffs (the §5 gap, partially closed)
+
+Replayed `prism verify` over the 6 baseline fan-out diffs
+(`harness/runs/fanout-verify-replay.json`). One diff changed function
+contracts (privatizing/renaming click utils): verify returned **incomplete,
+340 line-precise missed sites, 14 unverified seeds** -- and that is the same
+cell whose test suite failed. The other five only ADDED deprecation warnings
+to attributes: no call-shaped contract changed, verify correctly returned
+complete. 1-for-1 within its stated scope, silent outside it, no false
+flags. Consistent with the oops-pair analysis (§5): signature changes are
+verify's sweet spot, pattern-replication sweeps its blind spot.
+
+### 8.4 What this leaves standing
+
+- Direct-call change-impact (§1, §2): unchanged -- compiler-oracle scored,
+  no e2e claim involved.
+- Ordinary coding: parity, cost-neutral (8.1). Prism costs nothing to have.
+- Fan-out coding end-to-end: **not measurable with the oracles we have**
+  (8.2, 8.2.1). The bridge from the direct-call results to real work is NOT
+  demonstrated, and the obstacle is structural rather than a bed too small.
+- The mechanism, measured without an agent (8.2.2): the graph finds nothing
+  grep misses; it filters ~30-50% noise out of grep's hits and lifts
+  file-level precision from 0.51 to 0.91 against compiler oracles.
+- The gate (8.3): works within scope on real agent output.
+
 ## 6 · Where each result comes from
 
 | claim | source | raw data |
@@ -240,3 +414,8 @@ are ready the moment a credited agent diff stream exists.
 | Phrasing sensitivity | §7 above | `harness/runs/ab-phrasing/`, `ab-phrasing2/` |
 | Verify corpus bench | §7 above | `harness/runs/verify-bench/` |
 | Mason+local 0.989 | §7 above | `harness/runs/mason-bench/` |
+| Day-to-day parity + cost (8.1) | §8 above | `harness/runs/e2e/*.opus.{baseline,prism_native,prism_priced*}.json` |
+| Retracted fan-out claim + controls (8.2; no codegraph measurement) | §8 above | `harness/runs/e2e/*fanout*`, `*.opus.{codegraph,baseline_fanout_steer}.json` |
+| Verify on real agent diffs (8.3) | §8 above | `harness/runs/fanout-verify-replay.json` |
+| e2e methodology postmortem (8.2.1) | §8 above | `harness/fanout_eval.py`, `harness/seeded_refactor.py` (built, then discarded — see 8.2.1 item 3) |
+| Grep-vs-graph mechanism (8.2.2) | §8 above | `harness/runs/grep-vs-graph-gap.json`, `harness/runs/impact-vs-grep.json` |

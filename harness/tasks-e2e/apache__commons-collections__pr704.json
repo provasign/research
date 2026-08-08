@@ -1,0 +1,29 @@
+{
+  "instance_id": "apache__commons-collections__pr704",
+  "repo": "apache/commons-collections",
+  "pr": 704,
+  "base_commit": "b219ccbe7b95250abd3ba3143edf340b7fad1943",
+  "merge_commit": "6171ecbb1dc89f3e2d3bae659b6364995fbc6027",
+  "patch": "diff --git a/src/main/java/org/apache/commons/collections4/MapUtils.java b/src/main/java/org/apache/commons/collections4/MapUtils.java\nindex 3d8d7e1..6dc8c74 100644\n--- a/src/main/java/org/apache/commons/collections4/MapUtils.java\n+++ b/src/main/java/org/apache/commons/collections4/MapUtils.java\n@@ -738,7 +738,7 @@ public class MapUtils {\n      */\n     public static <K> int getIntValue(final Map<? super K, ?> map, final K key,\n             final Function<K, Integer> defaultFunction) {\n-        return applyDefaultFunction(map, key, MapUtils::getInteger, defaultFunction, 0).byteValue();\n+        return applyDefaultFunction(map, key, MapUtils::getInteger, defaultFunction, 0).intValue();\n     }\n \n     /**\n",
+  "test_patch": "diff --git a/src/test/java/org/apache/commons/collections4/MapUtilsTest.java b/src/test/java/org/apache/commons/collections4/MapUtilsTest.java\nindex c047d49..2c3e96e 100644\n--- a/src/test/java/org/apache/commons/collections4/MapUtilsTest.java\n+++ b/src/test/java/org/apache/commons/collections4/MapUtilsTest.java\n@@ -482,11 +482,13 @@ class MapUtilsTest {\n     void testGetIntValue() {\n         final Map<String, Integer> in = new HashMap<>();\n         in.put(\"key\", 2);\n+        in.put(\"big\", 1000);\n \n         assertEquals(2, MapUtils.getIntValue(in, \"key\", 0), 0);\n         assertEquals(2, MapUtils.getIntValue(in, \"key\"), 0);\n         assertEquals(0, MapUtils.getIntValue(in, \"noKey\", 0), 0);\n-        assertEquals(0, MapUtils.getIntValue(in, \"noKey\", key -> 0), 0);\n+        assertEquals(1000, MapUtils.getIntValue(in, \"big\", key -> 0), 0);\n+        assertEquals(Integer.MAX_VALUE, MapUtils.getIntValue(in, \"noKey\", key -> Integer.MAX_VALUE), 0);\n         assertEquals(Integer.MIN_VALUE, MapUtils.getIntValue(in, \"noKey\", Integer.MIN_VALUE), 0);\n         assertEquals(Integer.MAX_VALUE, MapUtils.getIntValue(in, \"noKey\", Integer.MAX_VALUE), 0);\n         assertEquals(0, MapUtils.getIntValue(in, \"noKey\"), 0);\n@@ -587,7 +589,7 @@ class MapUtilsTest {\n         assertEquals(val, MapUtils.getShortValue(in, \"key\", val), 0);\n         assertEquals(val, MapUtils.getShortValue(in, \"key\"), 0);\n         assertEquals(val, MapUtils.getShortValue(in, \"noKey\", val), 0);\n-        assertEquals(val, MapUtils.getShortValue(in, \"noKey\", key -> val), 0);\n+        assertEquals(1000, MapUtils.getShortValue(in, \"noKey\", key -> (short) 1000), 0);\n         assertEquals(Short.MIN_VALUE, MapUtils.getShortValue(in, \"noKey\", Short.MIN_VALUE), 0);\n         assertEquals(Short.MAX_VALUE, MapUtils.getShortValue(in, \"noKey\", Short.MAX_VALUE), 0);\n         assertEquals(0, MapUtils.getShortValue(in, \"noKey\"), 0);\n",
+  "test_classes": [
+    "org.apache.commons.collections4.MapUtilsTest"
+  ],
+  "src_files": [
+    "src/main/java/org/apache/commons/collections4/MapUtils.java"
+  ],
+  "test_modules": [
+    "src/test/java/org/apache/commons/collections4/MapUtilsTest.java"
+  ],
+  "problem_statement": "Fix MapUtils.getIntValue(Map, K, Function) returning a byte\n\n`MapUtils.getIntValue(Map, K, Function)` narrows the resolved `Integer` through `.byteValue()`, so any value outside signed-byte range comes back truncated: a map entry of `1000` returns `-24`, and a `defaultFunction` yielding `Integer.MAX_VALUE` returns `-1`. This is the same defect fixed under COLLECTIONS-874 for the sibling `getLongValue(Map, K, Function)`, which moved to `.longValue()`; the `int` overload kept `.byteValue()`. Found while checking that each `getXxxValue(Map, K, Function)` matches its declared return type.\n\nUse `.intValue()` like every other numeric overload. `testGetIntValue` only drove the `Function` variant with `key -> 0`, which is unaffected by the narrowing, so the gap stayed invisible; the added assertions pin a map value and a default-function value that fall outside byte range.\n",
+  "kind": "bug",
+  "fail_to_pass": [
+    "org.apache.commons.collections4.MapUtilsTest::testLazySortedMapTransformer"
+  ],
+  "pass_to_pass": [
+    "org.apache.commons.collections4.MapUtilsTest::testVerbosePrintNullStream"
+  ],
+  "lang": "java",
+  "build": "maven",
+  "task_kind": "bug"
+}

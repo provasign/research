@@ -1,0 +1,23 @@
+diff --git a/src/click/types.py b/src/click/types.py
+index 556f20f..decdc02 100644
+--- a/src/click/types.py
++++ b/src/click/types.py
+@@ -167,7 +167,17 @@ class ParamType(t.Generic[ParamTypeValue], abc.ABC):
+ 
+         .. versionadded:: 8.0
+         """
+-        return []
++        return []      for choice in self.choices:
++            # Normalize the choice value to handle enum properly
++            if isinstance(choice, enum.Enum):
++                choice_str = choice.name
++            else:
++                choice_str = str(choice)
++                
++            if not choice_str.startswith(incomplete):
++                continue
++            items.append(CompletionItem(choice_str))
++        return items
+ 
+ 
+ class CompositeParamType(ParamType[ParamTypeValue]):

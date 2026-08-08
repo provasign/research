@@ -1,0 +1,99 @@
+diff --git a/src/main/java/org/apache/commons/collections4/bag/AbstractMapBag.java b/src/main/java/org/apache/commons/collections4/bag/AbstractMapBag.java
+index ddbd039f1..7190b89ec 100644
+--- a/src/main/java/org/apache/commons/collections4/bag/AbstractMapBag.java
++++ b/src/main/java/org/apache/commons/collections4/bag/AbstractMapBag.java
+@@ -196,6 +196,10 @@ public abstract class AbstractMapBag<E> implements Bag<E> {
+ 
+     /**
+      * Adds a new element to the bag, incrementing its count in the map.
++     * <p>
++     * The count of an element and the size of the bag are both capped at
++     * {@link Integer#MAX_VALUE}, consistent with {@link java.util.Collection#size()}.
++     * </p>
+      *
+      * @param object the object to search for
+      * @param nCopies the number of copies to add
+@@ -206,16 +210,28 @@ public abstract class AbstractMapBag<E> implements Bag<E> {
+         modCount++;
+         if (nCopies > 0) {
+             final MutableInteger mut = map.get(object);
+-            size += nCopies;
++            size = addClamped(size, nCopies);
+             if (mut == null) {
+                 map.put(object, new MutableInteger(nCopies));
+                 return true;
+             }
+-            mut.value += nCopies;
++            mut.value = addClamped(mut.value, nCopies);
+         }
+         return false;
+     }
+ 
++    /**
++     * Adds two non-negative counts, saturating at {@link Integer#MAX_VALUE} instead of overflowing.
++     *
++     * @param count the current count
++     * @param increment the amount to add
++     * @return the sum, capped at {@link Integer#MAX_VALUE}
++     */
++    private static int addClamped(final int count, final int increment) {
++        final long total = (long) count + increment;
++        return total > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) total;
++    }
++
+     /**
+      * Invokes {@link #add(Object)} for each element in the given collection.
+      *
+diff --git a/src/main/java/org/apache/commons/collections4/multiset/AbstractMapMultiSet.java b/src/main/java/org/apache/commons/collections4/multiset/AbstractMapMultiSet.java
+index 4d62bc47a..a85ad3190 100644
+--- a/src/main/java/org/apache/commons/collections4/multiset/AbstractMapMultiSet.java
++++ b/src/main/java/org/apache/commons/collections4/multiset/AbstractMapMultiSet.java
+@@ -315,6 +315,17 @@ public abstract class AbstractMapMultiSet<E> extends AbstractMultiSet<E> {
+         iterable.forEach(this::add);
+     }
+ 
++    /**
++     * Adds a number of occurrences of an element to this multiset.
++     * <p>
++     * The count of an element and the size of the multiset are both capped at
++     * {@link Integer#MAX_VALUE}, consistent with {@link java.util.Collection#size()}.
++     * </p>
++     *
++     * @param object the object to add
++     * @param occurrences the number of occurrences to add
++     * @return the count of the element before this call
++     */
+     @Override
+     public int add(final E object, final int occurrences) {
+         if (occurrences < 0) {
+@@ -326,16 +337,28 @@ public abstract class AbstractMapMultiSet<E> extends AbstractMultiSet<E> {
+ 
+         if (occurrences > 0) {
+             modCount++;
+-            size += occurrences;
++            size = addClamped(size, occurrences);
+             if (mut == null) {
+                 map.put(object, new MutableInteger(occurrences));
+             } else {
+-                mut.value += occurrences;
++                mut.value = addClamped(mut.value, occurrences);
+             }
+         }
+         return oldCount;
+     }
+ 
++    /**
++     * Adds two non-negative counts, saturating at {@link Integer#MAX_VALUE} instead of overflowing.
++     *
++     * @param count the current count
++     * @param increment the amount to add
++     * @return the sum, capped at {@link Integer#MAX_VALUE}
++     */
++    private static int addClamped(final int count, final int increment) {
++        final long total = (long) count + increment;
++        return total > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) total;
++    }
++
+     /**
+      * Clears the multiset by clearing the underlying map.
+      */

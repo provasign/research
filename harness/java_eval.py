@@ -22,6 +22,7 @@ CLONE_ROOT = Path.home() / "gvg-corpus"
 REPO_DIR = {
     "FasterXML/jackson-databind": CLONE_ROOT / "jackson-databind",
     "apache/commons-lang": CLONE_ROOT / "commons-lang",
+    "apache/commons-collections": CLONE_ROOT / "commons-collections",
 }
 TESTP = re.compile(r"src/test/.*\.java$")
 SRCP = re.compile(r"src/main/.*\.java$")

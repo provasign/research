@@ -1,0 +1,69 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java
+index 439adb8d4..89467c329 100644
+--- a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java
++++ b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java
+@@ -885,33 +885,43 @@ public class BeanDeserializer
+             }
+         }
+ 
++        // [databind#5980]: Value with Properties-based Creator can only be constructed
++        //  once we have hit END_OBJECT -- and by then the stream context of the value
++        //  itself has already been closed. So assigning current value here would
++        //  actually overwrite the current value of the enclosing context: to avoid
++        //  that, restore the previous value before returning.
++        final Object prevCurrentValue = p.currentValue();
+         p.assignCurrentValue(bean);
+-        // [databind#4938] Since 2.19, allow returning `null` from creator,
+-        //  but if so, need to skip all possibly relevant content
+-        if (bean == null) {
+-            _handleNullFromPropsBasedCreator(null, ctxt, unknown, referrings);
+-            return null;
+-        }
++        try {
++            // [databind#4938] Since 2.19, allow returning `null` from creator,
++            //  but if so, need to skip all possibly relevant content
++            if (bean == null) {
++                _handleNullFromPropsBasedCreator(null, ctxt, unknown, referrings);
++                return null;
++            }
+ 
+-        // 13-Apr-2020, tatu: [databind#2678] need to handle injection here
+-        if (_injectables != null) {
+-            injectValues(ctxt, bean);
+-        }
++            // 13-Apr-2020, tatu: [databind#2678] need to handle injection here
++            if (_injectables != null) {
++                injectValues(ctxt, bean);
++            }
+ 
+-        if (referrings != null) {
+-            for (BeanReferring referring : referrings) {
+-               referring.setBean(bean);
++            if (referrings != null) {
++                for (BeanReferring referring : referrings) {
++                   referring.setBean(bean);
++                }
+             }
+-        }
+-        if (unknown != null) {
+-            // polymorphic?
+-            if (bean.getClass() != _beanType.getRawClass()) { // lgtm [java/dereferenced-value-may-be-null]
+-                return handlePolymorphic(null, ctxt, bean, unknown);
++            if (unknown != null) {
++                // polymorphic?
++                if (bean.getClass() != _beanType.getRawClass()) { // lgtm [java/dereferenced-value-may-be-null]
++                    return handlePolymorphic(null, ctxt, bean, unknown);
++                }
++                // no, just some extra unknown properties
++                return handleUnknownProperties(ctxt, bean, unknown);
+             }
+-            // no, just some extra unknown properties
+-            return handleUnknownProperties(ctxt, bean, unknown);
++            return bean;
++        } finally {
++            p.assignCurrentValue(prevCurrentValue);
+         }
+-        return bean;
+     }
+ 
+     private BeanReferring handleUnresolvedReference(DeserializationContext ctxt,

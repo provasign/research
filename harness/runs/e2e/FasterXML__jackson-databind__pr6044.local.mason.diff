@@ -1,0 +1,46 @@
+diff --git a/TestExternalProperty.java b/TestExternalProperty.java
+new file mode 100644
+index 000000000..c2df9ee98
+--- /dev/null
++++ b/TestExternalProperty.java
+@@ -0,0 +1,39 @@
++import java.util.*;
++
++import com.fasterxml.jackson.annotation.*;
++import com.fasterxml.jackson.databind.*;
++
++public class TestExternalProperty {
++    public static void main(String[] args) throws Exception {
++        ObjectMapper mapper = new ObjectMapper();
++        
++        // This should work - simple case
++        String json1 = "{ \"type\": \"foo\", \"items\": [ {\"name\": \"test\"} ] }";
++        try {
++            Parent parent1 = mapper.readValue(json1, Parent.class);
++            System.out.println("Simple case works: " + parent1);
++        } catch (Exception e) {
++            System.out.println("Simple case failed: " + e.getMessage());
++            e.printStackTrace();
++        }
++        
++        // This should fail with the reported error
++        String json2 = "{ \"type\": \"foo\", \"items\": [ {\"name\": \"test\", \"@type\": \"bar\"} ] }";
++        try {
++            Parent parent2 = mapper.readValue(json2, Parent.class);
++            System.out.println("Complex case works: " + parent2);
++        } catch (Exception e) {
++            System.out.println("Complex case failed: " + e.getMessage());
++            e.printStackTrace();
++        }
++    }
++    
++    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXTERNAL_PROPERTY, property = "type")
++    static class Parent {
++        public List<Child> items;
++    }
++    
++    static class Child {
++        public String name;
++    }
++}
+\ No newline at end of file

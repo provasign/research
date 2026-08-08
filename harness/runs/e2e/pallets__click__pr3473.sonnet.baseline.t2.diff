@@ -1,0 +1,48 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index b422bd4..ed843f5 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -3449,7 +3449,10 @@ class Argument(Parameter):
+     provide fewer features than options but can have infinite ``nargs``
+     and are required by default.
+ 
+-    All parameters are passed onwards to the constructor of :class:`Parameter`.
++    :param help: the help string, shown in ``--help`` if given.
++
++    All other parameters are passed onwards to the constructor of
++    :class:`Parameter`.
+     """
+ 
+     param_type_name = "argument"
+@@ -3458,6 +3461,7 @@ class Argument(Parameter):
+         self,
+         param_decls: cabc.Sequence[str],
+         required: bool | None = None,
++        help: str | None = None,
+         **attrs: t.Any,
+     ) -> None:
+         # Auto-detect the requirement status of the argument if not explicitly set.
+@@ -3473,6 +3477,11 @@ class Argument(Parameter):
+         if "multiple" in attrs:
+             raise TypeError("__init__() got an unexpected keyword argument 'multiple'.")
+ 
++        if help:
++            help = inspect.cleandoc(help)
++
++        self.help = help
++
+         super().__init__(param_decls, required=required, **attrs)
+ 
+     @property
+@@ -3522,6 +3531,11 @@ class Argument(Parameter):
+             return f"'{self.make_metavar(ctx)}'"
+         return f"'{self.human_readable_name}'"
+ 
++    def get_help_record(self, ctx: Context) -> tuple[str, str] | None:
++        if not self.help:
++            return None
++        return self.make_metavar(ctx), self.help
++
+     def add_to_parser(self, parser: _OptionParser, ctx: Context) -> None:
+         parser.add_argument(dest=self.name, nargs=self.nargs, obj=self)
+ 

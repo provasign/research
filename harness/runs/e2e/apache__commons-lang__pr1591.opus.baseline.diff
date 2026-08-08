@@ -1,0 +1,47 @@
+diff --git a/src/main/java/org/apache/commons/lang3/ClassUtils.java b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+index 5c2cf099d..02d695f3a 100644
+--- a/src/main/java/org/apache/commons/lang3/ClassUtils.java
++++ b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+@@ -1012,8 +1012,14 @@ public static String getShortCanonicalName(final String canonicalName) {
+      * Gets the class name minus the package name from a {@link Class}.
+      *
+      * <p>
+-     * This method simply gets the name using {@code Class.getName()} and then calls {@link #getShortClassName(String)}. See
+-     * relevant notes there.
++     * Unlike {@link #getShortClassName(String)}, this method uses the reflective metadata of the given {@link Class} and
++     * therefore does not have to guess the meaning of {@code $} (dollar sign) characters: a {@code $} that is part of a
++     * class identifier is preserved, while only genuine nesting is rendered with a {@code .} (dot) character.
++     * </p>
++     *
++     * <p>
++     * Local and anonymous classes have no reliable simple name, so for those this method falls back to
++     * {@link #getShortClassName(String)} using {@code Class.getName()}.
+      * </p>
+      *
+      * @param cls the class to get the short name for.
+@@ -1024,7 +1030,24 @@ public static String getShortClassName(final Class<?> cls) {
+         if (cls == null) {
+             return StringUtils.EMPTY;
+         }
+-        return getShortClassName(cls.getName());
++        final StringBuilder arrayPrefix = new StringBuilder();
++        Class<?> type = cls;
++        while (type.isArray()) {
++            type = type.getComponentType();
++            arrayPrefix.append("[]");
++        }
++        if (type.isLocalClass() || type.isAnonymousClass()) {
++            return getShortClassName(type.getName()) + arrayPrefix;
++        }
++        final StringBuilder name = new StringBuilder(type.getSimpleName());
++        for (Class<?> declaring = type.getDeclaringClass(); declaring != null; declaring = declaring.getDeclaringClass()) {
++            if (declaring.isLocalClass() || declaring.isAnonymousClass()) {
++                // No reliable simple name for the enclosing class, use the binary name based logic for the whole name.
++                return getShortClassName(type.getName()) + arrayPrefix;
++            }
++            name.insert(0, PACKAGE_SEPARATOR_CHAR).insert(0, declaring.getSimpleName());
++        }
++        return name.append(arrayPrefix).toString();
+     }
+ 
+     /**

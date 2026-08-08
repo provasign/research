@@ -1,0 +1,28 @@
+diff --git a/src/werkzeug/routing/matcher.py b/src/werkzeug/routing/matcher.py
+index 9174061b..a08ed61d 100644
+--- a/src/werkzeug/routing/matcher.py
++++ b/src/werkzeug/routing/matcher.py
+@@ -50,6 +50,23 @@ class StateMachineMatcher:
+                     new_state = State()
+                     state.dynamic.append((part, new_state))
+                     state = new_state
++
++        for existing in state.rules:
++            if (
++                existing.websocket == rule.websocket
++                and existing.defaults == rule.defaults
++                and (
++                    existing.methods is None
++                    or rule.methods is None
++                    or existing.methods & rule.methods
++                )
++            ):
++                raise ValueError(
++                    f"URL rule '{rule.rule}' is already registered for endpoint"
++                    f" {existing.endpoint!r}. It would never match, as the"
++                    " existing rule is checked first."
++                )
++
+         state.rules.append(rule)
+ 
+     def update(self) -> None:

@@ -1,0 +1,69 @@
+diff --git a/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java b/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
+index b2753848a..1ec0c7583 100644
+--- a/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
++++ b/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
+@@ -1544,9 +1544,11 @@ ctor.creator()));
+                 if (isRecordType() && !_forSerialization) {
+                       // ...so can only remove ignored field and/or accessors, not constructor parameters that are needed
+                       // for instantiation...
++                      // 01-Aug-2025, tatu: [databind#6031] must collect aliases before
++                      //    accessors are removed
++                    _collectIgnoralsWithAliases(prop);
+                       prop.removeIgnored();
+                       // ...which will then be ignored (the incoming property value) during deserialization
+-                    _collectIgnorals(prop.getName());
+                     continue;
+                 }
+ 
+@@ -1554,14 +1556,21 @@ ctor.creator()));
+                 // 16-May-2022, tatu: NOTE! As per [databind#3357] need to consider
+                 //    only explicit inclusion by accessors OTHER than ones with ignoral marker
+                 if (!prop.anyExplicitsWithoutIgnoral()) {
++                    _collectIgnoralsWithAliases(prop);
+                     it.remove();
+-                    _collectIgnorals(prop.getName());
+                     continue;
+                 }
+                 // otherwise just remove ones marked to be ignored
++                // [databind#6031]: same here, aliases only visible before removal
++                List<PropertyName> aliases = _forSerialization ? null : prop.findAliases();
+                 prop.removeIgnored();
+                 if (!prop.couldDeserialize()) {
+                     _collectIgnorals(prop.getName());
++                    if (aliases != null) {
++                        for (PropertyName alias : aliases) {
++                            _collectIgnorals(alias.getSimpleName());
++                        }
++                    }
+                 }
+             }
+         }
+@@ -1605,6 +1614,28 @@ ctor.creator()));
+         }
+     }
+ 
++    /**
++     * Variant of {@link #_collectIgnorals(String)} that, for deserialization, also
++     * registers {@code @JsonAlias} names of the ignored property: without this,
++     * incoming JSON using an alias of an ignored property would not be recognized
++     * as ignorable (leading to "unknown property" failures, or the value being
++     * routed to an any-setter) even though the primary name is ({@code [databind#6031]}).
++     *<p>
++     * Must be called BEFORE accessors are removed from the property, since aliases
++     * are resolved via the property's primary member.
++     *
++     * @since 3.2
++     */
++    protected void _collectIgnoralsWithAliases(POJOPropertyBuilder prop)
++    {
++        _collectIgnorals(prop.getName());
++        if (!_forSerialization) {
++            for (PropertyName alias : prop.findAliases()) {
++                _collectIgnorals(alias.getSimpleName());
++            }
++        }
++    }
++
+     /**
+      * Returns {@code true} if the (already-collected) properties-based creator
+      * has a parameter currently bound to the given name. Used by

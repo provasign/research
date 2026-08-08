@@ -1,0 +1,25 @@
+diff --git a/rich/prompt.py b/rich/prompt.py
+index c7cf25b..45a6cfd 100644
+--- a/rich/prompt.py
++++ b/rich/prompt.py
+@@ -75,6 +75,20 @@ class PromptBase(Generic[PromptType]):
+         self.show_default = show_default
+         self.show_choices = show_choices
+ 
++    def on_validate_error(self, error: TextType) -> None:
++        """Called when validation fails. Prints the error message with markup enabled.
++        
++        Args:
++            error (TextType): The error message to display.
++        """
++        # Check if error is already a Text object with markup
++        if isinstance(error, Text):
++            # If it's a Text object with markup=True already, print as-is
++            self.console.print(error)
++        else:
++            # For string errors, ensure they are printed with markup
++            self.console.print(error, markup=True)
++
+     @classmethod
+     @overload
+     def ask(

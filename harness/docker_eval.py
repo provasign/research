@@ -35,12 +35,41 @@ def _repo_dir(task) -> Path:
     return CLONE_ROOT / task["repo"].replace("/", "__")
 
 
-def _pytest_in_docker(worktree: Path, modules: list[str]) -> dict[str, str]:
+# Per-repo test dependencies the plain `pip install -e . pytest` container
+# lacks. pydantic: its conftest registers/uses markers and helpers from these
+# plugins — without them collection dies with INTERNALERROR ('thread_unsafe'
+# not found), which rejected all three pydantic candidates on 2026-08-05.
+EXTRA_PIP = {
+    "pydantic/pydantic": ["pytest-run-parallel", "dirty-equals", "pytest-mock",
+                          "annotated-types", "email-validator", "pytest-examples"],
+}
+
+
+def _pytest_in_docker(worktree: Path, modules: list[str], repo: str = "") -> dict[str, str]:
     """Run the given test modules in a container; return {nodeid: outcome}."""
     # Install the project (editable) + pytest; project test-extras if declared.
     # pytest-timeout guards against a single hanging test (e.g. pager/stress
     # tests) blocking the whole module run.
-    cmd = ("pip install -q -e . pytest pytest-timeout 2>&1 | tail -2; "
+    extra = " ".join(EXTRA_PIP.get(repo, []))
+    # VCS-versioned builds (setuptools-scm / hatch-vcs / pdm-backend) need git
+    # history the container does not have: the worktree's .git is a FILE
+    # pointing at an unmounted host path, so `pip install -e .` dies deriving
+    # a version (measured: every pytest/werkzeug/urllib3 candidate rejected
+    # 0/0 on 2026-08-06). Pretend-version env vars skip the VCS lookup.
+    # Test-only deps live in different places per ecosystem: extras
+    # (.[dev]/.[test]), PEP-735 dependency groups (werkzeug: group "tests"
+    # carries ephemeral-port-reserve — measured, its conftest ImportErrors
+    # without it), or requirements files. Try them all, tolerantly; a miss
+    # is harmless, a hit unblocks the repo.
+    cmd = ("export SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0 PDM_BUILD_SCM_VERSION=0.0.0; "
+           "pip install -q --upgrade pip >/dev/null 2>&1; "
+           "(pip install -q -e '.[dev]' 2>/dev/null || pip install -q -e '.[test]' 2>/dev/null "
+           "|| pip install -q -e '.[tests]' 2>/dev/null || pip install -q -e .) 2>&1 | tail -2; "
+           "pip install -q --group dev >/dev/null 2>&1; pip install -q --group tests >/dev/null 2>&1; "
+           "for f in requirements/dev.txt requirements-dev.txt requirements/tests.txt "
+           "requirements/test.txt dev-requirements.txt; do "
+           "[ -f \"$f\" ] && pip install -q -r \"$f\" >/dev/null 2>&1; done; "
+           f"pip install -q pytest pytest-timeout {extra} 2>&1 | tail -2; "
            "python -m pytest " + " ".join(modules) +
            " -v --tb=no -p no:cacheprovider -o addopts='' --timeout=90")
     out = _sh("docker", "run", "--rm", "-v", f"{worktree}:/w", "-w", "/w",
@@ -76,14 +105,23 @@ def validate(task: dict) -> dict:
     mods = task["test_modules"]
     repo, wt = _worktree(task, [task["test_patch"]])
     try:
-        before = _pytest_in_docker(wt, mods)
+        before = _pytest_in_docker(wt, mods, task["repo"])
     finally:
         _cleanup(repo, wt)
     repo, wt = _worktree(task, [task["test_patch"], task["patch"]])
     try:
-        after = _pytest_in_docker(wt, mods)
+        after = _pytest_in_docker(wt, mods, task["repo"])
     finally:
         _cleanup(repo, wt)
+    # A collection ERROR on the base side (0 nodeids collected) usually means
+    # the new tests import code that does not exist pre-fix — ImportError IS
+    # a failure. Without this, click#3637 read as "0/58 collected" and was
+    # rejected although every one of its 58 tests is genuinely fail->pass.
+    if not before and after:
+        f2p = sorted(n for n, o in after.items() if o == "PASSED")
+        return {"fail_to_pass": f2p, "pass_to_pass": [],
+                "valid": bool(f2p), "n_before": 0, "n_after": len(after),
+                "note": "base-side collection error treated as fail (new-code import)"}
     f2p = sorted(n for n, o in after.items()
                  if o == "PASSED" and before.get(n) in ("FAILED", "ERROR"))
     p2p = sorted(n for n, o in after.items()
@@ -97,7 +135,7 @@ def score(task: dict, agent_patch: str) -> dict:
     mods = task["test_modules"]
     repo, wt = _worktree(task, [task["test_patch"], agent_patch])
     try:
-        res = _pytest_in_docker(wt, mods)
+        res = _pytest_in_docker(wt, mods, task.get("repo", ""))
     finally:
         _cleanup(repo, wt)
     f2p_ok = all(res.get(n) == "PASSED" for n in task["fail_to_pass"])

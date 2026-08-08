@@ -1,0 +1,141 @@
+diff --git a/src/main/java/org/apache/commons/collections4/properties/OrderedProperties.java b/src/main/java/org/apache/commons/collections4/properties/OrderedProperties.java
+index c6bd53d37..ec533f98d 100644
+--- a/src/main/java/org/apache/commons/collections4/properties/OrderedProperties.java
++++ b/src/main/java/org/apache/commons/collections4/properties/OrderedProperties.java
+@@ -16,7 +16,11 @@
+  */
+ package org.apache.commons.collections4.properties;
+ 
++import java.util.AbstractCollection;
+ import java.util.AbstractMap.SimpleEntry;
++import java.util.AbstractSet;
++import java.util.ArrayList;
++import java.util.Collection;
+ import java.util.Collections;
+ import java.util.Enumeration;
+ import java.util.Iterator;
+@@ -41,6 +45,105 @@ import java.util.stream.Collectors;
+  */
+ public class OrderedProperties extends Properties {
+ 
++    /**
++     * A view of the keys in insertion order; removals write through to the map.
++     */
++    private final class KeySet extends AbstractSet<Object> {
++
++        @Override
++        public void clear() {
++            OrderedProperties.this.clear();
++        }
++
++        @Override
++        public boolean contains(final Object o) {
++            return containsKey(o);
++        }
++
++        @Override
++        public Iterator<Object> iterator() {
++            return new ViewIterator<>(Function.identity());
++        }
++
++        @Override
++        public boolean remove(final Object o) {
++            return OrderedProperties.this.remove(o) != null;
++        }
++
++        @Override
++        public int size() {
++            return OrderedProperties.this.size();
++        }
++    }
++
++    /**
++     * A view of the values in key insertion order; removals write through to the map.
++     */
++    private final class Values extends AbstractCollection<Object> {
++
++        @Override
++        public void clear() {
++            OrderedProperties.this.clear();
++        }
++
++        @Override
++        public boolean contains(final Object o) {
++            return containsValue(o);
++        }
++
++        @Override
++        public Iterator<Object> iterator() {
++            return new ViewIterator<>(OrderedProperties.this::get);
++        }
++
++        @Override
++        public int size() {
++            return OrderedProperties.this.size();
++        }
++    }
++
++    /**
++     * Iterates a snapshot of the ordered keys, mapping each to the element type; {@link #remove()} routes through the map so the order tracker and the
++     * backing table stay in sync.
++     *
++     * @param <E> the element type.
++     */
++    private final class ViewIterator<E> implements Iterator<E> {
++
++        private final Iterator<Object> keyIterator;
++        private final Function<Object, E> mapper;
++        private Object lastKey;
++        private boolean canRemove;
++
++        private ViewIterator(final Function<Object, E> mapper) {
++            this.mapper = mapper;
++            synchronized (OrderedProperties.this) {
++                this.keyIterator = new ArrayList<>(orderedKeys).iterator();
++            }
++        }
++
++        @Override
++        public boolean hasNext() {
++            return keyIterator.hasNext();
++        }
++
++        @Override
++        public E next() {
++            lastKey = keyIterator.next();
++            canRemove = true;
++            return mapper.apply(lastKey);
++        }
++
++        @Override
++        public void remove() {
++            if (!canRemove) {
++                throw new IllegalStateException();
++            }
++            canRemove = false;
++            OrderedProperties.this.remove(lastKey);
++        }
++    }
++
+     private static final long serialVersionUID = 1L;
+ 
+     /**
+@@ -119,7 +222,7 @@ public class OrderedProperties extends Properties {
+ 
+     @Override
+     public Set<Object> keySet() {
+-        return orderedKeys;
++        return new KeySet();
+     }
+ 
+     @Override
+@@ -209,4 +312,9 @@ public class OrderedProperties extends Properties {
+             sb.append(", ");
+         }
+     }
++
++    @Override
++    public Collection<Object> values() {
++        return new Values();
++    }
+ }

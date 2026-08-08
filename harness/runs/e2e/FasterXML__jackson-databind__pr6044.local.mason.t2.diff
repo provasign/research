@@ -1,0 +1,42 @@
+diff --git a/TestExternalPropertyWithContainerType.java b/TestExternalPropertyWithContainerType.java
+new file mode 100644
+index 000000000..63559cf50
+--- /dev/null
++++ b/TestExternalPropertyWithContainerType.java
+@@ -0,0 +1,35 @@
++import java.util.*;
++
++import com.fasterxml.jackson.annotation.*;
++import com.fasterxml.jackson.databind.ObjectMapper;
++
++public class TestExternalPropertyWithContainerType {
++    
++    static class ContainerBean {
++        @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXTERNAL_PROPERTY, property = "type")
++        @JsonSubTypes({
++            @JsonSubTypes.Type(value = String.class, name = "string"),
++            @JsonSubTypes.Type(value = Integer.class, name = "integer")
++        })
++        public Object value;
++        
++        public String type;
++    }
++    
++    public static void main(String[] args) throws Exception {
++        ObjectMapper mapper = new ObjectMapper();
++        
++        // Test with a list
++        ContainerBean bean = new ContainerBean();
++        bean.type = "string";
++        bean.value = Arrays.asList("a", "b", "c");
++        
++        String json = mapper.writeValueAsString(bean);
++        System.out.println("Serialized: " + json);
++        
++        // This should fail according to the issue
++        ContainerBean result = mapper.readValue(json, ContainerBean.class);
++        System.out.println("Deserialized type: " + result.type);
++        System.out.println("Deserialized value: " + result.value);
++    }
++}
+\ No newline at end of file

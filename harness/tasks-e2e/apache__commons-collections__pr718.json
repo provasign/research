@@ -1,0 +1,30 @@
+{
+  "instance_id": "apache__commons-collections__pr718",
+  "repo": "apache/commons-collections",
+  "pr": 718,
+  "base_commit": "7a27229ebc6f1ed543328614b35534c599921ac5",
+  "merge_commit": "88d8b2f618ea46872ed01a839259a3ef3f7f31e6",
+  "patch": "diff --git a/src/main/java/org/apache/commons/collections4/SplitMapUtils.java b/src/main/java/org/apache/commons/collections4/SplitMapUtils.java\nindex ea8a904..27d3e8a 100644\n--- a/src/main/java/org/apache/commons/collections4/SplitMapUtils.java\n+++ b/src/main/java/org/apache/commons/collections4/SplitMapUtils.java\n@@ -131,9 +131,15 @@ public class SplitMapUtils {\n             throw new UnsupportedOperationException();\n         }\n \n+        /**\n+         * Always throws {@link UnsupportedOperationException}.\n+         *\n+         * @param key The key whose mapping would be removed.\n+         * @throws UnsupportedOperationException Always thrown.\n+         */\n         @Override\n         public V remove(final Object key) {\n-            return get.remove(key);\n+            throw new UnsupportedOperationException();\n         }\n \n         @Override\n",
+  "test_patch": "diff --git a/src/test/java/org/apache/commons/collections4/SplitMapUtilsTest.java b/src/test/java/org/apache/commons/collections4/SplitMapUtilsTest.java\nindex 94628d0..a7226fc 100644\n--- a/src/test/java/org/apache/commons/collections4/SplitMapUtilsTest.java\n+++ b/src/test/java/org/apache/commons/collections4/SplitMapUtilsTest.java\n@@ -97,7 +97,7 @@ class SplitMapUtilsTest {\n         assertInstanceOf(Unmodifiable.class, map);\n \n         // check individual operations\n-        int sz = map.size();\n+        final int sz = map.size();\n \n         attemptPutOperation(map::clear);\n \n@@ -116,12 +116,15 @@ class SplitMapUtilsTest {\n         assertEquals(other, map);\n         assertEquals(other.hashCode(), map.hashCode());\n \n-        // remove\n-        for (int i = 0; i < 10; i++) {\n-            assertEquals(i, map.remove(String.valueOf(i)).intValue());\n-            assertEquals(--sz, map.size());\n-        }\n-        assertTrue(map.isEmpty());\n+        // remove, and the Map default methods that route through it\n+        attemptPutOperation(() -> map.remove(\"0\"));\n+        attemptPutOperation(() -> map.remove(\"1\", 1));\n+        attemptPutOperation(() -> map.computeIfPresent(\"2\", (k, v) -> null));\n+        attemptPutOperation(() -> map.compute(\"3\", (k, v) -> null));\n+        attemptPutOperation(() -> map.merge(\"4\", 4, (a, b) -> null));\n+\n+        assertEquals(sz, map.size());\n+        assertEquals(sz, backingMap.size());\n         assertSame(map, SplitMapUtils.readableMap(map));\n     }\n \n",
+  "test_classes": [
+    "org.apache.commons.collections4.SplitMapUtilsTest"
+  ],
+  "src_files": [
+    "src/main/java/org/apache/commons/collections4/SplitMapUtils.java"
+  ],
+  "test_modules": [
+    "src/test/java/org/apache/commons/collections4/SplitMapUtilsTest.java"
+  ],
+  "problem_statement": "Reject remove on the Unmodifiable map from SplitMapUtils.readableMap\n\n`SplitMapUtils.readableMap` returns a `WrappedGet` that implements `Unmodifiable` and blocks `clear`, `put` and `putAll`, but `remove(Object)` delegates to the wrapped `Get`, so the view deletes from the underlying map. The `Map` default methods that route through it inherit the hole, so `remove(k, v)`, `computeIfPresent`, `compute` and `merge` empty it just as well, and `UnmodifiableMap.unmodifiableMap` hands the view straight back on its `instanceof Unmodifiable` check, so re-wrapping does not close it. Found while auditing the library's `Unmodifiable` implementations for mutators that reach the delegate; every other one throws, so the fix stays inside `WrappedGet`.\n\n- [x] Read the [contribution guidelines](CONTRIBUTING.md) for this project.\n- [ ] Read the [ASF Generative Tooling Guidance](https://www.apache.org/legal/generative-tooling.html) if you use Artificial Intelligence (AI).\n- [ ] I used AI to create any part of, or all of, this pull request. Which AI tool was used to create this pull request, and to what extent did it contribute?\n- [x] Run a successful build using the default [Maven](https://maven.apache.org/) goal with `mvn`; that's `mvn` on the command line by itself.\n- [x] Write unit tests that match behavioral changes, where the tests fail if the changes to the runtime are not applied. This may not always be possible, but it is a best practice.\n- [x] Write a pull request description that is detailed enough to understand what the pull request does, how, and why.\n- [x] Each commit in the pull request should have a meaningful subject line and body.\n",
+  "kind": "bug",
+  "fail_to_pass": [
+    "org.apache.commons.collections4.SplitMapUtilsTest::testAlreadyReadableMap"
+  ],
+  "pass_to_pass": [
+    "org.apache.commons.collections4.SplitMapUtilsTest::testAlreadyWritableMap",
+    "org.apache.commons.collections4.SplitMapUtilsTest::testWritableMap"
+  ],
+  "lang": "java",
+  "build": "maven",
+  "task_kind": "bug"
+}

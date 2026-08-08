@@ -1,0 +1,31 @@
+diff --git a/src/click/termui.py b/src/click/termui.py
+index e5e9678..c36bf7a 100644
+--- a/src/click/termui.py
++++ b/src/click/termui.py
+@@ -98,6 +98,8 @@ def _build_prompt(
+     show_choices: bool = True,
+     type: ParamType[t.Any] | None = None,
+ ) -> str:
++    from .globals import get_current_context
++    
+     prompt = text
+     if type is not None and show_choices and isinstance(type, Choice):
+         prompt += f" ({', '.join(map(str, type.choices))})"
+@@ -105,6 +107,17 @@ def _build_prompt(
+         default = f"({show_default})"
+     if default is not None and show_default:
+         prompt = f"{prompt} [{_format_default(default)}]"
++    
++    # If color is disabled in the current context, strip ANSI codes from the prompt
++    try:
++        ctx = get_current_context()
++        if ctx is not None and hasattr(ctx, 'color') and ctx.color is False:
++            from ._compat import strip_ansi
++            prompt = strip_ansi(prompt)
++    except Exception:
++        # If we can't determine color settings, proceed normally
++        pass
++        
+     return f"{prompt}{suffix}"
+ 
+ 

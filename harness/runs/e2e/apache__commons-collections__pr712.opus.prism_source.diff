@@ -1,0 +1,146 @@
+diff --git a/src/main/java/org/apache/commons/collections4/trie/analyzer/StringKeyAnalyzer.java b/src/main/java/org/apache/commons/collections4/trie/analyzer/StringKeyAnalyzer.java
+index 6b0aaa6df..c86e9fd8c 100644
+--- a/src/main/java/org/apache/commons/collections4/trie/analyzer/StringKeyAnalyzer.java
++++ b/src/main/java/org/apache/commons/collections4/trie/analyzer/StringKeyAnalyzer.java
+@@ -36,6 +36,18 @@ public class StringKeyAnalyzer extends KeyAnalyzer<String> {
+     /** The number of bits per {@link Character}. */
+     public static final int LENGTH = Character.SIZE;
+ 
++    /**
++     * The number of bits used to represent a single character position.
++     *
++     * <p>
++     * Every position is encoded as a <em>presence</em> bit followed by the {@link #LENGTH} bits of the character
++     * itself. The presence bit tells the end of a key apart from an actual {@code '\0'} character, so that keys such
++     * as {@code "x"} and {@code "x\0"} remain distinct (COLLECTIONS-714). Since a missing character encodes as a zero
++     * presence bit, shorter keys still sort before the keys they are a prefix of.
++     * </p>
++     */
++    private static final int BITS_PER_ELEMENT = LENGTH + 1;
++
+     /** A bit mask where the first bit is 1 and the others are zero. */
+     private static final int MSB = 0x8000;
+ 
+@@ -58,54 +70,49 @@ public class StringKeyAnalyzer extends KeyAnalyzer<String> {
+     public int bitIndex(final String key, final int offsetInBits, final int lengthInBits,
+                         final String other, final int otherOffsetInBits, final int otherLengthInBits) {
+ 
+-        boolean allNull = true;
+-
+-        if (offsetInBits % LENGTH != 0 || otherOffsetInBits % LENGTH != 0
+-                || lengthInBits % LENGTH != 0 || otherLengthInBits % LENGTH != 0) {
++        if (offsetInBits % BITS_PER_ELEMENT != 0 || otherOffsetInBits % BITS_PER_ELEMENT != 0
++                || lengthInBits % BITS_PER_ELEMENT != 0 || otherLengthInBits % BITS_PER_ELEMENT != 0) {
+             throw new IllegalArgumentException("The offsets and lengths must be at Character boundaries");
+         }
+ 
+-        final int beginIndex1 = offsetInBits / LENGTH;
+-        final int beginIndex2 = otherOffsetInBits / LENGTH;
++        final int beginIndex1 = offsetInBits / BITS_PER_ELEMENT;
++        final int beginIndex2 = otherOffsetInBits / BITS_PER_ELEMENT;
+ 
+-        final int endIndex1 = beginIndex1 + lengthInBits / LENGTH;
+-        final int endIndex2 = beginIndex2 + otherLengthInBits / LENGTH;
++        final int endIndex1 = beginIndex1 + lengthInBits / BITS_PER_ELEMENT;
++        final int endIndex2 = beginIndex2 + otherLengthInBits / BITS_PER_ELEMENT;
+ 
+-        final int length = Math.max(endIndex1, endIndex2);
++        final int length = Math.max(lengthInBits, otherLengthInBits) / BITS_PER_ELEMENT;
+ 
+         // Look at each character, and if they're different
+         // then figure out which bit makes the difference
+         // and return it.
+-        char k = 0;
+-        char f = 0;
+         for (int i = 0; i < length; i++) {
+             final int index1 = beginIndex1 + i;
+             final int index2 = beginIndex2 + i;
+ 
+-            if (index1 >= endIndex1) {
+-                k = 0;
+-            } else {
+-                k = key.charAt(index1);
++            final boolean present1 = index1 < endIndex1;
++            final boolean present2 = other != null && index2 < endIndex2;
++
++            if (present1 != present2) {
++                // One key ends here and the other does not: they differ on the presence bit.
++                return i * BITS_PER_ELEMENT;
+             }
+ 
+-            if (other == null || index2 >= endIndex2) {
+-                f = 0;
+-            } else {
+-                f = other.charAt(index2);
++            if (!present1) {
++                break;
+             }
+ 
++            final char k = key.charAt(index1);
++            final char f = other.charAt(index2);
++
+             if (k != f) {
+                 final int x = k ^ f;
+-                return i * LENGTH + Integer.numberOfLeadingZeros(x) - LENGTH;
+-            }
+-
+-            if (k != 0) {
+-                allNull = false;
++                return i * BITS_PER_ELEMENT + 1 + Integer.numberOfLeadingZeros(x) - LENGTH;
+             }
+         }
+ 
+-        // All bits are 0
+-        if (allNull) {
++        // All bits are 0, which is only the case for a key without any character
++        if (lengthInBits == 0) {
+             return NULL_BIT_KEY;
+         }
+ 
+@@ -115,7 +122,7 @@ public class StringKeyAnalyzer extends KeyAnalyzer<String> {
+ 
+     @Override
+     public int bitsPerElement() {
+-        return LENGTH;
++        return BITS_PER_ELEMENT;
+     }
+ 
+     @Override
+@@ -124,26 +131,31 @@ public class StringKeyAnalyzer extends KeyAnalyzer<String> {
+             return false;
+         }
+ 
+-        final int index = bitIndex / LENGTH;
+-        final int bit = bitIndex % LENGTH;
++        final int index = bitIndex / BITS_PER_ELEMENT;
++        final int bit = bitIndex % BITS_PER_ELEMENT;
++
++        if (bit == 0) {
++            // The presence bit is set as long as there actually is a character at this position.
++            return index < key.length();
++        }
+ 
+-        return (key.charAt(index) & mask(bit)) != 0;
++        return index < key.length() && (key.charAt(index) & mask(bit - 1)) != 0;
+     }
+ 
+     @Override
+     public boolean isPrefix(final String prefix, final int offsetInBits,
+                             final int lengthInBits, final String key) {
+-        if (offsetInBits % LENGTH != 0 || lengthInBits % LENGTH != 0) {
++        if (offsetInBits % BITS_PER_ELEMENT != 0 || lengthInBits % BITS_PER_ELEMENT != 0) {
+             throw new IllegalArgumentException(
+                     "Cannot determine prefix outside of Character boundaries");
+         }
+ 
+-        final String s1 = prefix.substring(offsetInBits / LENGTH, lengthInBits / LENGTH);
++        final String s1 = prefix.substring(offsetInBits / BITS_PER_ELEMENT, lengthInBits / BITS_PER_ELEMENT);
+         return key.startsWith(s1);
+     }
+ 
+     @Override
+     public int lengthInBits(final String key) {
+-        return key != null ? key.length() * LENGTH : 0;
++        return key != null ? key.length() * BITS_PER_ELEMENT : 0;
+     }
+ }

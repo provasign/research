@@ -1,0 +1,64 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index b422bd4..df1bd85 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -1199,13 +1199,22 @@ class Command:
+                 formatter.write_text(text)
+ 
+     def format_options(self, ctx: Context, formatter: HelpFormatter) -> None:
+-        """Writes all the options into the formatter if they exist."""
++        """Writes all the arguments and options into the formatter if they exist."""
++        args = []
+         opts = []
+         for param in self.get_params(ctx):
+             rv = param.get_help_record(ctx)
+-            if rv is not None:
++            if rv is None:
++                continue
++            if param.param_type_name == "argument":
++                args.append(rv)
++            else:
+                 opts.append(rv)
+ 
++        if args:
++            with formatter.section(_("Arguments")):
++                formatter.write_dl(args)
++
+         if opts:
+             with formatter.section(_("Options")):
+                 formatter.write_dl(opts)
+@@ -3450,6 +3459,12 @@ class Argument(Parameter):
+     and are required by default.
+ 
+     All parameters are passed onwards to the constructor of :class:`Parameter`.
++
++    :param help: The help text shown for this argument in the ``Arguments``
++        section of the command's help page.
++
++    .. versionchanged:: 8.3.0
++        Added the ``help`` parameter.
+     """
+ 
+     param_type_name = "argument"
+@@ -3458,6 +3473,7 @@ class Argument(Parameter):
+         self,
+         param_decls: cabc.Sequence[str],
+         required: bool | None = None,
++        help: str | None = None,
+         **attrs: t.Any,
+     ) -> None:
+         # Auto-detect the requirement status of the argument if not explicitly set.
+@@ -3475,6 +3491,13 @@ class Argument(Parameter):
+ 
+         super().__init__(param_decls, required=required, **attrs)
+ 
++        self.help = help
++
++    def get_help_record(self, ctx: Context) -> tuple[str, str] | None:
++        if not self.help:
++            return None
++        return self.make_metavar(ctx), inspect.cleandoc(self.help)
++
+     @property
+     def human_readable_name(self) -> str:
+         if self.metavar is not None:

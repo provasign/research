@@ -1,0 +1,248 @@
+diff --git a/.codegraph/.gitignore b/.codegraph/.gitignore
+new file mode 100644
+index 00000000..d20c0fe4
+--- /dev/null
++++ b/.codegraph/.gitignore
+@@ -0,0 +1,5 @@
++# CodeGraph data files — local to each machine, not for committing.
++# Ignore everything in .codegraph/ except this file itself, so transient
++# files (the database, daemon.pid, sockets, logs) never show up in git.
++*
++!.gitignore
+diff --git a/CHANGES.rst b/CHANGES.rst
+index 88fff09f..97ddf2fb 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -14,6 +14,9 @@ Version 3.2.0
+ -   The CSP ``prefetch_src``, ``navigate_to``, and ``plugin_types`` properties
+     are deprecated. Their corresponding directives have been deprecated or
+     removed from the spec. :pr:`3114`
++-   Header names set by Werkzeug use consistent capitalization. The
++    ``Content-Security-Policy-Report-Only`` and ``ETag`` headers were previously
++    written with inconsistent case.
+ -   ``HTTP_STATUS_CODES`` is deprecated. Use Python's built-in
+     ``http.HTTPStatus`` instead. Reason phrases use the more common title case
+     rather than upper case. :pr:`3139`
+diff --git a/src/werkzeug/middleware/shared_data.py b/src/werkzeug/middleware/shared_data.py
+index c632649e..bc1427c9 100644
+--- a/src/werkzeug/middleware/shared_data.py
++++ b/src/werkzeug/middleware/shared_data.py
+@@ -259,7 +259,7 @@ class SharedDataMiddleware:
+             timeout = self.cache_timeout
+             etag = self.generate_etag(mtime, file_size, real_filename)  # type: ignore
+             headers += [
+-                ("Etag", f'"{etag}"'),
++                ("ETag", f'"{etag}"'),
+                 ("Cache-Control", f"max-age={timeout}, public"),
+             ]
+ 
+diff --git a/src/werkzeug/sansio/response.py b/src/werkzeug/sansio/response.py
+index ead6f840..f8d13114 100644
+--- a/src/werkzeug/sansio/response.py
++++ b/src/werkzeug/sansio/response.py
+@@ -125,7 +125,7 @@ class Response:
+             self.headers = Headers(headers)
+ 
+         if content_type is None:
+-            if mimetype is None and "content-type" not in self.headers:
++            if mimetype is None and "Content-Type" not in self.headers:
+                 mimetype = self.default_mimetype
+             if mimetype is not None:
+                 mimetype = get_content_type(mimetype, "utf-8")
+@@ -297,7 +297,7 @@ class Response:
+     @property
+     def mimetype(self) -> str | None:
+         """The mimetype (content type without charset etc.)"""
+-        ct = self.headers.get("content-type")
++        ct = self.headers.get("Content-Type")
+ 
+         if ct:
+             return ct.split(";")[0].strip()
+@@ -320,7 +320,7 @@ class Response:
+         def on_update(d: CallbackDict[str, str]) -> None:
+             self.headers["Content-Type"] = dump_options_header(self.mimetype, d)
+ 
+-        d = parse_options_header(self.headers.get("content-type", ""))[1]
++        d = parse_options_header(self.headers.get("Content-Type", ""))[1]
+         return CallbackDict(d, on_update)
+ 
+     location = header_property[str](
+@@ -474,7 +474,7 @@ class Response:
+         .. versionchanged:: 2.0
+             The datetime object is timezone-aware.
+         """
+-        value = self.headers.get("retry-after")
++        value = self.headers.get("Retry-After")
+         if value is None:
+             return None
+ 
+@@ -488,8 +488,8 @@ class Response:
+     @retry_after.setter
+     def retry_after(self, value: datetime | int | str | None) -> None:
+         if value is None:
+-            if "retry-after" in self.headers:
+-                del self.headers["retry-after"]
++            if "Retry-After" in self.headers:
++                del self.headers["Retry-After"]
+             return
+         elif isinstance(value, datetime):
+             value = http_date(value)
+@@ -531,13 +531,13 @@ class Response:
+         """
+ 
+         def on_update(cache_control: _CacheControl) -> None:
+-            if not cache_control and "cache-control" in self.headers:
+-                del self.headers["cache-control"]
++            if not cache_control and "Cache-Control" in self.headers:
++                del self.headers["Cache-Control"]
+             elif cache_control:
+                 self.headers["Cache-Control"] = cache_control.to_header()
+ 
+         return parse_cache_control_header(
+-            self.headers.get("cache-control"), on_update, ResponseCacheControl
++            self.headers.get("Cache-Control"), on_update, ResponseCacheControl
+         )
+ 
+     def set_etag(self, etag: str, weak: bool = False) -> None:
+@@ -572,11 +572,11 @@ class Response:
+ 
+         def on_update(rng: ContentRange) -> None:
+             if not rng:
+-                del self.headers["content-range"]
++                del self.headers["Content-Range"]
+             else:
+                 self.headers["Content-Range"] = rng.to_header()
+ 
+-        rv = parse_content_range_header(self.headers.get("content-range"), on_update)
++        rv = parse_content_range_header(self.headers.get("Content-Range"), on_update)
+         # always provide a content range object to make the descriptor
+         # more user friendly.  It provides an unset() method that can be
+         # used to remove the header quickly.
+@@ -587,7 +587,7 @@ class Response:
+     @content_range.setter
+     def content_range(self, value: ContentRange | str | None) -> None:
+         if not value:
+-            del self.headers["content-range"]
++            del self.headers["Content-Range"]
+         elif isinstance(value, str):
+             self.headers["Content-Range"] = value
+         else:
+@@ -676,11 +676,11 @@ class Response:
+ 
+         def on_update(csp: ContentSecurityPolicy) -> None:
+             if not csp:
+-                del self.headers["content-security-policy"]
++                del self.headers["Content-Security-Policy"]
+             else:
+                 self.headers["Content-Security-Policy"] = csp.to_header()
+ 
+-        rv = parse_csp_header(self.headers.get("content-security-policy"), on_update)
++        rv = parse_csp_header(self.headers.get("Content-Security-Policy"), on_update)
+         if rv is None:
+             rv = ContentSecurityPolicy(None, on_update=on_update)
+         return rv
+@@ -690,7 +690,7 @@ class Response:
+         self, value: ContentSecurityPolicy | str | None
+     ) -> None:
+         if not value:
+-            del self.headers["content-security-policy"]
++            del self.headers["Content-Security-Policy"]
+         elif isinstance(value, str):
+             self.headers["Content-Security-Policy"] = value
+         else:
+@@ -709,12 +709,12 @@ class Response:
+ 
+         def on_update(csp: ContentSecurityPolicy) -> None:
+             if not csp:
+-                del self.headers["content-security-policy-report-only"]
++                del self.headers["Content-Security-Policy-Report-Only"]
+             else:
+-                self.headers["Content-Security-policy-report-only"] = csp.to_header()
++                self.headers["Content-Security-Policy-Report-Only"] = csp.to_header()
+ 
+         rv = parse_csp_header(
+-            self.headers.get("content-security-policy-report-only"), on_update
++            self.headers.get("Content-Security-Policy-Report-Only"), on_update
+         )
+         if rv is None:
+             rv = ContentSecurityPolicy(None, on_update=on_update)
+@@ -725,11 +725,11 @@ class Response:
+         self, value: ContentSecurityPolicy | str | None
+     ) -> None:
+         if not value:
+-            del self.headers["content-security-policy-report-only"]
++            del self.headers["Content-Security-Policy-Report-Only"]
+         elif isinstance(value, str):
+-            self.headers["Content-Security-policy-report-only"] = value
++            self.headers["Content-Security-Policy-Report-Only"] = value
+         else:
+-            self.headers["Content-Security-policy-report-only"] = value.to_header()
++            self.headers["Content-Security-Policy-Report-Only"] = value.to_header()
+ 
+     # CORS
+ 
+diff --git a/src/werkzeug/utils.py b/src/werkzeug/utils.py
+index f67b008e..51e90fab 100644
+--- a/src/werkzeug/utils.py
++++ b/src/werkzeug/utils.py
+@@ -540,7 +540,7 @@ def send_file(
+         # Some x-sendfile implementations incorrectly ignore the 304
+         # status code and send the file anyway.
+         if rv.status_code == 304:
+-            rv.headers.pop("x-sendfile", None)
++            rv.headers.pop("X-Sendfile", None)
+ 
+     return rv
+ 
+diff --git a/src/werkzeug/wrappers/response.py b/src/werkzeug/wrappers/response.py
+index 47072923..880772d8 100644
+--- a/src/werkzeug/wrappers/response.py
++++ b/src/werkzeug/wrappers/response.py
+@@ -644,9 +644,9 @@ class Response(_SansIOResponse):
+             "HTTP_IF_RANGE" not in environ
+             or not is_resource_modified(
+                 environ,
+-                self.headers.get("etag"),
++                self.headers.get("ETag"),
+                 None,
+-                self.headers.get("last-modified"),
++                self.headers.get("Last-Modified"),
+                 ignore_if_range=False,
+             )
+         ) and "HTTP_RANGE" in environ
+@@ -760,14 +760,14 @@ class Response(_SansIOResponse):
+             # will not override an already existing header.  Unfortunately
+             # this header will be overridden by many WSGI servers including
+             # wsgiref.
+-            if "date" not in self.headers:
++            if "Date" not in self.headers:
+                 self.headers["Date"] = http_date()
+             is206 = self._process_range_request(environ, complete_length, accept_ranges)
+             if not is206 and not is_resource_modified(
+                 environ,
+-                self.headers.get("etag"),
++                self.headers.get("ETag"),
+                 None,
+-                self.headers.get("last-modified"),
++                self.headers.get("Last-Modified"),
+             ):
+                 if parse_etags(environ.get("HTTP_IF_MATCH")):
+                     self.status_code = 412
+@@ -775,7 +775,7 @@ class Response(_SansIOResponse):
+                     self.status_code = 304
+             if (
+                 self.automatically_set_content_length
+-                and "content-length" not in self.headers
++                and "Content-Length" not in self.headers
+             ):
+                 length = self.calculate_content_length()
+                 if length is not None:
+@@ -789,7 +789,7 @@ class Response(_SansIOResponse):
+             SHA-1 is used to generate the value. MD5 may not be
+             available in some environments.
+         """
+-        if overwrite or "etag" not in self.headers:
++        if overwrite or "ETag" not in self.headers:
+             self.set_etag(generate_etag(self.get_data()), weak)
+ 
+ 

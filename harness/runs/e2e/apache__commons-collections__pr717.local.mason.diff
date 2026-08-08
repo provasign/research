@@ -1,0 +1,34 @@
+diff --git a/src/main/java/org/apache/commons/collections4/multimap/AbstractListValuedMap.java b/src/main/java/org/apache/commons/collections4/multimap/AbstractListValuedMap.java
+index a073e4355..4947fb49d 100644
+--- a/src/main/java/org/apache/commons/collections4/multimap/AbstractListValuedMap.java
++++ b/src/main/java/org/apache/commons/collections4/multimap/AbstractListValuedMap.java
+@@ -129,9 +129,11 @@ public abstract class AbstractListValuedMap<K, V> extends AbstractMultiValuedMap
+             List<V> list = getMapping();
+             if (list == null) {
+                 list = createCollection();
++                list.add(index, value);
+                 getMap().put(key, list);
++            } else {
++                list.add(index, value);
+             }
+-            list.add(index, value);
+         }
+ 
+         @Override
+diff --git a/src/main/java/org/apache/commons/collections4/multimap/AbstractMultiValuedMap.java b/src/main/java/org/apache/commons/collections4/multimap/AbstractMultiValuedMap.java
+index 4f7323c0b..74d75598d 100644
+--- a/src/main/java/org/apache/commons/collections4/multimap/AbstractMultiValuedMap.java
++++ b/src/main/java/org/apache/commons/collections4/multimap/AbstractMultiValuedMap.java
+@@ -444,7 +444,11 @@ public abstract class AbstractMultiValuedMap<K, V> implements MultiValuedMap<K,
+             Collection<V> coll = getMapping();
+             if (coll == null) {
+                 coll = createCollection();
+-                AbstractMultiValuedMap.this.map.put(key, coll);
++                final boolean changed = coll.addAll(other);
++                if (changed) {
++                    AbstractMultiValuedMap.this.map.put(key, coll);
++                }
++                return changed;
+             }
+             return coll.addAll(other);
+         }

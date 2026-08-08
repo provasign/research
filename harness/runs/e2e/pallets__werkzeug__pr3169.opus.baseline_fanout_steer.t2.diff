@@ -1,0 +1,647 @@
+diff --git a/CHANGES.rst b/CHANGES.rst
+index 21af9107..06171e76 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -20,7 +20,15 @@ Version 3.2.0
+     ``parse_accept_header``, ``parse_cache_control_header``,
+     ``parse_content_range_header``, ``parse_csp_header``, ``parse_etags``,
+     ``parse_if_range_header``, ``parse_range_header``, ``parse_set_header``.
+-    This improves typing and reduces circular imports. :pr:`3116`
++    This improves static typing and reduces circular imports. :pr:`3116`
++-   The ``Request.parameter_storage_class``, ``dict_storage_class`` and
++    ``list_storage_class`` attributes, and the ``cls`` parameter to
++    ``parse_cookie``, ``parse_form_data``, and ``FormDataParser``, are
++    deprecated. ``Request.form``, ``files``, ``args``, and ``cookies`` will
++    always be ``ImmutableMultiDict``. ``Request.access_route`` will always be
++    ``Sequence``. These were previously overridable to allow ordered data
++    structures when needed, but Python's ``dict`` now guarantees order. This
++    improves static typing. :pr:`3169`
+ -   ``HTTP_STATUS_CODES`` is deprecated. Use Python's built-in
+     ``http.HTTPStatus`` instead. Reason phrases use the more common title case
+     rather than upper case. :pr:`3139`
+diff --git a/src/werkzeug/formparser.py b/src/werkzeug/formparser.py
+index e1f5636e..da906123 100644
+--- a/src/werkzeug/formparser.py
++++ b/src/werkzeug/formparser.py
+@@ -8,6 +8,7 @@ from urllib.parse import parse_qsl
+ from ._internal import _plain_int
+ from .datastructures import FileStorage
+ from .datastructures import Headers
++from .datastructures import ImmutableMultiDict
+ from .datastructures import MultiDict
+ from .exceptions import RequestEntityTooLarge
+ from .http import parse_options_header
+@@ -55,10 +56,10 @@ def parse_form_data(
+     stream_factory: TStreamFactory | None = None,
+     max_form_memory_size: int | None = None,
+     max_content_length: int | None = None,
+-    cls: type[MultiDict[str, t.Any]] | None = None,
+     silent: bool = True,
+     *,
+     max_form_parts: int | None = None,
++    **kwargs: t.Any,
+ ) -> t_parse_result:
+     """Parse the form data in the environ and return it as tuple in the form
+     ``(stream, form, files)``.  You should only call this method if the
+@@ -84,13 +85,15 @@ def parse_form_data(
+                                is longer than this value an
+                                :exc:`~exceptions.RequestEntityTooLarge`
+                                exception is raised.
+-    :param cls: an optional dict class to use.  If this is not specified
+-                       or `None` the default :class:`MultiDict` is used.
+     :param silent: If set to False parsing errors will not be caught.
+     :param max_form_parts: The maximum number of multipart parts to be parsed. If this
+         is exceeded, a :exc:`~exceptions.RequestEntityTooLarge` exception is raised.
+     :return: A tuple in the form ``(stream, form, files)``.
+ 
++    .. versionchanged:: 3.2
++        The ``cls`` parameter is deprecated and will be removed in Werkzeug 3.3. It will
++        always be ``ImmutableMultiDict``.
++
+     .. versionchanged:: 3.0
+         The ``charset`` and ``errors`` parameters were removed.
+ 
+@@ -104,14 +107,26 @@ def parse_form_data(
+        Added the ``max_form_memory_size``, ``max_content_length``, and ``cls``
+        parameters.
+     """
+-    return FormDataParser(
++    parser_kwargs: dict[str, t.Any] = dict(
+         stream_factory=stream_factory,
+         max_form_memory_size=max_form_memory_size,
+         max_content_length=max_content_length,
+         max_form_parts=max_form_parts,
+         silent=silent,
+-        cls=cls,
+-    ).parse_from_environ(environ)
++    )
++
++    if "cls" in kwargs:
++        import warnings
++
++        warnings.warn(
++            "The 'cls' parameter is deprecated and will be removed in Werkzeug 3.3."
++            " It will always be 'ImmutableMultiDict'.",
++            DeprecationWarning,
++            stacklevel=2,
++        )
++        parser_kwargs["cls"] = kwargs["cls"]
++
++    return FormDataParser(**parser_kwargs).parse_from_environ(environ)
+ 
+ 
+ class FormDataParser:
+@@ -133,12 +148,14 @@ class FormDataParser:
+                                is longer than this value an
+                                :exc:`~exceptions.RequestEntityTooLarge`
+                                exception is raised.
+-    :param cls: an optional dict class to use.  If this is not specified
+-                       or `None` the default :class:`MultiDict` is used.
+     :param silent: If set to False parsing errors will not be caught.
+     :param max_form_parts: The maximum number of multipart parts to be parsed. If this
+         is exceeded, a :exc:`~exceptions.RequestEntityTooLarge` exception is raised.
+ 
++    .. versionchanged:: 3.2
++        The ``cls`` parameter and attribute are deprecated and will be removed
++        in Werkzeug 3.3. They will always be ``ImmutableMultiDict``.
++
+     .. versionchanged:: 3.0
+         The ``charset`` and ``errors`` parameters were removed.
+ 
+@@ -156,10 +173,10 @@ class FormDataParser:
+         stream_factory: TStreamFactory | None = None,
+         max_form_memory_size: int | None = None,
+         max_content_length: int | None = None,
+-        cls: type[MultiDict[str, t.Any]] | None = None,
+         silent: bool = True,
+         *,
+         max_form_parts: int | None = None,
++        **kwargs: t.Any,
+     ) -> None:
+         if stream_factory is None:
+             stream_factory = default_stream_factory
+@@ -169,10 +186,17 @@ class FormDataParser:
+         self.max_content_length = max_content_length
+         self.max_form_parts = max_form_parts
+ 
+-        if cls is None:
+-            cls = t.cast("type[MultiDict[str, t.Any]]", MultiDict)
++        if "cls" in kwargs:
++            import warnings
++
++            warnings.warn(
++                "The 'cls' parameter is deprecated and will be removed in Werkzeug 3.3."
++                " It will always be 'ImmutableMultiDict'.",
++                DeprecationWarning,
++                stacklevel=2,
++            )
+ 
+-        self.cls = cls
++        self.cls: type[ImmutableMultiDict[str, t.Any]] | None = kwargs.get("cls")
+         self.silent = silent
+ 
+     def parse_from_environ(self, environ: WSGIEnvironment) -> t_parse_result:
+@@ -217,7 +241,10 @@ class FormDataParser:
+         elif mimetype == "application/x-www-form-urlencoded":
+             parse_func = self._parse_urlencoded
+         else:
+-            return stream, self.cls(), self.cls()
++            if self.cls is not None:
++                return stream, self.cls(), self.cls()
++
++            return stream, ImmutableMultiDict(), ImmutableMultiDict()
+ 
+         if options is None:
+             options = {}
+@@ -228,7 +255,10 @@ class FormDataParser:
+             if not self.silent:
+                 raise
+ 
+-        return stream, self.cls(), self.cls()
++        if self.cls is not None:
++            return stream, self.cls(), self.cls()
++
++        return stream, ImmutableMultiDict(), ImmutableMultiDict()
+ 
+     def _parse_multipart(
+         self,
+@@ -242,12 +272,16 @@ class FormDataParser:
+         if not boundary:
+             raise ValueError("Missing boundary")
+ 
+-        with MultiPartParser(
++        kwargs: dict[str, t.Any] = dict(
+             stream_factory=self.stream_factory,
+             max_form_memory_size=self.max_form_memory_size,
+             max_form_parts=self.max_form_parts,
+-            cls=self.cls,
+-        ) as parser:
++        )
++
++        if self.cls is not None:
++            kwargs["cls"] = self.cls
++
++        with MultiPartParser(**kwargs) as parser:
+             form, files = parser.parse(stream, boundary, content_length)
+ 
+         return stream, form, files
+@@ -271,7 +305,11 @@ class FormDataParser:
+             keep_blank_values=True,
+             errors="werkzeug.url_quote",
+         )
+-        return stream, self.cls(items), self.cls()
++
++        if self.cls is not None:
++            return stream, self.cls(items), self.cls()
++
++        return stream, ImmutableMultiDict(items), ImmutableMultiDict()
+ 
+ 
+ class MultiPartParser:
+@@ -279,9 +317,9 @@ class MultiPartParser:
+         self,
+         stream_factory: TStreamFactory | None = None,
+         max_form_memory_size: int | None = None,
+-        cls: type[MultiDict[str, t.Any]] | None = None,
+         buffer_size: int = 64 * 1024,
+         max_form_parts: int | None = None,
++        **kwargs: t.Any,
+     ) -> None:
+         self.max_form_memory_size = max_form_memory_size
+         self.max_form_parts = max_form_parts
+@@ -292,10 +330,17 @@ class MultiPartParser:
+         self.stream_factory = stream_factory
+         self._files: list[t.IO[bytes]] = []
+ 
+-        if cls is None:
+-            cls = t.cast("type[MultiDict[str, t.Any]]", MultiDict)
++        if "cls" in kwargs:
++            import warnings
+ 
+-        self.cls = cls
++            warnings.warn(
++                "The 'cls' parameter is deprecated and will be removed in Werkzeug 3.3."
++                " It will always be 'ImmutableMultiDict'.",
++                DeprecationWarning,
++                stacklevel=2,
++            )
++
++        self.cls: type[ImmutableMultiDict[str, t.Any]] | None = kwargs.get("cls")
+         self.buffer_size = buffer_size
+ 
+     def __enter__(self) -> te.Self:
+@@ -409,7 +454,10 @@ class MultiPartParser:
+ 
+                 event = parser.next_event()
+ 
+-        return self.cls(fields), self.cls(files)
++        if self.cls is not None:
++            return self.cls(fields), self.cls(files)
++
++        return ImmutableMultiDict(fields), ImmutableMultiDict(files)
+ 
+ 
+ def _chunk_iter(read: t.Callable[[int], bytes], size: int) -> t.Iterator[bytes | None]:
+diff --git a/src/werkzeug/http.py b/src/werkzeug/http.py
+index d082218f..65952af1 100644
+--- a/src/werkzeug/http.py
++++ b/src/werkzeug/http.py
+@@ -1272,20 +1272,16 @@ def is_hop_by_hop_header(header: str) -> bool:
+ 
+ 
+ def parse_cookie(
+-    header: WSGIEnvironment | str | None,
+-    cls: type[ds.MultiDict[str, str]] | None = None,
+-) -> ds.MultiDict[str, str]:
+-    """Parse a cookie from a string or WSGI environ.
++    header: WSGIEnvironment | str | None, **kwargs: t.Any
++) -> ds.ImmutableMultiDict[str, str]:
++    """Parse cookies from a ``Cookie`` header as an :class:`.ImmutableMultiDict`.
+ 
+-    The same key can be provided multiple times, the values are stored
+-    in-order. The default :class:`MultiDict` will have the first value
+-    first, and all values can be retrieved with
+-    :meth:`MultiDict.getlist`.
++    :param header: The ``Cookie`` header, or a WSGI environ with an
++        ``HTTP_COOKIE`` key.
+ 
+-    :param header: The cookie header as a string, or a WSGI environ dict
+-        with a ``HTTP_COOKIE`` key.
+-    :param cls: A dict-like class to store the parsed cookies in.
+-        Defaults to :class:`MultiDict`.
++    .. versionchanged:: 3.2
++        The ``cls`` parameter is deprecated and will be removed in Werkzeug 3.3.
++        It will always be ``ImmutableMultiDict``.
+ 
+     .. versionchanged:: 3.0
+         Passing bytes, and the ``charset`` and ``errors`` parameters, were removed.
+@@ -1305,7 +1301,20 @@ def parse_cookie(
+     if cookie:
+         cookie = cookie.encode("latin1").decode()
+ 
+-    return _sansio_http.parse_cookie(cookie=cookie, cls=cls)
++    parse_kwargs: dict[str, t.Any] = {}
++
++    if "cls" in kwargs:
++        import warnings
++
++        warnings.warn(
++            "The 'cls' parameter is deprecated and will be removed in Werkzeug"
++            " 3.3. It will always be 'ImmutableMultiDict'.",
++            DeprecationWarning,
++            stacklevel=2,
++        )
++        parse_kwargs["cls"] = kwargs["cls"]
++
++    return _sansio_http.parse_cookie(cookie=cookie, **parse_kwargs)
+ 
+ 
+ _cookie_no_quote_re = re.compile(r"[\w!#$%&'()*+\-./:<=>?@\[\]^`{|}~]*", re.A)
+diff --git a/src/werkzeug/sansio/http.py b/src/werkzeug/sansio/http.py
+index 8c484714..ad6c914e 100644
+--- a/src/werkzeug/sansio/http.py
++++ b/src/werkzeug/sansio/http.py
+@@ -116,27 +116,34 @@ def _cookie_unslash_replace(m: t.Match[bytes]) -> bytes:
+ 
+ 
+ def parse_cookie(
+-    cookie: str | None = None,
+-    cls: type[ds.MultiDict[str, str]] | None = None,
+-) -> ds.MultiDict[str, str]:
+-    """Parse a cookie from a string.
++    cookie: str | None = None, **kwargs: t.Any
++) -> ds.ImmutableMultiDict[str, str]:
++    """Parse cookies from a ``Cookie`` header as an :class:`.ImmutableMultiDict`.
+ 
+-    The same key can be provided multiple times, the values are stored
+-    in-order. The default :class:`MultiDict` will have the first value
+-    first, and all values can be retrieved with
+-    :meth:`MultiDict.getlist`.
++    :param cookie: The ``Cookie`` header.
+ 
+-    :param cookie: The cookie header as a string.
+-    :param cls: A dict-like class to store the parsed cookies in.
+-        Defaults to :class:`MultiDict`.
++    .. versionchanged:: 3.2
++        The ``cls`` parameter is deprecated and will be removed in Werkzeug 3.3.
++        It will always be ``ImmutableMultiDict``.
+ 
+     .. versionchanged:: 3.0
+         Passing bytes, and the ``charset`` and ``errors`` parameters, were removed.
+ 
+     .. versionadded:: 2.2
+     """
+-    if cls is None:
+-        cls = ds.MultiDict
++    if "cls" in kwargs:
++        import warnings
++
++        warnings.warn(
++            "The 'cls' parameter is deprecated and will be removed in Werkzeug 3.3."
++            " It will always be 'ImmutableMultiDict'.",
++            DeprecationWarning,
++            stacklevel=2,
++        )
++
++    cls: type[ds.ImmutableMultiDict[str, str]] = kwargs.get(
++        "cls", ds.ImmutableMultiDict
++    )
+ 
+     if not cookie:
+         return cls()
+diff --git a/src/werkzeug/sansio/request.py b/src/werkzeug/sansio/request.py
+index 17e66576..bc3313ff 100644
+--- a/src/werkzeug/sansio/request.py
++++ b/src/werkzeug/sansio/request.py
+@@ -1,5 +1,6 @@
+ from __future__ import annotations
+ 
++import collections.abc as cabc
+ import typing as t
+ from datetime import datetime
+ from urllib.parse import parse_qsl
+@@ -10,11 +11,9 @@ from ..datastructures import ETags
+ from ..datastructures import Headers
+ from ..datastructures import HeaderSet
+ from ..datastructures import IfRange
+-from ..datastructures import ImmutableList
+ from ..datastructures import ImmutableMultiDict
+ from ..datastructures import LanguageAccept
+ from ..datastructures import MIMEAccept
+-from ..datastructures import MultiDict
+ from ..datastructures import Range
+ from ..datastructures import RequestCacheControl
+ from ..http import parse_date
+@@ -61,31 +60,32 @@ class Request:
+     .. versionadded:: 2.0
+     """
+ 
+-    #: the class to use for `args` and `form`.  The default is an
+-    #: :class:`~werkzeug.datastructures.ImmutableMultiDict` which supports
+-    #: multiple values per key. A :class:`~werkzeug.datastructures.ImmutableDict`
+-    #: is faster but only remembers the last key. It is also
+-    #: possible to use mutable structures, but this is not recommended.
++    #: The class to use for :attr:`args`, :attr:`form`, and :attr:`files`.
++    #:
++    #: .. deprecated:: 3.2
++    #:     Will be removed in Werkzeug 3.3. It will always be ``ImmutableMultiDict``.
+     #:
+     #: .. versionadded:: 0.6
+-    parameter_storage_class: type[MultiDict[str, t.Any]] = ImmutableMultiDict
++    parameter_storage_class: None = None
+ 
+-    #: The type to be used for dict values from the incoming WSGI
+-    #: environment. (For example for :attr:`cookies`.) By default an
+-    #: :class:`~werkzeug.datastructures.ImmutableMultiDict` is used.
++    #: The class to use for parsed dict values, such as :attr:`cookies`.
++    #:
++    #: .. deprecated:: 3.2
++    #:     Will be removed in Werkzeug 3.3. It will always be ``ImmutableMultiDict``.
+     #:
+     #: .. versionchanged:: 1.0.0
+     #:     Changed to ``ImmutableMultiDict`` to support multiple values.
+     #:
+     #: .. versionadded:: 0.6
+-    dict_storage_class: type[MultiDict[str, t.Any]] = ImmutableMultiDict
++    dict_storage_class: None = None
+ 
+-    #: the type to be used for list values from the incoming WSGI environment.
+-    #: By default an :class:`~werkzeug.datastructures.ImmutableList` is used
+-    #: (for example for :attr:`access_list`).
++    #: The class to use for parsed list values, such as :attr:`access_route`.
++    #:
++    #: .. deprecated:: 3.2
++    #:     Will be removed in Werkzeug 3.3. It will always be ``Sequence``.
+     #:
+     #: .. versionadded:: 0.6
+-    list_storage_class: type[list[t.Any]] = ImmutableList
++    list_storage_class: None = None
+ 
+     user_agent_class: type[UserAgent] = UserAgent
+     """The class used and returned by the :attr:`user_agent` property to
+@@ -151,39 +151,61 @@ class Request:
+         return f"<{type(self).__name__} {url!r} [{self.method}]>"
+ 
+     @cached_property
+-    def args(self) -> MultiDict[str, str]:
+-        """The parsed URL parameters (the part in the URL after the question
+-        mark).
+-
+-        By default an
+-        :class:`~werkzeug.datastructures.ImmutableMultiDict`
+-        is returned from this function.  This can be changed by setting
+-        :attr:`parameter_storage_class` to a different type.  This might
+-        be necessary if the order of the form data is important.
++    def args(self) -> ImmutableMultiDict[str, str]:
++        """The parsed URL query parameters (the ``?key=value&a=b`` part of a
++        URL) as an :class:`ImmutableMultiDict`.
+ 
+         .. versionchanged:: 2.3
+             Invalid bytes remain percent encoded.
+         """
+-        return self.parameter_storage_class(
+-            parse_qsl(
+-                self.query_string.decode(),
+-                keep_blank_values=True,
+-                errors="werkzeug.url_quote",
+-            )
++        items = parse_qsl(
++            self.query_string.decode(),
++            keep_blank_values=True,
++            errors="werkzeug.url_quote",
+         )
+ 
++        if self.parameter_storage_class is not None:
++            import warnings
++
++            warnings.warn(
++                "Setting 'Request.parameter_storage_class' is deprecated and will be"
++                " removed in Werkzeug 3.3. It will always be 'ImmutableMultiDict'.",
++                DeprecationWarning,
++                stacklevel=2,
++            )
++            return self.parameter_storage_class(items)
++
++        return ImmutableMultiDict(items)
++
+     @cached_property
+-    def access_route(self) -> list[str]:
+-        """If a forwarded header exists this is a list of all ip addresses
+-        from the client ip to the last proxy server.
++    def access_route(self) -> cabc.Sequence[str]:
++        """The route taken from the client to the application.
++
++        This is ``X-Forwarded-For`` if it is set. Remember to only trust the
++        last N values, where N is the number of servers setting this header in
++        front of the application.
++
++        Otherwise, this only contains :attr:`remote_addr`, or is empty.
+         """
+         if "X-Forwarded-For" in self.headers:
+-            return self.list_storage_class(
+-                parse_list_header(self.headers["X-Forwarded-For"])
+-            )
++            items = parse_list_header(self.headers["X-Forwarded-For"])
+         elif self.remote_addr is not None:
+-            return self.list_storage_class([self.remote_addr])
+-        return self.list_storage_class()
++            items = [self.remote_addr]
++        else:
++            items = []
++
++        if self.list_storage_class is not None:
++            import warnings
++
++            warnings.warn(
++                "Setting 'Request.list_storage_class' is deprecated and will be"
++                " removed in Werkzeug 3.3. It will always be 'Sequence'.",
++                DeprecationWarning,
++                stacklevel=2,
++            )
++            return self.list_storage_class(items)
++
++        return items
+ 
+     @cached_property
+     def full_path(self) -> str:
+@@ -238,9 +260,12 @@ class Request:
+         """A :class:`dict` with the contents of all cookies transmitted with
+         the request."""
+         wsgi_combined_cookie = ";".join(self.headers.getlist("Cookie"))
+-        return parse_cookie(  # type: ignore
+-            wsgi_combined_cookie, cls=self.dict_storage_class
+-        )
++        kwargs: dict[str, t.Any] = {}
++
++        if self.dict_storage_class is not None:
++            kwargs["cls"] = self.dict_storage_class
++
++        return parse_cookie(wsgi_combined_cookie, **kwargs)
+ 
+     # Common Descriptors
+ 
+diff --git a/src/werkzeug/wrappers/request.py b/src/werkzeug/wrappers/request.py
+index d97d22f9..8f9da3d1 100644
+--- a/src/werkzeug/wrappers/request.py
++++ b/src/werkzeug/wrappers/request.py
+@@ -243,14 +243,26 @@ class Request(_SansIORequest):
+ 
+         .. versionadded:: 0.8
+         """
+-        return self.form_data_parser_class(
++        kwargs: dict[str, t.Any] = dict(
+             stream_factory=self._get_file_stream,
+             max_form_memory_size=self.max_form_memory_size,
+             max_content_length=self.max_content_length,
+             max_form_parts=self.max_form_parts,
+-            cls=self.parameter_storage_class,
+         )
+ 
++        if self.parameter_storage_class is not None:
++            import warnings
++
++            warnings.warn(
++                "Setting 'Request.parameter_storage_class' is deprecated and will be"
++                " removed in Werkzeug 3.3. It will always be 'ImmutableMultiDict'.",
++                DeprecationWarning,
++                stacklevel=2,
++            )
++            kwargs["cls"] = self.parameter_storage_class
++
++        return self.form_data_parser_class(**kwargs)
++
+     def _load_form_data(self) -> None:
+         """Method used internally to retrieve submitted data.  After calling
+         this sets `form` and `files` on the request object to multi dicts
+@@ -273,11 +285,21 @@ class Request(_SansIORequest):
+                 self.mimetype_params,
+             )
+         else:
+-            data = (
+-                self.stream,
+-                self.parameter_storage_class(),
+-                self.parameter_storage_class(),
+-            )
++            if self.parameter_storage_class is not None:
++                import warnings
++
++                warnings.warn(
++                    "Setting 'Request.parameter_storage_class' is deprecated and will"
++                    " be removed in Werkzeug 3.3. It will always be"
++                    " 'ImmutableMultiDict'.",
++                    DeprecationWarning,
++                    stacklevel=2,
++                )
++                cls = self.parameter_storage_class
++            else:
++                cls = ImmutableMultiDict
++
++            data = self.stream, cls(), cls()
+ 
+         # inject the values into the instance dict so that we bypass
+         # our cached_property non-data descriptor.
+@@ -426,19 +448,11 @@ class Request(_SansIORequest):
+ 
+     @cached_property
+     def form(self) -> ImmutableMultiDict[str, str]:
+-        """The form parameters.  By default an
+-        :class:`~werkzeug.datastructures.ImmutableMultiDict`
+-        is returned from this function.  This can be changed by setting
+-        :attr:`parameter_storage_class` to a different type.  This might
+-        be necessary if the order of the form data is important.
+-
+-        Please keep in mind that file uploads will not end up here, but instead
+-        in the :attr:`files` attribute.
++        """The parsed form text fields as an :class:`.ImmutableMultiDict`. File
++        fields are in :attr:`files`, not here.
+ 
+         .. versionchanged:: 0.9
+-
+-            Previous to Werkzeug 0.9 this would only contain form data for POST
+-            and PUT requests.
++            Works for any method, not only ``POST`` and ``PUT``.
+         """
+         self._load_form_data()
+         return self.form
+@@ -465,6 +479,7 @@ class Request(_SansIORequest):
+         args = []
+ 
+         for d in sources:
++            # TODO remove with parameter_storage_class
+             if not isinstance(d, MultiDict):
+                 d = MultiDict(d)
+ 
+@@ -474,23 +489,16 @@ class Request(_SansIORequest):
+ 
+     @cached_property
+     def files(self) -> ImmutableMultiDict[str, FileStorage]:
+-        """:class:`~werkzeug.datastructures.MultiDict` object containing
+-        all uploaded files.  Each key in :attr:`files` is the name from the
+-        ``<input type="file" name="">``.  Each value in :attr:`files` is a
+-        Werkzeug :class:`~werkzeug.datastructures.FileStorage` object.
+-
+-        It basically behaves like a standard file object you know from Python,
+-        with the difference that it also has a
+-        :meth:`~werkzeug.datastructures.FileStorage.save` function that can
+-        store the file on the filesystem.
+-
+-        Note that :attr:`files` will only contain data if the request method was
+-        POST, PUT or PATCH and the ``<form>`` that posted to the request had
+-        ``enctype="multipart/form-data"``.  It will be empty otherwise.
+-
+-        See the :class:`~werkzeug.datastructures.MultiDict` /
+-        :class:`~werkzeug.datastructures.FileStorage` documentation for
+-        more details about the used data structure.
++        """The parsed form file fields as an :class:`.ImmutableMultiDict`. Text
++        fields are in :attr:`form`, not here.
++
++        This will only be populated if the HTML form has the
++        ``enctype=multipart/form-data`` attribute.
++
++        Each value is a :class:`.FileStorage` object. ``FileStorage`` is
++        file-like, for example it has a ``read()`` method and is iterable. The
++        :meth:`~.FileStorage.save` method can be used to save the data, along
++        with the :func:`.secure_filename` function.
+         """
+         self._load_form_data()
+         return self.files

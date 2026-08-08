@@ -1,0 +1,95 @@
+diff --git a/CHANGES.rst b/CHANGES.rst
+index 21af9107..e4b4a0e7 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -31,6 +31,9 @@ Version 3.2.0
+ -   The ``accept_charsets`` header property on ``Request``, and the
+     ``CharsetAccept`` class, are deprecated. The header has not been used for a
+     long time. :pr:`3161`
++-   The ``parameter_storage_class``, ``dict_storage_class``, and
++    ``list_storage_class`` attributes on ``Request`` are deprecated. The
++    default immutable types will always be used.
+ -   ``redirect`` returns a ``303`` status code by default instead of ``302``.
+     This tells the client to always switch to ``GET``, rather than only
+     switching ``POST`` to ``GET``. This preserves the current behavior of
+diff --git a/src/werkzeug/sansio/request.py b/src/werkzeug/sansio/request.py
+index 17e66576..f6af8a38 100644
+--- a/src/werkzeug/sansio/request.py
++++ b/src/werkzeug/sansio/request.py
+@@ -67,6 +67,9 @@ class Request:
+     #: is faster but only remembers the last key. It is also
+     #: possible to use mutable structures, but this is not recommended.
+     #:
++    #: .. deprecated:: 3.2
++    #:     Will be removed in Werkzeug 3.3.
++    #:
+     #: .. versionadded:: 0.6
+     parameter_storage_class: type[MultiDict[str, t.Any]] = ImmutableMultiDict
+ 
+@@ -74,6 +77,9 @@ class Request:
+     #: environment. (For example for :attr:`cookies`.) By default an
+     #: :class:`~werkzeug.datastructures.ImmutableMultiDict` is used.
+     #:
++    #: .. deprecated:: 3.2
++    #:     Will be removed in Werkzeug 3.3.
++    #:
+     #: .. versionchanged:: 1.0.0
+     #:     Changed to ``ImmutableMultiDict`` to support multiple values.
+     #:
+@@ -84,9 +90,30 @@ class Request:
+     #: By default an :class:`~werkzeug.datastructures.ImmutableList` is used
+     #: (for example for :attr:`access_list`).
+     #:
++    #: .. deprecated:: 3.2
++    #:     Will be removed in Werkzeug 3.3.
++    #:
+     #: .. versionadded:: 0.6
+     list_storage_class: type[list[t.Any]] = ImmutableList
+ 
++    def __init_subclass__(cls, **kwargs: t.Any) -> None:
++        super().__init_subclass__(**kwargs)
++
++        for name in (
++            "parameter_storage_class",
++            "dict_storage_class",
++            "list_storage_class",
++        ):
++            if name in cls.__dict__:
++                import warnings
++
++                warnings.warn(
++                    f"The '{name}' attribute is deprecated and will be removed in"
++                    " Werkzeug 3.3.",
++                    DeprecationWarning,
++                    stacklevel=3,
++                )
++
+     user_agent_class: type[UserAgent] = UserAgent
+     """The class used and returned by the :attr:`user_agent` property to
+     parse the header. Defaults to
+@@ -157,9 +184,7 @@ class Request:
+ 
+         By default an
+         :class:`~werkzeug.datastructures.ImmutableMultiDict`
+-        is returned from this function.  This can be changed by setting
+-        :attr:`parameter_storage_class` to a different type.  This might
+-        be necessary if the order of the form data is important.
++        is returned from this function.
+ 
+         .. versionchanged:: 2.3
+             Invalid bytes remain percent encoded.
+diff --git a/src/werkzeug/wrappers/request.py b/src/werkzeug/wrappers/request.py
+index d97d22f9..e7f0e347 100644
+--- a/src/werkzeug/wrappers/request.py
++++ b/src/werkzeug/wrappers/request.py
+@@ -428,9 +428,7 @@ class Request(_SansIORequest):
+     def form(self) -> ImmutableMultiDict[str, str]:
+         """The form parameters.  By default an
+         :class:`~werkzeug.datastructures.ImmutableMultiDict`
+-        is returned from this function.  This can be changed by setting
+-        :attr:`parameter_storage_class` to a different type.  This might
+-        be necessary if the order of the form data is important.
++        is returned from this function.
+ 
+         Please keep in mind that file uploads will not end up here, but instead
+         in the :attr:`files` attribute.

@@ -1,0 +1,42 @@
+diff --git a/src/main/java/org/apache/commons/collections4/map/Flat3Map.java b/src/main/java/org/apache/commons/collections4/map/Flat3Map.java
+index ed7fd90c2..0de45cf5f 100644
+--- a/src/main/java/org/apache/commons/collections4/map/Flat3Map.java
++++ b/src/main/java/org/apache/commons/collections4/map/Flat3Map.java
+@@ -151,9 +151,35 @@ public class Flat3Map<K, V> implements IterableMap<K, V>, Serializable, Cloneabl
+             }
+             final Map.Entry<?, ?> entry = (Map.Entry<?, ?>) obj;
+             final Object key = entry.getKey();
+-            final boolean result = parent.containsKey(key);
++            
++            // Find the matching entry in flat mode
++            Entry<K, V> match = null;
++            if (parent.delegateMap != null) {
++                // In delegate mode, use the delegate map's getEntry
++                match = (Entry<K, V>) parent.delegateMap.getEntry(key);
++            } else {
++                // In flat mode, manually check each entry
++                switch (parent.size) {
++                case 3:
++                    if (key == null ? parent.key3 == null : key.equals(parent.key3)) {
++                        match = new FlatMapEntry<>(parent, 3);
++                    }
++                case 2:
++                    if (match == null && (key == null ? parent.key2 == null : key.equals(parent.key2))) {
++                        match = new FlatMapEntry<>(parent, 2);
++                    }
++                case 1:
++                    if (match == null && (key == null ? parent.key1 == null : key.equals(parent.key1))) {
++                        match = new FlatMapEntry<>(parent, 1);
++                    }
++                }
++            }
++            
++            if (match == null || !match.equals(entry)) {
++                return false;
++            }
+             parent.remove(key);
+-            return result;
++            return true;
+         }
+ 
+         @Override

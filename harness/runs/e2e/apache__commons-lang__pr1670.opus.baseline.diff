@@ -1,0 +1,40 @@
+diff --git a/src/main/java/org/apache/commons/lang3/ClassUtils.java b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+index 1e7a3b5e3..f397ab9bd 100644
+--- a/src/main/java/org/apache/commons/lang3/ClassUtils.java
++++ b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+@@ -1271,6 +1271,26 @@ private void walkInterfaces(final Set<Class<?>> addTo, final Class<?> c) {
+         };
+     }
+ 
++    /**
++     * Tests whether the given class name contains nothing but a run of {@code "[]"} array markers from the given index to its end.
++     *
++     * @param className the class name to test.
++     * @param fromIndex the index of the first array marker.
++     * @return whether the tail of the class name is a well-formed run of array markers.
++     */
++    private static boolean isArrayMarkerRun(final String className, final int fromIndex) {
++        final int len = className.length();
++        if ((len - fromIndex) % 2 != 0) {
++            return false;
++        }
++        for (int i = fromIndex; i < len; i += 2) {
++            if (className.charAt(i) != '[' || className.charAt(i + 1) != ']') {
++                return false;
++            }
++        }
++        return true;
++    }
++
+     /**
+      * Tests whether one {@link Class} can be assigned to a variable of another {@link Class}.
+      *
+@@ -1642,7 +1662,7 @@ private static String toCleanName(final String className) {
+         if (cnLen > MAX_CLASS_NAME_LENGTH && !encodedName) {
+             throw new IllegalArgumentException(String.format("Class name greater than maxium length %,d", MAX_CLASS_NAME_LENGTH));
+         }
+-        if (canonicalName.endsWith(arrayMarker)) {
++        if (arrIdx >= 0 && canonicalName.endsWith(arrayMarker) && isArrayMarkerRun(canonicalName, arrIdx)) {
+             final int dims =  (canonicalName.length() - arrIdx) / 2;
+             if (dims > MAX_JVM_ARRAY_DIMENSION) {
+                 throw new IllegalArgumentException("Array dimension greater than JVM specification maximum of 255.");

@@ -1,0 +1,15 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index 1eb81d2..5ebd4ac 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -114,7 +114,9 @@ class BytesIOCopy(io.BytesIO):
+ 
+     def flush(self) -> None:
+         super().flush()
+-        self.copy_to.flush()
++        # Check if copy_to is still valid before flushing
++        if not self.copy_to.closed:
++            self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)

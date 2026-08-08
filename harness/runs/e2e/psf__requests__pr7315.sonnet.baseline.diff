@@ -1,0 +1,23 @@
+diff --git a/src/requests/adapters.py b/src/requests/adapters.py
+index c5726aed..72beac1f 100644
+--- a/src/requests/adapters.py
++++ b/src/requests/adapters.py
+@@ -590,8 +590,16 @@ class HTTPAdapter(BaseAdapter):
+             using_socks_proxy = proxy_scheme.startswith("socks")
+ 
+         url = request.path_url
+-        if url.startswith("//"):  # Don't confuse urllib3
+-            url = f"/{url.lstrip('/')}"
++        if url.startswith("//"):
++            # A URL with excess leading path separators can cause urllib3 to
++            # fail while trying to reparse it as a host:port pair. Only trim
++            # in that case; otherwise preserve the extra separators, since
++            # they can be a meaningful part of the path (e.g. S3 keys that
++            # start with a "/").
++            try:
++                parse_url(url)
++            except LocationValueError:
++                url = f"/{url.lstrip('/')}"
+ 
+         if is_proxied_http_request and not using_socks_proxy:
+             url = urldefragauth(request.url)

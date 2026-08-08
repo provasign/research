@@ -1,0 +1,37 @@
+diff --git a/src/click/formatting.py b/src/click/formatting.py
+index d9075ca..85d1967 100644
+--- a/src/click/formatting.py
++++ b/src/click/formatting.py
+@@ -179,7 +179,31 @@ class HelpFormatter:
+             # The prefix is too long, put the arguments on the next line.
+             self.write(usage_prefix)
+             self.write("\n")
+-            indent = " " * (max(self.current_indent, term_len(prefix)) + 4)
++            indent = " " * (max(self.current_indent + 1, len(usage_prefix)))
++            self.write(
++                wrap_text(
++                    args,
++                    text_width,
++                    initial_indent=indent,
++                    subsequent_indent=indent,
++                )
++            )   else:
++            # The prefix is too long, put the arguments on the next line.
++            self.write(usage_prefix)
++            self.write("\n")
++            indent = " " * (max(self.current_indent + 1, len(usage_prefix)))
++            if args:
++                self.write(
++                    wrap_text(
++                        args,
++                        text_width,
++                        initial_indent=indent,
++                        subsequent_indent=indent,
++                    )
++                )
++            else:
++                # Do nothing - we already wrote the prefix line
++                passlf.current_indent, term_len(prefix)) + 4)
+             self.write(
+                 wrap_text(
+                     args, text_width, initial_indent=indent, subsequent_indent=indent

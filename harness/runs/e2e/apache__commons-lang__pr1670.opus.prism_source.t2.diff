@@ -1,0 +1,41 @@
+diff --git a/src/main/java/org/apache/commons/lang3/ClassUtils.java b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+index 1e7a3b5e3..19aa9a16b 100644
+--- a/src/main/java/org/apache/commons/lang3/ClassUtils.java
++++ b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+@@ -1493,6 +1493,27 @@ public static boolean isAssignable(Class<?>[] classArray, Class<?>[] toClassArra
+         return true;
+     }
+ 
++    /**
++     * Tests whether the given class name only contains well-formed array markers ({@code "[]"}) from the given index to the end, for example the
++     * {@code "[][]"} in {@code "java.lang.String[][]"}.
++     *
++     * @param canonicalName the class name to check.
++     * @param fromIndex     the index of the first array marker.
++     * @return whether the array suffix is well-formed.
++     */
++    private static boolean isArrayMarkerSuffix(final String canonicalName, final int fromIndex) {
++        final int len = canonicalName.length();
++        if ((len - fromIndex) % 2 != 0) {
++            return false;
++        }
++        for (int i = fromIndex; i < len; i += 2) {
++            if (canonicalName.charAt(i) != '[' || canonicalName.charAt(i + 1) != ']') {
++                return false;
++            }
++        }
++        return true;
++    }
++
+     /**
+      * Tests whether the specified class an inner class or static nested class.
+      *
+@@ -1642,7 +1663,7 @@ private static String toCleanName(final String className) {
+         if (cnLen > MAX_CLASS_NAME_LENGTH && !encodedName) {
+             throw new IllegalArgumentException(String.format("Class name greater than maxium length %,d", MAX_CLASS_NAME_LENGTH));
+         }
+-        if (canonicalName.endsWith(arrayMarker)) {
++        if (canonicalName.endsWith(arrayMarker) && isArrayMarkerSuffix(canonicalName, arrIdx)) {
+             final int dims =  (canonicalName.length() - arrIdx) / 2;
+             if (dims > MAX_JVM_ARRAY_DIMENSION) {
+                 throw new IllegalArgumentException("Array dimension greater than JVM specification maximum of 255.");

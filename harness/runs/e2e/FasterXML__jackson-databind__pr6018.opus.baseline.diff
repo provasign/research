@@ -1,0 +1,72 @@
+diff --git a/release-notes/VERSION b/release-notes/VERSION
+index 8d661702e..f819c8747 100644
+--- a/release-notes/VERSION
++++ b/release-notes/VERSION
+@@ -221,6 +221,8 @@ Versions: 3.x (for earlier see VERSION-2.x)
+  (fix by Lee Jiwon)
+ #6010: `WRITE_ENUMS_TO_LOWERCASE` must use `Locale.ROOT` for case folding
+  (fix by Lee Jiwon)
++#6017: Support delegating `@JsonUnwrapped` serializer (from
++  `StdConvertingSerializer`)
+ - Remove project-specific Android SDK compatibility level, use shared;
+   no change level itself (stillAndroid SDK 34)
+ 
+diff --git a/src/main/java/tools/jackson/databind/ser/std/StdConvertingSerializer.java b/src/main/java/tools/jackson/databind/ser/std/StdConvertingSerializer.java
+index b4beda28a..2042ba47b 100644
+--- a/src/main/java/tools/jackson/databind/ser/std/StdConvertingSerializer.java
++++ b/src/main/java/tools/jackson/databind/ser/std/StdConvertingSerializer.java
+@@ -8,6 +8,7 @@ import tools.jackson.databind.jsontype.TypeSerializer;
+ import tools.jackson.databind.ser.impl.PropertySerializerMap;
+ import tools.jackson.databind.util.ClassUtil;
+ import tools.jackson.databind.util.Converter;
++import tools.jackson.databind.util.NameTransformer;
+ 
+ /**
+  * Serializer implementation where given Java type is first converted
+@@ -99,6 +100,33 @@ public class StdConvertingSerializer
+         return new StdConvertingSerializer(converter, delegateType, delegateSerializer, prop);
+     }
+ 
++    /*
++    /**********************************************************************
++    /* Mutant factories
++    /**********************************************************************
++     */
++
++    /**
++     * Overridden to support {@code @JsonUnwrapped} by delegating unwrapping
++     * to the serializer of the delegate (converted) type, if we have one.
++     *
++     * @since 3.2
++     */
++    @Override
++    public ValueSerializer<Object> unwrappingSerializer(NameTransformer unwrapper)
++    {
++        // Nothing much we can do for the dynamic case (delegate serializer
++        // resolved only at serialization time)
++        if (_delegateSerializer == null) {
++            return this;
++        }
++        ValueSerializer<?> unwrapping = _delegateSerializer.unwrappingSerializer(unwrapper);
++        if (unwrapping == _delegateSerializer) {
++            return this;
++        }
++        return withDelegate(_converter, _delegateType, unwrapping, _property);
++    }
++
+     /*
+     /**********************************************************************
+     /* Contextualization
+@@ -155,6 +183,12 @@ public class StdConvertingSerializer
+         return _delegateSerializer;
+     }
+ 
++    // @since 3.2
++    @Override
++    public boolean isUnwrappingSerializer() {
++        return (_delegateSerializer != null) && _delegateSerializer.isUnwrappingSerializer();
++    }
++
+     /*
+     /**********************************************************************
+     /* Serialization

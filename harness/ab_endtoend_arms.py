@@ -39,7 +39,7 @@ CFG_DIR = Path("/tmp/ab-endtoend")
 CFG_DIR.mkdir(exist_ok=True)
 
 (CFG_DIR / "engine-b.json").write_text(json.dumps({"mcpServers": {
-    "engine-b": {"type": "stdio", "command": str(HOME / ".local/bin/engine-b"),
+    "codegraph": {"type": "stdio", "command": str(HOME / ".local/bin/codegraph"),
                   "args": ["serve", "--mcp"]}}}))
 (CFG_DIR / "prism.json").write_text(json.dumps({"mcpServers": {
     "prism": {"type": "stdio", "command": str(HOME / "bin/prism"), "args": ["mcp"]}}}))
@@ -169,7 +169,7 @@ ARMS = {
                     "returns relevant symbols, call paths, and blast radius in one "
                     "call -- use it as your primary context tool; impact/callers "
                     "for follow-ups. Then edit and build.",
-        "allowed": _EDIT_AND_BUILD + ["mcp__engine-b"],
+        "allowed": _EDIT_AND_BUILD + ["mcp__codegraph"],
         "mcp": str(CFG_DIR / "engine-b.json"),
     },
 }
@@ -202,4 +202,129 @@ GRAPH_TOOL_PREFIXES = {
                     "mcp__prism__prism_dead_code"),
     "engine-b": ("mcp__engine-b",),
     "baseline": (),
+}
+
+
+# prism_only (2026-08-03): the single-verb design, cloud tier. Grep/rg/find/glob
+# STRIPPED; the ONLY way to find code is prism_query. change_impact for
+# signature changes. Steering forbids text search explicitly.
+ARMS["prism_only"] = {
+    "guidance": (
+        "CONTEXT TOOL: Prism, and ONLY Prism. You have NO grep, ripgrep, find, "
+        "glob, ls, or cat. To find ANY code, run:\n"
+        "  python3 /Users/tapabratapal/Projects/provasign/research/harness/pq.py \"<what you need>\" \"comma,separated,anchor,terms\"\n"
+        "It returns the type-resolved graph answer, and automatically falls back "
+        "to a text search only when the graph has nothing for those terms -- so it "
+        "is never empty-handed. Pass the terms you would have grepped. For a "
+        "signature/type change, also use prism_change_impact. Then Read the files "
+        "it points to, edit, and build."),
+    "allowed": [t for t in _EDIT_AND_BUILD if t not in _SEARCH] + [
+        "Bash(python3 /Users/tapabratapal/Projects/provasign/research/harness/pq.py:*)",
+        "mcp__prism__prism_change_impact"],
+    "mcp": str(CFG_DIR / "prism.json"),
+}
+
+# prism_native (2026-08-05): the clean single-tool arm the merged text search
+# makes fair. Unlike prism_only (which bolted a text fallback on via pq.py),
+# this arm exposes the SHIPPED 15-tool MCP surface and nothing else: since
+# v0.31 prism_search/prism_query run a real rg/grep full-text pass internally,
+# stripping grep no longer removes a capability -- only a routing choice.
+ARMS["prism_native"] = {
+    "guidance": (
+        "CONTEXT TOOL: the Prism MCP server, and ONLY Prism -- you have no grep, "
+        "ripgrep, find, glob, ls, or cat. This costs you nothing: prism_search "
+        "searches symbol names AND the raw source text (a real ripgrep pass -- "
+        "error messages, config keys, comments all land), so use it exactly as "
+        "you would grep. Workflow: prism_query(task=\"<the symptom>\", terms=[your "
+        "search terms]) FIRST -- it returns edit-ready line-numbered source "
+        "windows, callers, and raw text matches in one call; do not re-read what "
+        "it shows. prism_search to locate anything else. For a signature/type "
+        "change, prism_change_impact. Then Read/Edit the files and build."),
+    "allowed": [t for t in _EDIT_AND_BUILD if t not in _SEARCH] + ["mcp__prism"],
+    "mcp": str(CFG_DIR / "prism.json"),
+}
+
+
+# prism_priced (2026-08-06): prism_native + agent-priced delivery. Same
+# single-tool exposure, but the guidance teaches the scope knob added after
+# the first meaningful-bed run measured prism_native at ~1.5x baseline cost
+# with identical resolves: the arm's steering routed every locate through
+# the rich delivery. Here the agent says what it wants — a pure grep when
+# it would have grepped, enrichment when it asks for it.
+ARMS["prism_priced"] = {
+    "guidance": (
+        "CONTEXT TOOL: the Prism MCP server, and ONLY Prism -- you have no grep, "
+        "ripgrep, find, glob, ls, or cat. This costs you nothing, because YOU "
+        "price each request:\n"
+        "- Just locating something (a string, an error message, a config key, a "
+        "symbol name)? prism_search(query, scope=\"text\") is a PURE grep -- "
+        "exactly the rg hits, cheapest; regex=true for patterns. Use it exactly "
+        "as you would grep/rg.\n"
+        "- Need real context (the code, its callers, edit-ready windows)? "
+        "prism_query(task=\"<the symptom>\", terms=[your search terms]) -- one "
+        "call, do not re-read what it shows.\n"
+        "- Signature/type change? prism_change_impact.\n"
+        "Default to the CHEAP request; escalate to prism_query only when you "
+        "actually need the context, not just the location. Then Read/Edit the "
+        "files and build."),
+    "allowed": [t for t in _EDIT_AND_BUILD if t not in _SEARCH] + ["mcp__prism"],
+    "mcp": str(CFG_DIR / "prism.json"),
+}
+
+
+# prism_priced_v2 (2026-08-07): the priced arm with the edit-site guard. The
+# 78-cell grid left one open question: priced went 0/6 on the three coin-flip
+# tasks (native 3/6) — 22% likely by chance, but with a plausible mechanism
+# (cheap-first steering thinning context BEFORE the first edit; urllib3#3786
+# trace: 4-7 text searches + still failed where native read full windows).
+# v2 keeps cheap-by-default for LOCATING and forbids skimping at the edit
+# site. This is the candidate default; the tiebreaker runs against THIS, not
+# the superseded v1 — we validate what ships, not what we already replaced.
+ARMS["prism_priced_v2"] = {
+    "guidance": (
+        "CONTEXT TOOL: the Prism MCP server, and ONLY Prism -- you have no grep, "
+        "ripgrep, find, glob, ls, or cat. YOU price each request:\n"
+        "- LOCATING something (a string, an error message, a config key, a "
+        "symbol name)? prism_search(query, scope=\"text\") is a PURE grep -- "
+        "exactly the rg hits, cheapest; regex=true for patterns.\n"
+        "- But NEVER edit code you have only seen as grep hits. Before editing "
+        "any function, get its real context ONCE: prism_query(task=\"<the "
+        "symptom>\", terms=[the anchors you found]) -- edit-ready line-numbered "
+        "windows plus callers; do not re-read what it shows.\n"
+        "- Signature/type change? prism_change_impact.\n"
+        "Cheap requests to FIND, full context to EDIT. Then Read/Edit and build."),
+    "allowed": [t for t in _EDIT_AND_BUILD if t not in _SEARCH] + ["mcp__prism"],
+    "mcp": str(CFG_DIR / "prism.json"),
+}
+
+
+ARMS["codegraph"] = {
+    "guidance": (
+        "CONTEXT TOOL: CodeGraph. codegraph_explore(query) returns the relevant "
+        "symbols' source plus call paths and blast radius in ONE call -- use it "
+        "as your primary context tool. codegraph_node for one symbol's source "
+        "and caller/callee trail; codegraph_impact for what a change affects; "
+        "codegraph_callers/callees to walk the graph. You also have grep/rg for "
+        "text search. Then edit and build."),
+    "allowed": _EDIT_AND_BUILD + ["mcp__codegraph"],
+    "mcp": str(CFG_DIR / "engine-b.json"),
+}
+
+
+# baseline_fanout_steer (2026-08-07): the CONTROL the fan-out probe lacked.
+# The codegraph arm scored as well as prism on the fan-out bed while calling
+# its graph tool ZERO times in 6 cells — so the prism-vs-baseline coverage
+# gap may be a PROMPT effect (both graph arms' steering names blast radius /
+# one-call context; baseline's does not), not a tool effect. This arm has
+# baseline's tools and the graph arms' framing. If it matches them, the tool
+# contributed nothing on this bed and the earlier separation claim is void.
+ARMS["baseline_fanout_steer"] = {
+    "guidance": (
+        "CONTEXT TOOL: ripgrep/grep/find and file reads only. Before editing, "
+        "work out the FULL extent of the change: this issue may require the "
+        "same edit in several places across the codebase. Find every site the "
+        "change affects -- callers, related implementations, everywhere the "
+        "pattern appears -- then edit them all and build."),
+    "allowed": _EDIT_AND_BUILD,
+    "mcp": None,
 }

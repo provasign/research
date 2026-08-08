@@ -1,0 +1,50 @@
+diff --git a/src/click/shell_completion.py b/src/click/shell_completion.py
+index 7235f10..1c6877c 100644
+--- a/src/click/shell_completion.py
++++ b/src/click/shell_completion.py
+@@ -3,6 +3,7 @@ from __future__ import annotations
+ import collections.abc as cabc
+ import os
+ import re
++import sys
+ import typing as t
+ from gettext import gettext as _
+ 
+@@ -44,16 +45,35 @@ def shell_complete(
+     comp = comp_cls(cli, ctx_args, prog_name, complete_var)
+ 
+     if instruction == "source":
+-        echo(comp.source())
++        _echo_shell_script(comp.source())
+         return 0
+ 
+     if instruction == "complete":
+-        echo(comp.complete())
++        _echo_shell_script(comp.complete())
+         return 0
+ 
+     return 1
+ 
+ 
++def _echo_shell_script(script: str) -> None:
++    """Write a shell script to stdout using ``\\n`` line endings only.
++
++    On Windows, the default text stream translates ``\\n`` to ``\\r\\n``
++    on write. Shell completion scripts are always POSIX shell syntax
++    (even when generated on Windows for use in a Bash/Zsh emulation
++    layer such as Git Bash or MSYS2), and the injected ``\\r`` bytes can
++    break the shell's parser. Write raw bytes to avoid the translation.
++    """
++    buffer = getattr(sys.stdout, "buffer", None)
++
++    if buffer is not None:
++        buffer.write(script.encode())
++        buffer.write(b"\n")
++        buffer.flush()
++    else:
++        echo(script)
++
++
+ class CompletionItem:
+     """Represents a completion value and metadata about the value. The
+     default metadata is ``type`` to indicate special shell handling,

@@ -1,0 +1,27 @@
+diff --git a/src/werkzeug/routing/matcher.py b/src/werkzeug/routing/matcher.py
+index 9174061b..2914877d 100644
+--- a/src/werkzeug/routing/matcher.py
++++ b/src/werkzeug/routing/matcher.py
+@@ -50,6 +50,22 @@ class StateMachineMatcher:
+                     new_state = State()
+                     state.dynamic.append((part, new_state))
+                     state = new_state
++
++        for other in state.rules:
++            if other.websocket != rule.websocket:
++                continue
++
++            if (
++                other.methods is None
++                or rule.methods is None
++                or other.methods & rule.methods
++            ):
++                raise ValueError(
++                    f"The rule {rule.rule!r} conflicts with the existing rule"
++                    f" {other.rule!r}. Rules that match the same URL and method"
++                    " must be unique."
++                )
++
+         state.rules.append(rule)
+ 
+     def update(self) -> None:

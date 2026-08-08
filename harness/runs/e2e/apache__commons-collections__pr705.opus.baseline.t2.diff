@@ -1,0 +1,73 @@
+diff --git a/src/main/java/org/apache/commons/collections4/bag/AbstractMapBag.java b/src/main/java/org/apache/commons/collections4/bag/AbstractMapBag.java
+index ddbd039f1..e6fc1f92b 100644
+--- a/src/main/java/org/apache/commons/collections4/bag/AbstractMapBag.java
++++ b/src/main/java/org/apache/commons/collections4/bag/AbstractMapBag.java
+@@ -194,6 +194,17 @@ public abstract class AbstractMapBag<E> implements Bag<E> {
+         return add(object, 1);
+     }
+ 
++    /**
++     * Adds two non-negative counts, clamping the result to {@link Integer#MAX_VALUE} instead of overflowing.
++     *
++     * @param a the first count
++     * @param b the second count
++     * @return the sum, saturated at {@link Integer#MAX_VALUE}
++     */
++    private static int clampedAdd(final int a, final int b) {
++        return (int) Math.min(Integer.MAX_VALUE, (long) a + b);
++    }
++
+     /**
+      * Adds a new element to the bag, incrementing its count in the map.
+      *
+@@ -206,12 +217,12 @@ public abstract class AbstractMapBag<E> implements Bag<E> {
+         modCount++;
+         if (nCopies > 0) {
+             final MutableInteger mut = map.get(object);
+-            size += nCopies;
++            size = clampedAdd(size, nCopies);
+             if (mut == null) {
+                 map.put(object, new MutableInteger(nCopies));
+                 return true;
+             }
+-            mut.value += nCopies;
++            mut.value = clampedAdd(mut.value, nCopies);
+         }
+         return false;
+     }
+diff --git a/src/main/java/org/apache/commons/collections4/multiset/AbstractMapMultiSet.java b/src/main/java/org/apache/commons/collections4/multiset/AbstractMapMultiSet.java
+index 4d62bc47a..8c77f38db 100644
+--- a/src/main/java/org/apache/commons/collections4/multiset/AbstractMapMultiSet.java
++++ b/src/main/java/org/apache/commons/collections4/multiset/AbstractMapMultiSet.java
+@@ -315,6 +315,17 @@ public abstract class AbstractMapMultiSet<E> extends AbstractMultiSet<E> {
+         iterable.forEach(this::add);
+     }
+ 
++    /**
++     * Adds two non-negative counts, clamping the result to {@link Integer#MAX_VALUE} instead of overflowing.
++     *
++     * @param a the first count
++     * @param b the second count
++     * @return the sum, saturated at {@link Integer#MAX_VALUE}
++     */
++    private static int clampedAdd(final int a, final int b) {
++        return (int) Math.min(Integer.MAX_VALUE, (long) a + b);
++    }
++
+     @Override
+     public int add(final E object, final int occurrences) {
+         if (occurrences < 0) {
+@@ -326,11 +337,11 @@ public abstract class AbstractMapMultiSet<E> extends AbstractMultiSet<E> {
+ 
+         if (occurrences > 0) {
+             modCount++;
+-            size += occurrences;
++            size = clampedAdd(size, occurrences);
+             if (mut == null) {
+                 map.put(object, new MutableInteger(occurrences));
+             } else {
+-                mut.value += occurrences;
++                mut.value = clampedAdd(mut.value, occurrences);
+             }
+         }
+         return oldCount;

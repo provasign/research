@@ -1,0 +1,104 @@
+diff --git a/changelog/2577.bugfix.rst b/changelog/2577.bugfix.rst
+new file mode 100644
+index 00000000..f5ecff43
+--- /dev/null
++++ b/changelog/2577.bugfix.rst
+@@ -0,0 +1 @@
++Fixed HTTPS proxies in forwarding mode (``use_forwarding_for_https=True``) to use ``proxy_ssl_context``, ``proxy_assert_hostname`` and ``proxy_assert_fingerprint`` when connecting to the proxy instead of the target's ``ssl_context``, ``assert_hostname`` and ``assert_fingerprint``. Passing ``ssl_context`` together with ``use_forwarding_for_https=True`` now raises a ``ValueError``.
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 84e1dab9..6835ee47 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -793,24 +793,47 @@ class HTTPSConnection(HTTPConnection):
+             # Remove trailing '.' from fqdn hostnames to allow certificate validation
+             server_hostname_rm_dot = server_hostname.rstrip(".")
+ 
+-            sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+-                sock=sock,
+-                cert_reqs=self.cert_reqs,
+-                ssl_version=self.ssl_version,
+-                ssl_minimum_version=self.ssl_minimum_version,
+-                ssl_maximum_version=self.ssl_maximum_version,
+-                ca_certs=self.ca_certs,
+-                ca_cert_dir=self.ca_cert_dir,
+-                ca_cert_data=self.ca_cert_data,
+-                cert_file=self.cert_file,
+-                key_file=self.key_file,
+-                key_password=self.key_password,
+-                server_hostname=server_hostname_rm_dot,
+-                ssl_context=self.ssl_context,
+-                tls_in_tls=tls_in_tls,
+-                assert_hostname=self.assert_hostname,
+-                assert_fingerprint=self.assert_fingerprint,
+-            )
++            # In forwarding mode this TLS handshake is with the proxy, not with
++            # the target origin, so the proxy's own TLS configuration applies.
++            if self.proxy_is_forwarding and self.proxy_config is not None:
++                sock_and_verified = _ssl_wrap_socket_and_match_hostname(
++                    sock=sock,
++                    cert_reqs=self.cert_reqs,
++                    ssl_version=self.ssl_version,
++                    ssl_minimum_version=self.ssl_minimum_version,
++                    ssl_maximum_version=self.ssl_maximum_version,
++                    ca_certs=self.ca_certs,
++                    ca_cert_dir=self.ca_cert_dir,
++                    ca_cert_data=self.ca_cert_data,
++                    server_hostname=server_hostname_rm_dot,
++                    ssl_context=self.proxy_config.ssl_context,
++                    tls_in_tls=tls_in_tls,
++                    assert_hostname=self.proxy_config.assert_hostname,
++                    assert_fingerprint=self.proxy_config.assert_fingerprint,
++                    # Features that aren't implemented for proxies yet:
++                    cert_file=None,
++                    key_file=None,
++                    key_password=None,
++                )
++            else:
++                sock_and_verified = _ssl_wrap_socket_and_match_hostname(
++                    sock=sock,
++                    cert_reqs=self.cert_reqs,
++                    ssl_version=self.ssl_version,
++                    ssl_minimum_version=self.ssl_minimum_version,
++                    ssl_maximum_version=self.ssl_maximum_version,
++                    ca_certs=self.ca_certs,
++                    ca_cert_dir=self.ca_cert_dir,
++                    ca_cert_data=self.ca_cert_data,
++                    cert_file=self.cert_file,
++                    key_file=self.key_file,
++                    key_password=self.key_password,
++                    server_hostname=server_hostname_rm_dot,
++                    ssl_context=self.ssl_context,
++                    tls_in_tls=tls_in_tls,
++                    assert_hostname=self.assert_hostname,
++                    assert_fingerprint=self.assert_fingerprint,
++                )
+             self.sock = sock_and_verified.socket
+ 
+         # If an error occurs during connection/handshake we may need to release
+diff --git a/src/urllib3/poolmanager.py b/src/urllib3/poolmanager.py
+index 3914dec2..fee04f7f 100644
+--- a/src/urllib3/poolmanager.py
++++ b/src/urllib3/poolmanager.py
+@@ -581,6 +581,22 @@ class ProxyManager(PoolManager):
+         if proxy.scheme not in ("http", "https"):
+             raise ProxySchemeUnknown(proxy.scheme)
+ 
++        if (
++            use_forwarding_for_https
++            and connection_pool_kw.get("ssl_context") is not None
++        ):
++            if proxy_ssl_context is not None:
++                raise ValueError(
++                    "Can't specify both 'ssl_context' and 'proxy_ssl_context' when "
++                    "'use_forwarding_for_https=True', the connection is only made to "
++                    "the proxy so only 'proxy_ssl_context' is used."
++                )
++            raise ValueError(
++                "The 'proxy_ssl_context' option must be used instead of 'ssl_context' "
++                "when 'use_forwarding_for_https=True', the connection is only made to "
++                "the proxy."
++            )
++
+         if not proxy.port:
+             port = port_by_scheme.get(proxy.scheme, 80)
+             proxy = proxy._replace(port=port)

@@ -1,0 +1,21 @@
+diff --git a/src/main/java/org/apache/commons/lang3/ClassUtils.java b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+index 1e7a3b5e3..99f909012 100644
+--- a/src/main/java/org/apache/commons/lang3/ClassUtils.java
++++ b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+@@ -1103,8 +1103,14 @@ public static String getShortClassName(String className) {
+         final StringBuilder arrayPrefix = new StringBuilder();
+         // Handle array encoding
+         if (className.startsWith("[")) {
+-            while (className.charAt(0) == '[') {
+-                className = className.substring(1);
++            int arrayDimensions = 0;
++            // Count and strip all leading '[' characters
++            while (className.charAt(arrayDimensions) == '[') {
++                arrayDimensions++;
++            }
++            className = className.substring(arrayDimensions);
++            // Add the appropriate number of "[]" to the prefix
++            for (int i = 0; i < arrayDimensions; i++) {
+                 arrayPrefix.append("[]");
+             }
+             // Strip Object type encoding

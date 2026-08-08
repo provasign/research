@@ -1,0 +1,28 @@
+diff --git a/src/click/types.py b/src/click/types.py
+index 556f20f..cee4f92 100644
+--- a/src/click/types.py
++++ b/src/click/types.py
+@@ -167,7 +167,22 @@ class ParamType(t.Generic[ParamTypeValue], abc.ABC):
+ 
+         .. versionadded:: 8.0
+         """
+-        return []
++        if self.choices is None:
++            return []
++        
++        # Handle enum choices correctly for autocomplete
++        items = []
++        for choice in self.choices:
++            # If it's an enum, we want to use the enum member name, not qualified name
++            if isinstance(choice, enum.Enum):
++                display_name = choice.name
++                value = str(choice)
++            else:
++                display_name = str(choice)
++                value = display_name
++            
++            items.append(CompletionItem(display_name, value=value))
++        return items
+ 
+ 
+ class CompositeParamType(ParamType[ParamTypeValue]):

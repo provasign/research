@@ -1,0 +1,69 @@
+diff --git a/CHANGES.rst b/CHANGES.rst
+index 1c4e997..036d5dc 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -13,6 +13,10 @@ Unreleased
+     ``semver.Version``. :issue:`3298` :pr:`3299`
+ -   Fix pager test pollution under parallel execution by using pytest's
+     ``tmp_path`` fixture instead of a shared temporary file path. :pr:`3238`
++-   The ``CliRunner`` isolation streams support ``fileno()``, so passing
++    ``sys.stdout``/``sys.stderr`` to APIs that need a real file descriptor, such
++    as ``subprocess.run``, no longer raises ``io.UnsupportedOperation``. Output
++    written to the descriptor is captured in the result. :issue:`2429`
+ -   Patch ``pdb.Pdb`` in ``CliRunner`` isolation so ``pdb.set_trace()``,
+     ``breakpoint()``, and debuggers subclassing ``pdb.Pdb`` (ipdb, pdbpp) can
+     interact with the real terminal instead of the captured I/O streams.
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..f6d86b9 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -76,12 +76,49 @@ class BytesIOCopy(io.BytesIO):
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._real_file: t.IO[bytes] | None = None
++        self._real_file_pos = 0
++
++    def fileno(self) -> int:
++        """Return a real file descriptor backing this stream.
++
++        ``io.BytesIO`` has no file descriptor, so code that passes
++        ``sys.stdout``/``sys.stderr`` to APIs which need one, such as
++        ``subprocess.run(..., stdout=sys.stderr)``, would fail with
++        ``io.UnsupportedOperation``. A temporary file is created on
++        demand and anything written to it is merged into this stream.
++
++        .. versionadded:: 8.3.3
++        """
++        if self._real_file is None:
++            self._real_file = tempfile.TemporaryFile()
++
++        return self._real_file.fileno()
++
++    def _sync_real_file(self) -> None:
++        """Copy anything written to the file descriptor into this stream."""
++        if self._real_file is None:
++            return
++
++        self._real_file.seek(self._real_file_pos)
++        data = self._real_file.read()
++
++        if data:
++            self._real_file_pos += len(data)
++            self.copy_to.write(data)
++            super().write(data)
+ 
+     def flush(self) -> None:
++        self._sync_real_file()
+         super().flush()
+         self.copy_to.flush()
+ 
++    def getvalue(self) -> bytes:
++        self._sync_real_file()
++        return super().getvalue()
++
+     def write(self, b: ReadableBuffer) -> int:
++        self._sync_real_file()
+         self.copy_to.write(b)
+         return super().write(b)
+ 

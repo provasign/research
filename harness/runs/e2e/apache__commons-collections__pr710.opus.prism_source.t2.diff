@@ -1,0 +1,120 @@
+diff --git a/src/main/java/org/apache/commons/collections4/collection/CompositeCollection.java b/src/main/java/org/apache/commons/collections4/collection/CompositeCollection.java
+index 6623fae13..6064b9122 100644
+--- a/src/main/java/org/apache/commons/collections4/collection/CompositeCollection.java
++++ b/src/main/java/org/apache/commons/collections4/collection/CompositeCollection.java
+@@ -425,15 +425,16 @@ public class CompositeCollection<E> implements Collection<E>, Serializable {
+      * This implementation calls {@code size()} on each collection.
+      * </p>
+      *
+-     * @return total number of elements in all contained containers.
++     * @return total number of elements in all contained containers, or
++     *  {@code Integer.MAX_VALUE} if that total exceeds {@code Integer.MAX_VALUE}.
+      */
+     @Override
+     public int size() {
+-        int size = 0;
++        long size = 0;
+         for (final Collection<E> item : all) {
+             size += item.size();
+         }
+-        return size;
++        return (int) Math.min(size, Integer.MAX_VALUE);
+     }
+ 
+     /**
+diff --git a/src/main/java/org/apache/commons/collections4/map/CompositeMap.java b/src/main/java/org/apache/commons/collections4/map/CompositeMap.java
+index 640bb7498..c23fd1bf9 100644
+--- a/src/main/java/org/apache/commons/collections4/map/CompositeMap.java
++++ b/src/main/java/org/apache/commons/collections4/map/CompositeMap.java
+@@ -536,11 +536,11 @@ public class CompositeMap<K, V> extends AbstractIterableMap<K, V> implements Ser
+      */
+     @Override
+     public int size() {
+-        int size = 0;
++        long size = 0;
+         for (int i = composite.length - 1; i >= 0; --i) {
+             size += composite[i].size();
+         }
+-        return size;
++        return (int) Math.min(size, Integer.MAX_VALUE);
+     }
+ 
+     /**
+diff --git a/src/main/java/org/apache/commons/collections4/multimap/AbstractMultiValuedMap.java b/src/main/java/org/apache/commons/collections4/multimap/AbstractMultiValuedMap.java
+index f6e707c7e..3006bfbf1 100644
+--- a/src/main/java/org/apache/commons/collections4/multimap/AbstractMultiValuedMap.java
++++ b/src/main/java/org/apache/commons/collections4/multimap/AbstractMultiValuedMap.java
+@@ -896,6 +896,9 @@ public abstract class AbstractMultiValuedMap<K, V> implements MultiValuedMap<K,
+      * This implementation does <strong>not</strong> cache the total size
+      * of the multivalued map, but rather calculates it by iterating
+      * over the entries of the underlying map.
++     * <p>
++     * If the map contains more than {@code Integer.MAX_VALUE} values,
++     * {@code Integer.MAX_VALUE} is returned.
+      */
+     @Override
+     public int size() {
+@@ -903,11 +906,11 @@ public abstract class AbstractMultiValuedMap<K, V> implements MultiValuedMap<K,
+         // but this requires that all modifications of the multimap
+         // (including the wrapped collections and entry/value
+         // collections) are tracked.
+-        int size = 0;
++        long size = 0;
+         for (final Collection<V> col : getMap().values()) {
+             size += col.size();
+         }
+-        return size;
++        return (int) Math.min(size, Integer.MAX_VALUE);
+     }
+ 
+     @Override
+diff --git a/src/main/java/org/apache/commons/collections4/multiset/AbstractMultiSet.java b/src/main/java/org/apache/commons/collections4/multiset/AbstractMultiSet.java
+index a340117c0..16d9482df 100644
+--- a/src/main/java/org/apache/commons/collections4/multiset/AbstractMultiSet.java
++++ b/src/main/java/org/apache/commons/collections4/multiset/AbstractMultiSet.java
+@@ -473,17 +473,18 @@ public abstract class AbstractMultiSet<E> extends AbstractCollection<E> implemen
+     }
+ 
+     /**
+-     * Returns the number of elements in this multiset.
++     * Returns the number of elements in this multiset, or {@code Integer.MAX_VALUE}
++     * if the multiset contains more than {@code Integer.MAX_VALUE} elements.
+      *
+      * @return current size of the multiset
+      */
+     @Override
+     public int size() {
+-        int totalSize = 0;
++        long totalSize = 0;
+         for (final Entry<E> entry : entrySet()) {
+             totalSize += entry.getCount();
+         }
+-        return totalSize;
++        return (int) Math.min(totalSize, Integer.MAX_VALUE);
+     }
+ 
+     /**
+diff --git a/src/main/java/org/apache/commons/collections4/set/CompositeSet.java b/src/main/java/org/apache/commons/collections4/set/CompositeSet.java
+index 5a640f5c1..29d9d2fe6 100644
+--- a/src/main/java/org/apache/commons/collections4/set/CompositeSet.java
++++ b/src/main/java/org/apache/commons/collections4/set/CompositeSet.java
+@@ -465,15 +465,16 @@ public class CompositeSet<E> implements Set<E>, Serializable {
+      * <p>
+      * This implementation calls {@code size()} on each set.
+      *
+-     * @return total number of elements in all contained containers
++     * @return total number of elements in all contained containers, or
++     *  {@code Integer.MAX_VALUE} if that total exceeds {@code Integer.MAX_VALUE}
+      */
+     @Override
+     public int size() {
+-        int size = 0;
++        long size = 0;
+         for (final Set<E> item : all) {
+             size += item.size();
+         }
+-        return size;
++        return (int) Math.min(size, Integer.MAX_VALUE);
+     }
+ 
+     /**

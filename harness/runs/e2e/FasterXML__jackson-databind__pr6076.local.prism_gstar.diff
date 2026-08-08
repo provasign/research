@@ -1,0 +1,21 @@
+diff --git a/src/main/java/tools/jackson/databind/ser/jackson/JsonValueSerializer.java b/src/main/java/tools/jackson/databind/ser/jackson/JsonValueSerializer.java
+index 3fbdbdc15..4bc51b401 100644
+--- a/src/main/java/tools/jackson/databind/ser/jackson/JsonValueSerializer.java
++++ b/src/main/java/tools/jackson/databind/ser/jackson/JsonValueSerializer.java
+@@ -157,7 +157,15 @@ public class JsonValueSerializer
+             BeanProperty property)
+     {
+         TypeSerializer vts = _valueTypeSerializer;
+-        if (vts != null) {
++        
++        // For JsonValue properties, we need to use an accessor-based BeanProperty
++        // that contains annotations from the JsonValue accessor itself, 
++        // not just the enclosing property
++        BeanProperty valueProperty = new JsonValueProperty(property, _accessor);
++        // For JsonValue properties, we need to use an accessor-based BeanProperty
++        // that contains annotations from the JsonValue accessor itself, 
++        // not just the enclosing property
++        BeanProperty valueProperty = new JsonValueProperty(property, _accessor);if (vts != null) {
+             vts = vts.forProperty(ctxt, property);
+         }
+         ValueSerializer<?> ser = _valueSerializer;

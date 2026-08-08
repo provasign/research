@@ -1,0 +1,94 @@
+diff --git a/src/main/java/org/apache/commons/collections4/ClosureUtils.java b/src/main/java/org/apache/commons/collections4/ClosureUtils.java
+index 4ad525c4d..eaa0b70e5 100644
+--- a/src/main/java/org/apache/commons/collections4/ClosureUtils.java
++++ b/src/main/java/org/apache/commons/collections4/ClosureUtils.java
+@@ -17,6 +17,7 @@
+ package org.apache.commons.collections4;
+ 
+ import java.util.Collection;
++import java.util.LinkedHashMap;
+ import java.util.Map;
+ import java.util.Objects;
+ 
+@@ -324,12 +325,14 @@ public class ClosureUtils {
+     @SuppressWarnings("unchecked")
+     public static <E> Closure<E> switchMapClosure(final Map<? extends E, Closure<E>> objectsAndClosures) {
+         Objects.requireNonNull(objectsAndClosures, "objectsAndClosures");
+-        final Closure<? super E> def = objectsAndClosures.remove(null);
+-        final int size = objectsAndClosures.size();
++        // copy so the caller's map is not mutated; LinkedHashMap preserves iterator() ordering
++        final Map<E, Closure<E>> entries = new LinkedHashMap<>(objectsAndClosures);
++        final Closure<? super E> def = entries.remove(null);
++        final int size = entries.size();
+         final Closure<? super E>[] trs = new Closure[size];
+         final Predicate<E>[] preds = new Predicate[size];
+         int i = 0;
+-        for (final Map.Entry<? extends E, Closure<E>> entry : objectsAndClosures.entrySet()) {
++        for (final Map.Entry<E, Closure<E>> entry : entries.entrySet()) {
+             preds[i] = EqualPredicate.<E>equalPredicate(entry.getKey());
+             trs[i] = entry.getValue();
+             i++;
+diff --git a/src/main/java/org/apache/commons/collections4/TransformerUtils.java b/src/main/java/org/apache/commons/collections4/TransformerUtils.java
+index 3b1bdceab..cc0703b5a 100644
+--- a/src/main/java/org/apache/commons/collections4/TransformerUtils.java
++++ b/src/main/java/org/apache/commons/collections4/TransformerUtils.java
+@@ -17,6 +17,7 @@
+ package org.apache.commons.collections4;
+ 
+ import java.util.Collection;
++import java.util.LinkedHashMap;
+ import java.util.Map;
+ import java.util.Objects;
+ 
+@@ -372,12 +373,14 @@ public class TransformerUtils {
+             final Map<I, Transformer<I, O>> objectsAndTransformers) {
+ 
+         Objects.requireNonNull(objectsAndTransformers, "objectsAndTransformers");
+-        final Transformer<? super I, ? extends O> def = objectsAndTransformers.remove(null);
+-        final int size = objectsAndTransformers.size();
++        // copy so the caller's map is not mutated; LinkedHashMap preserves iterator() ordering
++        final Map<I, Transformer<I, O>> entries = new LinkedHashMap<>(objectsAndTransformers);
++        final Transformer<? super I, ? extends O> def = entries.remove(null);
++        final int size = entries.size();
+         final Transformer<? super I, ? extends O>[] trs = new Transformer[size];
+         final Predicate<I>[] preds = new Predicate[size];
+         int i = 0;
+-        for (final Map.Entry<I, Transformer<I, O>> entry : objectsAndTransformers.entrySet()) {
++        for (final Map.Entry<I, Transformer<I, O>> entry : entries.entrySet()) {
+             preds[i] = EqualPredicate.<I>equalPredicate(entry.getKey());
+             trs[i++] = entry.getValue();
+         }
+diff --git a/src/main/java/org/apache/commons/collections4/functors/SwitchClosure.java b/src/main/java/org/apache/commons/collections4/functors/SwitchClosure.java
+index d3aff1985..ffcd596d6 100644
+--- a/src/main/java/org/apache/commons/collections4/functors/SwitchClosure.java
++++ b/src/main/java/org/apache/commons/collections4/functors/SwitchClosure.java
+@@ -17,6 +17,7 @@
+ package org.apache.commons.collections4.functors;
+ 
+ import java.io.Serializable;
++import java.util.LinkedHashMap;
+ import java.util.Map;
+ import java.util.Objects;
+ 
+@@ -57,16 +58,18 @@ public class SwitchClosure<T> implements Closure<T>, Serializable {
+     @SuppressWarnings("unchecked")
+     public static <E> Closure<E> switchClosure(final Map<Predicate<E>, Closure<E>> predicatesAndClosures) {
+         Objects.requireNonNull(predicatesAndClosures, "predicatesAndClosures");
++        // copy so the caller's map is not mutated; LinkedHashMap preserves iterator() ordering
++        final Map<Predicate<E>, Closure<E>> entries = new LinkedHashMap<>(predicatesAndClosures);
+         // convert to array like this to guarantee iterator() ordering
+-        final Closure<? super E> defaultClosure = predicatesAndClosures.remove(null);
+-        final int size = predicatesAndClosures.size();
++        final Closure<? super E> defaultClosure = entries.remove(null);
++        final int size = entries.size();
+         if (size == 0) {
+             return (Closure<E>) (defaultClosure == null ? NOPClosure.<E>nopClosure() : defaultClosure);
+         }
+         final Closure<E>[] closures = new Closure[size];
+         final Predicate<E>[] preds = new Predicate[size];
+         int i = 0;
+-        for (final Map.Entry<Predicate<E>, Closure<E>> entry : predicatesAndClosures.entrySet()) {
++        for (final Map.Entry<Predicate<E>, Closure<E>> entry : entries.entrySet()) {
+             preds[i] = entry.getKey();
+             closures[i] = entry.getValue();
+             i++;

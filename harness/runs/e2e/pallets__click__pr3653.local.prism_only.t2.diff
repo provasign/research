@@ -1,0 +1,29 @@
+diff --git a/src/click/termui.py b/src/click/termui.py
+index e5e9678..9267e9c 100644
+--- a/src/click/termui.py
++++ b/src/click/termui.py
+@@ -260,6 +260,8 @@ def confirm(
+     .. versionadded:: 4.0
+         Added the ``err`` parameter.
+     """
++    from .globals import get_current_context
++    
+     prompt = _build_prompt(
+         text,
+         prompt_suffix,
+@@ -267,6 +269,15 @@ def confirm(
+         "y/n" if default is None else ("Y/n" if default else "y/N"),
+     )
+ 
++    # Strip ANSI codes from prompt if colors are disabled
++    try:
++        ctx = get_current_context()
++        if ctx and not resolve_color_default(ctx.color):
++            prompt = strip_ansi(prompt)
++    except Exception:
++        # Fallback to original behavior if context is not available or any error occurs
++        pass
++
+     while True:
+         try:
+             value = _readline_prompt(visible_prompt_func, prompt, err).lower().strip()

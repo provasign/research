@@ -1,0 +1,33 @@
+diff --git a/src/main/java/org/apache/commons/lang3/RandomStringUtils.java b/src/main/java/org/apache/commons/lang3/RandomStringUtils.java
+index 40a5dc744..3d19c3861 100644
+--- a/src/main/java/org/apache/commons/lang3/RandomStringUtils.java
++++ b/src/main/java/org/apache/commons/lang3/RandomStringUtils.java
+@@ -296,7 +296,27 @@ public static String random(int count, int start, int end, final boolean letters
+             if (letters && digits && start <= ASCII_0 && end >= ASCII_z + 1) {
+                 return random(count, 0, 0, false, false, ALPHANUMERICAL_CHARS, random);
+             }
+-            if (digits && end <= ASCII_0 || letters && end <= ASCII_A) {
++            // Check if the requested character categories are actually reachable in the range
++            // The original check was: digits && end <= '0' || letters && end <= 'A'
++            // This incorrectly rejected ranges that contain one category but not the other
++            // For example, range ['0', 'A') contains digits but no letters, so it should be allowed
++            // when digits=true and letters=false
++            boolean hasDigits = false;
++            boolean hasLetters = false;
++            for (int i = Math.max(start, 0); i < Math.min(end, 128); i++) {
++                if (Character.isDigit(i)) {
++                    hasDigits = true;
++                }
++                if (Character.isLetter(i)) {
++                    hasLetters = true;
++                }
++                // Early exit if both categories are found
++                if (hasDigits && hasLetters) {
++                    break;
++                }
++            }
++            // Only reject if the requested categories are not reachable in the range
++            if ((digits && !hasDigits) || (letters && !hasLetters)) {
+                 throw new IllegalArgumentException(
+                         String.format("Parameter end (%,d) must be greater than (%,d) for generating digits or greater than (%,d) for generating letters.", end,
+                                 ASCII_0, ASCII_A));

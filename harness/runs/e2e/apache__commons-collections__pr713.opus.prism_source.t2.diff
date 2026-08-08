@@ -1,0 +1,94 @@
+diff --git a/src/main/java/org/apache/commons/collections4/list/SetUniqueList.java b/src/main/java/org/apache/commons/collections4/list/SetUniqueList.java
+index a63e18714..922f5246d 100644
+--- a/src/main/java/org/apache/commons/collections4/list/SetUniqueList.java
++++ b/src/main/java/org/apache/commons/collections4/list/SetUniqueList.java
+@@ -216,9 +216,11 @@ public class SetUniqueList<E> extends AbstractSerializableListDecorator<E> {
+      *
+      * @param index  The index to insert at
+      * @param object  The object to add
++     * @throws IndexOutOfBoundsException if the index is out of range [0, size]
+      */
+     @Override
+     public void add(final int index, final E object) {
++        checkIndex(index);
+         // adds element if it is not contained already
+         if (!set.contains(object)) {
+             set.add(object);
+@@ -258,9 +260,11 @@ public class SetUniqueList<E> extends AbstractSerializableListDecorator<E> {
+      * @param index  The index to insert at
+      * @param coll  The collection to add in iterator order
+      * @return true if this collection changed
++     * @throws IndexOutOfBoundsException if the index is out of range [0, size]
+      */
+     @Override
+     public boolean addAll(final int index, final Collection<? extends E> coll) {
++        checkIndex(index);
+         final List<E> temp = new ArrayList<>();
+         for (final E e : coll) {
+             if (set.add(e)) {
+@@ -279,6 +283,18 @@ public class SetUniqueList<E> extends AbstractSerializableListDecorator<E> {
+         return UnmodifiableSet.unmodifiableSet(set);
+     }
+ 
++    /**
++     * Rejects an index outside the insertion range before any mutation occurs.
++     *
++     * @param index  The index to validate
++     * @throws IndexOutOfBoundsException if the index is out of range [0, size]
++     */
++    private void checkIndex(final int index) {
++        if (index < 0 || index > size()) {
++            throw new IndexOutOfBoundsException("Index: " + index + ", Size: " + size());
++        }
++    }
++
+     @Override
+     public void clear() {
+         super.clear();
+diff --git a/src/main/java/org/apache/commons/collections4/set/ListOrderedSet.java b/src/main/java/org/apache/commons/collections4/set/ListOrderedSet.java
+index eb96dc9fe..2aef176ae 100644
+--- a/src/main/java/org/apache/commons/collections4/set/ListOrderedSet.java
++++ b/src/main/java/org/apache/commons/collections4/set/ListOrderedSet.java
+@@ -229,9 +229,11 @@ public class ListOrderedSet<E>
+      *
+      * @param index The index at which the element is to be inserted
+      * @param object The element to be inserted
++     * @throws IndexOutOfBoundsException if the index is out of range [0, size]
+      * @see List#add(int, Object)
+      */
+     public void add(final int index, final E object) {
++        checkIndex(index);
+         if (!contains(object)) {
+             decorated().add(object);
+             setOrder.add(index, object);
+@@ -256,9 +258,11 @@ public class ListOrderedSet<E>
+      * @param index The position to insert the elements
+      * @param coll The collection containing the elements to be inserted
+      * @return {@code true} if this ordered set changed as a result of the call
++     * @throws IndexOutOfBoundsException if the index is out of range [0, size]
+      * @see List#addAll(int, Collection)
+      */
+     public boolean addAll(final int index, final Collection<? extends E> coll) {
++        checkIndex(index);
+         boolean changed = false;
+         // collect all elements to be added for performance reasons
+         final List<E> toAdd = new ArrayList<>();
+@@ -287,6 +291,18 @@ public class ListOrderedSet<E>
+         return UnmodifiableList.unmodifiableList(setOrder);
+     }
+ 
++    /**
++     * Rejects an index outside the insertion range before any mutation occurs.
++     *
++     * @param index The index to validate
++     * @throws IndexOutOfBoundsException if the index is out of range [0, size]
++     */
++    private void checkIndex(final int index) {
++        if (index < 0 || index > setOrder.size()) {
++            throw new IndexOutOfBoundsException("Index: " + index + ", Size: " + setOrder.size());
++        }
++    }
++
+     @Override
+     public void clear() {
+         decorated().clear();

@@ -1,0 +1,17 @@
+diff --git a/src/requests/models.py b/src/requests/models.py
+index 4142f2a4..e9b099c2 100644
+--- a/src/requests/models.py
++++ b/src/requests/models.py
+@@ -121,6 +121,12 @@ class RequestEncodingMixin:
+         if not path:
+             path = "/"
+ 
++        # Preserve leading slashes that may have been normalized
++        # This is a workaround for requests 2.32+ issue where double slashes
++        # are being stripped from URLs (https://github.com/psf/requests/pull/6644)
++        if hasattr(self, '_original_path') and self._original_path:
++            path = self._original_path
++
+         url.append(path)
+ 
+         query = p.query

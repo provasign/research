@@ -1,0 +1,149 @@
+mason dev-eb61ed89bfd7 · ollama:qwen3-coder:30b · /private/var/folders/pz/cmyjc37x5dz39wxf73my55k80000gn/T/e2e-run-nmlpl_fv
+prism: repo not indexed yet — building the index (one-time)
+
+I'll help you backport the fix from PR #5964 into the 2.18 branch to resolve issue #5962. Let me first understand what's happening by examining the code and the failing test.
+  ◆ search_symbols query=IgnorePropertiesCaseInsensitive5962Test
+
+── search_symbols ─────────────────────────────
+
+Let me look for files related to ignore properties and case insensitive functionality:
+  · list_files filter=IgnoreProperties
+  · list_files filter=filter
+  · list_files path=src/test/java/com/fasterxml/jackson/databind/deser/filter
+
+Let me search for the specific test file that's failing:
+  · grep pattern=IgnorePropertiesCaseInsensitive5962Test
+
+Let me search for files related to BeanPropertyMap or case insensitive property handling:
+  · grep pattern=BeanPropertyMap
+
+Let me look at the BeanPropertyMap implementation to understand how it handles case insensitive properties:
+  · read_file path=src/main/java/com/fasterxml/jackson/databind/deser/impl/Bean…
+
+Let me continue reading the rest of this file:
+  · read_file path=src/main/java/com/fasterxml/jackson/databind/deser/impl/Bean… offset=1000
+
+Let me get the rest of the file:
+  · read_file path=src/main/java/com/fasterxml/jackson/databind/deser/impl/Bean… offset=800
+
+Let me get the full file content by reading it differently:
+  $ wc -l src/main/java/com/fasterxml/jackson/databind/deser/impl/BeanPropertyMap.java
+  · read_file path=src/main/java/com/fasterxml/jackson/databind/deser/impl/Bean… offset=600
+
+Let me try to get the full file using bash:
+  $ cat src/main/java/com/fasterxml/jackson/databind/deser/impl/BeanPropertyMap.java | tail -n +600
+
+Now let me look at the test file to understand what's failing:
+  $ find . -name "*IgnorePropertiesCaseInsensitive5962Test*" -type f
+
+Let me search for the test in a different way:
+  $ find . -name "*.java" -exec grep -l "IgnorePropertiesCaseInsensitive5962Test\|test5962_caseInsensitiveRebuildRestoresIgnoredProperty" {} \;
+
+Let me check if this test exists in the repository by looking at recent commits or checking if it's a test that needs to be added:
+  $ find . -name "*.java" -exec grep -l "JsonIgnoreProperties.*case.*insens\|case.*insens.*JsonIgnoreProperties" {} \;
+
+Let me look at the PR #5964 to understand what was fixed. First, let me check if there are any recent changes or backport information:
+  $ git log --oneline --grep="5962\|5964" | head -10
+
+Let me look at the issue more carefully. Based on the error message and the problem description, I need to understand what's happening with case insensitive property handling when `@JsonIgnoreProperties` is used. Let me examine how BeanPropertyMap handles removal of properties:
+
+Looking at the error:
+1. The test expects that after removing a property with `@JsonIgnoreProperties`, it should NOT be restored
+2. But in the current code, it seems like when case-insensitive matching is used, properties can be incorrectly found/removed
+
+Let me look more closely at how `withoutProperties` works and how case insensitive matching works:
+  $ grep -n "withoutProperties\|remove\|find.*String" src/main/java/com/fasterxml/jackson/databind/deser/impl/BeanPropertyMap.java
+
+Let me look at the `remove` method more closely:
+  · read_file path=src/main/java/com/fasterxml/jackson/databind/deser/impl/Bean… offset=449 lines=30
+
+Let me get the remove method directly:
+  $ sed -n '449,475p' src/main/java/com/fasterxml/jackson/databind/deser/impl/BeanPropertyMap.java
+
+Now I see the issue! In the `remove` method, it's using `getPropertyName(propToRm)` to get the key for comparison. But in case-insensitive mode, this returns a lowercase version of the property name.
+
+However, when we're looking up properties in the hash area, we're comparing against `_hashArea[i-1]` which is the stored key (which would be lowercase in case-insensitive mode). The problem is that `getPropertyName` is used to get the key for comparison, but it's not consistent with how keys are stored.
+
+Let me also look at the `find` method and understand how case insensitive matching works:
+  $ sed -n '559,580p' src/main/java/com/fasterxml/jackson/databind/deser/impl/BeanPropertyMap.java
+
+Now I understand the issue better. Let me also check how properties are initialized and stored:
+  $ sed -n '100,130p' src/main/java/com/fasterxml/jackson/databind/deser/impl/BeanPropertyMap.java
+
+Let me look at the `init` method to understand how keys are stored:
+  $ sed -n '150,190p' src/main/java/com/fasterxml/jackson/databind/deser/impl/BeanPropertyMap.java
+
+Let me look at the `init` method more carefully:
+  $ sed -n '195,230p' src/main/java/com/fasterxml/jackson/databind/deser/impl/BeanPropertyMap.java
+  $ sed -n '230,260p' src/main/java/com/fasterxml/jackson/databind/deser/impl/BeanPropertyMap.java
+
+Now I see the issue clearly. In the `init` method, when properties are stored in `_hashArea`, they use `getPropertyName(prop)` which returns a lowercase version for case-insensitive mode.
+
+But in the `remove` method, it's also using `getPropertyName(propToRm)` to get the key for comparison. However, there's an inconsistency in how this is handled.
+
+Let me look at the `getPropertyName` method:
+  $ sed -n '520,530p' src/main/java/com/fasterxml/jackson/databind/deser/impl/BeanPropertyMap.java
+
+Let me find the `getPropertyName` method:
+  $ grep -n "getPropertyName" src/main/java/com/fasterxml/jackson/databind/deser/impl/BeanPropertyMap.java
+  $ sed -n '533,540p' src/main/java/com/fasterxml/jackson/databind/deser/impl/BeanPropertyMap.java
+
+Now I understand the issue. The problem is in the `remove` method. When we're removing a property, we get the key using `getPropertyName(propToRm)` which returns a lowercase version if case-insensitive mode is enabled.
+
+But then in the loop, we compare this with `_hashArea[i-1]` which should be the stored lowercase key (since that's how it was stored in `init`). However, there's an issue with the logic.
+
+Let me create a test to reproduce the problem first:
+  ✎ TestReproduceIssue.java (1829 bytes)
+    + import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+    + import com.fasterxml.jackson.databind.ObjectMapper;
+    + import com.fasterxml.jackson.databind.DeserializationFeature;
+    + 
+    + public class TestReproduceIssue {
+    +     public static void main(String[] args) throws Exception {
+    +         ObjectMapper mapper = new ObjectMapper();
+    +         mapper.enable(DeserializationFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES);
+    +         
+    +         // This should work - case insensitive property handling
+    +         String json1 = "{\"name\":\"test\", \"Name\":\"test2\"}";
+    +         try {
+    +   …
+
+But first, let me understand the exact issue by looking at what the failing test is trying to do. Let me look for existing tests that might be related:
+  $ find . -name "*.java" -exec grep -l "case.*insens.*ignore\|ignore.*case.*insens" {} \;
+
+Let me look at the actual problem more systematically. Based on the issue description and looking at the code, I think I understand what's happening:
+
+1. When `@JsonIgnoreProperties` is used with case-insensitive mode, properties are removed from the map
+2. But when a property name is looked up for removal, it uses case-insensitive comparison 
+3. However, there's inconsistency in how the key comparison works
+
+Looking at the `remove` method again:
+  $ sed -n '449,475p' src/main/java/com/fasterxml/jackson/databind/deser/impl/BeanPropertyMap.java
+
+The problem is in the `remove` method. When we're looking for a property to remove:
+
+1. We get `key = getPropertyName(propToRm)` which returns lowercase if case-insensitive mode is on
+2. Then we compare `key.equals(_hashArea[i-1])` where `_hashArea[i-1]` is the stored key (also lowercase in case-insensitive mode)
+3. But there's a potential issue with how this works when properties are being removed
+
+Actually, let me re-read the problem description more carefully. The issue says that after removing a property with `@JsonIgnoreProperties`, it should NOT be restored. This suggests that the problem is not in the removal itself but in some other part of the process.
+
+Let me look at how `withoutProperties` works:
+  $ sed -n '398,450p' src/main/java/com/fasterxml/jackson/databind/deser/impl/BeanPropertyMap.java
+
+I think I need to understand the exact problem better. Let me look at what `IgnorePropertiesUtil.shouldIgnore` does:
+  $ find . -name "IgnorePropertiesUtil.java" -type f
+  · read_file path=src/main/java/com/fasterxml/jackson/databind/util/IgnoreProp…
+
+Now I understand the issue better. The problem is that `IgnorePropertiesUtil.shouldIgnore` does a direct string comparison, but when case-insensitive mode is enabled, we need to do case-insensitive comparisons.
+
+However, looking at this more carefully, I think there's an issue in how the `withoutProperties` method works with case-insensitive properties.
+
+Let me look at what happens when we have case-insensitive matching and ignore properties. The problem seems to be that:
+
+1. Properties are stored with their original names (but in lowercase for case-insensitive mode)
+2. When checking if a property should be ignored, it's doing direct string comparison
+3. But the comparison logic is inconsistent
+
+Let me look at how `withoutProperties` is called and what happens when we have case-insensitive properties:
+  $ grep -rn "withoutProperties" src/main/java/com/fasterxml/jackson/databind/deser/impl/ | head -10

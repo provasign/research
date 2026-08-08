@@ -1,0 +1,33 @@
+diff --git a/src/click/_termui_impl.py b/src/click/_termui_impl.py
+index 1d23026..e025b02 100644
+--- a/src/click/_termui_impl.py
++++ b/src/click/_termui_impl.py
+@@ -439,16 +439,27 @@ def get_pager_file(color: bool | None = None) -> t.Generator[t.TextIO, None, Non
+         # Split streams by capabilities rather than the abstract TextIO /
+         # BinaryIO annotations: buffered text streams can be unwrapped to bytes,
+         # while text-only streams are yielded as-is.
++        wrapped = False
+         if _has_binary_buffer(stream):
+             # Text stream backed by a binary buffer.
+             stream = MaybeStripAnsi(stream.buffer, color=color, encoding=encoding)
++            wrapped = True
+         elif isinstance(stream, t.BinaryIO):
+             # Binary stream
+             stream = MaybeStripAnsi(stream, color=color, encoding=encoding)
++            wrapped = True
+         try:
+             yield stream
+         finally:
+-            stream.flush()
++            if wrapped:
++                # ``stream`` is a TextIOWrapper we created around another
++                # stream's underlying buffer (e.g. sys.stdout.buffer). If we
++                # let it be garbage collected as-is, its __del__ will close()
++                # the shared buffer, closing the original stream too. Detach
++                # instead, which flushes without closing the shared buffer.
++                stream.detach()
++            else:
++                stream.flush()
+ 
+ 
+ @contextlib.contextmanager

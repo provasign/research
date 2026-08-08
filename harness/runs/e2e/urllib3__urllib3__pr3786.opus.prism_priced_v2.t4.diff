@@ -1,0 +1,144 @@
+diff --git a/changelog/2577.bugfix.rst b/changelog/2577.bugfix.rst
+new file mode 100644
+index 00000000..5f2d79a5
+--- /dev/null
++++ b/changelog/2577.bugfix.rst
+@@ -0,0 +1,3 @@
++Fixed HTTPS proxies in forwarding mode (``use_forwarding_for_https=True``) using
++``ssl_context`` instead of ``proxy_ssl_context`` to connect to the proxy. Passing
++``ssl_context`` in that case is now deprecated and emits a ``FutureWarning``.
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 84e1dab9..91ff140b 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -793,25 +793,36 @@ class HTTPSConnection(HTTPConnection):
+             # Remove trailing '.' from fqdn hostnames to allow certificate validation
+             server_hostname_rm_dot = server_hostname.rstrip(".")
+ 
+-            sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+-                sock=sock,
+-                cert_reqs=self.cert_reqs,
+-                ssl_version=self.ssl_version,
+-                ssl_minimum_version=self.ssl_minimum_version,
+-                ssl_maximum_version=self.ssl_maximum_version,
+-                ca_certs=self.ca_certs,
+-                ca_cert_dir=self.ca_cert_dir,
+-                ca_cert_data=self.ca_cert_data,
+-                cert_file=self.cert_file,
+-                key_file=self.key_file,
+-                key_password=self.key_password,
+-                server_hostname=server_hostname_rm_dot,
+-                ssl_context=self.ssl_context,
+-                tls_in_tls=tls_in_tls,
+-                assert_hostname=self.assert_hostname,
+-                assert_fingerprint=self.assert_fingerprint,
+-            )
+-            self.sock = sock_and_verified.socket
++            # Forwarding proxies should use the proxy's TLS policy for this
++            # handshake since the connection being established is to the proxy,
++            # not to the target origin. Tunneling proxies instead use the
++            # connection's own TLS policy because the handshake here is with
++            # the target origin (TLS-in-TLS).
++            wrapped_socket: ssl.SSLSocket | SSLTransport
++            if self.proxy_is_forwarding and self.proxy_config is not None:
++                # _connect_tls_proxy will verify and assign proxy_is_verified
++                wrapped_socket = self._connect_tls_proxy(server_hostname_rm_dot, sock)
++                is_verified = self.proxy_is_verified is True
++            else:
++                wrapped_socket, is_verified = _ssl_wrap_socket_and_match_hostname(
++                    sock=sock,
++                    cert_reqs=self.cert_reqs,
++                    ssl_version=self.ssl_version,
++                    ssl_minimum_version=self.ssl_minimum_version,
++                    ssl_maximum_version=self.ssl_maximum_version,
++                    ca_certs=self.ca_certs,
++                    ca_cert_dir=self.ca_cert_dir,
++                    ca_cert_data=self.ca_cert_data,
++                    cert_file=self.cert_file,
++                    key_file=self.key_file,
++                    key_password=self.key_password,
++                    server_hostname=server_hostname_rm_dot,
++                    ssl_context=self.ssl_context,
++                    tls_in_tls=tls_in_tls,
++                    assert_hostname=self.assert_hostname,
++                    assert_fingerprint=self.assert_fingerprint,
++                )
++            self.sock = wrapped_socket
+ 
+         # If an error occurs during connection/handshake we may need to release
+         # our lock so another connection can probe the origin.
+@@ -832,7 +843,7 @@ class HTTPSConnection(HTTPConnection):
+         # If this connection doesn't know if the origin supports HTTP/2
+         # we report back to the HTTP/2 probe our result.
+         if target_supports_http2 is None:
+-            supports_http2 = sock_and_verified.socket.selected_alpn_protocol() == "h2"
++            supports_http2 = wrapped_socket.selected_alpn_protocol() == "h2"
+             http2_probe.set_and_release(
+                 host=probe_http2_host,
+                 port=probe_http2_port,
+@@ -846,7 +857,7 @@ class HTTPSConnection(HTTPConnection):
+         if self.proxy_is_forwarding:
+             self.is_verified = False
+         else:
+-            self.is_verified = sock_and_verified.is_verified
++            self.is_verified = is_verified
+ 
+         # If there's a proxy to be connected to we are fully connected.
+         # This is set twice (once above and here) due to forwarding proxies
+@@ -856,15 +867,22 @@ class HTTPSConnection(HTTPConnection):
+         # Set `self.proxy_is_verified` unless it's already set while
+         # establishing a tunnel.
+         if self._has_connected_to_proxy and self.proxy_is_verified is None:
+-            self.proxy_is_verified = sock_and_verified.is_verified
++            self.proxy_is_verified = is_verified
+ 
+     def _connect_tls_proxy(self, hostname: str, sock: socket.socket) -> ssl.SSLSocket:
+         """
+-        Establish a TLS connection to the proxy using the provided SSL context.
++        Establish a TLS connection to the proxy using the proxy's TLS policy.
+         """
+-        # `_connect_tls_proxy` is called when self._tunnel_host is truthy.
+         proxy_config = typing.cast(ProxyConfig, self.proxy_config)
++
++        # Only 'proxy_ssl_context' is used for connecting to proxies. For
++        # forwarding proxies we fall back to the connection's 'ssl_context'
++        # when no 'proxy_ssl_context' is given for backwards compatibility,
++        # see 'ProxyManager.__init__' which warns about that case.
+         ssl_context = proxy_config.ssl_context
++        if ssl_context is None and self.proxy_is_forwarding:
++            ssl_context = self.ssl_context
++
+         sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+             sock,
+             cert_reqs=self.cert_reqs,
+diff --git a/src/urllib3/poolmanager.py b/src/urllib3/poolmanager.py
+index 3914dec2..c4ac3bf1 100644
+--- a/src/urllib3/poolmanager.py
++++ b/src/urllib3/poolmanager.py
+@@ -588,6 +588,26 @@ class ProxyManager(PoolManager):
+         self.proxy = proxy
+         self.proxy_headers = proxy_headers or {}
+         self.proxy_ssl_context = proxy_ssl_context
++
++        # Only 'proxy_ssl_context' should be used to connect to an HTTPS proxy.
++        # When forwarding we're connecting to the proxy with the same code path
++        # as an origin, so 'ssl_context' used to be applied to the proxy
++        # connection. That's deprecated, but still honored until urllib3 v3.0.
++        if (
++            use_forwarding_for_https
++            and proxy.scheme == "https"
++            and connection_pool_kw.get("ssl_context") is not None
++        ):
++            warnings.warn(
++                "Passing 'ssl_context' when 'use_forwarding_for_https=True' is "
++                "deprecated and will raise an error in urllib3 v3.0. Use "
++                "'proxy_ssl_context' to configure the TLS connection to the proxy.",
++                category=FutureWarning,
++                stacklevel=2,
++            )
++            if self.proxy_ssl_context is None:
++                self.proxy_ssl_context = connection_pool_kw["ssl_context"]
++
+         self.proxy_config = ProxyConfig(
+             proxy_ssl_context,
+             use_forwarding_for_https,

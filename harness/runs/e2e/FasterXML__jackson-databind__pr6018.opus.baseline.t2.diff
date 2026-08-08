@@ -1,0 +1,92 @@
+diff --git a/release-notes/VERSION b/release-notes/VERSION
+index 8d661702e..27a2f1cfc 100644
+--- a/release-notes/VERSION
++++ b/release-notes/VERSION
+@@ -221,6 +221,8 @@ Versions: 3.x (for earlier see VERSION-2.x)
+  (fix by Lee Jiwon)
+ #6010: `WRITE_ENUMS_TO_LOWERCASE` must use `Locale.ROOT` for case folding
+  (fix by Lee Jiwon)
++#6017: `@JsonUnwrapped` doesn't fully work for delegating ValueSerializer (even
++  one delegating to `BeanSerializerBase`)
+ - Remove project-specific Android SDK compatibility level, use shared;
+   no change level itself (stillAndroid SDK 34)
+ 
+diff --git a/src/main/java/tools/jackson/databind/ser/bean/BeanSerializerBase.java b/src/main/java/tools/jackson/databind/ser/bean/BeanSerializerBase.java
+index 2a75d205b..467c97aa1 100644
+--- a/src/main/java/tools/jackson/databind/ser/bean/BeanSerializerBase.java
++++ b/src/main/java/tools/jackson/databind/ser/bean/BeanSerializerBase.java
+@@ -401,9 +401,12 @@ public abstract class BeanSerializerBase
+             if (unwrapped.getType().getRawClass() == _beanType.getRawClass()) {
+                 continue;
+             }
+-            // Inner serializer may be a custom (non-BeanSerializerBase) impl;
+-            // without access to its effective property names we cannot check it.
+-            if (!(unwrapped.findUnwrappingSerializer(ctxt) instanceof BeanSerializerBase innerSer)) {
++            // Inner serializer may be a custom impl (or one delegating to another
++            // serializer, [databind#6017]): rely on `properties()` which both
++            // `BeanSerializerBase` and `DelegatingSerializer` expose. If none
++            // exposed, nothing to check.
++            ValueSerializer<Object> innerSer = unwrapped.findUnwrappingSerializer(ctxt);
++            if (innerSer == null) {
+                 continue;
+             }
+             for (Iterator<PropertyWriter> it = innerSer.properties(); it.hasNext(); ) {
+diff --git a/src/main/java/tools/jackson/databind/ser/bean/UnwrappingBeanPropertyWriter.java b/src/main/java/tools/jackson/databind/ser/bean/UnwrappingBeanPropertyWriter.java
+index 5d2b55762..2356f1e46 100644
+--- a/src/main/java/tools/jackson/databind/ser/bean/UnwrappingBeanPropertyWriter.java
++++ b/src/main/java/tools/jackson/databind/ser/bean/UnwrappingBeanPropertyWriter.java
+@@ -156,15 +156,33 @@ public class UnwrappingBeanPropertyWriter
+     private ValueSerializer<Object> _asUnwrapping(ValueSerializer<Object> ser)
+     {
+         NameTransformer t = _nameTransformer;
+-        if (ser.isUnwrappingSerializer()
+-                // as per [databind#2060], need to also check this, in case someone writes
+-                // custom implementation that does not extend standard implementation:
+-                && ser instanceof UnwrappingBeanSerializer unwrappingBeanSerializer) {
+-            t = NameTransformer.chainedTransformer(t, unwrappingBeanSerializer._nameTransformer);
++        if (ser.isUnwrappingSerializer()) {
++            // as per [databind#2060], need to also check this, in case someone writes
++            // custom implementation that does not extend standard implementation:
++            UnwrappingBeanSerializer unwrappingBeanSer = _findUnwrappingBeanSerializer(ser);
++            if (unwrappingBeanSer != null) {
++                t = NameTransformer.chainedTransformer(t, unwrappingBeanSer._nameTransformer);
++            }
+         }
+         return ser.unwrappingSerializer(t);
+     }
+ 
++    /**
++     * Helper method for finding the actual {@link UnwrappingBeanSerializer}, if any,
++     * possibly through delegation ([databind#6017]).
++     *
++     * @since 3.2
++     */
++    private static UnwrappingBeanSerializer _findUnwrappingBeanSerializer(ValueSerializer<?> ser)
++    {
++        for (; ser != null; ser = ser.getDelegatee()) {
++            if (ser instanceof UnwrappingBeanSerializer unwrappingBeanSer) {
++                return unwrappingBeanSer;
++            }
++        }
++        return null;
++    }
++
+     /*
+     /**********************************************************************
+     /* Overrides: schema generation
+@@ -227,14 +245,7 @@ public class UnwrappingBeanPropertyWriter
+         } else {
+             serializer = ctxt.findPrimaryPropertySerializer(type, this);
+         }
+-        NameTransformer t = _nameTransformer;
+-        if (serializer.isUnwrappingSerializer()
+-            // as per [databind#2060], need to also check this, in case someone writes
+-            // custom implementation that does not extend standard implementation:
+-            && serializer instanceof UnwrappingBeanSerializer unwrappingBeanSerializer) {
+-                t = NameTransformer.chainedTransformer(t, unwrappingBeanSerializer._nameTransformer);
+-        }
+-        serializer = serializer.unwrappingSerializer(t);
++        serializer = _asUnwrapping(serializer);
+ 
+         _dynamicSerializers = _dynamicSerializers.newWith(type, serializer);
+         return serializer;

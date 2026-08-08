@@ -1,0 +1,30 @@
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 443cb01b..871ab63e 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -78,6 +78,9 @@ RECENT_DATE = datetime.date(2025, 1, 1)
+ 
+ _CONTAINS_CONTROL_CHAR_RE = re.compile(r"[^-!#$%&'*+.^_`|~0-9a-zA-Z]")
+ 
++# An obs-fold is a CRLF (or a bare CR/LF) followed by at least one SP or HTAB.
++_OBS_FOLD_RE = re.compile(r"[\r\n]+[ \t]+")
++
+ 
+ class HTTPConnection(_HTTPConnection):
+     """
+@@ -616,7 +619,14 @@ class HTTPConnection(_HTTPConnection):
+                 exc_info=True,
+             )
+ 
+-        headers = HTTPHeaderDict(httplib_response.msg.items())
++        # RFC 7230, section 3.2.4: a user agent that receives an obs-fold in a
++        # response message that is not within a message/http container MUST
++        # replace each received obs-fold with one or more SP octets prior to
++        # interpreting the field value.
++        headers = HTTPHeaderDict(
++            (name, _OBS_FOLD_RE.sub(" ", value))
++            for name, value in httplib_response.msg.items()
++        )
+ 
+         response = HTTPResponse(
+             body=httplib_response,

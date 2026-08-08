@@ -1,0 +1,32 @@
+{
+  "instance_id": "apache__commons-collections__pr716",
+  "repo": "apache/commons-collections",
+  "pr": 716,
+  "base_commit": "dc4d1c92c2c68d1e7b74d20e73991f751eec64f1",
+  "merge_commit": "fe8eb4989392cb436438978b151aa800b70195b9",
+  "patch": "diff --git a/src/main/java/org/apache/commons/collections4/list/TreeList.java b/src/main/java/org/apache/commons/collections4/list/TreeList.java\nindex d2e75eb..68931b2 100644\n--- a/src/main/java/org/apache/commons/collections4/list/TreeList.java\n+++ b/src/main/java/org/apache/commons/collections4/list/TreeList.java\n@@ -966,8 +966,8 @@ public class TreeList<E> extends AbstractList<E> {\n      */\n     @Override\n     public void add(final int index, final E obj) {\n-        modCount++;\n         checkInterval(index, 0, size());\n+        modCount++;\n         if (root == null) {\n             root = new AVLNode<>(index, obj, null, null);\n         } else {\n@@ -1105,8 +1105,8 @@ public class TreeList<E> extends AbstractList<E> {\n      */\n     @Override\n     public E remove(final int index) {\n-        modCount++;\n         checkInterval(index, 0, size() - 1);\n+        modCount++;\n         final E result = get(index);\n         root = root.remove(index);\n         size--;\n",
+  "test_patch": "diff --git a/src/test/java/org/apache/commons/collections4/list/TreeListTest.java b/src/test/java/org/apache/commons/collections4/list/TreeListTest.java\nindex bff75d2..2f2adf0 100644\n--- a/src/test/java/org/apache/commons/collections4/list/TreeListTest.java\n+++ b/src/test/java/org/apache/commons/collections4/list/TreeListTest.java\n@@ -171,6 +171,25 @@ public class TreeListTest<E> extends AbstractListTest<E> {\n         assertEquals(\"A\", li.previous());\n     }\n \n+    @Test\n+    void testFailedIndexedChangeKeepsIteratorValid() {\n+        final List<String> list = new TreeList<>();\n+        list.add(\"a\");\n+        list.add(\"b\");\n+\n+        // a rejected add(index) is a no-op and must not invalidate a live iterator\n+        final ListIterator<String> addIt = list.listIterator();\n+        assertThrows(IndexOutOfBoundsException.class, () -> list.add(5, \"x\"));\n+        assertEquals(2, list.size());\n+        assertEquals(\"a\", addIt.next());\n+\n+        // same for a rejected remove(index)\n+        final ListIterator<String> removeIt = list.listIterator();\n+        assertThrows(IndexOutOfBoundsException.class, () -> list.remove(10));\n+        assertEquals(2, list.size());\n+        assertEquals(\"a\", removeIt.next());\n+    }\n+\n     @Test\n     @SuppressWarnings(\"unchecked\")\n     void testIndexOf() {\n",
+  "test_classes": [
+    "org.apache.commons.collections4.list.TreeListTest"
+  ],
+  "src_files": [
+    "src/main/java/org/apache/commons/collections4/list/TreeList.java"
+  ],
+  "test_modules": [
+    "src/test/java/org/apache/commons/collections4/list/TreeListTest.java"
+  ],
+  "problem_statement": "Increment modCount after the bounds check in TreeList add and remove\n\nnoticed `add(int, E)` and `remove(int)` bump `modCount` before `checkInterval`, so a rejected out-of-range index leaves the list unchanged yet still trips a spurious `ConcurrentModificationException` in an iterator obtained earlier. `set(int, E)` already validates first and `AbstractLinkedList` validates via `getNode` before bumping `modCount`; moving the increment below the bounds check in both methods makes a rejected index a true no-op.\n\n- [x] Read the [contribution guidelines](CONTRIBUTING.md) for this project.\n- [ ] Read the [ASF Generative Tooling Guidance](https://www.apache.org/legal/generative-tooling.html) if you use Artificial Intelligence (AI).\n- [ ] I used AI to create any part of, or all of, this pull request. Which AI tool was used to create this pull request, and to what extent did it contribute?\n- [x] Run a successful build using the default [Maven](https://maven.apache.org/) goal with `mvn`; that's `mvn` on the command line by itself.\n- [x] Write unit tests that match behavioral changes, where the tests fail if the changes to the runtime are not applied. This may not always be possible, but it is a best practice.\n- [x] Write a pull request description that is detailed enough to understand what the pull request does, how, and why.\n- [x] Each commit in the pull request should have a meaningful subject line and body. Note that a maintainer may squash commits during the merge process.\n",
+  "kind": "bug",
+  "fail_to_pass": [
+    "org.apache.commons.collections4.list.TreeListTest::testObjectEqualsSelf"
+  ],
+  "pass_to_pass": [
+    "org.apache.commons.collections4.list.TreeListTest::testBugCollections447",
+    "org.apache.commons.collections4.list.TreeListTest::testIndexOf",
+    "org.apache.commons.collections4.list.TreeListTest::testRemove",
+    "org.apache.commons.collections4.list.TreeListTest::testTreeListIteratorConstruction"
+  ],
+  "lang": "java",
+  "build": "maven",
+  "task_kind": "bug"
+}

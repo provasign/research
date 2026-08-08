@@ -1,0 +1,29 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java b/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
+index 070c2df39..9747ae4de 100644
+--- a/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
++++ b/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
+@@ -244,9 +244,21 @@ public class UnwrappedPropertyHandler
+         if (prop != null) {
+             ValueDeserializer<?> deser = prop.getValueDeserializer();
+             if (deser != null) {
+-                // Recursively collect property names
+-            	deser.collectAllPropertyNamesTo(names);
+-                return deser.hasAnySetter();
++                // For unwrapping deserializers, check if they can contribute property names
++                if (deser instanceof UnwrappingDeserializer) {
++                    // Call collectAllPropertyNamesTo to add those names to our set
++                    ((UnwrappingDeserializer) deser).collectAllPropertyNamesTo(names);
++                    // Return true if this is a valid unwrapping deserializer with property info
++                    return true;
++                }
++                // For regular deserializers, try to get name directly
++                String name = prop.getName();
++                if (name != null) {
++                    names.add(name);
++                }
++                // Regular deserializers should not be reported as having any setter 
++                // (the method is about whether there are "any setter" style handlers)
++                return false;
+             }
+         }
+         return false;

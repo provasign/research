@@ -1,0 +1,16 @@
+diff --git a/src/click/shell_completion.py b/src/click/shell_completion.py
+index 7235f10..572439d 100644
+--- a/src/click/shell_completion.py
++++ b/src/click/shell_completion.py
+@@ -44,7 +44,10 @@ def shell_complete(
+     comp = comp_cls(cli, ctx_args, prog_name, complete_var)
+ 
+     if instruction == "source":
+-        echo(comp.source())
++        # Write as bytes to bypass text-mode newline translation (e.g.
++        # "\n" -> "\r\n" on Windows), which would corrupt the shell
++        # script for shells like zsh that don't tolerate CRLF.
++        echo(comp.source().encode())
+         return 0
+ 
+     if instruction == "complete":

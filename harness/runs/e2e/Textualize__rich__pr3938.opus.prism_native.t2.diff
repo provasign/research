@@ -1,0 +1,52 @@
+diff --git a/rich/console.py b/rich/console.py
+index 994adfc..8fa688b 100644
+--- a/rich/console.py
++++ b/rich/console.py
+@@ -1742,7 +1742,9 @@ class Console:
+                 ):
+                     buffer_extend(line)
+             else:
+-                self._buffer.extend(new_segments)
++                # Ensure line feeds are not styled, otherwise the style would
++                # continue on to the following line (see #3936).
++                self._buffer.extend(Segment.split_newlines(new_segments))
+ 
+     def print_json(
+         self,
+diff --git a/rich/segment.py b/rich/segment.py
+index edcb52d..d7c93ac 100644
+--- a/rich/segment.py
++++ b/rich/segment.py
+@@ -246,6 +246,32 @@ class Segment(NamedTuple):
+         else:
+             return filterfalse(attrgetter("control"), segments)
+ 
++    @classmethod
++    def split_newlines(cls, segments: Iterable["Segment"]) -> Iterable["Segment"]:
++        """Split line feeds in to their own (unstyled) segments.
++
++        This ensures a style is never applied to a line feed, which would cause the
++        style to continue on to the following line.
++
++        Args:
++            segments (Iterable[Segment]): Segments potentially containing line feeds.
++
++        Yields:
++            Iterable[Segment]: Segments where no styled segment contains a line feed.
++        """
++        new_line_segment = cls("\n")
++        for segment in segments:
++            text, style, control = segment
++            if style is None or control or "\n" not in text:
++                yield segment
++                continue
++            while text:
++                _text, new_line, text = text.partition("\n")
++                if _text:
++                    yield cls(_text, style)
++                if new_line:
++                    yield new_line_segment
++
+     @classmethod
+     def split_lines(cls, segments: Iterable["Segment"]) -> Iterable[List["Segment"]]:
+         """Split a sequence of segments in to a list of lines.

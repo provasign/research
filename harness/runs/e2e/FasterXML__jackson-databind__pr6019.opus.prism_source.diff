@@ -1,0 +1,26 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java
+index 439adb8d47..7918b8ab49 100644
+--- a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java
++++ b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java
+@@ -885,7 +885,10 @@ public class BeanDeserializer
+             }
+         }
+ 
+-        p.assignCurrentValue(bean);
++        // 26-Nov-2025, tatu: [databind#5980] Must NOT assign current value here: by
++        //   the time Creator is called we are at END_OBJECT and the Object context
++        //   has already been closed -- assignment would clobber the value of the
++        //   PARENT context (that is, of the enclosing POJO, if any).
+         // [databind#4938] Since 2.19, allow returning `null` from creator,
+         //  but if so, need to skip all possibly relevant content
+         if (bean == null) {
+@@ -1332,7 +1335,8 @@ public class BeanDeserializer
+         } catch (Exception e) {
+             return wrapInstantiationProblem(ctxt, e);
+         }
+-        p.assignCurrentValue(bean);
++        // 26-Nov-2025, tatu: [databind#5980] No current value assignment here either
++        //   (see `_deserializeUsingPropertyBased()` for explanation)
+ 
+         // [databind#4938] Since 2.19, allow returning `null` from creator,
+         //  but if so, need to skip all possibly relevant content

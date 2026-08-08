@@ -1,0 +1,35 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java b/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
+index 070c2df39..8386ce3bb 100644
+--- a/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
++++ b/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
+@@ -38,8 +38,10 @@ public class UnwrappedPropertyHandler
+     protected final Set<String> _unwrappedPropertyNames;
+ 
+     /**
+-     * Flag that indicates if any of the unwrapped value deserializers
+-     * has an "any setter" (see {@link com.fasterxml.jackson.annotation.JsonAnySetter})
++     * Flag that indicates if any of the unwrapped value deserializers accepts
++     * properties it did not enumerate: either because it has an "any setter"
++     * (see {@link com.fasterxml.jackson.annotation.JsonAnySetter}), or because
++     * it does not report its property names at all (custom deserializers).
+      *
+      * @since 3.1
+      */
+@@ -245,8 +247,15 @@ public class UnwrappedPropertyHandler
+             ValueDeserializer<?> deser = prop.getValueDeserializer();
+             if (deser != null) {
+                 // Recursively collect property names
+-            	deser.collectAllPropertyNamesTo(names);
+-                return deser.hasAnySetter();
++                final int before = names.size();
++                deser.collectAllPropertyNamesTo(names);
++                if (deser.hasAnySetter()) {
++                    return true;
++                }
++                // [databind#6001]: custom unwrapping deserializers are not required to
++                // implement `collectAllPropertyNamesTo()`; if one contributes no names
++                // at all we cannot know what it accepts and must pass everything through
++                return names.size() == before;
+             }
+         }
+         return false;

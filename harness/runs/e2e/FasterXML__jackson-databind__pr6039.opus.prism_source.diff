@@ -1,0 +1,67 @@
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java b/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java
+index 3e63a4a6b..fe3535356 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java
+@@ -894,7 +894,10 @@ ClassUtil.nameOf(handledType()), ClassUtil.name(propName)));
+             // 16-May-2016, tatu: How about per-property case-insensitivity?
+             Boolean B = format.getFeature(JsonFormat.Feature.ACCEPT_CASE_INSENSITIVE_PROPERTIES);
+             if (B != null) {
+-                BeanPropertyMap propsOrig = _beanProperties;
++                // 09-Nov-2025, tatu: [databind#5962] MUST use properties of `contextual`,
++                //   not of `this`: former may have had properties removed due to
++                //   per-property `@JsonIgnoreProperties` handling above
++                BeanPropertyMap propsOrig = contextual._beanProperties;
+                 BeanPropertyMap props = propsOrig.withCaseInsensitivity(B.booleanValue());
+                 if (props != propsOrig) {
+                     contextual = contextual.withBeanProperties(props);
+@@ -1785,7 +1788,7 @@ ClassUtil.name(refName), ClassUtil.getTypeDescription(backRefType),
+             Object beanOrBuilder, String propName)
+         throws IOException
+     {
+-        if (IgnorePropertiesUtil.shouldIgnore(propName, _ignorableProps, _includableProps)) {
++        if (_shouldIgnoreByName(propName)) {
+             handleIgnoredProperty(p, ctxt, beanOrBuilder, propName);
+         } else if (_anySetter != null) {
+             try {
+@@ -1813,7 +1816,7 @@ ClassUtil.name(refName), ClassUtil.getTypeDescription(backRefType),
+             p.skipChildren();
+             return;
+         }
+-        if (IgnorePropertiesUtil.shouldIgnore(propName, _ignorableProps, _includableProps)) {
++        if (_shouldIgnoreByName(propName)) {
+             handleIgnoredProperty(p, ctxt, beanOrClass, propName);
+         }
+         // Otherwise use default handling (call handler(s); if not
+@@ -1821,6 +1824,32 @@ ClassUtil.name(refName), ClassUtil.getTypeDescription(backRefType),
+         super.handleUnknownProperty(p, ctxt, beanOrClass, propName);
+     }
+ 
++    /**
++     * Helper method for checking whether given (unmatched) property name is to be
++     * ignored (or, with "includable" properties, not included) by name.
++     *<p>
++     * Note that when properties are matched case-insensitively, ignoral by name
++     * is matched case-insensitively as well (see [databind#5962]): otherwise
++     * a property removed from the property map could get through as "unknown".
++     *
++     * @since 2.18
++     */
++    protected boolean _shouldIgnoreByName(String propName)
++    {
++        if (IgnorePropertiesUtil.shouldIgnore(propName, _ignorableProps, _includableProps)) {
++            return true;
++        }
++        if ((_ignorableProps != null) && (_beanProperties != null)
++                && _beanProperties.isCaseInsensitive()) {
++            for (String ignorable : _ignorableProps) {
++                if (ignorable.equalsIgnoreCase(propName)) {
++                    return true;
++                }
++            }
++        }
++        return false;
++    }
++
+     /**
+      * Method called when an explicitly ignored property (one specified with a
+      * name to match, either by property annotation or class annotation) is encountered.

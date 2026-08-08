@@ -1,0 +1,52 @@
+diff --git a/src/main/java/com/fasterxml/jackson/databind/introspect/BasicClassIntrospector.java b/src/main/java/com/fasterxml/jackson/databind/introspect/BasicClassIntrospector.java
+index 7927c3990..5c6c26f64 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/introspect/BasicClassIntrospector.java
++++ b/src/main/java/com/fasterxml/jackson/databind/introspect/BasicClassIntrospector.java
+@@ -52,6 +52,12 @@ public class BasicClassIntrospector
+                 AnnotatedClassResolver.createPrimordial(CLS_OBJECT));
+     }
+ 
++    /*
++    /**********************************************************
++    /* Helper methods for standard type introspection
++    /**********************************************************
++     */
++
+     /*
+     /**********************************************************
+     /* Life cycle
+@@ -108,6 +114,34 @@ public class BasicClassIntrospector
+         return desc;
+     }
+ 
++    /**
++     * @since 2.21
++     */
++    protected BasicBeanDescription _findStdTypeDesc(MapperConfig<?> config, JavaType type)
++    {
++        // Ensure proper resolution of primitive types and their wrappers
++        if (type.isPrimitive()) {
++            // For primitives, resolve to wrapper types for consistent handling
++            Class<?> raw = type.getRawClass();
++            if (raw == Boolean.TYPE) {
++                return BOOLEAN_DESC;
++            } else if (raw == Integer.TYPE) {
++                return INT_DESC;
++            } else if (raw == Long.TYPE) {
++                return LONG_DESC;
++            }
++        } else {
++            // Handle common non-primitive types for optimized resolution
++            Class<?> raw = type.getRawClass();
++            if (raw == String.class) {
++                return STRING_DESC;
++            } else if (raw == Object.class) {
++                return OBJECT_DESC;
++            }
++        }
++        return null;
++    }
++
+     @Override
+     public BasicBeanDescription forDeserializationWithBuilder(DeserializationConfig config,
+             JavaType builderType, MixInResolver r, BeanDescription valueTypeDesc)

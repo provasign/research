@@ -1,0 +1,47 @@
+diff --git a/src/main/java/org/apache/commons/lang3/ClassUtils.java b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+index 5c2cf099d..0fcfef06c 100644
+--- a/src/main/java/org/apache/commons/lang3/ClassUtils.java
++++ b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+@@ -1012,8 +1012,14 @@ public static String getShortCanonicalName(final String canonicalName) {
+      * Gets the class name minus the package name from a {@link Class}.
+      *
+      * <p>
+-     * This method simply gets the name using {@code Class.getName()} and then calls {@link #getShortClassName(String)}. See
+-     * relevant notes there.
++     * Unlike {@link #getShortClassName(String)}, this method uses the {@link Class} metadata instead of parsing the name
++     * returned by {@code Class.getName()}. Therefore {@code $} (dollar sign) characters that are part of a class
++     * identifier, and not inner class separators, are preserved.
++     * </p>
++     *
++     * <p>
++     * Local and anonymous classes fall back to {@link #getShortClassName(String)} in order to keep the
++     * compiler-generated ordinal naming.
+      * </p>
+      *
+      * @param cls the class to get the short name for.
+@@ -1024,7 +1030,24 @@ public static String getShortClassName(final Class<?> cls) {
+         if (cls == null) {
+             return StringUtils.EMPTY;
+         }
+-        return getShortClassName(cls.getName());
++        final StringBuilder arrayPrefix = new StringBuilder();
++        Class<?> type = cls;
++        while (type.isArray()) {
++            type = type.getComponentType();
++            arrayPrefix.append("[]");
++        }
++        // Local and anonymous classes (or classes nested in them) have no reliable simple name, fall back to the
++        // string based logic which preserves the compiler-generated ordinals.
++        for (Class<?> enclosing = type; enclosing != null; enclosing = enclosing.getEnclosingClass()) {
++            if (enclosing.isAnonymousClass() || enclosing.isLocalClass()) {
++                return getShortClassName(type.getName()) + arrayPrefix;
++            }
++        }
++        final StringBuilder name = new StringBuilder(type.getSimpleName());
++        for (Class<?> enclosing = type.getEnclosingClass(); enclosing != null; enclosing = enclosing.getEnclosingClass()) {
++            name.insert(0, PACKAGE_SEPARATOR_CHAR).insert(0, enclosing.getSimpleName());
++        }
++        return name.append(arrayPrefix).toString();
+     }
+ 
+     /**

@@ -1,0 +1,124 @@
+diff --git a/src/main/java/org/apache/commons/collections4/multiset/AbstractMapMultiSet.java b/src/main/java/org/apache/commons/collections4/multiset/AbstractMapMultiSet.java
+index 4d62bc47a..e695e3f8d 100644
+--- a/src/main/java/org/apache/commons/collections4/multiset/AbstractMapMultiSet.java
++++ b/src/main/java/org/apache/commons/collections4/multiset/AbstractMapMultiSet.java
+@@ -330,7 +330,14 @@ public abstract class AbstractMapMultiSet<E> extends AbstractMultiSet<E> {
+             if (mut == null) {
+                 map.put(object, new MutableInteger(occurrences));
+             } else {
+-                mut.value += occurrences;
++                // Handle potential integer overflow
++                final int newValue = mut.value + occurrences;
++                // If adding would cause overflow, clamp to Integer.MAX_VALUE
++                if (newValue < mut.value) {
++                    mut.value = Integer.MAX_VALUE;
++                } else {
++                    mut.value = newValue;
++                }
+             }
+         }
+         return oldCount;
+diff --git a/src/test/java/org/apache/commons/collections4/multiset/AbstractMapMultiSetOverflowTest.java b/src/test/java/org/apache/commons/collections4/multiset/AbstractMapMultiSetOverflowTest.java
+new file mode 100644
+index 000000000..6319b2841
+--- /dev/null
++++ b/src/test/java/org/apache/commons/collections4/multiset/AbstractMapMultiSetOverflowTest.java
+@@ -0,0 +1,97 @@
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one or more
++ * contributor license agreements.  See the NOTICE file distributed with
++ * this work for additional information regarding copyright ownership.
++ * The ASF licenses this file to You under the Apache License, Version 2.0
++ * (the "License"); you may not use this file except in compliance with
++ * the License.  You may obtain a copy of the License at
++ *
++ *      https://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.commons.collections4.multiset;
++
++import static org.junit.jupiter.api.Assertions.assertEquals;
++import static org.junit.jupiter.api.Assertions.assertTrue;
++
++import java.util.Arrays;
++
++import org.apache.commons.collections4.MultiSet;
++import org.junit.jupiter.api.Test;
++
++/**
++ * Tests for integer overflow in AbstractMapMultiSet.
++ */
++public class AbstractMapMultiSetOverflowTest {
++
++    @Test
++    public void testAddLargeOccurrences() {
++        final MultiSet<String> multiset = new HashMultiSet<>();
++        
++        // Add a large number of occurrences to cause potential overflow
++        final int largeNumber = 1000000;
++        multiset.add("test", largeNumber);
++        
++        // Should not cause integer overflow - the count should be correct
++        assertEquals(largeNumber, multiset.getCount("test"));
++        
++        // Add even more to potentially cause overflow
++        multiset.add("test", largeNumber);
++        assertEquals(2 * largeNumber, multiset.getCount("test"));
++    }
++
++    @Test
++    public void testAddVeryLargeOccurrences() {
++        final MultiSet<String> multiset = new HashMultiSet<>();
++        
++        // Add a very large number of occurrences that could cause overflow
++        final int veryLargeNumber = Integer.MAX_VALUE - 1000;
++        multiset.add("test", veryLargeNumber);
++        
++        assertEquals(veryLargeNumber, multiset.getCount("test"));
++        
++        // Add more to potentially cause overflow
++        multiset.add("test", 1000);
++        assertEquals(veryLargeNumber + 1000, multiset.getCount("test"));
++    }
++    
++    @Test
++    public void testIntegerOverflowScenario() {
++        final MultiSet<String> multiset = new HashMultiSet<>();
++        
++        // This should cause integer overflow when we add to a value that's already close to MAX_VALUE
++        final int initialValue = Integer.MAX_VALUE - 100;
++        multiset.add("test", initialValue);
++        
++        assertEquals(initialValue, multiset.getCount("test"));
++        
++        // Now try to add more - this should not cause an overflow exception but should handle it gracefully
++        multiset.add("test", 200);  // This would overflow: (Integer.MAX_VALUE - 100) + 200 = Integer.MAX_VALUE + 100
++        
++        // The count should be clamped to Integer.MAX_VALUE, not negative
++        final int actualCount = multiset.getCount("test");
++        assertEquals(Integer.MAX_VALUE, actualCount, "Count should be clamped to MAX_VALUE, not overflow to negative");
++    }
++    
++    @Test
++    public void testMultipleOverflowScenarios() {
++        final MultiSet<String> multiset = new HashMultiSet<>();
++        
++        // Add a value close to MAX_VALUE
++        multiset.add("test", Integer.MAX_VALUE - 10);
++        assertEquals(Integer.MAX_VALUE - 10, multiset.getCount("test"));
++        
++        // Add more to cause overflow
++        multiset.add("test", 20);  // Should overflow to MAX_VALUE
++        assertEquals(Integer.MAX_VALUE, multiset.getCount("test"));
++        
++        // Add even more
++        multiset.add("test", Integer.MAX_VALUE);  // Should still be MAX_VALUE
++        assertEquals(Integer.MAX_VALUE, multiset.getCount("test"));
++    }
++}
+\ No newline at end of file

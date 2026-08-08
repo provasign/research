@@ -1,0 +1,104 @@
+diff --git a/CHANGES.rst b/CHANGES.rst
+index 1c4e997..d4b87fb 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -17,6 +17,10 @@ Unreleased
+     ``breakpoint()``, and debuggers subclassing ``pdb.Pdb`` (ipdb, pdbpp) can
+     interact with the real terminal instead of the captured I/O streams.
+     :issue:`654` :issue:`824` :issue:`843` :pr:`951` :pr:`3235`
++-   The streams ``CliRunner`` installs during isolation report the file
++    descriptor of the stream they replaced, so code such as
++    ``subprocess.run(..., stdout=sys.stderr)`` no longer raises
++    ``io.UnsupportedOperation: fileno``. :issue:`2437`
+ -   Add optional randomized parallel test execution using ``pytest-randomly`` and
+     ``pytest-xdist`` to detect test pollution and race conditions. :pr:`3151`
+ -   Add contributor documentation for running stress tests, randomized
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..0ae4690 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -102,11 +102,32 @@ class StreamMixer:
+ 
+ class _NamedTextIOWrapper(io.TextIOWrapper):
+     def __init__(
+-        self, buffer: t.BinaryIO, name: str, mode: str, **kwargs: t.Any
++        self,
++        buffer: t.BinaryIO,
++        name: str,
++        mode: str,
++        fileno: int | None = None,
++        **kwargs: t.Any,
+     ) -> None:
+         super().__init__(buffer, **kwargs)
+         self._name = name
+         self._mode = mode
++        self._fileno = fileno
++
++    def fileno(self) -> int:
++        """Return the file descriptor of the stream this one replaced.
++
++        The wrapper is backed by an in-memory buffer, which has no file
++        descriptor. Code such as ``subprocess.run(stdout=sys.stderr)``
++        needs a real one, so fall back to the descriptor of the stream
++        that was replaced during isolation.
++
++        .. versionadded:: 8.3.2
++        """
++        if self._fileno is None:
++            return super().fileno()
++
++        return self._fileno
+ 
+     def close(self) -> None:
+         """
+@@ -321,13 +342,28 @@ class CliRunner:
+ 
+         stream_mixer = StreamMixer()
+ 
++        def _fileno_of(stream: t.IO[t.Any] | None) -> int | None:
++            """The descriptor of a replaced stream, if it has a real one."""
++            try:
++                return stream.fileno()  # type: ignore[union-attr]
++            except Exception:
++                return None
++
++        stdin_fileno = _fileno_of(old_stdin)
++        stdout_fileno = _fileno_of(old_stdout)
++        stderr_fileno = _fileno_of(old_stderr)
++
+         if self.echo_stdin:
+             bytes_input = echo_input = t.cast(
+                 t.BinaryIO, EchoingStdin(bytes_input, stream_mixer.stdout)
+             )
+ 
+         sys.stdin = text_input = _NamedTextIOWrapper(
+-            bytes_input, encoding=self.charset, name="<stdin>", mode="r"
++            bytes_input,
++            encoding=self.charset,
++            name="<stdin>",
++            mode="r",
++            fileno=stdin_fileno,
+         )
+ 
+         if self.echo_stdin:
+@@ -336,7 +372,11 @@ class CliRunner:
+             text_input._CHUNK_SIZE = 1  # type: ignore
+ 
+         sys.stdout = _NamedTextIOWrapper(
+-            stream_mixer.stdout, encoding=self.charset, name="<stdout>", mode="w"
++            stream_mixer.stdout,
++            encoding=self.charset,
++            name="<stdout>",
++            mode="w",
++            fileno=stdout_fileno,
+         )
+ 
+         sys.stderr = _NamedTextIOWrapper(
+@@ -344,6 +384,7 @@ class CliRunner:
+             encoding=self.charset,
+             name="<stderr>",
+             mode="w",
++            fileno=stderr_fileno,
+             errors="backslashreplace",
+         )
+ 

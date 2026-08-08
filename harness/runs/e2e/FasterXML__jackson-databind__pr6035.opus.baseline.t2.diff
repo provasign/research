@@ -1,0 +1,189 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java b/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java
+index 926c06d33..b06a8b7f2 100644
+--- a/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java
++++ b/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java
+@@ -737,6 +737,8 @@ public class BeanDeserializerFactory
+             String name = property.getName();
+             // explicit ignoral using @JsonIgnoreProperties of @JsonIncludeProperties needs to block entries
+             if (IgnorePropertiesUtil.shouldIgnore(name, ignored, included)) {
++                // [databind#6031]: aliases of ignored property need to be ignored too
++                _addIgnorableAliases(builder, property);
+                 continue;
+             }
+             if (!property.hasConstructorParameter()) { // never skip constructor params
+@@ -746,6 +748,7 @@ public class BeanDeserializerFactory
+                         && isIgnorableType(ctxt, property, rawPropertyType, ignoredTypes)) {
+                     // important: make ignorable, to avoid errors if value is actually seen
+                     builder.addIgnorable(name);
++                    _addIgnorableAliases(builder, property);
+                     continue;
+                 }
+             }
+@@ -754,6 +757,21 @@ public class BeanDeserializerFactory
+         return result;
+     }
+ 
++    /**
++     * Helper method for registering aliases (see {@code @JsonAlias}) of a property
++     * that is being ignored, so that alias names are ignored along with the primary
++     * name (and not, for example, passed to an "any setter"): [databind#6031].
++     *
++     * @since 3.2
++     */
++    private void _addIgnorableAliases(BeanDeserializerBuilder builder,
++            BeanPropertyDefinition property)
++    {
++        for (PropertyName alias : property.findAliases()) {
++            builder.addIgnorable(alias.getSimpleName());
++        }
++    }
++
+     /**
+      * Method that will find if bean has any managed- or back-reference properties,
+      * and if so add them to bean, to be linked during resolution phase.
+diff --git a/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java b/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
+index b2753848a..67a14f86a 100644
+--- a/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
++++ b/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
+@@ -148,6 +148,16 @@ public class POJOPropertiesCollector
+      */
+     protected HashSet<String> _classLevelIgnoredNames;
+ 
++    /**
++     * Aliases (from {@code @JsonAlias}) of properties dropped as ignored, keyed by
++     * the ignored property name: needed so that alias names are ignored along with
++     * the primary name (and not, for example, passed to an "any setter"), see
++     * {@code [databind#6031]}.
++     *
++     * @since 3.2
++     */
++    protected Map<String, List<PropertyName>> _ignoredPropertyAliases;
++
+     /**
+      * Snapshot of {@link #_perPropertyIgnoredNames} taken just before the
+      * {@code [databind#2001]} creator-rename rescue can fire, used by
+@@ -381,7 +391,7 @@ public class POJOPropertiesCollector
+         if (!_collected) {
+             collectAll();
+         }
+-        return _unionWithClassLevel(_perPropertyIgnoredNames);
++        return _withIgnoredAliases(_unionWithClassLevel(_perPropertyIgnoredNames));
+     }
+ 
+     /**
+@@ -409,7 +419,7 @@ public class POJOPropertiesCollector
+         Set<String> perPropertyView = (_nonRescuedIgnoredPropertyNames != null)
+                 ? _nonRescuedIgnoredPropertyNames
+                 : _perPropertyIgnoredNames;
+-        return _unionWithClassLevel(perPropertyView);
++        return _withIgnoredAliases(_unionWithClassLevel(perPropertyView));
+     }
+ 
+     /**
+@@ -1544,6 +1554,7 @@ ctor.creator()));
+                 if (isRecordType() && !_forSerialization) {
+                       // ...so can only remove ignored field and/or accessors, not constructor parameters that are needed
+                       // for instantiation...
++                      _collectIgnoredAliases(prop);
+                       prop.removeIgnored();
+                       // ...which will then be ignored (the incoming property value) during deserialization
+                     _collectIgnorals(prop.getName());
+@@ -1555,12 +1566,15 @@ ctor.creator()));
+                 //    only explicit inclusion by accessors OTHER than ones with ignoral marker
+                 if (!prop.anyExplicitsWithoutIgnoral()) {
+                     it.remove();
++                    _collectIgnoredAliases(prop);
+                     _collectIgnorals(prop.getName());
+                     continue;
+                 }
+                 // otherwise just remove ones marked to be ignored
++                final List<PropertyName> aliases = prop.findAliases();
+                 prop.removeIgnored();
+                 if (!prop.couldDeserialize()) {
++                    _collectIgnoredAliases(prop.getName(), aliases);
+                     _collectIgnorals(prop.getName());
+                 }
+             }
+@@ -1605,6 +1619,34 @@ ctor.creator()));
+         }
+     }
+ 
++    /**
++     * Helper method called to record aliases of a property being dropped as ignored,
++     * so that alias names get ignored along with the primary name ({@code [databind#6031]}).
++     * Must be called before ignored accessors are removed from the property.
++     *
++     * @since 3.2
++     */
++    protected void _collectIgnoredAliases(POJOPropertyBuilder prop)
++    {
++        _collectIgnoredAliases(prop.getName(), prop.findAliases());
++    }
++
++    /**
++     * Variant of {@link #_collectIgnoredAliases(POJOPropertyBuilder)} for cases where
++     * aliases had to be resolved before ignored accessors were removed.
++     *
++     * @since 3.2
++     */
++    protected void _collectIgnoredAliases(String name, List<PropertyName> aliases)
++    {
++        if ((name != null) && (aliases != null) && !aliases.isEmpty()) {
++            if (_ignoredPropertyAliases == null) {
++                _ignoredPropertyAliases = new HashMap<>();
++            }
++            _ignoredPropertyAliases.put(name, aliases);
++        }
++    }
++
+     /**
+      * Returns {@code true} if the (already-collected) properties-based creator
+      * has a parameter currently bound to the given name. Used by
+@@ -2245,4 +2287,34 @@ ctor.creator()));
+         result.addAll(_classLevelIgnoredNames);
+         return result;
+     }
++
++    /**
++     * Returns given set of ignored names, expanded with aliases of ignored properties
++     * (see {@link #_ignoredPropertyAliases}); aliases of properties that are no longer
++     * ignored (due to the {@code [databind#2001]} rescue) are not included.
++     * Does not modify the input set.
++     *
++     * @since 3.2
++     */
++    private Set<String> _withIgnoredAliases(Set<String> names) {
++        if (_ignoredPropertyAliases == null) {
++            return names;
++        }
++        HashSet<String> result = null;
++        for (Map.Entry<String, List<PropertyName>> entry : _ignoredPropertyAliases.entrySet()) {
++            if (!names.contains(entry.getKey())) {
++                continue;
++            }
++            for (PropertyName alias : entry.getValue()) {
++                String aliasName = alias.getSimpleName();
++                if (!names.contains(aliasName)) {
++                    if (result == null) {
++                        result = new HashSet<>(names);
++                    }
++                    result.add(aliasName);
++                }
++            }
++        }
++        return (result == null) ? names : result;
++    }
+ }
+diff --git a/src/main/java/tools/jackson/databind/introspect/POJOPropertyBuilder.java b/src/main/java/tools/jackson/databind/introspect/POJOPropertyBuilder.java
+index 61ffa0a94..ef60becea 100644
+--- a/src/main/java/tools/jackson/databind/introspect/POJOPropertyBuilder.java
++++ b/src/main/java/tools/jackson/databind/introspect/POJOPropertyBuilder.java
+@@ -1006,6 +1006,8 @@ public class POJOPropertyBuilder
+             // and possible explicit names
+             if (parent != null) {
+                 parent._collectIgnorals(getName());
++                // [databind#6031]: aliases need to be ignored along with primary name
++                parent._collectIgnoredAliases(this);
+                 for (PropertyName pn : findExplicitNames()) {
+                     String simpleName = pn.getSimpleName();
+                     // [databind#5975]: Skip ignoral when the explicit name is owned
