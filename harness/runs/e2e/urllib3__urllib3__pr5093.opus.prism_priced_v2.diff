@@ -1,0 +1,29 @@
+diff --git a/changelog/3454.bugfix.rst b/changelog/3454.bugfix.rst
+new file mode 100644
+index 00000000..4b7b1990
+--- /dev/null
++++ b/changelog/3454.bugfix.rst
+@@ -0,0 +1 @@
++Fixed the ``proxy_ssl_context`` verification settings being overridden by the target connection's ``ssl_context``, which made it impossible to verify the HTTPS proxy connection while skipping verification of the proxied connection.
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 8a89488d..933c8274 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -915,9 +915,16 @@ class HTTPSConnection(HTTPConnection):
+         # `_connect_tls_proxy` is called when self._tunnel_host is truthy.
+         proxy_config = typing.cast(ProxyConfig, self.proxy_config)
+         ssl_context = proxy_config.ssl_context
++        # The proxy connection is configured by ``proxy_ssl_context``, so use its
++        # verify_mode instead of the target connection's cert_reqs which would
++        # otherwise leak onto the proxy's SSLContext.
++        if ssl_context is not None:
++            cert_reqs = ssl_context.verify_mode
++        else:
++            cert_reqs = self.cert_reqs
+         sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+             sock,
+-            cert_reqs=self.cert_reqs,
++            cert_reqs=cert_reqs,
+             ssl_version=self.ssl_version,
+             ssl_minimum_version=self.ssl_minimum_version,
+             ssl_maximum_version=self.ssl_maximum_version,

@@ -1,44 +1,20 @@
-diff --git a/CHANGES.rst b/CHANGES.rst
-index 1c4e997..41f5bcf 100644
---- a/CHANGES.rst
-+++ b/CHANGES.rst
-@@ -17,6 +17,11 @@ Unreleased
-     ``breakpoint()``, and debuggers subclassing ``pdb.Pdb`` (ipdb, pdbpp) can
-     interact with the real terminal instead of the captured I/O streams.
-     :issue:`654` :issue:`824` :issue:`843` :pr:`951` :pr:`3235`
-+-   The streams ``CliRunner`` isolation installs as ``sys.stdin``,
-+    ``sys.stdout``, and ``sys.stderr`` support ``fileno()``, returning the
-+    descriptor of the corresponding real stream. Passing them to
-+    :mod:`subprocess` no longer raises ``io.UnsupportedOperation``.
-+    :issue:`2478`
- -   Add optional randomized parallel test execution using ``pytest-randomly`` and
-     ``pytest-xdist`` to detect test pollution and race conditions. :pr:`3151`
- -   Add contributor documentation for running stress tests, randomized
 diff --git a/src/click/testing.py b/src/click/testing.py
-index fe079ba..8d0bf56 100644
+index fe079ba..af4f886 100644
 --- a/src/click/testing.py
 +++ b/src/click/testing.py
-@@ -117,6 +117,29 @@ class _NamedTextIOWrapper(io.TextIOWrapper):
+@@ -117,6 +117,21 @@ class _NamedTextIOWrapper(io.TextIOWrapper):
          """
          ...
  
 +    def fileno(self) -> int:
-+        """Return the descriptor of the real stream being replaced.
++        """Return the descriptor of the real stream this wrapper stands in
++        for, so APIs that need a true file descriptor, such as
++        :func:`subprocess.run`, keep working during isolation. Output a
++        subprocess writes there goes to the real stream and is not captured.
 +
-+        The wrapped buffer is a :class:`io.BytesIO`, which has no
-+        descriptor, so passing ``sys.stdout``/``sys.stderr`` to code that
-+        needs a real one, such as :mod:`subprocess`, raised
-+        ``io.UnsupportedOperation``. Fall back to the original stream
-+        Python preserves, so a child process writes to the terminal
-+        instead of failing.
-+
-+        .. versionadded:: 8.3.3
++        .. versionadded:: 8.3.2
 +        """
-+        real = {
-+            "<stdin>": sys.__stdin__,
-+            "<stdout>": sys.__stdout__,
-+            "<stderr>": sys.__stderr__,
-+        }.get(self._name)
++        real = getattr(sys, f"__{self._name.strip('<>')}__", None)
 +
 +        if real is None:
 +            raise io.UnsupportedOperation("fileno")

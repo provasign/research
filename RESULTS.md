@@ -429,6 +429,17 @@ verify's sweet spot, pattern-replication sweeps its blind spot.
 **6.4× fewer turns, 9.3× fewer tokens, 6.1× cheaper, 6.7× faster, at the same
 answer.** Total grid spend $9.97 vs $1.64.
 
+**Revalidated 2026-08-09 on prism v0.39.0** (post-audit: line clamp, limit
+semantics, flag validation, grove v0.28.0, astkit v0.4.22): the prism arm
+reproduced within noise — recall 0.987 identical, 4.3 turns, 94k tokens,
+$0.28, same per-task residuals. The baseline arm did NOT: it dropped to
+0.906, entirely from one django run scoring 0.438 where every prior run
+scored 1.0. That arm contains no prism — it is Opus-on-grep variance, the
+same tail risk the 2026-07 grid measured, resurfacing in current data. One
+run; noted, not headlined. Also revalidated: day-to-day cost parity, priced
+arm full 13-task bed on v0.39.0 at +7% vs baseline (published +2%, single
+trial, within the observed noise band), same resolve pattern.
+
 Read it honestly: a 2026-08 frontier model no longer needs a graph to be
 complete on this task family — it greps its way there. What Prism changes is
 the cost of getting there. Prism's 0.987 is three tasks at 1.000 plus engine

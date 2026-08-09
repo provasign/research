@@ -1,0 +1,73 @@
+diff --git a/CHANGES.rst b/CHANGES.rst
+index a39471f..f2c3001 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -17,6 +17,9 @@ Unreleased
+ -   ``echo_via_pager`` flushes after each write, so passing a generator streams
+     output to the pager incrementally instead of staying hidden until the pipe
+     buffer fills. :issue:`3242` :issue:`2542` :pr:`3534`
++-   ``echo_via_pager`` no longer closes ``sys.stdout`` when no pager command is
++    available and it falls back to writing to stdout directly, which caused
++    ``ValueError: I/O operation on closed file`` under ``CliRunner``.
+ 
+ 
+ Version 8.4.1
+diff --git a/src/click/_termui_impl.py b/src/click/_termui_impl.py
+index 3336c37..ad7ae84 100644
+--- a/src/click/_termui_impl.py
++++ b/src/click/_termui_impl.py
+@@ -454,6 +454,14 @@ def get_pager_file(color: bool | None = None) -> t.Generator[t.TextIO, None, Non
+             stream.flush()
+ 
+ 
++def _fallback_stdout() -> t.TextIO:
++    """Stdout to page to when no pager command is available. Wrapped in
++    ``_SkipClose`` so that the stream, which comes from elsewhere rather than
++    our internal helpers, isn't closed when the pager wrapper is torn down.
++    """
++    return _SkipClose(_default_text_stdout() or StringIO())  # type: ignore[return-value]
++
++
+ @contextlib.contextmanager
+ def _pipepager(
+     cmd_parts: list[str], color: bool | None = None
+@@ -471,8 +479,7 @@ def _pipepager(
+     """
+     # Split the command into the invoked CLI and its parameters.
+     if not cmd_parts:
+-        stdout = _default_text_stdout() or StringIO()
+-        yield stdout, "utf-8", False
++        yield _fallback_stdout(), "utf-8", False
+         return
+ 
+     import shutil
+@@ -482,8 +489,7 @@ def _pipepager(
+ 
+     cmd_filepath = shutil.which(cmd)
+     if not cmd_filepath:
+-        stdout = _default_text_stdout() or StringIO()
+-        yield stdout, "utf-8", False
++        yield _fallback_stdout(), "utf-8", False
+         return
+ 
+     # Produces a normalized absolute path string.
+@@ -571,8 +577,7 @@ def _tempfilepager(
+     """
+     # Split the command into the invoked CLI and its parameters.
+     if not cmd_parts:
+-        stdout = _default_text_stdout() or StringIO()
+-        yield stdout, "utf-8", False
++        yield _fallback_stdout(), "utf-8", False
+         return
+ 
+     import shutil
+@@ -582,8 +587,7 @@ def _tempfilepager(
+ 
+     cmd_filepath = shutil.which(cmd)
+     if not cmd_filepath:
+-        stdout = _default_text_stdout() or StringIO()
+-        yield stdout, "utf-8", False
++        yield _fallback_stdout(), "utf-8", False
+         return
+ 
+     # Produces a normalized absolute path string.
