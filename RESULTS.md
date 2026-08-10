@@ -446,6 +446,15 @@ the cost of getting there. Prism's 0.987 is three tasks at 1.000 plus engine
 residuals already pinned as invariant baselines (serialize 0.982, guava 0.997
 at 310 sites, typeorm 0.946) — not regressions.
 
+**Re-run 2026-08-10 on prism v0.42.0** (grove v0.30.0 multi-hop
+receiver-chain fix): the prism arm's mean recall **0.987 → 0.9995** — the
+serialize and typeorm residuals closed at the agent level exactly as at the
+engine level (both 1.000; guava stays 0.997, the anonymous-inner-class
+astkit residual), at an unchanged cost profile ($0.32 vs $0.28 mean,
+guava ran 8 turns this trial). Prior cells archived under
+`runs/ab-agentic/archive-v0.42.0-prechain/`. The baseline arm was not
+re-run (grep is engine-independent; its 1.000 stands).
+
 ### 9.2 The mason token claim is retired
 
 See the correction in §7. mason v0.31.1 + qwen3-coder:30b re-measured on
