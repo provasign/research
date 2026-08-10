@@ -1,0 +1,50 @@
+diff --git a/rich/console.py b/rich/console.py
+index 994adfc..7b091ec 100644
+--- a/rich/console.py
++++ b/rich/console.py
+@@ -1742,7 +1742,7 @@ class Console:
+                 ):
+                     buffer_extend(line)
+             else:
+-                self._buffer.extend(new_segments)
++                self._buffer.extend(Segment.unstyle_new_lines(new_segments))
+ 
+     def print_json(
+         self,
+diff --git a/rich/segment.py b/rich/segment.py
+index edcb52d..5e05f19 100644
+--- a/rich/segment.py
++++ b/rich/segment.py
+@@ -275,6 +275,32 @@ class Segment(NamedTuple):
+         if line:
+             yield line
+ 
++    @classmethod
++    def unstyle_new_lines(cls, segments: Iterable["Segment"]) -> Iterable["Segment"]:
++        """Split segments so that line breaks are not styled.
++
++        This prevents styles (such as background colors) from bleeding on to the
++        following line.
++
++        Args:
++            segments (Iterable[Segment]): Segments potentially containing line feeds.
++
++        Yields:
++            Segment: Segments where no line break carries a style.
++        """
++        new_line_segment = cls("\n")
++        for segment in segments:
++            text, style, control = segment
++            if style is None or control or "\n" not in text:
++                yield segment
++            else:
++                while text:
++                    _text, new_line, text = text.partition("\n")
++                    if _text:
++                        yield cls(_text, style)
++                    if new_line:
++                        yield new_line_segment
++
+     @classmethod
+     def split_and_crop_lines(
+         cls,

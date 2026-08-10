@@ -1,0 +1,22 @@
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 8a89488d..adfb3c8e 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -915,9 +915,16 @@ class HTTPSConnection(HTTPConnection):
+         # `_connect_tls_proxy` is called when self._tunnel_host is truthy.
+         proxy_config = typing.cast(ProxyConfig, self.proxy_config)
+         ssl_context = proxy_config.ssl_context
++        if ssl_context is not None:
++            # The proxy connection is configured by its own SSL context, so the
++            # verification settings of the target connection must not leak into
++            # it. This allows verifying the proxy while not verifying the target.
++            cert_reqs = ssl_context.verify_mode
++        else:
++            cert_reqs = self.cert_reqs
+         sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+             sock,
+-            cert_reqs=self.cert_reqs,
++            cert_reqs=cert_reqs,
+             ssl_version=self.ssl_version,
+             ssl_minimum_version=self.ssl_minimum_version,
+             ssl_maximum_version=self.ssl_maximum_version,
