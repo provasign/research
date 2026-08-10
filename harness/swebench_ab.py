@@ -43,14 +43,16 @@ RUN_TIMEOUT_S = 1800
 # the agent sees the same guidance a real prism user gets.
 PRISM_STEERING = """
 You also have the `prism` code-intelligence CLI (Bash, --format text). Prefer it
-over raw grep/read to find and read code cheaply:
-  prism query "<what you're looking for>" --terms a,b --include graph,tests --format text   # callers/callees/tests of a symbol
-  prism lookup <pkg.Symbol> --format text     # one symbol's body (~5x cheaper than reading the file)
-  prism read <file> --format text             # whole file, session-compressed on repeat reads
-  prism change-impact 'Type.method' --format text   # every site a signature change must touch, in one call
+over raw grep/read to find and read code cheaply — YOU price each request:
+  prism search <term> --scope text --format text    # a PURE grep (real rg pass inside prism) — use this where you would grep/rg
+  prism query "<the task>" --terms a,b --format text # edit-ready line-numbered source windows + each anchor's callers (--terms REQUIRED)
+  prism lookup <pkg.Symbol> --format text            # one symbol's body (~5x cheaper than reading the file)
+  prism read <file> --format text                    # whole file, session-compressed on repeat reads
+  prism change-impact 'Type.method' --format text    # every site a signature change must touch, in one call
 A repeat `prism read` of an unchanged file returns a `// [prism:cached]` pointer,
-not the body — you already have it; do not re-fetch. Use shell grep only to find
-an anchor, then let prism expand from it.
+not the body — you already have it; do not re-fetch. Default to the CHEAP
+request (search --scope text to locate); escalate to query only when you need
+the context, not just the location.
 """
 
 BASE_PROMPT = """You are fixing a real bug in the {repo} repository, checked out at the
@@ -111,9 +113,11 @@ def parse_stream(stdout: str) -> dict:
     return env
 
 
-def run_agent(prompt: str, tools: list[str], workdir: Path) -> dict:
+def run_agent(prompt: str, tools: list[str], workdir: Path, model: str = "") -> dict:
     cmd = ["claude", "-p", prompt, "--output-format", "stream-json", "--verbose",
            "--strict-mcp-config", "--allowedTools", ",".join(tools)]
+    if model:
+        cmd += ["--model", model]
     t0 = time.time()
     proc = subprocess.Popen(cmd, cwd=str(workdir), stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, text=True, start_new_session=True)
@@ -130,7 +134,7 @@ def run_agent(prompt: str, tools: list[str], workdir: Path) -> dict:
     return env
 
 
-def run_arm(task: dict, arm: str, prism: str) -> dict:
+def run_arm(task: dict, arm: str, prism: str, model: str = "") -> dict:
     """Check out the task's repo at base_commit, run the agent, capture the
     patch (git diff of its edits) + efficiency metrics."""
     repo_dir = ensure_repo(task["repo"])
@@ -148,7 +152,7 @@ def run_arm(task: dict, arm: str, prism: str) -> dict:
             steer = "\n" + PRISM_STEERING
         prompt = BASE_PROMPT.format(repo=task["repo"], problem=task["problem_statement"],
                                     steer=steer)
-        env = run_agent(prompt, tools, wt)
+        env = run_agent(prompt, tools, wt, model)
         # The prediction patch = the agent's edits (exclude the .grove index).
         patch = sh("git", "-C", str(wt), "diff", "--", ".", ":(exclude).grove").stdout
         usage = env.get("usage") or {}
@@ -207,6 +211,7 @@ def main() -> None:
     ap.add_argument("--arms", nargs="+", default=["baseline", "prism"])
     ap.add_argument("--out", default="runs/swebench")
     ap.add_argument("--prism", default=str(Path.home() / "bin" / "prism"))
+    ap.add_argument("--model", default="opus")
     args = ap.parse_args()
 
     if args.fetch:
@@ -227,7 +232,7 @@ def main() -> None:
                 print(f"[{i+1}/{len(tasks)}] {task['instance_id']} :: {arm}  SKIP (done)", flush=True)
                 continue
             print(f"[{i+1}/{len(tasks)}] {task['instance_id']} :: {arm}", flush=True)
-            rec = run_arm(task, arm, args.prism)
+            rec = run_arm(task, arm, args.prism, args.model)
             json.dump(rec, open(recpath, "w"))
             print(f"      turns={rec['turns']} fresh_in={rec['fresh_input_tokens']} "
                   f"cache={rec['cache_read_tokens']} out={rec['output_tokens']} "
