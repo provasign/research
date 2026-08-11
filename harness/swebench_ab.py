@@ -121,20 +121,31 @@ def parse_stream(stdout: str) -> dict:
             obj = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if obj.get("type") == "assistant":
+        if obj.get("type") == "system" and obj.get("subtype") == "init":
+            # The init event lists the tools ACTUALLY loaded at turn one —
+            # the ground truth for whether MCP schemas were deferred.
+            env["init_tools"] = obj.get("tools", [])
+        elif obj.get("type") == "assistant":
             for b in obj.get("message", {}).get("content", []):
                 if b.get("type") == "tool_use":
                     name = b.get("name", "?")
-                    cmd = b.get("input", {}).get("command", "") if name == "Bash" else ""
-                    trace.append(cmd[:120] if cmd else name)
+                    inp = b.get("input", {})
+                    if name == "Bash":
+                        trace.append(inp.get("command", "")[:120])
+                    elif name == "ToolSearch":
+                        trace.append(f"ToolSearch({inp.get('query','')})"[:120])
+                    else:
+                        trace.append(name)
         elif obj.get("type") == "result":
             env.update(obj)
     env["tool_trace"] = trace
-    # Detect an actual prism INVOCATION (the binary run as a command), not the
-    # substring "prism" anywhere — the worktree path could contain it. Matches
-    # `prism ...` or `/path/to/prism ...`, not an unrelated path segment.
-    env["prism_used"] = any(re.search(r"(?:^|[\s;&|(])(?:[^\s;&|(]*/)?prism\s", t)
-                            for t in trace)
+    # prism use = MCP tool call OR the CLI binary run as a command (path
+    # segments containing "prism" don't count). The pre-2026-08-11 version
+    # missed MCP calls entirely and under-reported adoption.
+    env["prism_used"] = any(
+        t.startswith("mcp__prism")
+        or re.search(r"(?:^|[\s;&|(])(?:[^\s;&|(]*/)?prism\s", t)
+        for t in trace)
     return env
 
 
@@ -232,6 +243,8 @@ def run_arm(task: dict, arm: str, prism: str, model: str = "") -> dict:
         return {
             "instance_id": task["instance_id"], "arm": arm,
             "isolation_removed": isolation_removed,
+            "prism_tools_loaded_at_init": sorted(
+                t for t in (env.get("init_tools") or []) if "prism" in t.lower()),
             "model_patch": patch,
             "empty_patch": not patch.strip(),
             "turns": env.get("num_turns"),
