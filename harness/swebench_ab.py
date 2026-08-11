@@ -50,9 +50,14 @@ over raw grep/read to find and read code cheaply — YOU price each request:
   prism read <file> --format text                    # whole file, session-compressed on repeat reads
   prism change-impact 'Type.method' --format text    # every site a signature change must touch, in one call
 A repeat `prism read` of an unchanged file returns a `// [prism:cached]` pointer,
-not the body — you already have it; do not re-fetch. Default to the CHEAP
-request (search --scope text to locate); escalate to query only when you need
-the context, not just the location.
+not the body — you already have it; do not re-fetch.
+Cheap requests to FIND, full context to EDIT: search --scope text to locate, but
+NEVER edit code you have only seen as grep hits or piecemeal slices. Before
+editing any function, get its real context ONCE — `prism query` with the anchors
+you found (windows + callers), or `prism read` the WHOLE implicated file. The
+error message's location is where a bug SURFACES, not necessarily where it
+lives — read the full file that defines the failing behavior before deciding
+where to edit.
 """
 
 BASE_PROMPT = """You are fixing a real bug in the {repo} repository, checked out at the
@@ -119,8 +124,15 @@ def run_agent(prompt: str, tools: list[str], workdir: Path, model: str = "") -> 
     if model:
         cmd += ["--model", model]
     t0 = time.time()
+    # GIT_ALLOW_PROTOCOL=file: git stays fully usable locally but cannot fetch
+    # over the network. Audit of trials 1-2 caught agents running
+    # `git fetch origin refs/pull/<N>/head` to pull the GOLD fix (the instance
+    # id leaks the PR number); gh/curl were already blocked by the allowlist,
+    # git was the remaining hole. Applies identically to both arms.
+    env = {**os.environ, "GIT_ALLOW_PROTOCOL": "file"}
     proc = subprocess.Popen(cmd, cwd=str(workdir), stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, text=True, start_new_session=True)
+                            stderr=subprocess.PIPE, text=True, start_new_session=True,
+                            env=env)
     try:
         out, err = proc.communicate(timeout=RUN_TIMEOUT_S)
         timed_out = False
