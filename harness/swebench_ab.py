@@ -41,24 +41,44 @@ RUN_TIMEOUT_S = 1800
 
 # The prism CLI steering block, kept in sync with prism's own `init` output —
 # the agent sees the same guidance a real prism user gets.
-PRISM_STEERING = """
-You also have the `prism` code-intelligence CLI (Bash, --format text). Prefer it
-over raw grep/read to find and read code cheaply — YOU price each request:
-  prism search <term> --scope text --format text    # a PURE grep (real rg pass inside prism) — use this where you would grep/rg
-  prism query "<the task>" --terms a,b --format text # edit-ready line-numbered source windows + each anchor's callers (--terms REQUIRED)
-  prism lookup <pkg.Symbol> --format text            # one symbol's body (~5x cheaper than reading the file)
-  prism read <file> --format text                    # whole file, session-compressed on repeat reads
-  prism change-impact 'Type.method' --format text    # every site a signature change must touch, in one call
-A repeat `prism read` of an unchanged file returns a `// [prism:cached]` pointer,
-not the body — you already have it; do not re-fetch.
-Cheap requests to FIND, full context to EDIT: search --scope text to locate, but
-NEVER edit code you have only seen as grep hits or piecemeal slices. Before
-editing any function, get its real context ONCE — `prism query` with the anchors
-you found (windows + callers), or `prism read` the WHOLE implicated file. The
-error message's location is where a bug SURFACES, not necessarily where it
-lives — read the full file that defines the failing behavior before deciding
-where to edit.
+# Matched-arm design (per RESULTS.md §8.2.1 finding #4: arm comparisons need
+# MATCHED steering or the tool effect is unmeasurable). BOTH arms receive
+# INVESTIGATION_GUIDANCE verbatim; the prism arm additionally receives
+# PRISM_STEERING, which is a purely DESCRIPTIVE tool reference — no workflow
+# doctrine, no request-pricing mandate. The arms differ in tool availability
+# and tool documentation only.
+INVESTIGATION_GUIDANCE = """
+Investigation discipline (applies regardless of which tools you use):
+- Where an error is raised is where the bug SURFACES, not necessarily where it
+  lives. Before deciding where to edit, read the WHOLE file that defines the
+  failing behavior, not just the lines a search hit.
+- Before finishing, run the tests for the module the issue is about, not only
+  the tests nearest the code you edited.
+- Make the smallest change that resolves the issue; do not restructure
+  neighboring code the issue does not require.
 """
+
+# FAITHFUL DEPLOYMENT ARM (2026-08-11). The shipped prism deployment routes
+# STRUCTURALLY: prism init's deny-builtin-search puts Grep/Bash(grep|rg) in
+# permissions.deny (active on this machine), and the steering the agent sees
+# is the init-GENERATED block, not harness-authored prose. The prism arm
+# therefore (a) removes the built-in search tools and (b) injects the real
+# generated steering verbatim, read from the prism repo's AGENTS.md at run
+# time so it can never drift from what init writes.
+SEARCH_TOOLS = {"Grep", "Bash(grep:*)", "Bash(rg:*)"}
+
+
+MCP_CFG = Path("/tmp/ab-swebench")
+MCP_CFG.mkdir(exist_ok=True)
+(MCP_CFG / "prism.json").write_text(json.dumps({"mcpServers": {
+    "prism": {"type": "stdio", "command": str(Path.home() / "bin/prism"), "args": ["mcp"]}}}))
+
+
+def real_prism_steering() -> str:
+    src = Path.home() / "Projects/provasign/prism/AGENTS.md"
+    text = src.read_text()
+    end = text.find("<!-- prism:end -->")
+    return text[:end].strip() if end >= 0 else text.strip()
 
 BASE_PROMPT = """You are fixing a real bug in the {repo} repository, checked out at the
 commit where the bug exists. Read the issue, find the cause in the code, and EDIT
@@ -118,9 +138,12 @@ def parse_stream(stdout: str) -> dict:
     return env
 
 
-def run_agent(prompt: str, tools: list[str], workdir: Path, model: str = "") -> dict:
+def run_agent(prompt: str, tools: list[str], workdir: Path, model: str = "",
+              mcp: str = "") -> dict:
     cmd = ["claude", "-p", prompt, "--output-format", "stream-json", "--verbose",
            "--strict-mcp-config", "--allowedTools", ",".join(tools)]
+    if mcp:
+        cmd += ["--mcp-config", mcp]
     if model:
         cmd += ["--model", model]
     t0 = time.time()
@@ -156,15 +179,19 @@ def run_arm(task: dict, arm: str, prism: str, model: str = "") -> dict:
     sh("git", "-C", str(repo_dir), "worktree", "add", "--detach", "-f",
        str(wt), task["base_commit"])
     try:
-        steer = ""
+        steer = "\n" + INVESTIGATION_GUIDANCE
         tools = list(TOOLS_BASE)
         if arm == "prism":
             sh(prism, "index", ".", cwd=str(wt), timeout=600)
-            tools += [f"Bash(prism:*)", f"Bash({prism}:*)"]
-            steer = "\n" + PRISM_STEERING
+            # Faithful deployment: built-in search denied, prism is the
+            # search path (scope="text" is the ripgrep passthrough).
+            tools = [t for t in tools if t not in SEARCH_TOOLS]
+            tools += [f"Bash(prism:*)", f"Bash({prism}:*)", "mcp__prism"]
+            steer += "\n" + real_prism_steering()
         prompt = BASE_PROMPT.format(repo=task["repo"], problem=task["problem_statement"],
                                     steer=steer)
-        env = run_agent(prompt, tools, wt, model)
+        env = run_agent(prompt, tools, wt, model,
+                        mcp=str(MCP_CFG / "prism.json") if arm == "prism" else "")
         # The prediction patch = the agent's edits (exclude the .grove index).
         patch = sh("git", "-C", str(wt), "diff", "--", ".", ":(exclude).grove").stdout
         usage = env.get("usage") or {}
