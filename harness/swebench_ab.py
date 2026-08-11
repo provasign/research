@@ -169,6 +169,39 @@ def run_agent(prompt: str, tools: list[str], workdir: Path, model: str = "",
     return env
 
 
+# Files through which a corpus checkout could smuggle steering into a cell.
+# ARM ISOLATION RULE: the baseline arm must carry ZERO prism steering or
+# config; the prism arm's deployment comes exclusively from the harness
+# (prompt-injected generated steering + --mcp-config + tool list), never
+# from files in the checkout — otherwise a prism-configured corpus repo
+# double-steers one arm and contaminates the other.
+STEERING_FILES = ["CLAUDE.md", "AGENTS.md", "GEMINI.md", ".cursorrules",
+                  ".windsurfrules", ".clinerules", ".mcp.json",
+                  ".github/copilot-instructions.md"]
+STEERING_DIRS = [".claude", ".cursor", ".windsurf", ".grove", ".kiro",
+                 ".devin", ".vscode"]
+
+
+def sanitize_worktree(wt: Path, arm: str) -> list[str]:
+    """Strip anything prism-related the checkout brought with it, BOTH arms.
+    Returns what was removed so the cell record can prove isolation."""
+    import shutil
+    removed = []
+    for rel in STEERING_FILES:
+        p = wt / rel
+        if p.exists() and "prism" in p.read_text(errors="ignore").lower():
+            p.unlink()
+            removed.append(rel)
+    for rel in STEERING_DIRS:
+        p = wt / rel
+        if p.is_dir():
+            probe = " ".join(str(f) for f in p.rglob("*"))
+            if "prism" in probe.lower() or rel in (".claude", ".grove"):
+                shutil.rmtree(p, ignore_errors=True)
+                removed.append(rel + "/")
+    return removed
+
+
 def run_arm(task: dict, arm: str, prism: str, model: str = "") -> dict:
     """Check out the task's repo at base_commit, run the agent, capture the
     patch (git diff of its edits) + efficiency metrics."""
@@ -178,6 +211,7 @@ def run_arm(task: dict, arm: str, prism: str, model: str = "") -> dict:
     sh("git", "-C", str(repo_dir), "worktree", "prune")
     sh("git", "-C", str(repo_dir), "worktree", "add", "--detach", "-f",
        str(wt), task["base_commit"])
+    isolation_removed = sanitize_worktree(wt, arm)
     try:
         steer = "\n" + INVESTIGATION_GUIDANCE
         tools = list(TOOLS_BASE)
@@ -197,6 +231,7 @@ def run_arm(task: dict, arm: str, prism: str, model: str = "") -> dict:
         usage = env.get("usage") or {}
         return {
             "instance_id": task["instance_id"], "arm": arm,
+            "isolation_removed": isolation_removed,
             "model_patch": patch,
             "empty_patch": not patch.strip(),
             "turns": env.get("num_turns"),
