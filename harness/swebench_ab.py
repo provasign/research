@@ -74,6 +74,21 @@ MCP_CFG.mkdir(exist_ok=True)
     "prism": {"type": "stdio", "command": str(Path.home() / "bin/prism"), "args": ["mcp"]}}}))
 
 
+SHORT_PRISM_STEERING = """
+## Prism — code intelligence (already in your tool list)
+
+prism_search/query/read/lookup/change_impact are loaded now; call them
+directly, no lookup step. Locate a string/symbol -> prism_search(scope="text")
+(a real ripgrep pass, same cost as grep). Bug/task with an anchor ->
+prism_query(task=..., terms=[...]) -- terms is required, guess one keyword.
+Signature change, rename, or "who breaks if I change X" ->
+prism_change_impact -- returns the complete site set in one call; do not
+re-verify it with grep, that measurably drops real sites. A repeat
+prism_read of an unchanged file returns a short cached-pointer line, not
+the body -- that is not an error.
+"""
+
+
 def real_prism_steering() -> str:
     src = Path.home() / "Projects/provasign/prism/AGENTS.md"
     text = src.read_text()
@@ -150,9 +165,17 @@ def parse_stream(stdout: str) -> dict:
 
 
 def run_agent(prompt: str, tools: list[str], workdir: Path, model: str = "",
-              mcp: str = "") -> dict:
+              mcp: str = "", disallowed: list[str] | None = None) -> dict:
     cmd = ["claude", "-p", prompt, "--output-format", "stream-json", "--verbose",
            "--strict-mcp-config", "--allowedTools", ",".join(tools)]
+    if disallowed:
+        # VERIFIED 2026-08-11: omitting a tool from --allowedTools does NOT
+        # deny it in headless mode -- a live check showed grep executing
+        # with permission_denials:[] despite being absent from allowedTools.
+        # --disallowedTools is the actual enforcement mechanism (confirmed:
+        # is_error:true, populated permission_denials, command never runs).
+        # Every prism-arm cell before this fix had full grep/rg access.
+        cmd += ["--disallowedTools", ",".join(disallowed)]
     if mcp:
         cmd += ["--mcp-config", mcp]
     if model:
@@ -213,7 +236,8 @@ def sanitize_worktree(wt: Path, arm: str) -> list[str]:
     return removed
 
 
-def run_arm(task: dict, arm: str, prism: str, model: str = "") -> dict:
+def run_arm(task: dict, arm: str, prism: str, model: str = "",
+            steering_variant: str = "full") -> dict:
     """Check out the task's repo at base_commit, run the agent, capture the
     patch (git diff of its edits) + efficiency metrics."""
     repo_dir = ensure_repo(task["repo"])
@@ -232,11 +256,13 @@ def run_arm(task: dict, arm: str, prism: str, model: str = "") -> dict:
             # search path (scope="text" is the ripgrep passthrough).
             tools = [t for t in tools if t not in SEARCH_TOOLS]
             tools += [f"Bash(prism:*)", f"Bash({prism}:*)", "mcp__prism"]
-            steer += "\n" + real_prism_steering()
+            steer += "\n" + (SHORT_PRISM_STEERING if steering_variant == "short"
+                               else real_prism_steering())
         prompt = BASE_PROMPT.format(repo=task["repo"], problem=task["problem_statement"],
                                     steer=steer)
         env = run_agent(prompt, tools, wt, model,
-                        mcp=str(MCP_CFG / "prism.json") if arm == "prism" else "")
+                        mcp=str(MCP_CFG / "prism.json") if arm == "prism" else "",
+                        disallowed=list(SEARCH_TOOLS) if arm == "prism" else None)
         # The prediction patch = the agent's edits (exclude the .grove index).
         patch = sh("git", "-C", str(wt), "diff", "--", ".", ":(exclude).grove").stdout
         usage = env.get("usage") or {}
