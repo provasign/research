@@ -266,11 +266,32 @@ def run_arm(task: dict, arm: str, prism: str, model: str = "",
         # The prediction patch = the agent's edits (exclude the .grove index).
         patch = sh("git", "-C", str(wt), "diff", "--", ".", ":(exclude).grove").stdout
         usage = env.get("usage") or {}
+        denials = env.get("permission_denials") or []
+        # Word-boundary match on the command's LEADING token only (grep as
+        # the invoked binary, not a substring anywhere in the command line --
+        # a naive "grep" in str(cmd) false-positived on this repo's own
+        # worktree path /tmp/swebench-wt-grepwarn, which contains "grep").
+        _search_re = re.compile(r"(?:^|[\s;&|(])(?:[^\s;&|(]*/)?(?:sudo\s+)?(?:rg|grep)\b")
+        # Heuristic, same class of imprecision as prism_used's regex above: a
+        # quoted string mentioning "grep" (e.g. echo "use grep") can
+        # false-positive. Acceptable for a diagnostic count, not a security
+        # boundary -- --disallowedTools is the actual enforcement.
+        denied_search_attempts = [
+            d for d in denials
+            if d.get("tool_name") == "Bash"
+            and _search_re.search(str(d.get("tool_input", {}).get("command", "")))
+        ] if arm == "prism" else []
         return {
             "instance_id": task["instance_id"], "arm": arm,
             "isolation_removed": isolation_removed,
             "prism_tools_loaded_at_init": sorted(
                 t for t in (env.get("init_tools") or []) if "prism" in t.lower()),
+            # Proves denial actually fired, not just that a grep command
+            # appears in tool_trace (an attempted-then-denied call and a
+            # successful call look IDENTICAL in tool_trace alone -- that
+            # ambiguity is exactly what hid the 2026-08-11 bug).
+            "permission_denials": denials,
+            "denied_search_attempts": len(denied_search_attempts),
             "model_patch": patch,
             "empty_patch": not patch.strip(),
             "turns": env.get("num_turns"),
