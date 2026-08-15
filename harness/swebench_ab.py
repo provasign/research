@@ -64,27 +64,72 @@ Investigation discipline (applies regardless of which tools you use):
   neighboring code the issue does not require.
 """
 
-# FAITHFUL DEPLOYMENT ARM (2026-08-11, superseded 2026-08-14). The shipped
-# prism deployment routes STRUCTURALLY. Through v0.49.x this meant: prism
-# init's deny-builtin-search puts Grep/Bash(grep|rg) in permissions.deny,
-# and the harness reproduced that by stripping SEARCH_TOOLS from
-# --allowedTools and passing them to --disallowedTools instead.
+# FAITHFUL DEPLOYMENT ARM -- what "faithful" means has changed twice, so the
+# history matters:
 #
-# v0.50.0 shipped a PreToolUse hook (prism hook pretooluse) as the PRIMARY
-# enforcement mechanism -- it fires before permission rules are evaluated
-# and feeds the denial reason back to the model as tool-result text ("use
-# prism_search instead"), not a bare failure; permissions.deny is now a
-# failsafe, not the mechanism itself. A harness-simulated --disallowedTools
-# no longer reproduces the real deployment: it blocks the call but never
-# explains it, which is exactly the behavior difference we measured (live
-# smoke test, 2026-08-14) changes recovery. Faithful now means actually
-# running `prism init --deny-builtin-search` IN the worktree so the agent
-# gets the real per-project .claude/settings.json (hook + deny) and
-# .mcp.json -- see run_arm(). SEARCH_TOOLS survives only as the historical
-# marker of what used to be manually stripped; --allowedTools for the prism
-# arm now includes them unmodified, same as a real user's config, and the
-# worktree's own settings.json does the actual blocking.
+#   through v0.49.x : `prism init --deny-builtin-search` wrote
+#                     permissions.deny [Grep, Bash(grep:*), Bash(rg:*)];
+#                     the harness simulated it via --disallowedTools.
+#   v0.50.0-v0.51.x : a PreToolUse hook became the primary mechanism, so the
+#                     harness switched to running the real init in-worktree.
+#   v0.52.0 onward  : THE WHOLE DENIAL ARC WAS REVERTED. There is no hook,
+#                     and the shipped `prism init` writes NO deny rules.
+#
+# The harness kept calling `prism init --deny-builtin-search` after that
+# revert, so every prism-arm cell ran with grep/rg blocked -- a configuration
+# no prism user gets. Caught 2026-08-15 in the v054-smoke traces: 4 denied
+# grep calls in the prism arm, 0 in baseline, with the agent burning turns
+# retrying before falling back to prism_search. Numbers from runs before this
+# fix measure prism-plus-a-denial, not prism.
+#
+# Faithful now means: plain `prism init`, no flag. The agent gets .mcp.json,
+# the steering block, and a free choice between grep and prism -- which is
+# the actual question ("do agents reach for it when they don't have to?").
+#
+# SEARCH_TOOLS survives only as the historical marker of what used to be
+# stripped from --allowedTools. Nothing strips it now.
 SEARCH_TOOLS = {"Grep", "Bash(grep:*)", "Bash(rg:*)"}
+
+
+def prism_provenance(prism: str) -> dict:
+    """Identify the binary under test, and refuse to run without one.
+
+    A run's conclusions are about a specific prism build; recording only the
+    PATH is not enough, because ~/bin/prism is routinely rebuilt. Capture the
+    version string, the mtime, and the tool surface the MCP server actually
+    advertises -- the last of these is what a tool-surface experiment is
+    changing, so a run that does not record it cannot be interpreted later.
+    """
+    exe = Path(prism).expanduser()
+    if not exe.exists():
+        raise RuntimeError(f"--prism {prism} does not exist; nothing to test")
+    ver = sh(str(exe), "version", timeout=30).stdout.strip() or "(no version output)"
+    # A local `go build` reports "prism dev", which identifies nothing — and
+    # ~/bin/prism is rebuilt constantly. Hash the bytes so a results directory
+    # names an exact build, not a moving path.
+    import hashlib
+    h = hashlib.sha256()
+    with open(exe, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    tools = []
+    try:
+        req = '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}\n'
+        out = subprocess.run([str(exe), "mcp", "."], input=req, capture_output=True,
+                             text=True, timeout=60).stdout.splitlines()
+        for line in out:
+            try:
+                d = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if "result" in d and "tools" in d["result"]:
+                tools = sorted(t["name"] for t in d["result"]["tools"])
+                break
+    except Exception:
+        pass
+    return {"path": str(exe), "version": ver, "sha256": h.hexdigest(),
+            "mtime": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(exe.stat().st_mtime)),
+            "mcp_tools": tools, "mcp_tool_count": len(tools)}
 
 
 def mark_trusted(path) -> None:
@@ -114,6 +159,12 @@ def unmark_trusted(path) -> None:
     cfg.write_text(_json.dumps(doc, indent=2))
 
 
+# UNWIRED as of 2026-08-15 and STALE: nothing passes steering_variant="short"
+# (it defaults to "full"), and this text describes the v0.50-era surface —
+# tools resident rather than deferred, no prism_verify, no multi-term search.
+# The live path is real_prism_steering(), which reads the block prism's own
+# `init` writes, so the arm always sees what a user sees. Left for the
+# short-steering probe; rewrite from AGENTS.md before reusing it.
 SHORT_PRISM_STEERING = """
 ## Prism — code intelligence (already in your tool list)
 
@@ -173,9 +224,25 @@ def ensure_repo(repo: str) -> Path:
     return dest
 
 
+def _clip(v, n=300):
+    """Truncate one tool-argument value for the metrics file.
+
+    Lists are kept as lists (the whole point is seeing that query=["a","b"]
+    was a batch of two), just with each element clipped.
+    """
+    if isinstance(v, str):
+        return v if len(v) <= n else v[:n] + f"...[+{len(v)-n} chars]"
+    if isinstance(v, list):
+        return [_clip(x, 80) for x in v[:20]]
+    if isinstance(v, dict):
+        return {k: _clip(x, 80) for k, x in list(v.items())[:20]}
+    return v
+
+
 def parse_stream(stdout: str) -> dict:
     env = {"result": ""}
     trace = []
+    calls = []
     for line in stdout.splitlines():
         line = line.strip()
         if not line:
@@ -199,9 +266,22 @@ def parse_stream(stdout: str) -> dict:
                         trace.append(f"ToolSearch({inp.get('query','')})"[:120])
                     else:
                         trace.append(name)
+                    # tool_trace keeps its historical string shape (every
+                    # existing analysis parses it), but for MCP tools it kept
+                    # the NAME ONLY and dropped the arguments -- so a run
+                    # could not answer "did the agent batch its search terms?"
+                    # or "what scope did it ask for?", which is exactly what
+                    # a tool-surface change needs to be judged on. Record the
+                    # arguments alongside, truncated so a big task string or
+                    # file body cannot bloat the metrics file.
+                    calls.append({
+                        "name": name,
+                        "input": {k: _clip(v) for k, v in inp.items()},
+                    })
         elif obj.get("type") == "result":
             env.update(obj)
     env["tool_trace"] = trace
+    env["tool_calls"] = calls
     # prism use = MCP tool call OR the CLI binary run as a command (path
     # segments containing "prism" don't count). The pre-2026-08-11 version
     # missed MCP calls entirely and under-reported adoption.
@@ -332,21 +412,47 @@ def run_arm(task: dict, arm: str, prism: str, model: str = "",
         steer = "\n" + INVESTIGATION_GUIDANCE
         tools = list(TOOLS_BASE)
         mcp_cfg = ""
-        if arm == "prism":
-            # Faithful deployment (v0.50.0+): run the REAL `prism init
-            # --deny-builtin-search` in THIS worktree so the agent gets the
-            # actual shipped mechanism (PreToolUse hook + permissions.deny
-            # failsafe, written to this worktree's own .claude/settings.json
-            # + .mcp.json) -- not a harness-simulated substitute. stdin is
-            # DEVNULL: the interactive "register global tools?" prompt must
-            # never block on stdin in a headless run (isInteractive() should
-            # already say no without a tty, but this makes it unconditional).
-            subprocess.run([prism, "init", "--deny-builtin-search"], cwd=str(wt),
+        if arm.startswith("prism"):
+            # Run the REAL `prism init` in THIS worktree -- no flags -- so the
+            # agent gets exactly what a user gets: .mcp.json, the steering
+            # block, and grep still available. stdin is DEVNULL: the
+            # interactive "register global tools?" prompt must never block on
+            # stdin in a headless run.
+            subprocess.run([prism, "init"], cwd=str(wt),
                            capture_output=True, text=True, stdin=subprocess.DEVNULL,
                            timeout=120)
+            # Verify, don't assume (the lesson of the corrupted-cache bug):
+            # a stray deny rule silently turns this into a different
+            # experiment, and the symptom -- an agent "choosing" prism -- looks
+            # like a POSITIVE result rather than a broken one.
+            _sp = wt / ".claude" / "settings.json"
+            if _sp.exists():
+                _deny = (json.loads(_sp.read_text())
+                         .get("permissions", {}).get("deny", []))
+                if _deny:
+                    raise RuntimeError(
+                        f"{task['instance_id']}: prism init wrote deny rules {_deny} "
+                        "into the prism arm. The shipped product denies nothing; "
+                        "this would measure a configuration no user runs.")
             sh(prism, "index", ".", cwd=str(wt), timeout=600)
             mark_trusted(wt)
             mcp_cfg = str(wt / ".mcp.json")
+            # Enrichment-smoke arm (2026-08-15, prototype branch
+            # proto/posttooluse-enrichment): identical deployment PLUS the
+            # PostToolUse Read-enrichment hook, injected into the worktree's
+            # settings.json. Gated on an explicit env var so ordinary runs
+            # are untouched.
+            if arm == "prism-enrich":
+                hook_cmd = os.environ.get("PRISM_POSTTOOLUSE_HOOK")
+                if not hook_cmd:
+                    raise RuntimeError("arm prism-enrich requires PRISM_POSTTOOLUSE_HOOK")
+                sp = wt / ".claude" / "settings.json"
+                doc = json.loads(sp.read_text()) if sp.exists() else {}
+                doc.setdefault("hooks", {}).setdefault("PostToolUse", []).append(
+                    {"matcher": "Read",
+                     "hooks": [{"type": "command", "command": hook_cmd}]})
+                sp.parent.mkdir(parents=True, exist_ok=True)
+                sp.write_text(json.dumps(doc, indent=2))
             # --allowedTools is the harness's overall safety boundary (no
             # arbitrary network/destructive commands) -- it is NOT how grep
             # gets blocked anymore, so Grep/grep/rg stay in it unmodified,
@@ -376,7 +482,7 @@ def run_arm(task: dict, arm: str, prism: str, model: str = "",
             d for d in denials
             if d.get("tool_name") == "Bash"
             and _search_re.search(str(d.get("tool_input", {}).get("command", "")))
-        ] if arm == "prism" else []
+        ] if arm.startswith("prism") else []
         return {
             "instance_id": task["instance_id"], "arm": arm,
             "isolation_removed": isolation_removed,
@@ -403,9 +509,10 @@ def run_arm(task: dict, arm: str, prism: str, model: str = "",
             "timed_out": env.get("_timed_out"),
             "prism_used": env.get("prism_used"),
             "tool_trace": env.get("tool_trace", []),
+            "tool_calls": env.get("tool_calls", []),
         }
     finally:
-        if arm == "prism":
+        if arm.startswith("prism"):
             unmark_trusted(wt)
         import shutil
         shutil.rmtree(wt, ignore_errors=True)  # standalone clone now, not a worktree
@@ -458,6 +565,17 @@ def main() -> None:
     # Idempotent resume: per-task metric JSONs are the source of truth and
     # survive a kill. Skip any (task, arm) already recorded; a re-launch picks
     # up exactly where a turn-boundary kill left off, re-paying for nothing.
+    prov = None
+    if any(a.startswith("prism") for a in args.arms):
+        prov = prism_provenance(args.prism)
+        print(f"prism under test: {prov['version']}  ({prov['path']}, built {prov['mtime']})")
+        print(f"  MCP surface: {prov['mcp_tool_count']} tools -> "
+              f"{', '.join(t.replace('prism_', '') for t in prov['mcp_tools']) or '(none)'}")
+        # Written next to the cells so a results directory is self-describing:
+        # "which build produced these numbers" must not depend on shell history.
+        json.dump(prov, open(outdir / "prism_provenance.json", "w"), indent=2)
+        print()
+
     for i, task in enumerate(tasks):
         for arm in args.arms:
             recpath = outdir / f"{task['instance_id']}.{arm}.json"
@@ -466,6 +584,8 @@ def main() -> None:
                 continue
             print(f"[{i+1}/{len(tasks)}] {task['instance_id']} :: {arm}", flush=True)
             rec = run_arm(task, arm, args.prism, args.model)
+            if arm.startswith("prism"):
+                rec["prism_provenance"] = prov
             json.dump(rec, open(recpath, "w"))
             print(f"      turns={rec['turns']} fresh_in={rec['fresh_input_tokens']} "
                   f"cache={rec['cache_read_tokens']} out={rec['output_tokens']} "
