@@ -1,0 +1,39 @@
+diff --git a/kinto/core/initialization.py b/kinto/core/initialization.py
+index 312df435..f5122dc1 100644
+--- a/kinto/core/initialization.py
++++ b/kinto/core/initialization.py
+@@ -447,6 +447,7 @@ def setup_metrics(config):
+         metrics_service = config.registry.metrics
+ 
+         metrics.watch_execution_time(metrics_service, config.registry.cache, prefix="backend")
++        metrics.watch_cache_hits(metrics_service, config.registry.cache)
+         metrics.watch_execution_time(metrics_service, config.registry.storage, prefix="backend")
+         metrics.watch_execution_time(metrics_service, config.registry.permission, prefix="backend")
+ 
+diff --git a/kinto/core/metrics.py b/kinto/core/metrics.py
+index d8f55b0f..cba2d467 100644
+--- a/kinto/core/metrics.py
++++ b/kinto/core/metrics.py
+@@ -74,6 +74,22 @@ def watch_execution_time(metrics_service, obj, prefix="", classname=None):
+             setattr(obj, name, decorated_method)
+ 
+ 
++def watch_cache_hits(metrics_service, cache):
++    """
++    Decorate the cache backend ``get()`` method in order to count cache hits and misses.
++    Metrics will be named `cache_hits` and `cache_misses`.
++    """
++    original_get = cache.get
++
++    @utils.safe_wraps(original_get)
++    def _wrapped(*args, **kwargs):
++        value = original_get(*args, **kwargs)
++        metrics_service.count("cache_hits" if value is not None else "cache_misses")
++        return value
++
++    cache.get = _wrapped
++
++
+ def listener_with_timer(config, key, func):
+     """
+     Add a timer with the specified `key` on the specified `func`.

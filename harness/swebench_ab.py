@@ -35,7 +35,13 @@ import time
 from pathlib import Path
 
 HARNESS = Path(__file__).resolve().parent
-REPO_CACHE = Path("/tmp/swebench-repos")
+# NOT /tmp: macOS's periodic cleaner deletes /tmp files untouched for 3+
+# days while KEEPING directories — observed 2026-08-15 00:00: all 32 cached
+# clones lost .git/HEAD+config simultaneously, leaving repos that LOOK
+# present but where checkout silently fails and the working tree stays at
+# clone-time state. A smoke ran on the wrong code for 64 turns before a
+# human noticed. Cache lives in $HOME now; integrity is CHECKED, not assumed.
+REPO_CACHE = Path.home() / ".cache" / "prism-research" / "swebench-repos"
 WT_ROOT = Path("/tmp/swebench-wt")
 RUN_TIMEOUT_S = 1800
 
@@ -58,20 +64,54 @@ Investigation discipline (applies regardless of which tools you use):
   neighboring code the issue does not require.
 """
 
-# FAITHFUL DEPLOYMENT ARM (2026-08-11). The shipped prism deployment routes
-# STRUCTURALLY: prism init's deny-builtin-search puts Grep/Bash(grep|rg) in
-# permissions.deny (active on this machine), and the steering the agent sees
-# is the init-GENERATED block, not harness-authored prose. The prism arm
-# therefore (a) removes the built-in search tools and (b) injects the real
-# generated steering verbatim, read from the prism repo's AGENTS.md at run
-# time so it can never drift from what init writes.
+# FAITHFUL DEPLOYMENT ARM (2026-08-11, superseded 2026-08-14). The shipped
+# prism deployment routes STRUCTURALLY. Through v0.49.x this meant: prism
+# init's deny-builtin-search puts Grep/Bash(grep|rg) in permissions.deny,
+# and the harness reproduced that by stripping SEARCH_TOOLS from
+# --allowedTools and passing them to --disallowedTools instead.
+#
+# v0.50.0 shipped a PreToolUse hook (prism hook pretooluse) as the PRIMARY
+# enforcement mechanism -- it fires before permission rules are evaluated
+# and feeds the denial reason back to the model as tool-result text ("use
+# prism_search instead"), not a bare failure; permissions.deny is now a
+# failsafe, not the mechanism itself. A harness-simulated --disallowedTools
+# no longer reproduces the real deployment: it blocks the call but never
+# explains it, which is exactly the behavior difference we measured (live
+# smoke test, 2026-08-14) changes recovery. Faithful now means actually
+# running `prism init --deny-builtin-search` IN the worktree so the agent
+# gets the real per-project .claude/settings.json (hook + deny) and
+# .mcp.json -- see run_arm(). SEARCH_TOOLS survives only as the historical
+# marker of what used to be manually stripped; --allowedTools for the prism
+# arm now includes them unmodified, same as a real user's config, and the
+# worktree's own settings.json does the actual blocking.
 SEARCH_TOOLS = {"Grep", "Bash(grep:*)", "Bash(rg:*)"}
 
 
-MCP_CFG = Path("/tmp/ab-swebench")
-MCP_CFG.mkdir(exist_ok=True)
-(MCP_CFG / "prism.json").write_text(json.dumps({"mcpServers": {
-    "prism": {"type": "stdio", "command": str(Path.home() / "bin/prism"), "args": ["mcp"]}}}))
+def mark_trusted(path) -> None:
+    """Headless `claude -p` ignores permissions.allow (and therefore
+    mcp__prism) in a workspace it has never seen accept the trust dialog --
+    verified live 2026-08-14 (prism_search calls failed with "you haven't
+    granted it yet" despite a correct permissions.allow entry). Each
+    worktree is a fresh, never-before-seen path, so this must run before
+    every prism-arm agent invocation."""
+    import json as _json
+    cfg = Path.home() / ".claude.json"
+    doc = _json.loads(cfg.read_text()) if cfg.exists() else {}
+    doc.setdefault("projects", {})[str(path)] = {
+        **doc.get("projects", {}).get(str(path), {}), "hasTrustDialogAccepted": True}
+    cfg.write_text(_json.dumps(doc, indent=2))
+
+
+def unmark_trusted(path) -> None:
+    """Undo mark_trusted after a worktree is torn down -- unbounded growth
+    of ~/.claude.json's projects map across a 38+ instance run otherwise."""
+    import json as _json
+    cfg = Path.home() / ".claude.json"
+    if not cfg.exists():
+        return
+    doc = _json.loads(cfg.read_text())
+    doc.get("projects", {}).pop(str(path), None)
+    cfg.write_text(_json.dumps(doc, indent=2))
 
 
 SHORT_PRISM_STEERING = """
@@ -116,8 +156,16 @@ def sh(*args, cwd=None, timeout=None) -> subprocess.CompletedProcess:
 
 
 def ensure_repo(repo: str) -> Path:
-    """Clone `owner/name` once (blobless) into the cache."""
+    """Clone `owner/name` once (blobless) into the cache; re-clone if the
+    cached copy fails an integrity check (a present-looking but gutted .git
+    is exactly what the /tmp cleaner left behind)."""
     dest = REPO_CACHE / repo.replace("/", "__")
+    if dest.exists():
+        ok = sh("git", "-C", str(dest), "rev-parse", "--git-dir")
+        if ok.returncode != 0:
+            print(f"!! cache integrity failure for {repo} — re-cloning", flush=True)
+            import shutil
+            shutil.rmtree(dest, ignore_errors=True)
     if not dest.exists():
         REPO_CACHE.mkdir(parents=True, exist_ok=True)
         sh("git", "clone", "--filter=blob:none", "--quiet",
@@ -243,26 +291,73 @@ def run_arm(task: dict, arm: str, prism: str, model: str = "",
     repo_dir = ensure_repo(task["repo"])
     wt = WT_ROOT / f"{task['instance_id']}__{arm}"
     WT_ROOT.mkdir(parents=True, exist_ok=True)
-    sh("git", "-C", str(repo_dir), "worktree", "prune")
-    sh("git", "-C", str(repo_dir), "worktree", "add", "--detach", "-f",
-       str(wt), task["base_commit"])
+    # Per-cell LOCAL CLONE with every ref stripped — NOT a worktree. A
+    # worktree shares the cache's refs, and the cache (cloned after every
+    # task's fixing PR merged) carries the GOLD FIX on origin/main. Agents
+    # provably mined it: 2026-08-15 audit found 21/228 cells running
+    # `git log --all` + `git show <sha>`; sonnet38 baseline dbbackup-623
+    # showed 1c40705 — the literal fix commit for its own task ("...
+    # auto-enabling --if-exists (#623)") — then edited and scored
+    # resolved=True. GIT_ALLOW_PROTOCOL=file blocked FETCHING the fix but
+    # the clone already contained it. --local hardlinks objects (cheap);
+    # checkout runs while origin still points at the cache (so a blobless
+    # cache can lazy-fetch), THEN all refs and the remote are deleted:
+    # future history becomes unreachable-by-discovery — `git log --all`
+    # shows only the detached base commit's ancestry.
+    sh("git", "clone", "--local", "--no-checkout", "--quiet",
+       str(repo_dir), str(wt))
+    # The cache is blobless; a --local clone's origin is a file path, which
+    # cannot serve promisor lazy-fetches. Re-point origin at the real remote
+    # (with promisor config) for the one checkout that materializes the
+    # tree — network at SETUP time, before any agent runs — then strip.
+    upstream = sh("git", "-C", str(repo_dir), "remote", "get-url", "origin").stdout.strip()
+    sh("git", "-C", str(wt), "remote", "set-url", "origin", upstream)
+    sh("git", "-C", str(wt), "config", "remote.origin.promisor", "true")
+    sh("git", "-C", str(wt), "config", "remote.origin.partialclonefilter", "blob:none")
+    sh("git", "-C", str(wt), "checkout", "--detach", "-f", "-q", task["base_commit"])
+    for ref in sh("git", "-C", str(wt), "for-each-ref",
+                  "--format=%(refname)").stdout.split():
+        sh("git", "-C", str(wt), "update-ref", "-d", ref)
+    sh("git", "-C", str(wt), "remote", "remove", "origin")
+    # A checkout that silently failed (corrupted cache, missing blobs) leaves
+    # the agent editing the WRONG CODE while every downstream number still
+    # gets recorded. Verify, don't assume.
+    head = sh("git", "-C", str(wt), "rev-parse", "HEAD").stdout.strip()
+    if head != task["base_commit"]:
+        raise RuntimeError(
+            f"worktree for {task['instance_id']} is at {head!r}, expected "
+            f"{task['base_commit']!r} — refusing to run an agent on the wrong code")
     isolation_removed = sanitize_worktree(wt, arm)
     try:
         steer = "\n" + INVESTIGATION_GUIDANCE
         tools = list(TOOLS_BASE)
+        mcp_cfg = ""
         if arm == "prism":
+            # Faithful deployment (v0.50.0+): run the REAL `prism init
+            # --deny-builtin-search` in THIS worktree so the agent gets the
+            # actual shipped mechanism (PreToolUse hook + permissions.deny
+            # failsafe, written to this worktree's own .claude/settings.json
+            # + .mcp.json) -- not a harness-simulated substitute. stdin is
+            # DEVNULL: the interactive "register global tools?" prompt must
+            # never block on stdin in a headless run (isInteractive() should
+            # already say no without a tty, but this makes it unconditional).
+            subprocess.run([prism, "init", "--deny-builtin-search"], cwd=str(wt),
+                           capture_output=True, text=True, stdin=subprocess.DEVNULL,
+                           timeout=120)
             sh(prism, "index", ".", cwd=str(wt), timeout=600)
-            # Faithful deployment: built-in search denied, prism is the
-            # search path (scope="text" is the ripgrep passthrough).
-            tools = [t for t in tools if t not in SEARCH_TOOLS]
-            tools += [f"Bash(prism:*)", f"Bash({prism}:*)", "mcp__prism"]
+            mark_trusted(wt)
+            mcp_cfg = str(wt / ".mcp.json")
+            # --allowedTools is the harness's overall safety boundary (no
+            # arbitrary network/destructive commands) -- it is NOT how grep
+            # gets blocked anymore, so Grep/grep/rg stay in it unmodified,
+            # same as a real user's config. mcp__prism must be in-scope for
+            # MCP calls to be reachable at all.
+            tools = list(TOOLS_BASE) + ["mcp__prism"]
             steer += "\n" + (SHORT_PRISM_STEERING if steering_variant == "short"
                                else real_prism_steering())
         prompt = BASE_PROMPT.format(repo=task["repo"], problem=task["problem_statement"],
                                     steer=steer)
-        env = run_agent(prompt, tools, wt, model,
-                        mcp=str(MCP_CFG / "prism.json") if arm == "prism" else "",
-                        disallowed=list(SEARCH_TOOLS) if arm == "prism" else None)
+        env = run_agent(prompt, tools, wt, model, mcp=mcp_cfg)
         # The prediction patch = the agent's edits (exclude the .grove index).
         patch = sh("git", "-C", str(wt), "diff", "--", ".", ":(exclude).grove").stdout
         usage = env.get("usage") or {}
@@ -275,7 +370,8 @@ def run_arm(task: dict, arm: str, prism: str, model: str = "",
         # Heuristic, same class of imprecision as prism_used's regex above: a
         # quoted string mentioning "grep" (e.g. echo "use grep") can
         # false-positive. Acceptable for a diagnostic count, not a security
-        # boundary -- --disallowedTools is the actual enforcement.
+        # boundary -- the worktree's own settings.json (hook + deny,
+        # written by `prism init` above) is the actual enforcement now.
         denied_search_attempts = [
             d for d in denials
             if d.get("tool_name") == "Bash"
@@ -309,7 +405,10 @@ def run_arm(task: dict, arm: str, prism: str, model: str = "",
             "tool_trace": env.get("tool_trace", []),
         }
     finally:
-        sh("git", "-C", str(repo_dir), "worktree", "remove", "--force", str(wt))
+        if arm == "prism":
+            unmark_trusted(wt)
+        import shutil
+        shutil.rmtree(wt, ignore_errors=True)  # standalone clone now, not a worktree
 
 
 def fetch_tasks(out: str, n: int) -> None:
