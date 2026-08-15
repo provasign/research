@@ -33,8 +33,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 import swebench_ab as ab  # noqa: E402
 
 
-def _run_both_arms():
-    """Drive run_arm for both arms with every side effect stubbed out."""
+def _run_arms(*arms):
+    """Drive run_arm for the named arms with every side effect stubbed out."""
     calls, init_calls = [], []
 
     def fake_run_agent(prompt, tools, workdir, model="", mcp="", disallowed=None):
@@ -66,8 +66,8 @@ def _run_both_arms():
         ab.sh = fake_sh
         task = {"instance_id": "x", "repo": "a/b", "base_commit": BASE,
                 "problem_statement": "p"}
-        ab.run_arm(task, "prism", "prism")
-        ab.run_arm(task, "baseline", "prism")
+        for a in arms:
+            ab.run_arm(task, a, "prism")
     finally:
         (ab.run_agent, ab.subprocess.run, ab.mark_trusted,
          ab.unmark_trusted, ab.sh) = orig
@@ -83,7 +83,7 @@ def test_prism_arm_runs_plain_init_and_never_denies_search():
     turns "did the agent choose prism?" into "the agent had no alternative",
     which reads as adoption in every downstream metric.
     """
-    calls, init_calls = _run_both_arms()
+    calls, init_calls = _run_arms("prism", "baseline")
     prism_call, baseline_call = calls[0], calls[1]
 
     assert len(init_calls) == 1, (
@@ -116,7 +116,7 @@ def test_prism_arm_runs_plain_init_and_never_denies_search():
 
 def test_both_arms_get_identical_investigation_guidance():
     """Arm isolation: the only prompt difference may be the prism block."""
-    calls, _ = _run_both_arms()
+    calls, _ = _run_arms("prism", "baseline")
     for c in calls:
         assert ab.INVESTIGATION_GUIDANCE.strip() in c["prompt"], (
             "both arms must carry INVESTIGATION_GUIDANCE verbatim — an "
@@ -124,6 +124,45 @@ def test_both_arms_get_identical_investigation_guidance():
     assert "prism" not in calls[1]["prompt"].lower(), (
         "baseline prompt mentions prism; the baseline arm must carry zero "
         "prism steering")
+
+
+def test_prism_cli_arm_has_no_mcp_at_all():
+    """The CLI arm's whole point is that MCP is ABSENT.
+
+    Its hypothesis is about FIXED COST: an MCP arm pays tool schemas as fresh
+    context whether or not a tool is called. If the arm quietly registers MCP
+    -- an init call, an --mcp-config, an mcp__prism in the tool list -- it
+    stops testing that and silently becomes a second copy of the MCP arm,
+    which would look like a clean replication rather than a broken control.
+    """
+    calls, init_calls = _run_arms("prism-cli")
+    c = calls[0]
+    assert init_calls == [], (
+        f"prism-cli must not run `prism init` — that writes .mcp.json and the "
+        f"MCP-first steering block: {init_calls}")
+    assert c["mcp"] == "", f"prism-cli must pass no --mcp-config, got {c['mcp']!r}"
+    assert not any("mcp__prism" in t for t in c["tools"]), (
+        f"prism-cli must not expose mcp__prism: {c['tools']}")
+    assert any(t.startswith("Bash(prism") or "prism" in t for t in c["tools"]
+               if t.startswith("Bash(")), (
+        f"prism-cli must expose the prism BINARY as a shell command: {c['tools']}")
+    assert "prism search" in c["prompt"], (
+        "prism-cli must carry CLI-first steering (CLI_PRISM_STEERING)")
+    assert "ToolSearch" not in c["prompt"], (
+        "prism-cli steering must not tell the agent to ToolSearch for prism_* "
+        "tools — in a CLI deployment they do not exist, and the instruction "
+        "sends it hunting before it does any work")
+
+
+def test_cli_and_mcp_steering_teach_the_same_routes():
+    """Arm isolation again: the two prism arms must differ in SURFACE, not in
+    what they teach. If one block mentions change-impact and the other does
+    not, the comparison measures the prose."""
+    cli = ab.CLI_PRISM_STEERING
+    mcp = ab.real_prism_steering()
+    for concept in ("search", "lookup", "read", "query", "change", "verify"):
+        assert concept in cli.lower(), f"CLI steering omits {concept}"
+        assert concept in mcp.lower(), f"MCP steering omits {concept}"
 
 
 def test_tool_calls_capture_mcp_arguments():
@@ -153,6 +192,8 @@ def test_clip_keeps_lists_but_bounds_strings():
 
 if __name__ == "__main__":
     test_prism_arm_runs_plain_init_and_never_denies_search()
+    test_prism_cli_arm_has_no_mcp_at_all()
+    test_cli_and_mcp_steering_teach_the_same_routes()
     test_both_arms_get_identical_investigation_guidance()
     test_tool_calls_capture_mcp_arguments()
     test_clip_keeps_lists_but_bounds_strings()

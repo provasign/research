@@ -159,6 +159,43 @@ def unmark_trusted(path) -> None:
     cfg.write_text(_json.dumps(doc, indent=2))
 
 
+# CLI ARM STEERING (2026-08-15). The shipped product has no CLI-only mode:
+# `prism init --mode` is accepted and IGNORED since v0.38.0, and the one
+# steering block it writes is MCP-first -- its opening instruction is to
+# ToolSearch for prism_* tools, which in a CLI deployment sends the agent
+# hunting for tools that do not exist. So the CLI arm cannot reuse the shipped
+# block with the MCP part deleted; it needs the inverse, and the harness owns
+# it until a measurement justifies adding the mode back to the product.
+#
+# Deliberately parallel in CONTENT to real_prism_steering(): same routes, same
+# relay rule, same batching advice. Only the surface differs. An arm
+# comparison where the two texts teach different things measures the prose,
+# not the surface.
+CLI_PRISM_STEERING = """
+## Prism — code intelligence (a command, already indexed)
+
+`prism` is on your PATH and this repo is indexed. It answers structural
+questions a text search cannot, and costs nothing until you call it.
+
+    prism search <term> [more terms...] --scope text --format text
+        where is X? --scope text is a plain grep. Pass SEVERAL terms to
+        search them in one call (up to 10), grouped by term.
+    prism lookup <pkg.Func> --format text        read one function
+    prism read <file> --format text              read one file
+    prism query "<label>" --terms X --format text
+        edit-ready context for X: source windows plus callers. Keys on
+        --terms; the label wording changes nothing.
+    prism change-impact 'Type.method' --format text
+        who breaks if I change X: declarations, every override and
+        implementation, all resolved callers, in one call. Relay that set
+        as-is -- re-checking it with grep measurably drops real sites.
+    prism verify --base <ref>                    is my diff complete?
+
+Keep `--format text`: without it you get JSON, which is ~2x the tokens for
+the same hits. Keep `--scope text` on a plain search: without it the CLI
+returns full symbol bodies for a text question.
+"""
+
 # UNWIRED as of 2026-08-15 and STALE: nothing passes steering_variant="short"
 # (it defaults to "full"), and this text describes the v0.50-era surface —
 # tools resident rather than deferred, no prism_verify, no multi-term search.
@@ -412,7 +449,23 @@ def run_arm(task: dict, arm: str, prism: str, model: str = "",
         steer = "\n" + INVESTIGATION_GUIDANCE
         tools = list(TOOLS_BASE)
         mcp_cfg = ""
-        if arm.startswith("prism"):
+        if arm == "prism-cli":
+            # CLI arm: prism as a SHELL COMMAND only -- no MCP server, no
+            # .mcp.json, no tool schemas in context. This is what the t1/t2
+            # beds ran (commit 119d8ff) before 2bec8bf replaced it with the
+            # MCP deployment; those two beds are the ones where prism came out
+            # cheaper in 76% of cells against 44% for the MCP beds, which is
+            # the observation this arm exists to test properly.
+            #
+            # The difference that matters is FIXED COST: an MCP arm pays tool
+            # schemas as fresh context every session whether or not anything
+            # is called (measured 2026-08-15: +19k fresh tokens and +$0.20 on
+            # a cell where prism was never invoked). A CLI arm pays nothing
+            # until the agent types `prism`.
+            sh(prism, "index", ".", cwd=str(wt), timeout=600)
+            tools = list(TOOLS_BASE) + ["Bash(prism:*)", f"Bash({prism}:*)"]
+            steer += "\n" + CLI_PRISM_STEERING
+        elif arm.startswith("prism"):
             # Run the REAL `prism init` in THIS worktree -- no flags -- so the
             # agent gets exactly what a user gets: .mcp.json, the steering
             # block, and grep still available. stdin is DEVNULL: the
@@ -512,7 +565,23 @@ def run_arm(task: dict, arm: str, prism: str, model: str = "",
             "tool_calls": env.get("tool_calls", []),
         }
     finally:
-        if arm.startswith("prism"):
+        if arm == "prism-cli":
+            # CLI arm: prism as a SHELL COMMAND only -- no MCP server, no
+            # .mcp.json, no tool schemas in context. This is what the t1/t2
+            # beds ran (commit 119d8ff) before 2bec8bf replaced it with the
+            # MCP deployment; those two beds are the ones where prism came out
+            # cheaper in 76% of cells against 44% for the MCP beds, which is
+            # the observation this arm exists to test properly.
+            #
+            # The difference that matters is FIXED COST: an MCP arm pays tool
+            # schemas as fresh context every session whether or not anything
+            # is called (measured 2026-08-15: +19k fresh tokens and +$0.20 on
+            # a cell where prism was never invoked). A CLI arm pays nothing
+            # until the agent types `prism`.
+            sh(prism, "index", ".", cwd=str(wt), timeout=600)
+            tools = list(TOOLS_BASE) + ["Bash(prism:*)", f"Bash({prism}:*)"]
+            steer += "\n" + CLI_PRISM_STEERING
+        elif arm.startswith("prism"):
             unmark_trusted(wt)
         import shutil
         shutil.rmtree(wt, ignore_errors=True)  # standalone clone now, not a worktree
