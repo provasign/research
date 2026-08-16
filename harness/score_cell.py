@@ -93,6 +93,31 @@ def contamination(rec: dict) -> list[str]:
     return hits
 
 
+def gold_copy(task: dict, patch: str, thresh: float = 0.95, minlines: int = 50) -> float | None:
+    """Second, INDEPENDENT tripwire: does the diff read as a copy of gold?
+
+    contamination() matches HOW an answer was obtained, so it is only ever as
+    good as its pattern list -- it would miss a fetch through an unlisted
+    host or an obfuscated URL. This checks WHAT was produced, needs no
+    patterns, and is mechanism-independent.
+
+    Distinctive ADDED lines only (>=25 chars): deletions match trivially
+    because both arms delete the same originals, and short lines are
+    boilerplate. Calibrated on real data 2026-08-16 -- the two known-copied
+    cells scored 100% over 174 and 124 lines, while the highest CLEAN cell
+    scored 100% over 17 lines and 91% over 23. Small fixes converge; a
+    hundred distinctive lines do not. Hence both a ratio AND a floor.
+    """
+    def added(p):
+        return [l[1:].strip() for l in p.split("\n")
+                if l.startswith("+") and not l.startswith("+++") and len(l[1:].strip()) >= 25]
+    g, a = set(added(task.get("patch", ""))), added(patch)
+    if len(a) < minlines:
+        return None
+    ratio = sum(1 for l in a if l in g) / len(a)
+    return ratio if ratio >= thresh else None
+
+
 def blast_radius(task: dict) -> tuple[int, str]:
     """Files touched by the GOLD patch, and its stratum.
 
@@ -191,6 +216,10 @@ def report(task: dict, run_dir: Path, arms=("no-prism", "prism")) -> dict | None
             sc = {"resolved": None, "error": str(e)[:200]}
         sc["score_wall_s"] = round(time.time() - t0, 1)
         contam = contamination(r)
+        copied = gold_copy(task, r.get("model_patch", ""))
+        if copied is not None:
+            contam = contam + [f"diff is {copied:.0%} verbatim gold over "
+                               f"50+ distinctive lines — copied, however obtained"]
         if contam:
             # Void, do not score. A cell that fetched the answer tells us
             # nothing about the tool, and reporting it as RESOLVED is worse
