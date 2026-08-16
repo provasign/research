@@ -191,3 +191,70 @@ if __name__ == "__main__":
             task.update(fail_to_pass=v["fail_to_pass"], pass_to_pass=v["pass_to_pass"])
             Path(a.task_json).write_text(json.dumps(task, indent=2))
             print(f"-> promoted: FAIL_TO_PASS={v['fail_to_pass']}")
+
+
+# --- Official SWE-bench-Live images -----------------------------------------
+#
+# The hand-rolled python:3.12 path guesses at extras and per-repo build
+# quirks, and it left 17 of 38 tasks unscoreable on 2026-08-16 -- every
+# failure a build problem, not a bad task. SWE-bench-Live publishes a
+# prebuilt, dependency-complete image per instance (3,150 of them), which
+# removes the guessing entirely.
+#
+# NOTE the image is NOT at base_commit. Verified on
+# datamodel-code-generator-2349: HEAD sat on a LATER PR, with 214 refs, an
+# intact origin, and 1,007 commits reachable beyond HEAD. Harmless for
+# scoring, because we reset to base before applying anything -- but never
+# hand /testbed to an AGENT as-is, it is a direct route to the gold fix.
+
+OFFICIAL_NS = "starryzhang"
+
+
+def official_image(instance_id: str) -> str:
+    """owner__repo-pr  ->  starryzhang/sweb.eval.x86_64.owner_1776_repo-pr"""
+    return f"{OFFICIAL_NS}/sweb.eval.x86_64.{instance_id.replace('__', '_1776_')}"
+
+
+def score_official(task: dict, agent_patch: str, timeout: int = 2400) -> dict:
+    """Score inside the instance's official image. Same verdict contract as
+    score(): resolved iff every FAIL_TO_PASS passes and no PASS_TO_PASS in the
+    executed modules regresses."""
+    img = official_image(task["instance_id"])
+    mods = sorted({n.split("::")[0] for n in task.get("FAIL_TO_PASS", []) if "::" in n})
+    runner = "python -m pytest"
+    for c in task.get("test_cmds") or []:
+        if c.startswith("uv run"):
+            runner = "uv run python -m pytest"
+            break
+    script = (
+        "set -e; cd /testbed; "
+        f"git checkout -f -q {task['base_commit']}; "
+        "git apply --3way /tmp/test.patch 2>&1 | tail -2 || true; "
+        "if [ -s /tmp/agent.patch ]; then git apply --3way /tmp/agent.patch 2>&1 | tail -2 || true; fi; "
+        f"{runner} " + " ".join(mods) +
+        # No --timeout: pytest-timeout is not in these images and injecting
+        # plugins into a project's own environment is what the hand-rolled
+        # path did wrong. The docker timeout bounds the run instead.
+        " -v --tb=no -p no:cacheprovider -o addopts='' 2>&1 | tail -400")
+    import os
+    d = tempfile.mkdtemp(prefix="swebl-")
+    Path(d, "test.patch").write_text(task.get("test_patch", "") or "")
+    Path(d, "agent.patch").write_text(agent_patch or "")
+    try:
+        out = _sh("docker", "run", "--rm", "--platform", "linux/amd64",
+                  "-v", f"{d}/test.patch:/tmp/test.patch:ro",
+                  "-v", f"{d}/agent.patch:/tmp/agent.patch:ro",
+                  img, "bash", "-lc", script, timeout=timeout, check=False)
+    finally:
+        import shutil
+        shutil.rmtree(d, ignore_errors=True)
+    res = {m.group(1): m.group(2) for m in RESULT_RE.finditer(out)}
+    if not res:
+        print("  [official] nothing collected; tail:\n" +
+              "\n".join("    " + l for l in out.splitlines()[-10:]))
+    f2p = task.get("FAIL_TO_PASS", [])
+    p2p = [n for n in task.get("PASS_TO_PASS", []) if n.split("::")[0] in mods]
+    f2p_ok = bool(f2p) and all(res.get(n) == "PASSED" for n in f2p)
+    p2p_ok = all(res.get(n) == "PASSED" for n in p2p)
+    return {"resolved": bool(f2p_ok and p2p_ok), "f2p_ok": f2p_ok,
+            "p2p_ok": p2p_ok, "n_run": len(res), "image": img}

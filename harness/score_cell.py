@@ -57,6 +57,21 @@ def categorize(cmd: str) -> str:
     return "other"
 
 
+def blast_radius(task: dict) -> tuple[int, str]:
+    """Files touched by the GOLD patch, and its stratum.
+
+    This is the axis that predicts prism's value, and it is computable for
+    free from any SWE-bench-style bed. Prism's measured win (RESULTS.md §9.1)
+    is on change sets of 8-310 sites; a task whose fix touches one file has no
+    blast radius to resolve, so a tool that resolves blast radii cannot help.
+    Reporting a single mean over a bed whose MEDIAN task touches 2 files
+    therefore measures the bed's size distribution, not the tool.
+    """
+    n = len(re.findall(r"^\+\+\+ b/", task.get("patch", ""), re.M))
+    return n, ("1 file" if n <= 1 else "2-3 files" if n <= 3
+               else "4-9 files" if n <= 9 else "10+ files")
+
+
 def modules_for(task: dict) -> list[str]:
     return sorted({n.split("::")[0] for n in task.get("FAIL_TO_PASS", []) if "::" in n})
 
@@ -111,9 +126,10 @@ def report(task: dict, run_dir: Path, arms=("no-prism", "prism")) -> dict | None
             return None
         recs[a] = json.load(open(p))
 
-    out = {"instance_id": tid, "arms": {}}
+    nfiles, stratum = blast_radius(task)
+    out = {"instance_id": tid, "gold_files": nfiles, "stratum": stratum, "arms": {}}
     print("\n" + "=" * 78)
-    print(f"CELL  {tid}")
+    print(f"CELL  {tid}    [gold patch: {nfiles} files — {stratum}]")
     print("=" * 78)
 
     st = scoreable(task)
@@ -217,13 +233,48 @@ def main() -> None:
             sys.exit(1)
 
     if results:
-        ok = collections.Counter()
-        for r in results:
-            for a, x in r["arms"].items():
-                ok[a] += bool(x["resolved"])
-        print("\n" + "=" * 78)
-        print(f"RESOLVE RATE over {len(results)} scored cells: " +
-              "  ".join(f"{a} {ok[a]}/{len(results)}" for a in sorted(ok)))
+        summarize(results)
+
+
+ORDER = ["1 file", "2-3 files", "4-9 files", "10+ files"]
+
+
+def summarize(results: list[dict]) -> None:
+    import statistics
+    ok = collections.Counter()
+    for r in results:
+        for a, x in r["arms"].items():
+            ok[a] += bool(x["resolved"])
+    print("\n" + "=" * 78)
+    print(f"RESOLVE RATE over {len(results)} scored cells: " +
+          "  ".join(f"{a} {ok[a]}/{len(results)}" for a in sorted(ok)))
+
+    # Stratified by blast radius. A pooled median over a bed whose median task
+    # touches 2 files hides the only stratum where the tool has work to do.
+    print(f"\nBY BLAST RADIUS (equal-correctness cells only — efficiency is "
+          f"meaningless where the arms disagree)")
+    print(f"  {'stratum':11}{'n':>3}{'eq':>4}{'base res':>10}{'prism res':>11}"
+          f"{'med Δturns':>12}{'med Δcost':>11}{'adopt':>7}")
+    by = collections.defaultdict(list)
+    for r in results:
+        by[r.get("stratum", "?")].append(r)
+    for k in ORDER + [x for x in by if x not in ORDER]:
+        g = by.get(k)
+        if not g:
+            continue
+        eq = [r for r in g if r["arms"]["no-prism"]["resolved"] == r["arms"]["prism"]["resolved"]
+              and r["arms"]["prism"]["resolved"] is not None]
+        rb = sum(1 for r in g if r["arms"]["no-prism"]["resolved"])
+        rp = sum(1 for r in g if r["arms"]["prism"]["resolved"])
+        ad = sum(1 for r in g if r["arms"]["prism"]["prism_used"])
+        dt = dc = float("nan")
+        if eq:
+            dt = statistics.median(r["arms"]["prism"]["turns"] - r["arms"]["no-prism"]["turns"] for r in eq)
+            dc = statistics.median(r["arms"]["prism"]["cost"] - r["arms"]["no-prism"]["cost"] for r in eq)
+        print(f"  {k:11}{len(g):3}{len(eq):4}{rb:>7}/{len(g):<2}{rp:>8}/{len(g):<2}"
+              f"{dt:12.1f}{dc:11.3f}{ad:>5}/{len(g)}")
+    print("\n  Prism's measured win (RESULTS.md §9.1) is on 8-310-site change sets.")
+    print("  Read the bottom strata; the top ones are where the tool has no work to do.")
 
 
 if __name__ == "__main__":

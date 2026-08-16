@@ -15,12 +15,15 @@ from score_cell import scoreable
 docker_eval.CLONE_ROOT = Path.home() / ".cache/prism-research/swebench-repos"
 
 tasks = json.load(open(sys.argv[1]))
+OFFICIAL = "--official" in sys.argv
+scorer = docker_eval.score_official if OFFICIAL else (lambda t, p: docker_eval.score(scoreable(t), p))
+print(f"scoring via {'OFFICIAL SWE-bench-Live images' if OFFICIAL else 'hand-rolled python:3.12'}")
 out = {}
 for i, t in enumerate(tasks, 1):
     tid = t["instance_id"]; t0 = time.time()
     try:
-        g = docker_eval.score(scoreable(t), t["patch"])
-        e = docker_eval.score(scoreable(t), "") if g.get("resolved") else {"resolved": None}
+        g = scorer(t, t["patch"])
+        e = scorer(t, "") if g.get("resolved") else {"resolved": None}
     except Exception as ex:                                    # noqa: BLE001
         g, e = {"resolved": None, "error": str(ex)[:150]}, {"resolved": None}
     ok = bool(g.get("resolved")) and e.get("resolved") is False
