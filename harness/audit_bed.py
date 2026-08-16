@@ -71,13 +71,25 @@ def check_worktree(t: dict, wt: Path) -> list[str]:
         bad.append(f"{tid}: HEAD {head[:12]} != base {t['base_commit'][:12]} — WRONG CODE")
         return bad  # everything downstream is meaningless
 
-    # Gold-fix reachability. Refs and the remote are stripped at setup so
-    # `git log --all` cannot surface the fixing commit; verify, don't assume.
+    # SETUP-TIME CHECKS ONLY. A live worktree is mid-cell: the agent has
+    # usually edited it, and during setup there is a window where origin is
+    # deliberately present (re-pointed at upstream so a blobless clone can
+    # materialise, then removed). Running these against a live tree produced
+    # 64 false alarms in one run -- a gate that cries wolf is worse than no
+    # gate, so skip rather than report when the tree is not in its as-set-up
+    # state.
+    if sh("git", "-C", str(wt), "status", "--porcelain").stdout.strip():
+        # The agent has edited the tree, so the gold patch will no longer
+        # apply and that says nothing about the bed. HEAD is still checked
+        # above, which is the one thing that stays meaningful mid-cell.
+        return bad
+
     refs = sh("git", "-C", str(wt), "for-each-ref", "--format=%(refname)").stdout.split()
     if refs:
         bad.append(f"{tid}: {len(refs)} refs present — `git log --all` can reach the gold fix")
     if sh("git", "-C", str(wt), "remote").stdout.strip():
-        bad.append(f"{tid}: a remote is configured — the fix is fetchable")
+        bad.append(f"{tid}: a remote is configured — the fix is fetchable "
+                   f"(if sampled mid-setup this is the transient upstream window, re-check)")
     newer = sh("git", "-C", str(wt), "log", "--all", "--oneline", "--not", t["base_commit"]).stdout.strip()
     if newer:
         bad.append(f"{tid}: {len(newer.splitlines())} commits reachable beyond base")

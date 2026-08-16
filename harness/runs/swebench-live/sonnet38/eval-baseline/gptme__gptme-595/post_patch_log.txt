@@ -1,0 +1,2306 @@
+cat testlog.out
+============================= test session starts ==============================
+platform linux -- Python 3.10.18, pytest-8.3.4, pluggy-1.5.0
+rootdir: /testbed
+configfile: pyproject.toml
+plugins: anyio-4.7.0, dotenv-0.5.2, mock-3.14.0, xdist-3.6.1, profiling-1.8.1, timeout-2.3.1, retry-1.6.3, cov-6.0.0
+collected 228 items
+
+tests/test_browser.py ssF..                                              [  2%]
+tests/test_chat.py ...                                                   [  3%]
+tests/test_chat_config.py ..                                             [  4%]
+tests/test_cli.py .......s..s..X....s.ssssssss                           [ 16%]
+tests/test_codeblock.py .........                                        [ 20%]
+tests/test_config.py ..............F                                     [ 27%]
+tests/test_context.py ....                                               [ 28%]
+tests/test_eval.py ss                                                    [ 29%]
+tests/test_llm_anthropic.py ....                                         [ 31%]
+tests/test_llm_openai.py .....                                           [ 33%]
+tests/test_logmanager.py .                                               [ 34%]
+tests/test_mcp.py ssss                                                   [ 35%]
+tests/test_message.py ..                                                 [ 36%]
+tests/test_prompt.py ...........                                         [ 41%]
+tests/test_prompt_tools.py ......                                        [ 44%]
+tests/test_prompts.py EEE                                                [ 45%]
+tests/test_reduce.py ..                                                  [ 46%]
+tests/test_server.py ...FFsF                                             [ 49%]
+tests/test_server_v2.py ....Fss....                                      [ 54%]
+tests/test_server_v2_auto_stepping.py .                                  [ 54%]
+tests/test_server_v2_sse.py .s                                           [ 55%]
+tests/test_server_v2_tool_confirmation.py .                              [ 56%]
+tests/test_shell.py ..........                                           [ 60%]
+tests/test_tool_use.py .....................                             [ 69%]
+tests/test_tools.py ............                                         [ 75%]
+tests/test_tools_chats.py .                                              [ 75%]
+tests/test_tools_computer.py ......sss                                   [ 79%]
+tests/test_tools_patch.py ...........                                    [ 84%]
+tests/test_tools_python.py ...                                           [ 85%]
+tests/test_tools_rag.py s..                                              [ 86%]
+tests/test_tools_save.py ....                                            [ 88%]
+tests/test_tools_shell.py ....                                           [ 90%]
+tests/test_tools_subagent.py ...                                         [ 91%]
+tests/test_tools_tts.py ........                                         [ 95%]
+tests/test_util.py ......                                                [ 97%]
+tests/test_util_cli.py ..s..                                             [100%]
+
+==================================== ERRORS ====================================
+____________________ ERROR at setup of test_get_prompt_full ____________________
+
+    @pytest.fixture(autouse=True)
+    def init():
+>       init_tools()
+
+/testbed/tests/test_prompts.py:9: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+allowlist = ['shell', 'python']
+
+    def init_tools(
+        allowlist: list[str] | None = None,
+    ) -> list[ToolSpec]:
+        """Initialize tools in a thread-safe manner.
+    
+        This function is thread-safe and can be called from multiple threads.
+        Each thread will get its own copy of the tools.
+    
+        If allowlist is not provided, it will be loaded from the environment variable
+        TOOL_ALLOWLIST or the chat config (if set).
+        """
+        with _tools_init_lock:
+            loaded_tools = _get_loaded_tools()
+            config = get_config()
+    
+            if allowlist is None:
+                env_allowlist = config.get_env("TOOL_ALLOWLIST")
+                if env_allowlist:
+                    allowlist = env_allowlist.split(",")
+                elif config.chat and config.chat.tools:
+                    allowlist = config.chat.tools
+    
+            for tool in get_toolchain(allowlist):
+                if tool in loaded_tools:
+                    # logger.warning("Tool '%s' already loaded", tool.name)
+                    continue
+                if tool.init:
+                    tool = tool.init()
+    
+                loaded_tools.append(tool)
+    
+            for tool_name in allowlist or []:
+                if not has_tool(tool_name):
+                    # if the tool is found but unavailable, we log a warning
+                    if tool_name in [tool.name for tool in get_available_tools()]:
+                        logger.warning("Tool %s found but is unavailable", tool_name)
+                        continue
+>                   raise ValueError(f"Tool '{tool_name}' not found")
+E                   ValueError: Tool 'python' not found
+
+/testbed/gptme/tools/__init__.py:147: ValueError
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+___________________ ERROR at setup of test_get_prompt_short ____________________
+
+    @pytest.fixture(autouse=True)
+    def init():
+>       init_tools()
+
+/testbed/tests/test_prompts.py:9: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+allowlist = ['shell', 'python']
+
+    def init_tools(
+        allowlist: list[str] | None = None,
+    ) -> list[ToolSpec]:
+        """Initialize tools in a thread-safe manner.
+    
+        This function is thread-safe and can be called from multiple threads.
+        Each thread will get its own copy of the tools.
+    
+        If allowlist is not provided, it will be loaded from the environment variable
+        TOOL_ALLOWLIST or the chat config (if set).
+        """
+        with _tools_init_lock:
+            loaded_tools = _get_loaded_tools()
+            config = get_config()
+    
+            if allowlist is None:
+                env_allowlist = config.get_env("TOOL_ALLOWLIST")
+                if env_allowlist:
+                    allowlist = env_allowlist.split(",")
+                elif config.chat and config.chat.tools:
+                    allowlist = config.chat.tools
+    
+            for tool in get_toolchain(allowlist):
+                if tool in loaded_tools:
+                    # logger.warning("Tool '%s' already loaded", tool.name)
+                    continue
+                if tool.init:
+                    tool = tool.init()
+    
+                loaded_tools.append(tool)
+    
+            for tool_name in allowlist or []:
+                if not has_tool(tool_name):
+                    # if the tool is found but unavailable, we log a warning
+                    if tool_name in [tool.name for tool in get_available_tools()]:
+                        logger.warning("Tool %s found but is unavailable", tool_name)
+                        continue
+>                   raise ValueError(f"Tool '{tool_name}' not found")
+E                   ValueError: Tool 'python' not found
+
+/testbed/gptme/tools/__init__.py:147: ValueError
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+___________________ ERROR at setup of test_get_prompt_custom ___________________
+
+    @pytest.fixture(autouse=True)
+    def init():
+>       init_tools()
+
+/testbed/tests/test_prompts.py:9: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+allowlist = ['shell', 'python']
+
+    def init_tools(
+        allowlist: list[str] | None = None,
+    ) -> list[ToolSpec]:
+        """Initialize tools in a thread-safe manner.
+    
+        This function is thread-safe and can be called from multiple threads.
+        Each thread will get its own copy of the tools.
+    
+        If allowlist is not provided, it will be loaded from the environment variable
+        TOOL_ALLOWLIST or the chat config (if set).
+        """
+        with _tools_init_lock:
+            loaded_tools = _get_loaded_tools()
+            config = get_config()
+    
+            if allowlist is None:
+                env_allowlist = config.get_env("TOOL_ALLOWLIST")
+                if env_allowlist:
+                    allowlist = env_allowlist.split(",")
+                elif config.chat and config.chat.tools:
+                    allowlist = config.chat.tools
+    
+            for tool in get_toolchain(allowlist):
+                if tool in loaded_tools:
+                    # logger.warning("Tool '%s' already loaded", tool.name)
+                    continue
+                if tool.init:
+                    tool = tool.init()
+    
+                loaded_tools.append(tool)
+    
+            for tool_name in allowlist or []:
+                if not has_tool(tool_name):
+                    # if the tool is found but unavailable, we log a warning
+                    if tool_name in [tool.name for tool in get_available_tools()]:
+                        logger.warning("Tool %s found but is unavailable", tool_name)
+                        continue
+>                   raise ValueError(f"Tool '{tool_name}' not found")
+E                   ValueError: Tool 'python' not found
+
+/testbed/gptme/tools/__init__.py:147: ValueError
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+=================================== FAILURES ===================================
+___________________________ test_read_url_with_links ___________________________
+
+    @pytest.mark.slow
+    def test_read_url_with_links():
+>       s = read_url("https://superuserlabs.org")
+
+tests/test_browser.py:28: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+gptme/tools/browser.py:142: in read_url
+    return read_url_playwright(url)  # type: ignore
+gptme/tools/_browser_playwright.py:80: in read_url
+    browser = get_browser()
+gptme/tools/_browser_playwright.py:24: in get_browser
+    _browser = BrowserThread()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <gptme.tools._browser_thread.BrowserThread object at 0x7fffa63813f0>
+
+    def __init__(self):
+        self.queue: Queue[tuple[Command | Action, object]] = Queue()
+        self.results: dict[object, tuple[Any, Exception | None]] = {}
+        self.lock = Lock()
+        self.ready = Event()
+        self._init_error: Exception | None = None
+        self.thread = Thread(target=self._run, daemon=True)
+        self.thread.start()
+        # Wait for browser to be ready
+        if not self.ready.wait(timeout=TIMEOUT):
+            raise TimeoutError("Browser failed to start")
+        if self._init_error:
+>           raise self._init_error
+E           RuntimeError: Browser executable not found. Run: pipx run playwright==1.49.1 install chromium-headless-shell
+
+gptme/tools/_browser_thread.py:42: RuntimeError
+---------------------------- Captured stdout setup -----------------------------
+[00:01:49] Using model: local/test                                              
+           Using browser tool with playwright                                   
+------------------------------ Captured log call -------------------------------
+ERROR    gptme.tools._browser_thread:_browser_thread.py:91 Error stopping browser
+Traceback (most recent call last):
+  File "/testbed/gptme/tools/_browser_thread.py", line 88, in _run
+    browser.close()
+UnboundLocalError: local variable 'browser' referenced before assignment
+________________________ test_resume_config_precedence _________________________
+
+    def test_resume_config_precedence():
+        """Test that resume configuration respects saved config unless CLI overrides provided."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logdir = Path(tmpdir) / "test-conversation"
+            logdir.mkdir()
+            workspace = Path(tmpdir) / "workspace"
+            workspace.mkdir()
+    
+            # Create a saved conversation config with specific model and tool_format
+            saved_config_content = f"""[chat]
+    model = "openrouter/test-model"
+    tool_format = "xml"
+    tools = ["shell", "python"]
+    stream = true
+    interactive = true
+    workspace = "{str(workspace)}"
+    
+    [env]
+    """
+    
+            config_file = logdir / "config.toml"
+            config_file.write_text(saved_config_content)
+    
+            # Test 1: Resume without CLI overrides - should use saved config
+            config = setup_config_from_cli(
+                workspace=workspace,
+                logdir=logdir,
+                model=None,  # No CLI override
+                tool_allowlist=None,  # No CLI override
+                tool_format=None,  # No CLI override
+                stream=True,
+                interactive=True,
+                agent_path=None,
+            )
+    
+            assert config.chat is not None, "Chat config should be loaded"
+>           assert (
+                config.chat.model == "openrouter/test-model"
+            ), "Should use saved model when no CLI override"
+E           AssertionError: Should use saved model when no CLI override
+E           assert 'local/test' == 'openrouter/test-model'
+E             
+E             - openrouter/test-model
+E             + local/test
+
+tests/test_config.py:624: AssertionError
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+__________________________ test_api_conversation_get ___________________________
+
+conv = 'test-server-723140', client = <FlaskClient <Flask 'gptme.server.api'>>
+
+    def test_api_conversation_get(conv, client: FlaskClient):
+        response = client.get(f"/api/conversations/{conv}")
+>       assert response.status_code == 200
+E       assert 500 == 200
+E        +  where 500 = <WrapperTestResponse streamed [500 INTERNAL SERVER ERROR]>.status_code
+
+/testbed/tests/test_server.py:40: AssertionError
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+           INFO     OpenAPI documentation available at /api/docs/     api.py:486
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+INFO     gptme.server.api:api.py:486 OpenAPI documentation available at /api/docs/
+----------------------------- Captured stdout call -----------------------------
+           ERROR    Exception on                                      app.py:875
+                    /api/conversations/test-server-723140 [GET]                 
+                    Traceback (most recent call last):                          
+                      File                                                      
+                    "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ           
+                    -py3.10/lib/python3.10/site-packages/flask/app.py           
+                    ", line 1511, in wsgi_app                                   
+                        response = self.full_dispatch_request()                 
+                      File                                                      
+                    "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ           
+                    -py3.10/lib/python3.10/site-packages/flask/app.py           
+                    ", line 919, in full_dispatch_request                       
+                        rv = self.handle_user_exception(e)                      
+                      File                                                      
+                    "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ           
+                    -py3.10/lib/python3.10/site-packages/flask/app.py           
+                    ", line 917, in full_dispatch_request                       
+                        rv = self.dispatch_request()                            
+                      File                                                      
+                    "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ           
+                    -py3.10/lib/python3.10/site-packages/flask/app.py           
+                    ", line 902, in dispatch_request                            
+                        return                                                  
+                    self.ensure_sync(self.view_functions[rule.endpoin           
+                    t])(**view_args)  # type: ignore[no-any-return]             
+                      File "/testbed/gptme/server/api.py", line 98,             
+                    in api_conversation                                         
+                        init_tools(None)  # FIXME: this is not                  
+                    thread-safe                                                 
+                      File "/testbed/gptme/tools/__init__.py", line             
+                    147, in init_tools                                          
+                        raise ValueError(f"Tool '{tool_name}' not               
+                    found")                                                     
+                    ValueError: Tool 'python' not found                         
+------------------------------ Captured log call -------------------------------
+ERROR    gptme.server.api:app.py:875 Exception on /api/conversations/test-server-723140 [GET]
+Traceback (most recent call last):
+  File "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ-py3.10/lib/python3.10/site-packages/flask/app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ-py3.10/lib/python3.10/site-packages/flask/app.py", line 919, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ-py3.10/lib/python3.10/site-packages/flask/app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ-py3.10/lib/python3.10/site-packages/flask/app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+  File "/testbed/gptme/server/api.py", line 98, in api_conversation
+    init_tools(None)  # FIXME: this is not thread-safe
+  File "/testbed/gptme/tools/__init__.py", line 147, in init_tools
+    raise ValueError(f"Tool '{tool_name}' not found")
+ValueError: Tool 'python' not found
+__________________________ test_api_conversation_post __________________________
+
+conv = 'test-server-625962', client = <FlaskClient <Flask 'gptme.server.api'>>
+
+    def test_api_conversation_post(conv, client: FlaskClient):
+        response = client.post(
+            f"/api/conversations/{conv}",
+            json={"role": "user", "content": "hello"},
+        )
+>       assert response.status_code == 200
+E       assert 500 == 200
+E        +  where 500 = <WrapperTestResponse streamed [500 INTERNAL SERVER ERROR]>.status_code
+
+/testbed/tests/test_server.py:48: AssertionError
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+           INFO     OpenAPI documentation available at /api/docs/     api.py:486
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+INFO     gptme.server.api:api.py:486 OpenAPI documentation available at /api/docs/
+----------------------------- Captured stdout call -----------------------------
+           ERROR    Exception on                                      app.py:875
+                    /api/conversations/test-server-625962 [POST]                
+                    Traceback (most recent call last):                          
+                      File                                                      
+                    "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ           
+                    -py3.10/lib/python3.10/site-packages/flask/app.py           
+                    ", line 1511, in wsgi_app                                   
+                        response = self.full_dispatch_request()                 
+                      File                                                      
+                    "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ           
+                    -py3.10/lib/python3.10/site-packages/flask/app.py           
+                    ", line 919, in full_dispatch_request                       
+                        rv = self.handle_user_exception(e)                      
+                      File                                                      
+                    "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ           
+                    -py3.10/lib/python3.10/site-packages/flask/app.py           
+                    ", line 917, in full_dispatch_request                       
+                        rv = self.dispatch_request()                            
+                      File                                                      
+                    "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ           
+                    -py3.10/lib/python3.10/site-packages/flask/app.py           
+                    ", line 902, in dispatch_request                            
+                        return                                                  
+                    self.ensure_sync(self.view_functions[rule.endpoin           
+                    t])(**view_args)  # type: ignore[no-any-return]             
+                      File "/testbed/gptme/server/api.py", line 224,            
+                    in api_conversation_post                                    
+                        init_tools(tool_allowlist)  # FIXME: this is            
+                    not thread-safe                                             
+                      File "/testbed/gptme/tools/__init__.py", line             
+                    147, in init_tools                                          
+                        raise ValueError(f"Tool '{tool_name}' not               
+                    found")                                                     
+                    ValueError: Tool 'python' not found                         
+------------------------------ Captured log call -------------------------------
+ERROR    gptme.server.api:app.py:875 Exception on /api/conversations/test-server-625962 [POST]
+Traceback (most recent call last):
+  File "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ-py3.10/lib/python3.10/site-packages/flask/app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ-py3.10/lib/python3.10/site-packages/flask/app.py", line 919, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ-py3.10/lib/python3.10/site-packages/flask/app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ-py3.10/lib/python3.10/site-packages/flask/app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+  File "/testbed/gptme/server/api.py", line 224, in api_conversation_post
+    init_tools(tool_allowlist)  # FIXME: this is not thread-safe
+  File "/testbed/gptme/tools/__init__.py", line 147, in init_tools
+    raise ValueError(f"Tool '{tool_name}' not found")
+ValueError: Tool 'python' not found
+____________________ test_api_conversation_generate_stream _____________________
+
+conv = 'test-server-509386', client = <FlaskClient <Flask 'gptme.server.api'>>
+
+    @pytest.mark.slow
+    def test_api_conversation_generate_stream(conv: str, client: FlaskClient):
+        # Ask the assistant to generate a test response
+        response = client.post(
+            f"/api/conversations/{conv}",
+            json={"role": "user", "content": "hello, just testing"},
+        )
+>       assert response.status_code == 200
+E       assert 500 == 200
+E        +  where 500 = <WrapperTestResponse streamed [500 INTERNAL SERVER ERROR]>.status_code
+
+/testbed/tests/test_server.py:87: AssertionError
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+           INFO     OpenAPI documentation available at /api/docs/     api.py:486
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+INFO     gptme.server.api:api.py:486 OpenAPI documentation available at /api/docs/
+----------------------------- Captured stdout call -----------------------------
+           ERROR    Exception on                                      app.py:875
+                    /api/conversations/test-server-509386 [POST]                
+                    Traceback (most recent call last):                          
+                      File                                                      
+                    "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ           
+                    -py3.10/lib/python3.10/site-packages/flask/app.py           
+                    ", line 1511, in wsgi_app                                   
+                        response = self.full_dispatch_request()                 
+                      File                                                      
+                    "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ           
+                    -py3.10/lib/python3.10/site-packages/flask/app.py           
+                    ", line 919, in full_dispatch_request                       
+                        rv = self.handle_user_exception(e)                      
+                      File                                                      
+                    "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ           
+                    -py3.10/lib/python3.10/site-packages/flask/app.py           
+                    ", line 917, in full_dispatch_request                       
+                        rv = self.dispatch_request()                            
+                      File                                                      
+                    "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ           
+                    -py3.10/lib/python3.10/site-packages/flask/app.py           
+                    ", line 902, in dispatch_request                            
+                        return                                                  
+                    self.ensure_sync(self.view_functions[rule.endpoin           
+                    t])(**view_args)  # type: ignore[no-any-return]             
+                      File "/testbed/gptme/server/api.py", line 224,            
+                    in api_conversation_post                                    
+                        init_tools(tool_allowlist)  # FIXME: this is            
+                    not thread-safe                                             
+                      File "/testbed/gptme/tools/__init__.py", line             
+                    147, in init_tools                                          
+                        raise ValueError(f"Tool '{tool_name}' not               
+                    found")                                                     
+                    ValueError: Tool 'python' not found                         
+------------------------------ Captured log call -------------------------------
+ERROR    gptme.server.api:app.py:875 Exception on /api/conversations/test-server-509386 [POST]
+Traceback (most recent call last):
+  File "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ-py3.10/lib/python3.10/site-packages/flask/app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ-py3.10/lib/python3.10/site-packages/flask/app.py", line 919, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ-py3.10/lib/python3.10/site-packages/flask/app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ-py3.10/lib/python3.10/site-packages/flask/app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+  File "/testbed/gptme/server/api.py", line 224, in api_conversation_post
+    init_tools(tool_allowlist)  # FIXME: this is not thread-safe
+  File "/testbed/gptme/tools/__init__.py", line 147, in init_tools
+    raise ValueError(f"Tool '{tool_name}' not found")
+ValueError: Tool 'python' not found
+__________________________ test_v2_conversation_post ___________________________
+
+v2_conv = {'conversation_id': 'test-server-v2-273572', 'session_id': '5721f393-c243-4a47-815f-a80d930cf7e7'}
+client = <FlaskClient <Flask 'gptme.server.api'>>
+
+    def test_v2_conversation_post(v2_conv, client: FlaskClient):
+        """Test posting a message to a V2 conversation."""
+        conversation_id = v2_conv["conversation_id"]
+    
+        response = client.post(
+            f"/api/v2/conversations/{conversation_id}",
+            json={"role": "user", "content": "Hello, this is a test message."},
+        )
+    
+>       assert response.status_code == 200
+E       assert 500 == 200
+E        +  where 500 = <WrapperTestResponse streamed [500 INTERNAL SERVER ERROR]>.status_code
+
+/testbed/tests/test_server_v2.py:155: AssertionError
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+           INFO     OpenAPI documentation available at /api/docs/     api.py:486
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+INFO     gptme.server.api:api.py:486 OpenAPI documentation available at /api/docs/
+----------------------------- Captured stdout call -----------------------------
+           ERROR    Exception on                                      app.py:875
+                    /api/v2/conversations/test-server-v2-273572                 
+                    [POST]                                                      
+                    Traceback (most recent call last):                          
+                      File                                                      
+                    "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ           
+                    -py3.10/lib/python3.10/site-packages/flask/app.py           
+                    ", line 1511, in wsgi_app                                   
+                        response = self.full_dispatch_request()                 
+                      File                                                      
+                    "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ           
+                    -py3.10/lib/python3.10/site-packages/flask/app.py           
+                    ", line 919, in full_dispatch_request                       
+                        rv = self.handle_user_exception(e)                      
+                      File                                                      
+                    "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ           
+                    -py3.10/lib/python3.10/site-packages/flask/app.py           
+                    ", line 917, in full_dispatch_request                       
+                        rv = self.dispatch_request()                            
+                      File                                                      
+                    "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ           
+                    -py3.10/lib/python3.10/site-packages/flask/app.py           
+                    ", line 902, in dispatch_request                            
+                        return                                                  
+                    self.ensure_sync(self.view_functions[rule.endpoin           
+                    t])(**view_args)  # type: ignore[no-any-return]             
+                      File "/testbed/gptme/server/api_v2.py", line              
+                    221, in api_conversation_post                               
+                        init_tools(tool_allowlist)                              
+                      File "/testbed/gptme/tools/__init__.py", line             
+                    147, in init_tools                                          
+                        raise ValueError(f"Tool '{tool_name}' not               
+                    found")                                                     
+                    ValueError: Tool 'python' not found                         
+------------------------------ Captured log call -------------------------------
+ERROR    gptme.server.api:app.py:875 Exception on /api/v2/conversations/test-server-v2-273572 [POST]
+Traceback (most recent call last):
+  File "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ-py3.10/lib/python3.10/site-packages/flask/app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ-py3.10/lib/python3.10/site-packages/flask/app.py", line 919, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ-py3.10/lib/python3.10/site-packages/flask/app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/root/.cache/pypoetry/virtualenvs/gptme-QnKYwBMZ-py3.10/lib/python3.10/site-packages/flask/app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+  File "/testbed/gptme/server/api_v2.py", line 221, in api_conversation_post
+    init_tools(tool_allowlist)
+  File "/testbed/gptme/tools/__init__.py", line 147, in init_tools
+    raise ValueError(f"Tool '{tool_name}' not found")
+ValueError: Tool 'python' not found
+==================================== PASSES ====================================
+___________________________ test_read_url_arxiv_html ___________________________
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+___________________________ test_read_url_arxiv_pdf ____________________________
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+__________________________ test_find_potential_paths ___________________________
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_______________________ test_find_potential_paths_empty ________________________
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+____________________ test_find_potential_paths_punctuation _____________________
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_________________________ test_chat_config_from_logdir _________________________
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_______________________ test_chat_config_load_or_create ________________________
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+[00:01:50] Using project configuration at /testbed/gptme.toml                   
+__________________________________ test_help ___________________________________
+---------------------------- Captured stdout setup -----------------------------
+setting XDG_DATA_HOME to /tmp/tmphi20hlg_
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_________________________________ test_version _________________________________
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+______________________________ test_command_exit _______________________________
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+______________________________ test_command_help _______________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_____________________________ test_command_tokens ______________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_______________________________ test_command_log _______________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+______________________________ test_command_tools ______________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+______________________________ test_command_fork _______________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+running: gptme --name test-74175-test_command_fork /fork test-74175-test_command_fork-fork
+_____________________________ test_command_rename ______________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+running: gptme --name test-74175-test_command_rename /rename test-74175-test_command_rename-rename
+________________________________ test_fileblock ________________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+running: gptme --name test-74175-test_fileblock /impersonate ```save hello.py
+print('hello')
+```
+running: gptme --name test-74175-test_fileblock /impersonate ```append hello.py
+print('world')
+```
+running: gptme --name test-74175-test_fileblock /impersonate ```save hello/hello.py
+print("hello")
+```
+running: gptme --name test-74175-test_fileblock /impersonate ```patch hello/hello.py
+<<<<<<< ORIGINAL
+print("hello")
+=======
+print("hello world")
+>>>>>>> UPDATED
+```
+__________________________________ test_shell __________________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_________________________________ test_python __________________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+______________________________ test_python_error _______________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_____________________________ test_block[ipython] ______________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+running: gptme --name test-74175-test_block[ipython] /impersonate ```ipython
+def test():
+    print("start")  # start
+
+    print("after empty line")
+```
+output: [00:01:50] WARNING  Skipping all confirmation prompts.                cli.py:187
+           Using browser tool with playwright                                   
+           WARNING  init() called twice, ignoring                     init.py:26
+           Using logdir /tmp/tmphi20hlg_/gptme/logs/test-74175-test_block       
+           Using workspace at /tmp/tmpratnvndj                                  
+Skipped 1 hidden system messages, show with --show-hidden
+--- ^^^ past messages ^^^ ---
+User: 
+/impersonate ```ipython
+def test():
+    print("start")  # start
+
+    print("after empty line")
+```
+Assistant: 
+```ipython
+def test():
+    print("start")  # start
+
+    print("after empty line")
+```
+
+Preview
+def test():                                                                     
+    print("start")  # start                                                     
+                                                                                
+    print("after empty line")                                                   
+
+System: 
+Executed code block.
+
+END
+________________________________ test_block[sh] ________________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+running: gptme --name test-74175-test_block[sh] /impersonate ```sh
+function test() {
+    echo "start"  # start
+
+    echo "after empty line"
+}
+```
+output: [00:01:50] WARNING  Skipping all confirmation prompts.                cli.py:187
+           Using browser tool with playwright                                   
+           WARNING  init() called twice, ignoring                     init.py:26
+           Using logdir /tmp/tmphi20hlg_/gptme/logs/test-74175-test_block       
+           Using workspace at /tmp/tmp0jk1sbnj                                  
+Skipped 1 hidden system messages, show with --show-hidden
+--- ^^^ past messages ^^^ ---
+User: 
+/impersonate ```sh
+function test() {
+    echo "start"  # start
+
+    echo "after empty line"
+}
+```
+Assistant: 
+```sh
+function test() {
+    echo "start"  # start
+
+    echo "after empty line"
+}
+```
+
+END
+__________________________________ test_stdin __________________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+running: gptme --name test-74175-test_stdin /exit
+________________________ test_extract_codeblocks_basic _________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_______________________ test_extract_codeblocks_multiple _______________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+________________________ test_extract_codeblocks_nested ________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+__________________ test_extract_codeblocks_unfinished_nested ___________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+________________________ test_extract_codeblocks_empty _________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+______________________ test_extract_codeblocks_text_only _______________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_____________________ test_extract_codeblocks_no_language ______________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+___________ test_extract_codeblocks_markdown_with_nested_no_langtag ____________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_____________________ test_extract_codeblocks_consecutive ______________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_______________________________ test_get_config ________________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+___________________ test_env_vars_loaded_in_correct_priority ___________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+           Using project configuration at /tmp/gptme.toml                       
+__________________ test_mcp_config_loaded_in_correct_priority __________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+           Using project configuration at /tmp/gptme.toml                       
+_______________________ test_mcp_config_loaded_from_toml _______________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_______________________ test_mcp_config_loaded_from_json _______________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+______________________ test_chat_config_loaded_from_toml _______________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+______________________ test_chat_config_loaded_from_json _______________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+___________________________ test_chat_config_to_dict ___________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+___________________________ test_chat_config_to_toml ___________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_______________________ test_default_chat_config_to_toml _______________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_____________________ test_project_config_loaded_from_toml _____________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+           WARNING  Unknown keys in project config:                config.py:137
+                    dict_keys(['base_prompt'])                                  
+------------------------------ Captured log call -------------------------------
+WARNING  gptme.config:config.py:137 Unknown keys in project config: dict_keys(['base_prompt'])
+_____________________ test_project_config_loaded_from_json _____________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+           WARNING  Unknown keys in project config:                config.py:137
+                    dict_keys(['base_prompt'])                                  
+------------------------------ Captured log call -------------------------------
+WARNING  gptme.config:config.py:137 Unknown keys in project config: dict_keys(['base_prompt'])
+_________________________ test_project_config_to_dict __________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+           WARNING  Unknown keys in project config:                config.py:137
+                    dict_keys(['base_prompt'])                                  
+------------------------------ Captured log call -------------------------------
+WARNING  gptme.config:config.py:137 Unknown keys in project config: dict_keys(['base_prompt'])
+_________________________ test_project_config_to_toml __________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+           WARNING  Unknown keys in project config:                config.py:137
+                    dict_keys(['base_prompt'])                                  
+           WARNING  Unknown keys in project config:                config.py:137
+                    dict_keys(['base_prompt'])                                  
+------------------------------ Captured log call -------------------------------
+WARNING  gptme.config:config.py:137 Unknown keys in project config: dict_keys(['base_prompt'])
+WARNING  gptme.config:config.py:137 Unknown keys in project config: dict_keys(['base_prompt'])
+__________________________ test_file_to_display_path ___________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+___________________________ test_append_file_content ___________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+__________________________ test_gather_fresh_context ___________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+           INFO     Files mentioned:                              context.py:231
+                    {PosixPath('/tmp/pytest-of-root/pytest-2/test               
+                    _gather_fresh_context0/file1.txt'): 1,                      
+                    PosixPath('/tmp/pytest-of-root/pytest-2/test_               
+                    gather_fresh_context0/file2.txt'): 1}                       
+           INFO     Read file:                                    context.py:273
+                    /tmp/pytest-of-root/pytest-2/test_gather_fres               
+                    h_context0/file1.txt                                        
+           INFO     Read file:                                    context.py:273
+                    /tmp/pytest-of-root/pytest-2/test_gather_fres               
+                    h_context0/file2.txt                                        
+------------------------------ Captured log call -------------------------------
+INFO     gptme.util.context:context.py:231 Files mentioned: {PosixPath('/tmp/pytest-of-root/pytest-2/test_gather_fresh_context0/file1.txt'): 1, PosixPath('/tmp/pytest-of-root/pytest-2/test_gather_fresh_context0/file2.txt'): 1}
+INFO     gptme.util.context:context.py:273 Read file: /tmp/pytest-of-root/pytest-2/test_gather_fresh_context0/file1.txt
+INFO     gptme.util.context:context.py:273 Read file: /tmp/pytest-of-root/pytest-2/test_gather_fresh_context0/file2.txt
+___________________________ test_get_mentioned_files ___________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+           INFO     Files mentioned:                              context.py:231
+                    {PosixPath('/tmp/pytest-of-root/pytest-2/test               
+                    _get_mentioned_files0/file1.txt'): 2,                       
+                    PosixPath('/tmp/pytest-of-root/pytest-2/test_               
+                    get_mentioned_files0/file2.txt'): 1}                        
+------------------------------ Captured log call -------------------------------
+INFO     gptme.util.context:context.py:231 Files mentioned: {PosixPath('/tmp/pytest-of-root/pytest-2/test_get_mentioned_files0/file1.txt'): 2, PosixPath('/tmp/pytest-of-root/pytest-2/test_get_mentioned_files0/file2.txt'): 1}
+___________________________ test_message_conversion ____________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+____________________ test_message_conversion_without_tools _____________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+______________________ test_message_conversion_with_tools ______________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+________________ test_message_conversion_with_tool_and_non_tool ________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+___________________________ test_message_conversion ____________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+__________________________ test_message_conversion_o1 __________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+____________________ test_message_conversion_without_tools _____________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+______________________ test_message_conversion_with_tools ______________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+________________ test_message_conversion_with_tool_and_non_tool ________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_________________________________ test_branch __________________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+           WARNING  No logfile specified, using tmpfile at      logmanager.py:91
+                    /tmp/tmp3_4nl36p                                            
+Assistant: hello
+           INFO     Creating a new branch 'dev'                logmanager.py:279
+Assistant: world
+Undoing messages:
+  assistant: hello
+------------------------------ Captured log call -------------------------------
+WARNING  gptme.logmanager:logmanager.py:91 No logfile specified, using tmpfile at /tmp/tmp3_4nl36p
+INFO     gptme.logmanager:logmanager.py:279 Creating a new branch 'dev'
+__________________________________ test_toml ___________________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+[message]
+role = "system"
+content = """
+Hello world!
+\"\"\"Difficult to handle string\"\"\"
+"""
+timestamp = "2026-08-15T00:01:50.999947"
+call_id = "None"
+
+
+<Message role=system content=Hello world!...>
+[[messages]]
+role = "system"
+content = """
+Hello world!
+\"\"\"Difficult to handle string\"\"\"
+"""
+timestamp = "2026-08-15T00:01:50.999947"
+call_id = "None"
+
+
+
+[[messages]]
+role = "user"
+content = """
+Hello computer!
+"""
+timestamp = "2026-08-15T00:01:51.000720"
+call_id = "None"
+pinned = true
+hide = true
+
+
+
+[<Message role=system content=Hello world!...>, <Message role=user content=Hello computer!>]
+_____________________________ test_get_codeblocks ______________________________
+---------------------------- Captured stdout setup -----------------------------
+[00:01:51] WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+______________________________ test_is_valid_path ______________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+________________________ test_path_lexer[absolute_path] ________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+___________________ test_path_lexer[explicit_relative_path] ____________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+______________________ test_path_lexer[nonexistent_path] _______________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_________________________ test_path_lexer[quoted_path] _________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_______________________ test_path_lexer[escaped_spaces] ________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+________________________ test_path_lexer[invalid_path] _________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+___________________________ test_path_lexer_caching ____________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+____________________________ test_symlink_handling _____________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_________________________ test_cache_clearing_on_chdir _________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+________________________ test_get_input_cache_clearing _________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+___________________ test_prompt_tools[Markdown with example] ___________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_________________ test_prompt_tools[Markdown without example] __________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_____________________ test_prompt_tools[XML with example] ______________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+____________________ test_prompt_tools[XML without example] ____________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_____________________ test_prompt_tools[Tool with example] _____________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+___________________ test_prompt_tools[Tool without example] ____________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+______________________________ test_truncate_msg _______________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_______________________________ test_reduce_log ________________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+len_pre=5271
+           INFO     Log exceeded limit of 1000, was 5271, reducing  reduce.py:34
+len_post=246
+reduced[-1].content='```cli.py\nimport logging\nimport os\nimport signal\nimport sys\nfrom datetime import datetime\nfrom itertools import islice\nfrom pathlib import Path\nfrom typing import Literal\n\nimport click\n[...]\n    all_data = ""\n\n    while True:\n        chunk = sys.stdin.read(chunk_size)\n        if not chunk:\n            break\n        all_data += chunk\n\n    return all_data\n\n```\n\n```index.html\n<!DOCTYPE html>\n<html>\n  <head>\n    <title>gptme</title>\n    <link rel="icon" type="image/png" href="/favicon.png">\n\n    <!-- Scripts -->\n    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>\n    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>\n    <script src="https://cdn.jsdelivr.net/npm/marked/lib/marked.umd.js"></script>\n[...]\n                </form>\n              </div>\n            </div>\n          </div>\n        </div>\n      </div>\n    </div>\n  </body>\n</html>\n\n```'
+------------------------------ Captured log call -------------------------------
+INFO     gptme.util.reduce:reduce.py:34 Log exceeded limit of 1000, was 5271, reducing
+__________________________________ test_root ___________________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+           INFO     OpenAPI documentation available at /api/docs/     api.py:486
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+INFO     gptme.server.api:api.py:486 OpenAPI documentation available at /api/docs/
+________________________________ test_api_root _________________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+           INFO     OpenAPI documentation available at /api/docs/     api.py:486
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+INFO     gptme.server.api:api.py:486 OpenAPI documentation available at /api/docs/
+__________________________ test_api_conversation_list __________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+           INFO     OpenAPI documentation available at /api/docs/     api.py:486
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+INFO     gptme.server.api:api.py:486 OpenAPI documentation available at /api/docs/
+_______________________________ test_v2_api_root _______________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+           INFO     OpenAPI documentation available at /api/docs/     api.py:486
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+INFO     gptme.server.api:api.py:486 OpenAPI documentation available at /api/docs/
+__________________________ test_v2_conversations_list __________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+           INFO     OpenAPI documentation available at /api/docs/     api.py:486
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+INFO     gptme.server.api:api.py:486 OpenAPI documentation available at /api/docs/
+___________________________ test_v2_conversation_get ___________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+           INFO     OpenAPI documentation available at /api/docs/     api.py:486
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+INFO     gptme.server.api:api.py:486 OpenAPI documentation available at /api/docs/
+______________ test_v2_create_conversation_default_system_prompt _______________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+           INFO     OpenAPI documentation available at /api/docs/     api.py:486
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+INFO     gptme.server.api:api.py:486 OpenAPI documentation available at /api/docs/
+_______________ test_v2_chat_config_saved_on_conversation_create _______________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+           INFO     OpenAPI documentation available at /api/docs/     api.py:486
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+INFO     gptme.server.api:api.py:486 OpenAPI documentation available at /api/docs/
+----------------------------- Captured stdout call -----------------------------
+old config {'chat': {'model': 'gpt-4o', 'tools': ['append', 'browser', 'chats', 'patch', 'read', 'save', 'screenshot', 'shell', 'vision', 'youtube', 'ipython'], 'stream': True, 'interactive': True, 'workspace': '/tmp/pytest-of-root/pytest-2/test_symlink_handling0'}, 'env': {}, 'mcp': {'enabled': False, 'auto_start': False, 'servers': []}}
+--------------------------------------------------------------------------------
+new config {'chat': {'model': 'gpt-4o', 'tools': ['append', 'browser', 'chats', 'patch', 'read', 'save', 'screenshot', 'shell', 'vision', 'youtube', 'ipython'], 'stream': True, 'interactive': True, 'workspace': '/tmp/pytest-of-root/pytest-2/test_symlink_handling0'}, 'env': {}, 'mcp': {'enabled': False, 'auto_start': False, 'servers': []}}
+__________ test_v2_chat_config_saved_separately_for_each_conversation __________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+           INFO     OpenAPI documentation available at /api/docs/     api.py:486
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+INFO     gptme.server.api:api.py:486 OpenAPI documentation available at /api/docs/
+________________________ test_v2_chat_config_get_works _________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+           INFO     OpenAPI documentation available at /api/docs/     api.py:486
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+INFO     gptme.server.api:api.py:486 OpenAPI documentation available at /api/docs/
+----------------------------- Captured stdout call -----------------------------
+config {'chat': {'model': 'gpt-4o', 'tools': ['append', 'browser', 'chats', 'patch', 'read', 'save', 'screenshot', 'shell', 'vision', 'youtube', 'ipython'], 'stream': True, 'interactive': True, 'workspace': '/tmp/pytest-of-root/pytest-2/test_symlink_handling0'}, 'env': {}, 'mcp': {'enabled': False, 'auto_start': False, 'servers': []}}
+input_config {'chat': {'model': 'gpt-4o', 'tools': ['append', 'browser', 'chats', 'patch', 'read', 'save', 'screenshot', 'shell', 'vision', 'youtube', 'ipython'], 'stream': True, 'interactive': True, 'workspace': '/tmp/pytest-of-root/pytest-2/test_symlink_handling0'}, 'env': {}, 'mcp': {'enabled': False, 'auto_start': False, 'servers': []}}
+_______________________ test_v2_chat_config_update_works _______________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+           INFO     OpenAPI documentation available at /api/docs/     api.py:486
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+INFO     gptme.server.api:api.py:486 OpenAPI documentation available at /api/docs/
+----------------------------- Captured stdout call -----------------------------
+[00:01:51] Using browser tool with playwright                                   
+______________________________ test_auto_stepping ______________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+           INFO     OpenAPI documentation available at /api/docs/     api.py:486
+ * Serving Flask app 'gptme.server.api'
+ * Debug mode: off
+           INFO     WARNING: This is a development        _internal.py:97
+                    server. Do not use it in a production                       
+                    deployment. Use a production WSGI server                    
+                    instead.                                                 
+                     * Running on http://localhost:48641                        
+           INFO     Press CTRL+C to quit                  _internal.py:97
+           INFO     127.0.0.1 - - [15/Aug/2026 00:01:51] "PUT    _internal.py:97
+                    /api/v2/conversations/test-tools-1786752111-                
+                    7420 HTTP/1.1" 200 -                                        
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+INFO     gptme.server.api:api.py:486 OpenAPI documentation available at /api/docs/
+INFO     werkzeug:_internal.py:97 WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on http://localhost:48641
+INFO     werkzeug:_internal.py:97 Press CTRL+C to quit
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [15/Aug/2026 00:01:51] "PUT /api/v2/conversations/test-tools-1786752111-7420 HTTP/1.1" 200 -
+----------------------------- Captured stdout call -----------------------------
+           INFO     127.0.0.1 - - [15/Aug/2026 00:01:51] "GET    _internal.py:97
+                    /api/v2/conversations/test-tools-1786752111-                
+                    7420/events?session_id=70601e54-7509-4d40-bf                
+                    dc-20fe3162049f HTTP/1.1" 200 -                             
+           Using browser tool with playwright                                   
+User: Create a directory named /tmp/test_dir and list its contents
+           INFO     127.0.0.1 - - [15/Aug/2026 00:01:51] "POST   _internal.py:97
+                    /api/v2/conversations/test-tools-1786752111-                
+                    7420 HTTP/1.1" 200 -                                        
+           INFO     127.0.0.1 - - [15/Aug/2026 00:01:51] "POST   _internal.py:97
+                    /api/v2/conversations/test-tools-1786752111-                
+                    7420/step HTTP/1.1" 200 -                                   
+           Using browser tool with playwright                                   
+Assistant: 
+I'll help you create a directory and list its contents.
+
+First, let's create a directory:
+
+```shell
+mkdir -p /tmp/test_dir
+```
+           Using browser tool with playwright                                   
+           INFO     Tool                                  api_v2_sessions.py:383
+                    94ef6e43-c471-4134-ac0d-a9e91319244a                        
+                    executing                                                   
+           INFO     Executing tool: shell                 api_v2_sessions.py:387
+
+Preview
+mkdir -p /tmp/test_dir                                                          
+
+           INFO     Tool execution complete, outputs: 1   api_v2_sessions.py:389
+System: 
+Ran command: `mkdir -p /tmp/test_dir`
+
+No output
+           Using browser tool with playwright                                   
+Assistant: 
+Now, let's list its contents:
+
+```shell
+ls -la /tmp/test_dir
+```
+           Using browser tool with playwright                                   
+           INFO     Tool                                  api_v2_sessions.py:383
+                    f40ba877-06f3-42a3-877c-40d36cd10543                        
+                    executing                                                   
+           INFO     Executing tool: shell                 api_v2_sessions.py:387
+total 12
+drwxr-xr-x 2 root root 4096 Sep 14  2025 .
+drwxrwxrwt 1 root root 4096 Aug 15 00:01 ..
+           INFO     Tool execution complete, outputs: 1   api_v2_sessions.py:389
+System: 
+Ran allowlisted command: `ls -la /tmp/test_dir`
+
+```stdout
+total 12
+drwxr-xr-x 2 root root 4096 Sep 14  2025 .
+drwxrwxrwt 1 root root 4096 Aug 15 00:01 ..
+```
+           Using browser tool with playwright                                   
+Assistant: The directory has been created and listed successfully.
+[00:01:52] INFO     127.0.0.1 - - [15/Aug/2026 00:01:52] "GET    _internal.py:97
+                    /api/v2/conversations/test-tools-1786752111-                
+                    7420 HTTP/1.1" 200 -                                        
+------------------------------ Captured log call -------------------------------
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [15/Aug/2026 00:01:51] "GET /api/v2/conversations/test-tools-1786752111-7420/events?session_id=70601e54-7509-4d40-bfdc-20fe3162049f HTTP/1.1" 200 -
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [15/Aug/2026 00:01:51] "POST /api/v2/conversations/test-tools-1786752111-7420 HTTP/1.1" 200 -
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [15/Aug/2026 00:01:51] "POST /api/v2/conversations/test-tools-1786752111-7420/step HTTP/1.1" 200 -
+INFO     gptme.server.api_v2_sessions:api_v2_sessions.py:383 Tool 94ef6e43-c471-4134-ac0d-a9e91319244a executing
+INFO     gptme.server.api_v2_sessions:api_v2_sessions.py:387 Executing tool: shell
+INFO     gptme.server.api_v2_sessions:api_v2_sessions.py:389 Tool execution complete, outputs: 1
+INFO     gptme.server.api_v2_sessions:api_v2_sessions.py:383 Tool f40ba877-06f3-42a3-877c-40d36cd10543 executing
+INFO     gptme.server.api_v2_sessions:api_v2_sessions.py:387 Executing tool: shell
+INFO     gptme.server.api_v2_sessions:api_v2_sessions.py:389 Tool execution complete, outputs: 1
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [15/Aug/2026 00:01:52] "GET /api/v2/conversations/test-tools-1786752111-7420 HTTP/1.1" 200 -
+______________________________ test_event_stream _______________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+           INFO     OpenAPI documentation available at /api/docs/     api.py:486
+ * Serving Flask app 'gptme.server.api'
+ * Debug mode: off
+           INFO     WARNING: This is a development        _internal.py:97
+                    server. Do not use it in a production                       
+                    deployment. Use a production WSGI server                    
+                    instead.                                                 
+                     * Running on http://localhost:49865                        
+           INFO     Press CTRL+C to quit                  _internal.py:97
+           INFO     127.0.0.1 - - [15/Aug/2026 00:01:52] "PUT    _internal.py:97
+                    /api/v2/conversations/test-tools-1786752112-                
+                    6495 HTTP/1.1" 200 -                                        
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+INFO     gptme.server.api:api.py:486 OpenAPI documentation available at /api/docs/
+INFO     werkzeug:_internal.py:97 WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on http://localhost:49865
+INFO     werkzeug:_internal.py:97 Press CTRL+C to quit
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [15/Aug/2026 00:01:52] "PUT /api/v2/conversations/test-tools-1786752112-6495 HTTP/1.1" 200 -
+----------------------------- Captured stdout call -----------------------------
+           INFO     127.0.0.1 - - [15/Aug/2026 00:01:52] "GET    _internal.py:97
+                    /api/v2/conversations/test-tools-1786752112-                
+                    6495/events?session_id=12f962f2-fe63-4b5d-b1                
+                    cc-e1eea4dd3bf7 HTTP/1.1" 200 -                             
+[00:01:52] Using browser tool with playwright                                   
+User: Test message
+           INFO     127.0.0.1 - - [15/Aug/2026 00:01:52] "POST   _internal.py:97
+                    /api/v2/conversations/test-tools-1786752112-                
+                    6495 HTTP/1.1" 200 -                                        
+           INFO     127.0.0.1 - - [15/Aug/2026 00:01:52] "GET    _internal.py:97
+                    /api/v2/conversations/test-tools-1786752112-                
+                    6495 HTTP/1.1" 200 -                                        
+------------------------------ Captured log call -------------------------------
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [15/Aug/2026 00:01:52] "GET /api/v2/conversations/test-tools-1786752112-6495/events?session_id=12f962f2-fe63-4b5d-b1cc-e1eea4dd3bf7 HTTP/1.1" 200 -
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [15/Aug/2026 00:01:52] "POST /api/v2/conversations/test-tools-1786752112-6495 HTTP/1.1" 200 -
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [15/Aug/2026 00:01:52] "GET /api/v2/conversations/test-tools-1786752112-6495 HTTP/1.1" 200 -
+_________________________ test_tool_confirmation_flow __________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+           INFO     OpenAPI documentation available at /api/docs/     api.py:486
+ * Serving Flask app 'gptme.server.api'
+ * Debug mode: off
+           INFO     WARNING: This is a development        _internal.py:97
+                    server. Do not use it in a production                       
+                    deployment. Use a production WSGI server                    
+                    instead.                                                 
+                     * Running on http://localhost:36179                        
+           INFO     Press CTRL+C to quit                  _internal.py:97
+[00:01:53] INFO     127.0.0.1 - - [15/Aug/2026 00:01:53] "PUT    _internal.py:97
+                    /api/v2/conversations/test-tools-1786752113-                
+                    4119 HTTP/1.1" 200 -                                        
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+INFO     gptme.server.api:api.py:486 OpenAPI documentation available at /api/docs/
+INFO     werkzeug:_internal.py:97 WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on http://localhost:36179
+INFO     werkzeug:_internal.py:97 Press CTRL+C to quit
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [15/Aug/2026 00:01:53] "PUT /api/v2/conversations/test-tools-1786752113-4119 HTTP/1.1" 200 -
+----------------------------- Captured stdout call -----------------------------
+           INFO     127.0.0.1 - - [15/Aug/2026 00:01:53] "GET    _internal.py:97
+                    /api/v2/conversations/test-tools-1786752113-                
+                    4119/events?session_id=48c127bd-048b-41f6-8c                
+                    f9-41a77db56d1a HTTP/1.1" 200 -                             
+[00:01:53] Using browser tool with playwright                                   
+User: List files in the current directory
+           INFO     127.0.0.1 - - [15/Aug/2026 00:01:53] "POST   _internal.py:97
+                    /api/v2/conversations/test-tools-1786752113-                
+                    4119 HTTP/1.1" 200 -                                        
+           INFO     127.0.0.1 - - [15/Aug/2026 00:01:53] "POST   _internal.py:97
+                    /api/v2/conversations/test-tools-1786752113-                
+                    4119/step HTTP/1.1" 200 -                                   
+           Using browser tool with playwright                                   
+Assistant: 
+I'll help you list the files. Let me run the command:
+
+```shell
+ls -la
+```
+           INFO     Executing runnable tooluse:           api_v2_sessions.py:672
+                    ToolUse(tool='shell', args=[],                              
+                    content='ls -la', kwargs=None,                              
+                    call_id=None, start=2)                                      
+           INFO     127.0.0.1 - - [15/Aug/2026 00:01:53] "POST   _internal.py:97
+                    /api/v2/conversations/test-tools-1786752113-                
+                    4119/tool/confirm HTTP/1.1" 200 -                           
+           Using browser tool with playwright                                   
+           INFO     Tool                                  api_v2_sessions.py:383
+                    dfc3c300-f49b-4f29-b0a9-e0b70c759102                        
+                    executing                                                   
+           INFO     Executing tool: shell                 api_v2_sessions.py:387
+total 0
+           INFO     Tool execution complete, outputs: 1   api_v2_sessions.py:389
+System: 
+Ran allowlisted command: `ls -la`
+
+`total 0`
+           Using browser tool with playwright                                   
+Assistant: Done, let me know if you need anything else.
+           INFO     127.0.0.1 - - [15/Aug/2026 00:01:53] "GET    _internal.py:97
+                    /api/v2/conversations/test-tools-1786752113-                
+                    4119 HTTP/1.1" 200 -                                        
+------------------------------ Captured log call -------------------------------
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [15/Aug/2026 00:01:53] "GET /api/v2/conversations/test-tools-1786752113-4119/events?session_id=48c127bd-048b-41f6-8cf9-41a77db56d1a HTTP/1.1" 200 -
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [15/Aug/2026 00:01:53] "POST /api/v2/conversations/test-tools-1786752113-4119 HTTP/1.1" 200 -
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [15/Aug/2026 00:01:53] "POST /api/v2/conversations/test-tools-1786752113-4119/step HTTP/1.1" 200 -
+INFO     gptme.server.api_v2_sessions:api_v2_sessions.py:672 Executing runnable tooluse: ToolUse(tool='shell', args=[], content='ls -la', kwargs=None, call_id=None, start=2)
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [15/Aug/2026 00:01:53] "POST /api/v2/conversations/test-tools-1786752113-4119/tool/confirm HTTP/1.1" 200 -
+INFO     gptme.server.api_v2_sessions:api_v2_sessions.py:383 Tool dfc3c300-f49b-4f29-b0a9-e0b70c759102 executing
+INFO     gptme.server.api_v2_sessions:api_v2_sessions.py:387 Executing tool: shell
+INFO     gptme.server.api_v2_sessions:api_v2_sessions.py:389 Tool execution complete, outputs: 1
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [15/Aug/2026 00:01:53] "GET /api/v2/conversations/test-tools-1786752113-4119 HTTP/1.1" 200 -
+__________________________________ test_echo ___________________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+Hello World!
+_____________________________ test_echo_multiline ______________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+Line 1  
+  Line 2
+Hello
+World
+Hello
+World
+Hello World
+___________________________________ test_cd ____________________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+/tmp
+_____________________________ test_shell_cd_chdir ______________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+/tmp/tmpy2sk99ul
+_____________________________ test_split_commands ______________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+ls -l
+echo "Hello, World!"
+echo "This is a
+multiline command"
+_____________________________ test_heredoc_complex _____________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+This is the outer heredoc
+This is the inner heredoc
+Hello, World!
+________________________ test_heredoc_quoted_delimiters ________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+some content with single quotes
+some content with double quotes
+This $VAR should not be expanded
+______________________ test_split_commands_heredoc_quoted ______________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+________________________________ test_function _________________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+Hello, World!
+________________________________ test_pipeline _________________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+2
+_ test_tool_use_output_patch[markdown-args0-patch-None-```patch test.txt\npatch\n```] _
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_ test_tool_use_output_patch[markdown-args1-patch-kwargs1-```patch test.txt\npatch\n```] _
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_ test_tool_use_output_patch[xml-args2-patch-None-<tool-use>\n<patch args='test.txt'>\npatch\n</patch>\n</tool-use>] _
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_ test_tool_use_output_patch[tool-args3-...-None-@patch: {\n  "path": "test.txt",\n  "patch": "..."\n}] _
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_ test_tool_use_output_patch[tool-args4-patch-kwargs4-@patch: {\n  "path": "test_kwargs.txt",\n  "patch": "..."\n}] _
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_ test_toolcall_regex[@tool(tool_uid): {"param": "value"}-tool-{"param": "value"}] _
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_ test_toolcall_regex[@tool(tool_uid): {"missing": "comma" "key": "value"}-tool-{"missing": "comma", "key": "value"}] _
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_________ test_toolcall_regex[@tool(tool_uid): {invalid json}-tool-{}] _________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_ test_toolcall_regex[@tool(tool_uid): {\n  "param": "value"\n}-tool-{\n  "param": "value"\n}] _
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_ test_toolcall_regex[@tool(tool_uid): {\n  "param": "value with\nnewline",\n  "another": "value"\n}-tool-{\n  "param": "value with\nnewline",\n  "another": "value"\n}] _
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_ test_toolcall_regex[@tool(tool_uid): {"param": {"nested": "value"}}-tool-{"param": {"nested": "value"}}] _
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_ test_toolcall_regex[@tool(tool_uid): {"param": {"deeply": {"nested": "value"}}}-tool-{"param": {"deeply": {"nested": "value"}}}] _
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_ test_toolcall_regex[@tool(tool_uid): {"text": "a string with } brace"}-tool-{"text": "a string with } brace"}] _
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_ test_toolcall_regex[@tool(tool_uid): {"text": "a string with \\"quote\\" and } brace"}-tool-{"text": "a string with \\"quote\\" and } brace"}] _
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_ test_toolcall_regex[@save(tool_uid): {"path": "hello.py", "content": "def main():\n    print(\\"Hello, World!\\")\n    \nif __name__ == \\"__main__\\":\n    main()"}-save-{"path": "hello.py", "content": "def main():\n    print(\\"Hello, World!\\")\n    \nif __name__ == \\"__main__\\":\n    main()"}] _
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_______ test_toolcall_regex_invalid[some text @tool: {'param': 'value'}] _______
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+____________________ test_toolcall_regex_invalid[@tool: {] _____________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+___________ test_toolcall_regex_invalid[  @tool: {'param': 'value'}] ___________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+__________ test_toolcall_regex_invalid[@tool: {"unclosed": "string}] ___________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+______________ test_toolcall_regex_invalid[@tool: {"unclosed": {] ______________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_________ test_toolcall_regex_invalid[@tool: {"mismatched": "quote'}] __________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_______________________________ test_init_tools ________________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+           Using browser tool with playwright                                   
+__________________________ test_init_tools_allowlist ___________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+______________________ test_init_tools_allowlist_from_env ______________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+____________________________ test_init_tools_fails _____________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+________________________ test_tool_loading_with_package ________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+________________________ test_tool_loading_with_module _________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+____________________ test_tool_loading_with_missing_package ____________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+           WARNING  Module or package gptme.fake_ not found       __init__.py:74
+------------------------------ Captured log call -------------------------------
+WARNING  gptme.tools:__init__.py:74 Module or package gptme.fake_ not found
+___________________________ test_get_available_tools ___________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+________________________________ test_has_tool _________________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+________________________________ test_get_tool _________________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+__________________________ test_get_tool_for_lang_tag __________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+__________________________ test_is_supported_lang_tag __________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+__________________________________ test_chats __________________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_________________________ test_parse_key_sequence_text _________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+______________________ test_parse_key_sequence_single_key ______________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_____________________ test_parse_key_sequence_combination ______________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_______________________ test_parse_key_sequence_chained ________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+__________________ test_parse_key_sequence_multiple_modifiers __________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_______________________________ test_key_mapping _______________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+______________________________ test_execute_patch ______________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+
+Preview
+-original lines                                                                 
++modified lines                                                                 
+
+______________________________ test_apply_simple _______________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_____________________________ test_apply_function ______________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+____________________________ test_apply_clear_file _____________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+____________________________ test_apply_rm_function ____________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+____________________________ test_apply_empty_lines ____________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_____________________________ test_apply_multiple ______________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_________________________ test_apply_with_placeholders _________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+______________________________ test_patch_minimal ______________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_____________________ test_apply_with_extra_divider_fails ______________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_______________________ test_apply_with_nested_codeblock _______________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_____________________________ test_execute_python ______________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+
+Preview
+print(1 + 1)                                                                    
+
+2
+
+Preview
+a = 2                                                                           
+print(a)                                                                        
+
+2
+
+Preview
+a = 1                                                                           
+a += 1                                                                          
+print(a)                                                                        
+
+2
+
+Preview
+a = 2                                                                           
+
+
+Preview
+print(a)                                                                        
+
+2
+_______________________ test_execute_python_with_kwargs ________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+
+Preview
+print(1 + 1)                                                                    
+
+2
+___________________________ test_callable_signature ____________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_________________________ test_enhance_messages_no_rag _________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+________________________ test_enhance_messages_disabled ________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+________________________________ test_save_tool ________________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+
+Preview
+Hello, world!                                                                   
+
+
+Preview
+-Hello, world!                                                                  
++Hello again!                                                                   
+
+
+Preview
+Hello, world!                                                                   
+
+_________________________ test_save_tool_placeholders __________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_______________________________ test_append_tool _______________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+
+Preview
+First line                                                                      
+
+
+Preview
+ First line                                                                     
++Second line                                                                    
+
+________________________ test_append_tool_placeholders _________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+________________________ test_shorten_stdout_timestamp _________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+______________________ test_shorten_stdout_common_prefix _______________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+__________________________ test_shorten_stdout_indent __________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+________________________ test_shorten_stdout_blanklines ________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+___________________________ test_extract_json_block ____________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+____________________________ test_extract_json_raw _____________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+___________________________ test_extract_json_empty ____________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_______________________ test_split_text_single_sentence ________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+______________________ test_split_text_multiple_sentences ______________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+___________________________ test_split_text_decimals ___________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+__________________ test_split_text_numbers_before_punctuation __________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+__________________________ test_split_text_paragraphs __________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+__________________________ test_join_short_sentences ___________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+____________________________ test_split_text_lists _____________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+____________________________ test_clean_for_speech _____________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+______________________________ test_generate_name ______________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+______________________________ test_epoch_to_age _______________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+__________________ test_transform_examples_to_chat_directives __________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+______________ test_transform_examples_to_chat_directives_tricky _______________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+__________________________ test_example_to_xml_basic ___________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+After clean_example: '\nUser: Hello\nHow are you?\nAssistant: Hi\n'
+Final result: '<user>\nHello\nHow are 
+you?\n</user>\n<assistant>\nHi\n</assistant>'
+_____________________ test_example_to_xml_preserve_header ______________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+----------------------------- Captured stdout call -----------------------------
+After clean_example: '\nHeader1\n-------\n\nUser: 
+Hello\n\nHeader2\n-------\n\nSystem: blah\n'
+Final result: 
+'Header1\n-------\n\n<user>\nHello\n</user>\n\nHeader2\n-------\n\n<system>\nbla
+h\n</system>'
+______________________________ test_tokens_count _______________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_______________________________ test_chats_list ________________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_______________________________ test_tools_list ________________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+_______________________________ test_tools_info ________________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+=================================== XPASSES ====================================
+_______________________________ test_shell_file ________________________________
+---------------------------- Captured stdout setup -----------------------------
+           WARNING  init() called twice, ignoring                     init.py:26
+------------------------------ Captured log setup ------------------------------
+WARNING  gptme.init:init.py:26 init() called twice, ignoring
+=========================== short test summary info ============================
+PASSED tests/test_browser.py::test_read_url_arxiv_html
+PASSED tests/test_browser.py::test_read_url_arxiv_pdf
+PASSED tests/test_chat.py::test_find_potential_paths
+PASSED tests/test_chat.py::test_find_potential_paths_empty
+PASSED tests/test_chat.py::test_find_potential_paths_punctuation
+PASSED tests/test_chat_config.py::test_chat_config_from_logdir
+PASSED tests/test_chat_config.py::test_chat_config_load_or_create
+PASSED tests/test_cli.py::test_help
+PASSED tests/test_cli.py::test_version
+PASSED tests/test_cli.py::test_command_exit
+PASSED tests/test_cli.py::test_command_help
+PASSED tests/test_cli.py::test_command_tokens
+PASSED tests/test_cli.py::test_command_log
+PASSED tests/test_cli.py::test_command_tools
+PASSED tests/test_cli.py::test_command_fork
+PASSED tests/test_cli.py::test_command_rename
+PASSED tests/test_cli.py::test_fileblock
+PASSED tests/test_cli.py::test_shell
+PASSED tests/test_cli.py::test_python
+PASSED tests/test_cli.py::test_python_error
+PASSED tests/test_cli.py::test_block[ipython]
+PASSED tests/test_cli.py::test_block[sh]
+PASSED tests/test_cli.py::test_stdin
+PASSED tests/test_codeblock.py::test_extract_codeblocks_basic
+PASSED tests/test_codeblock.py::test_extract_codeblocks_multiple
+PASSED tests/test_codeblock.py::test_extract_codeblocks_nested
+PASSED tests/test_codeblock.py::test_extract_codeblocks_unfinished_nested
+PASSED tests/test_codeblock.py::test_extract_codeblocks_empty
+PASSED tests/test_codeblock.py::test_extract_codeblocks_text_only
+PASSED tests/test_codeblock.py::test_extract_codeblocks_no_language
+PASSED tests/test_codeblock.py::test_extract_codeblocks_markdown_with_nested_no_langtag
+PASSED tests/test_codeblock.py::test_extract_codeblocks_consecutive
+PASSED tests/test_config.py::test_get_config
+PASSED tests/test_config.py::test_env_vars_loaded_in_correct_priority
+PASSED tests/test_config.py::test_mcp_config_loaded_in_correct_priority
+PASSED tests/test_config.py::test_mcp_config_loaded_from_toml
+PASSED tests/test_config.py::test_mcp_config_loaded_from_json
+PASSED tests/test_config.py::test_chat_config_loaded_from_toml
+PASSED tests/test_config.py::test_chat_config_loaded_from_json
+PASSED tests/test_config.py::test_chat_config_to_dict
+PASSED tests/test_config.py::test_chat_config_to_toml
+PASSED tests/test_config.py::test_default_chat_config_to_toml
+PASSED tests/test_config.py::test_project_config_loaded_from_toml
+PASSED tests/test_config.py::test_project_config_loaded_from_json
+PASSED tests/test_config.py::test_project_config_to_dict
+PASSED tests/test_config.py::test_project_config_to_toml
+PASSED tests/test_context.py::test_file_to_display_path
+PASSED tests/test_context.py::test_append_file_content
+PASSED tests/test_context.py::test_gather_fresh_context
+PASSED tests/test_context.py::test_get_mentioned_files
+PASSED tests/test_llm_anthropic.py::test_message_conversion
+PASSED tests/test_llm_anthropic.py::test_message_conversion_without_tools
+PASSED tests/test_llm_anthropic.py::test_message_conversion_with_tools
+PASSED tests/test_llm_anthropic.py::test_message_conversion_with_tool_and_non_tool
+PASSED tests/test_llm_openai.py::test_message_conversion
+PASSED tests/test_llm_openai.py::test_message_conversion_o1
+PASSED tests/test_llm_openai.py::test_message_conversion_without_tools
+PASSED tests/test_llm_openai.py::test_message_conversion_with_tools
+PASSED tests/test_llm_openai.py::test_message_conversion_with_tool_and_non_tool
+PASSED tests/test_logmanager.py::test_branch
+PASSED tests/test_message.py::test_toml
+PASSED tests/test_message.py::test_get_codeblocks
+PASSED tests/test_prompt.py::test_is_valid_path
+PASSED tests/test_prompt.py::test_path_lexer[absolute_path]
+PASSED tests/test_prompt.py::test_path_lexer[explicit_relative_path]
+PASSED tests/test_prompt.py::test_path_lexer[nonexistent_path]
+PASSED tests/test_prompt.py::test_path_lexer[quoted_path]
+PASSED tests/test_prompt.py::test_path_lexer[escaped_spaces]
+PASSED tests/test_prompt.py::test_path_lexer[invalid_path]
+PASSED tests/test_prompt.py::test_path_lexer_caching
+PASSED tests/test_prompt.py::test_symlink_handling
+PASSED tests/test_prompt.py::test_cache_clearing_on_chdir
+PASSED tests/test_prompt.py::test_get_input_cache_clearing
+PASSED tests/test_prompt_tools.py::test_prompt_tools[Markdown with example]
+PASSED tests/test_prompt_tools.py::test_prompt_tools[Markdown without example]
+PASSED tests/test_prompt_tools.py::test_prompt_tools[XML with example]
+PASSED tests/test_prompt_tools.py::test_prompt_tools[XML without example]
+PASSED tests/test_prompt_tools.py::test_prompt_tools[Tool with example]
+PASSED tests/test_prompt_tools.py::test_prompt_tools[Tool without example]
+PASSED tests/test_reduce.py::test_truncate_msg
+PASSED tests/test_reduce.py::test_reduce_log
+PASSED tests/test_server.py::test_root
+PASSED tests/test_server.py::test_api_root
+PASSED tests/test_server.py::test_api_conversation_list
+PASSED tests/test_server_v2.py::test_v2_api_root
+PASSED tests/test_server_v2.py::test_v2_conversations_list
+PASSED tests/test_server_v2.py::test_v2_conversation_get
+PASSED tests/test_server_v2.py::test_v2_create_conversation_default_system_prompt
+PASSED tests/test_server_v2.py::test_v2_chat_config_saved_on_conversation_create
+PASSED tests/test_server_v2.py::test_v2_chat_config_saved_separately_for_each_conversation
+PASSED tests/test_server_v2.py::test_v2_chat_config_get_works
+PASSED tests/test_server_v2.py::test_v2_chat_config_update_works
+PASSED tests/test_server_v2_auto_stepping.py::test_auto_stepping
+PASSED tests/test_server_v2_sse.py::test_event_stream
+PASSED tests/test_server_v2_tool_confirmation.py::test_tool_confirmation_flow
+PASSED tests/test_shell.py::test_echo
+PASSED tests/test_shell.py::test_echo_multiline
+PASSED tests/test_shell.py::test_cd
+PASSED tests/test_shell.py::test_shell_cd_chdir
+PASSED tests/test_shell.py::test_split_commands
+PASSED tests/test_shell.py::test_heredoc_complex
+PASSED tests/test_shell.py::test_heredoc_quoted_delimiters
+PASSED tests/test_shell.py::test_split_commands_heredoc_quoted
+PASSED tests/test_shell.py::test_function
+PASSED tests/test_shell.py::test_pipeline
+PASSED tests/test_tool_use.py::test_tool_use_output_patch[markdown-args0-patch-None-```patch test.txt\npatch\n```]
+PASSED tests/test_tool_use.py::test_tool_use_output_patch[markdown-args1-patch-kwargs1-```patch test.txt\npatch\n```]
+PASSED tests/test_tool_use.py::test_tool_use_output_patch[xml-args2-patch-None-<tool-use>\n<patch args='test.txt'>\npatch\n</patch>\n</tool-use>]
+PASSED tests/test_tool_use.py::test_tool_use_output_patch[tool-args3-...-None-@patch: {\n  "path": "test.txt",\n  "patch": "..."\n}]
+PASSED tests/test_tool_use.py::test_tool_use_output_patch[tool-args4-patch-kwargs4-@patch: {\n  "path": "test_kwargs.txt",\n  "patch": "..."\n}]
+PASSED tests/test_tool_use.py::test_toolcall_regex[@tool(tool_uid): {"param": "value"}-tool-{"param": "value"}]
+PASSED tests/test_tool_use.py::test_toolcall_regex[@tool(tool_uid): {"missing": "comma" "key": "value"}-tool-{"missing": "comma", "key": "value"}]
+PASSED tests/test_tool_use.py::test_toolcall_regex[@tool(tool_uid): {invalid json}-tool-{}]
+PASSED tests/test_tool_use.py::test_toolcall_regex[@tool(tool_uid): {\n  "param": "value"\n}-tool-{\n  "param": "value"\n}]
+PASSED tests/test_tool_use.py::test_toolcall_regex[@tool(tool_uid): {\n  "param": "value with\nnewline",\n  "another": "value"\n}-tool-{\n  "param": "value with\nnewline",\n  "another": "value"\n}]
+PASSED tests/test_tool_use.py::test_toolcall_regex[@tool(tool_uid): {"param": {"nested": "value"}}-tool-{"param": {"nested": "value"}}]
+PASSED tests/test_tool_use.py::test_toolcall_regex[@tool(tool_uid): {"param": {"deeply": {"nested": "value"}}}-tool-{"param": {"deeply": {"nested": "value"}}}]
+PASSED tests/test_tool_use.py::test_toolcall_regex[@tool(tool_uid): {"text": "a string with } brace"}-tool-{"text": "a string with } brace"}]
+PASSED tests/test_tool_use.py::test_toolcall_regex[@tool(tool_uid): {"text": "a string with \\"quote\\" and } brace"}-tool-{"text": "a string with \\"quote\\" and } brace"}]
+PASSED tests/test_tool_use.py::test_toolcall_regex[@save(tool_uid): {"path": "hello.py", "content": "def main():\n    print(\\"Hello, World!\\")\n    \nif __name__ == \\"__main__\\":\n    main()"}-save-{"path": "hello.py", "content": "def main():\n    print(\\"Hello, World!\\")\n    \nif __name__ == \\"__main__\\":\n    main()"}]
+PASSED tests/test_tool_use.py::test_toolcall_regex_invalid[some text @tool: {'param': 'value'}]
+PASSED tests/test_tool_use.py::test_toolcall_regex_invalid[@tool: {]
+PASSED tests/test_tool_use.py::test_toolcall_regex_invalid[  @tool: {'param': 'value'}]
+PASSED tests/test_tool_use.py::test_toolcall_regex_invalid[@tool: {"unclosed": "string}]
+PASSED tests/test_tool_use.py::test_toolcall_regex_invalid[@tool: {"unclosed": {]
+PASSED tests/test_tool_use.py::test_toolcall_regex_invalid[@tool: {"mismatched": "quote'}]
+PASSED tests/test_tools.py::test_init_tools
+PASSED tests/test_tools.py::test_init_tools_allowlist
+PASSED tests/test_tools.py::test_init_tools_allowlist_from_env
+PASSED tests/test_tools.py::test_init_tools_fails
+PASSED tests/test_tools.py::test_tool_loading_with_package
+PASSED tests/test_tools.py::test_tool_loading_with_module
+PASSED tests/test_tools.py::test_tool_loading_with_missing_package
+PASSED tests/test_tools.py::test_get_available_tools
+PASSED tests/test_tools.py::test_has_tool
+PASSED tests/test_tools.py::test_get_tool
+PASSED tests/test_tools.py::test_get_tool_for_lang_tag
+PASSED tests/test_tools.py::test_is_supported_lang_tag
+PASSED tests/test_tools_chats.py::test_chats
+PASSED tests/test_tools_computer.py::test_parse_key_sequence_text
+PASSED tests/test_tools_computer.py::test_parse_key_sequence_single_key
+PASSED tests/test_tools_computer.py::test_parse_key_sequence_combination
+PASSED tests/test_tools_computer.py::test_parse_key_sequence_chained
+PASSED tests/test_tools_computer.py::test_parse_key_sequence_multiple_modifiers
+PASSED tests/test_tools_computer.py::test_key_mapping
+PASSED tests/test_tools_patch.py::test_execute_patch
+PASSED tests/test_tools_patch.py::test_apply_simple
+PASSED tests/test_tools_patch.py::test_apply_function
+PASSED tests/test_tools_patch.py::test_apply_clear_file
+PASSED tests/test_tools_patch.py::test_apply_rm_function
+PASSED tests/test_tools_patch.py::test_apply_empty_lines
+PASSED tests/test_tools_patch.py::test_apply_multiple
+PASSED tests/test_tools_patch.py::test_apply_with_placeholders
+PASSED tests/test_tools_patch.py::test_patch_minimal
+PASSED tests/test_tools_patch.py::test_apply_with_extra_divider_fails
+PASSED tests/test_tools_patch.py::test_apply_with_nested_codeblock
+PASSED tests/test_tools_python.py::test_execute_python
+PASSED tests/test_tools_python.py::test_execute_python_with_kwargs
+PASSED tests/test_tools_python.py::test_callable_signature
+PASSED tests/test_tools_rag.py::test_enhance_messages_no_rag
+PASSED tests/test_tools_rag.py::test_enhance_messages_disabled
+PASSED tests/test_tools_save.py::test_save_tool
+PASSED tests/test_tools_save.py::test_save_tool_placeholders
+PASSED tests/test_tools_save.py::test_append_tool
+PASSED tests/test_tools_save.py::test_append_tool_placeholders
+PASSED tests/test_tools_shell.py::test_shorten_stdout_timestamp
+PASSED tests/test_tools_shell.py::test_shorten_stdout_common_prefix
+PASSED tests/test_tools_shell.py::test_shorten_stdout_indent
+PASSED tests/test_tools_shell.py::test_shorten_stdout_blanklines
+PASSED tests/test_tools_subagent.py::test_extract_json_block
+PASSED tests/test_tools_subagent.py::test_extract_json_raw
+PASSED tests/test_tools_subagent.py::test_extract_json_empty
+PASSED tests/test_tools_tts.py::test_split_text_single_sentence
+PASSED tests/test_tools_tts.py::test_split_text_multiple_sentences
+PASSED tests/test_tools_tts.py::test_split_text_decimals
+PASSED tests/test_tools_tts.py::test_split_text_numbers_before_punctuation
+PASSED tests/test_tools_tts.py::test_split_text_paragraphs
+PASSED tests/test_tools_tts.py::test_join_short_sentences
+PASSED tests/test_tools_tts.py::test_split_text_lists
+PASSED tests/test_tools_tts.py::test_clean_for_speech
+PASSED tests/test_util.py::test_generate_name
+PASSED tests/test_util.py::test_epoch_to_age
+PASSED tests/test_util.py::test_transform_examples_to_chat_directives
+PASSED tests/test_util.py::test_transform_examples_to_chat_directives_tricky
+PASSED tests/test_util.py::test_example_to_xml_basic
+PASSED tests/test_util.py::test_example_to_xml_preserve_header
+PASSED tests/test_util_cli.py::test_tokens_count
+PASSED tests/test_util_cli.py::test_chats_list
+PASSED tests/test_util_cli.py::test_tools_list
+PASSED tests/test_util_cli.py::test_tools_info
+SKIPPED [1] tests/test_browser.py:11: unconditional skip
+SKIPPED [1] tests/test_browser.py:19: unconditional skip
+SKIPPED [1] tests/test_cli.py:108: No API key configured
+SKIPPED [1] tests/test_cli.py:136: No API key configured
+SKIPPED [1] tests/test_cli.py:276: No API key configured
+SKIPPED [1] tests/test_cli.py:299: No API key configured
+SKIPPED [1] tests/test_cli.py:335: No API key configured
+SKIPPED [1] tests/test_cli.py:354: No API key configured
+SKIPPED [1] tests/test_cli.py:386: No API key configured
+SKIPPED [1] tests/test_cli.py:399: No API key configured
+SKIPPED [3] tests/test_cli.py:410: No API key configured
+SKIPPED [1] tests/test_eval.py:23: No API key configured
+SKIPPED [1] tests/test_eval.py:44: No API key configured
+SKIPPED [1] tests/test_mcp.py:89: pipx or uvx not found in PATH
+SKIPPED [1] tests/test_mcp.py:104: pipx or uvx not found in PATH
+SKIPPED [1] tests/test_mcp.py:143: pipx or uvx not found in PATH
+SKIPPED [1] tests/test_mcp.py:160: pipx or uvx not found in PATH
+SKIPPED [1] tests/test_server.py:51: No API key configured
+SKIPPED [1] tests/test_server_v2.py:170: No API key configured
+SKIPPED [1] tests/test_server_v2.py:205: No API key configured
+SKIPPED [1] tests/test_server_v2_sse.py:41: No API key configured
+SKIPPED [1] tests/test_tools_computer.py:111: Test requires a working display environment
+SKIPPED [1] tests/test_tools_computer.py:132: macOS-only test
+SKIPPED [1] tests/test_tools_computer.py:144: Test requires a working display environment
+SKIPPED [1] tests/test_tools_rag.py:11: RAG is not available
+SKIPPED [1] tests/test_util_cli.py:111: gptme-rag not available
+XPASS tests/test_cli.py::test_shell_file
+ERROR tests/test_prompts.py::test_get_prompt_full - ValueError: Tool 'python'...
+ERROR tests/test_prompts.py::test_get_prompt_short - ValueError: Tool 'python...
+ERROR tests/test_prompts.py::test_get_prompt_custom - ValueError: Tool 'pytho...
+FAILED tests/test_browser.py::test_read_url_with_links - RuntimeError: Browse...
+FAILED tests/test_config.py::test_resume_config_precedence - AssertionError: ...
+FAILED tests/test_server.py::test_api_conversation_get - assert 500 == 200
+FAILED tests/test_server.py::test_api_conversation_post - assert 500 == 200
+FAILED tests/test_server.py::test_api_conversation_generate_stream - assert 5...
+FAILED tests/test_server_v2.py::test_v2_conversation_post - assert 500 == 200
+======== 6 failed, 190 passed, 28 skipped, 1 xpassed, 3 errors in 4.75s ========

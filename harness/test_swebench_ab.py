@@ -94,24 +94,60 @@ def test_prism_arm_runs_plain_init_and_never_denies_search():
         f"reverted in v0.52.0 and this silently changes what is measured: "
         f"{init_calls[0]}")
 
-    for name in ("Grep", "Bash(grep:*)", "Bash(rg:*)"):
-        assert name in prism_call["tools"], (
-            f"prism arm's --allowedTools must include {name}: the agent has to "
-            f"be free to choose grep over prism for the choice to mean anything")
-    assert prism_call["disallowed"] is None, (
-        "prism arm must not pass --disallowedTools — that was the pre-v0.50.0 "
-        "simulation of a mechanism that no longer exists")
+    # grep must be REACHABLE -- the agent has to be free to choose it over
+    # prism for the choice to mean anything. Expressed as "not denied" rather
+    # than "matches a pattern", because Bash is now allowed broadly.
+    assert "Bash" in prism_call["tools"] or "Bash(grep:*)" in prism_call["tools"], (
+        f"prism arm cannot reach grep: {prism_call['tools']}")
+    for pat in (prism_call["disallowed"] or []):
+        assert "grep" not in pat and "rg" not in pat, (
+            f"grep/rg must never be in the denylist: {pat}")
 
     assert "mcp__prism" in prism_call["tools"]
     assert prism_call["mcp"].endswith(".mcp.json"), (
         f"prism arm must point --mcp-config at the worktree's own .mcp.json "
         f"(written by init), not a shared static file: {prism_call['mcp']}")
 
-    assert baseline_call["disallowed"] is None
     assert "mcp__prism" not in baseline_call["tools"]
     assert baseline_call["mcp"] == ""
     print("OK: prism arm runs plain `prism init`, keeps grep available, "
           "passes no --disallowedTools; baseline unaffected")
+
+
+def test_boundary_is_denied_in_every_arm():
+    """The contamination boundary must hold on BOTH arms, always.
+
+    gh and curl are the routes to the gold fix an agent actually took: the
+    beets-5890 cell ran `gh pr view 5890 --json title,body,files` twice and
+    WebFetch'd the PR's files page. The instance_id leaks the PR number, so
+    this is a live threat, not a hypothetical. Bash is now allowed broadly,
+    which means the denylist is the ONLY thing standing between an agent and
+    the answer -- if it regresses, cells silently become copying exercises.
+    """
+    calls, _ = _run_arms("prism", "baseline", "prism-cli")
+    for c in calls:
+        dis = c["disallowed"] or []
+        for needed in ("Bash(gh:*)", "Bash(curl:*)", "Bash(wget:*)", "WebFetch", "WebSearch"):
+            assert needed in dis, (
+                f"{needed} missing from --disallowedTools: {dis}")
+
+
+def test_broad_bash_is_allowed_so_the_toolchain_works():
+    """Ordinary Python build/test idioms must not be refused.
+
+    The old enumeration denied `uv` 93 times, `pip`, `pytest`, and 46
+    `PYTHONPATH=... python3` invocations across one 38-task run -- none of
+    them dangerous, all of them simply absent from the list. An env-var
+    prefix cannot be expressed as a binary pattern at all, so enumeration
+    could never have covered it. Verified live: under broad Bash,
+    `PYTHONPATH=. python3`, `uv` and `pip` all run while gh and curl are
+    refused.
+    """
+    calls, _ = _run_arms("prism", "baseline")
+    for c in calls:
+        assert "Bash" in c["tools"], (
+            f"Bash must be allowed broadly; enumerating binaries measures the "
+            f"allowlist instead of the agent: {c['tools']}")
 
 
 def test_both_arms_get_identical_investigation_guidance():
@@ -193,6 +229,8 @@ def test_clip_keeps_lists_but_bounds_strings():
 if __name__ == "__main__":
     test_prism_arm_runs_plain_init_and_never_denies_search()
     test_prism_cli_arm_has_no_mcp_at_all()
+    test_boundary_is_denied_in_every_arm()
+    test_broad_bash_is_allowed_so_the_toolchain_works()
     test_cli_and_mcp_steering_teach_the_same_routes()
     test_both_arms_get_identical_investigation_guidance()
     test_tool_calls_capture_mcp_arguments()

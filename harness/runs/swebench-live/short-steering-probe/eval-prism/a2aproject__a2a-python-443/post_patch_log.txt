@@ -1,0 +1,1427 @@
+cat testlog.out
+   Building a2a-sdk @ file:///testbed
+      Built a2a-sdk @ file:///testbed
+Uninstalled 1 package in 21ms
+Installed 1 package in 1ms
+============================= test session starts ==============================
+platform linux -- Python 3.10.18, pytest-8.4.1, pluggy-1.6.0
+rootdir: /testbed
+configfile: pyproject.toml
+testpaths: tests
+plugins: asyncio-1.1.0, cov-6.2.1, mock-3.14.1, respx-0.22.0, typeguard-4.4.4, anyio-4.9.0
+asyncio: mode=strict, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 720 items
+
+tests/auth/test_user.py ..                                               [  0%]
+tests/client/test_auth_middleware.py ........                            [  1%]
+tests/client/test_base_client.py ...                                     [  1%]
+tests/client/test_client_factory.py ....                                 [  2%]
+tests/client/test_client_task_manager.py ...........                     [  3%]
+tests/client/test_errors.py ........................                     [  7%]
+tests/client/test_grpc_client.py .....                                   [  7%]
+tests/client/test_jsonrpc_client.py .............................        [ 11%]
+tests/client/test_legacy_client.py ..                                    [ 12%]
+tests/client/test_optionals.py .                                         [ 12%]
+tests/extensions/test_common.py ...                                      [ 12%]
+tests/integration/test_client_server_integration.py .................... [ 15%]
+.....                                                                    [ 16%]
+tests/server/agent_execution/test_context.py ........................    [ 19%]
+tests/server/agent_execution/test_simple_request_context_builder.py .... [ 20%]
+.F...                                                                    [ 20%]
+tests/server/apps/jsonrpc/test_fastapi_app.py ..                         [ 21%]
+tests/server/apps/jsonrpc/test_jsonrpc_app.py ............               [ 22%]
+tests/server/apps/jsonrpc/test_serialization.py ......                   [ 23%]
+tests/server/apps/jsonrpc/test_starlette_app.py ..                       [ 23%]
+tests/server/apps/rest/test_rest_fastapi_app.py ................         [ 26%]
+tests/server/events/test_event_consumer.py ...................           [ 28%]
+tests/server/events/test_event_queue.py .........................        [ 32%]
+tests/server/events/test_inmemory_queue_manager.py ............          [ 33%]
+tests/server/request_handlers/test_default_request_handler.py .......... [ 35%]
+.........................................                                [ 40%]
+tests/server/request_handlers/test_grpc_handler.py ..................... [ 43%]
+..                                                                       [ 44%]
+tests/server/request_handlers/test_jsonrpc_handler.py .................. [ 46%]
+...............                                                          [ 48%]
+tests/server/request_handlers/test_response_helpers.py .............     [ 50%]
+tests/server/tasks/test_database_push_notification_config_store.py .ss.s [ 51%]
+s.ss.ss.ss.ss.ss.ss.ss.ss.ss.ss.ss.ss.ss.ss.ss.ss                        [ 58%]
+tests/server/tasks/test_database_task_store.py .ss.ss.ss.ss.ss.ss.ss.ss. [ 61%]
+ss                                                                       [ 61%]
+tests/server/tasks/test_inmemory_push_notifications.py ..............    [ 63%]
+tests/server/tasks/test_inmemory_task_store.py ....                      [ 64%]
+tests/server/tasks/test_push_notification_sender.py ......               [ 65%]
+tests/server/tasks/test_result_aggregator.py ...............             [ 67%]
+tests/server/tasks/test_task_manager.py ................                 [ 69%]
+tests/server/tasks/test_task_updater.py ................................ [ 73%]
+...                                                                      [ 74%]
+tests/server/test_integration.py ................................        [ 78%]
+tests/server/test_models.py .......                                      [ 79%]
+tests/test_types.py .................................................... [ 86%]
+......                                                                   [ 87%]
+tests/utils/test_artifact.py .........                                   [ 89%]
+tests/utils/test_constants.py ..                                         [ 89%]
+tests/utils/test_error_handlers.py .....                                 [ 90%]
+tests/utils/test_helpers.py ................                             [ 92%]
+tests/utils/test_message.py .......................                      [ 95%]
+tests/utils/test_proto_utils.py .........                                [ 96%]
+tests/utils/test_task.py .............                                   [ 98%]
+tests/utils/test_telemetry.py ...........                                [100%]
+
+=================================== FAILURES ===================================
+_ TestSimpleRequestContextBuilder.test_build_populate_true_with_reference_task_ids _
+
+self = <test_simple_request_context_builder.TestSimpleRequestContextBuilder testMethod=test_build_populate_true_with_reference_task_ids>
+
+    async def test_build_populate_true_with_reference_task_ids(self):
+        builder = SimpleRequestContextBuilder(
+            should_populate_referred_tasks=True, task_store=self.mock_task_store
+        )
+        ref_task_id1 = 'ref_task1'
+        ref_task_id2 = 'ref_task2_missing'
+        ref_task_id3 = 'ref_task3'
+    
+        mock_ref_task1 = create_sample_task(task_id=ref_task_id1)
+        mock_ref_task3 = create_sample_task(task_id=ref_task_id3)
+    
+        # Configure task_store.get mock
+        # Note: AsyncMock side_effect needs to handle multiple calls if they have different args.
+        # A simple way is a list of return values, or a function.
+        async def get_side_effect(task_id):
+            if task_id == ref_task_id1:
+                return mock_ref_task1
+            if task_id == ref_task_id3:
+                return mock_ref_task3
+            return None
+    
+        self.mock_task_store.get = AsyncMock(side_effect=get_side_effect)
+    
+        params = MessageSendParams(
+            message=create_sample_message(
+                reference_task_ids=[ref_task_id1, ref_task_id2, ref_task_id3]
+            )
+        )
+        server_call_context = ServerCallContext(user=UnauthenticatedUser())
+    
+>       request_context = await builder.build(
+            params=params,
+            task_id='t1',
+            context_id='c1',
+            task=None,
+            context=server_call_context,
+        )
+
+tests/server/agent_execution/test_simple_request_context_builder.py:150: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/a2a/server/agent_execution/simple_request_context_builder.py:62: in build
+    tasks = await asyncio.gather(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <AsyncMock name='mock.get' id='140737384246928'>
+args = ('ref_task1', ServerCallContext(state={}, user=<a2a.auth.user.UnauthenticatedUser object at 0x7ffff8eb3e80>, requested_extensions=set(), activated_extensions=set()))
+kwargs = {}
+_call = call('ref_task1', ServerCallContext(state={}, user=<a2a.auth.user.UnauthenticatedUser object at 0x7ffff8eb3e80>, requested_extensions=set(), activated_extensions=set()))
+effect = <function TestSimpleRequestContextBuilder.test_build_populate_true_with_reference_task_ids.<locals>.get_side_effect at 0x7ffff84b09d0>
+
+    async def _execute_mock_call(self, /, *args, **kwargs):
+        # This is nearly just like super(), except for special handling
+        # of coroutines
+    
+        _call = _Call((args, kwargs), two=True)
+        self.await_count += 1
+        self.await_args = _call
+        self.await_args_list.append(_call)
+    
+        effect = self.side_effect
+        if effect is not None:
+            if _is_exception(effect):
+                raise effect
+            elif not _callable(effect):
+                try:
+                    result = next(effect)
+                except StopIteration:
+                    # It is impossible to propogate a StopIteration
+                    # through coroutines because of PEP 479
+                    raise StopAsyncIteration
+                if _is_exception(result):
+                    raise result
+            elif iscoroutinefunction(effect):
+>               result = await effect(*args, **kwargs)
+E               TypeError: TestSimpleRequestContextBuilder.test_build_populate_true_with_reference_task_ids.<locals>.get_side_effect() takes 1 positional argument but 2 were given
+
+/usr/local/lib/python3.10/unittest/mock.py:2245: TypeError
+=============================== warnings summary ===============================
+tests/client/test_grpc_client.py::test_send_message_task_response
+tests/client/test_grpc_client.py::test_send_message_message_response
+tests/client/test_grpc_client.py::test_get_task
+tests/client/test_grpc_client.py::test_get_task_with_history
+tests/client/test_grpc_client.py::test_cancel_task
+  /testbed/tests/client/test_grpc_client.py:60: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+    transport.stub = mock_grpc_stub
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/client/test_jsonrpc_client.py::TestJsonRpcTransport::test_send_message_error_response
+  /testbed/src/a2a/client/transports/jsonrpc.py:187: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+    response.raise_for_status()
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/client/test_jsonrpc_client.py::TestJsonRpcTransport::test_send_message_streaming_success
+  /testbed/.venv/lib/python3.10/site-packages/pydantic/main.py:253: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/client/test_legacy_client.py::test_a2a_client_send_message
+  /testbed/tests/client/test_legacy_client.py:71: DeprecationWarning: A2AClient is deprecated and will be removed in a future version. Use ClientFactory to create a client with a JSON-RPC transport.
+    client = A2AClient(
+
+tests/client/test_legacy_client.py::test_a2a_grpc_client_get_task
+  /testbed/tests/client/test_legacy_client.py:101: DeprecationWarning: A2AGrpcClient is deprecated and will be removed in a future version. Use ClientFactory to create a client with a gRPC transport.
+    client = A2AGrpcClient(grpc_stub=mock_grpc_stub, agent_card=grpc_agent_card)
+
+tests/server/events/test_event_queue.py::test_close_propagates_to_children
+  /usr/local/lib/python3.10/inspect.py:2173: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+    class RewriteSymbolics(ast.NodeTransformer):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/server/request_handlers/test_default_request_handler.py::test_on_message_send_with_push_notification_in_non_blocking_request
+  /usr/local/lib/python3.10/inspect.py:2186: RuntimeWarning: coroutine 'test_on_message_send_with_push_notification.<locals>.get_current_result' was never awaited
+    def visit_Name(self, node):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/server/request_handlers/test_default_request_handler.py::test_on_message_send_interrupted_flow
+  /usr/local/lib/python3.10/unittest/mock.py:2135: RuntimeWarning: coroutine 'test_on_message_send_with_push_notification_no_existing_Task.<locals>.get_current_result' was never awaited
+    setattr(_type, entry, MagicProxy(entry, self))
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_on_cancel_task_success
+  /usr/local/lib/python3.10/inspect.py:2224: RuntimeWarning: coroutine 'DefaultRequestHandler._run_event_stream' was never awaited
+    for i, (name, default) in enumerate(reversed(list(iter))):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_on_cancel_task_success
+  /usr/local/lib/python3.10/inspect.py:2224: RuntimeWarning: coroutine 'DefaultRequestHandler._cleanup_producer' was never awaited
+    for i, (name, default) in enumerate(reversed(list(iter))):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/server/tasks/test_database_push_notification_config_store.py::test_custom_table_name[sqlite]
+tests/server/test_models.py::test_create_push_notification_config_model
+  /testbed/src/a2a/server/models.py:228: SAWarning: This declarative base already contains a class with the same class name and module name as a2a.server.models.PushNotificationConfigModel, and will be replaced in the string-lookup table.
+    class PushNotificationConfigModel(PushNotificationConfigMixin, base):  # type: ignore
+
+tests/server/test_models.py::test_create_task_model
+  /testbed/src/a2a/server/models.py:180: SAWarning: This declarative base already contains a class with the same class name and module name as a2a.server.models.TaskModel, and will be replaced in the string-lookup table.
+    class TaskModel(TaskMixin, base):  # type: ignore
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+==================================== PASSES ====================================
+___________________________ test_handle_invalid_json ___________________________
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/testbed/src/a2a/server/apps/jsonrpc/jsonrpc_app.py", line 286, in _handle_requests
+    body = await request.json()
+  File "/testbed/.venv/lib/python3.10/site-packages/starlette/requests.py", line 250, in json
+    self._json = json.loads(body)
+  File "/usr/local/lib/python3.10/json/__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+  File "/usr/local/lib/python3.10/json/decoder.py", line 337, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+  File "/usr/local/lib/python3.10/json/decoder.py", line 353, in raw_decode
+    obj, end = self.scan_once(s, idx)
+json.decoder.JSONDecodeError: Expecting ',' delimiter: line 1 column 76 (char 75)
+------------------------------ Captured log call -------------------------------
+WARNING  a2a.server.apps.jsonrpc.jsonrpc_app:jsonrpc_app.py:249 Request Error (ID: None): Code=-32700, Message='Expecting ',' delimiter: line 1 column 76 (char 75)'
+________________________ test_handle_oversized_payload _________________________
+------------------------------ Captured log call -------------------------------
+WARNING  a2a.server.apps.jsonrpc.jsonrpc_app:jsonrpc_app.py:249 Request Error (ID: 1): Code=-32600, Message='Payload too large'
+_________________________ test_consume_one_queue_empty _________________________
+------------------------------ Captured log call -------------------------------
+WARNING  a2a.server.events.event_consumer:event_consumer.py:60 Event queue was empty in consume_one.
+________________________ test_enqueue_event_when_closed ________________________
+------------------------------ Captured log call -------------------------------
+WARNING  a2a.server.events.event_queue:event_queue.py:54 Queue is closed. Event will not be enqueued.
+WARNING  a2a.server.events.event_queue:event_queue.py:99 Queue is closed. Event will not be dequeued.
+WARNING  a2a.server.events.event_queue:event_queue.py:99 Queue is closed. Event will not be dequeued.
+_________________ test_dequeue_event_closed_and_empty_no_wait __________________
+------------------------------ Captured log call -------------------------------
+WARNING  a2a.server.events.event_queue:event_queue.py:99 Queue is closed. Event will not be dequeued.
+____________ test_dequeue_event_closed_and_empty_waits_then_raises _____________
+------------------------------ Captured log call -------------------------------
+WARNING  a2a.server.events.event_queue:event_queue.py:99 Queue is closed. Event will not be dequeued.
+________________ test_on_message_send_no_result_from_aggregator ________________
+------------------------------ Captured log call -------------------------------
+ERROR    a2a.server.request_handlers.default_request_handler:default_request_handler.py:354 Agent execution failed
+Traceback (most recent call last):
+  File "/testbed/src/a2a/server/request_handlers/default_request_handler.py", line 344, in on_message_send
+    raise ServerError(error=InternalError())  # noqa: TRY301
+a2a.utils.errors.ServerError
+____________________ test_on_message_send_task_id_mismatch _____________________
+------------------------------ Captured log call -------------------------------
+ERROR    a2a.server.request_handlers.default_request_handler:default_request_handler.py:284 Agent generated task_id=DIFFERENT_task_id_1 does not match the RequestContext task_id=context_task_id_1.
+ERROR    a2a.server.request_handlers.default_request_handler:default_request_handler.py:354 Agent execution failed
+Traceback (most recent call last):
+  File "/testbed/src/a2a/server/request_handlers/default_request_handler.py", line 347, in on_message_send
+    self._validate_task_id_match(task_id, result.id)
+  File "/testbed/src/a2a/utils/telemetry.py", line 236, in sync_wrapper
+    result = func(*args, **kwargs)
+  File "/testbed/src/a2a/server/request_handlers/default_request_handler.py", line 289, in _validate_task_id_match
+    raise ServerError(
+a2a.utils.errors.ServerError: code=-32603 data=None message='Task ID mismatch in agent response'
+_________________ test_on_message_send_stream_task_id_mismatch _________________
+------------------------------ Captured log call -------------------------------
+ERROR    a2a.server.request_handlers.default_request_handler:default_request_handler.py:284 Agent generated task_id=DIFFERENT_stream_task_id does not match the RequestContext task_id=stream_task_id_ctx.
+__________________ TestJSONRPCtHandler.test_on_message_error ___________________
+------------------------------ Captured log call -------------------------------
+ERROR    a2a.server.request_handlers.default_request_handler:default_request_handler.py:354 Agent execution failed
+Traceback (most recent call last):
+  File "/testbed/src/a2a/server/request_handlers/default_request_handler.py", line 338, in on_message_send
+    ) = await result_aggregator.consume_and_break_on_interrupt(
+  File "/testbed/src/a2a/server/tasks/result_aggregator.py", line 128, in consume_and_break_on_interrupt
+    async for event in event_stream:
+  File "/testbed/tests/server/request_handlers/test_jsonrpc_handler.py", line 305, in streaming_coro
+    raise ServerError(error=UnsupportedOperationError())
+a2a.utils.errors.ServerError
+___________ TestJSONRPCtHandler.test_on_message_send_error_handling ____________
+------------------------------ Captured log call -------------------------------
+ERROR    a2a.server.request_handlers.default_request_handler:default_request_handler.py:354 Agent execution failed
+Traceback (most recent call last):
+  File "/testbed/src/a2a/server/request_handlers/default_request_handler.py", line 338, in on_message_send
+    ) = await result_aggregator.consume_and_break_on_interrupt(
+  File "/usr/local/lib/python3.10/unittest/mock.py", line 2245, in _execute_mock_call
+    result = await effect(*args, **kwargs)
+  File "/testbed/tests/server/request_handlers/test_jsonrpc_handler.py", line 963, in consume_raises_error
+    raise ServerError(error=UnsupportedOperationError())
+a2a.utils.errors.ServerError
+__________ TestJSONRPCtHandler.test_on_message_send_task_id_mismatch ___________
+------------------------------ Captured log call -------------------------------
+ERROR    a2a.server.request_handlers.default_request_handler:default_request_handler.py:284 Agent generated task_id=task_123 does not match the RequestContext task_id=27d51698-a8f5-4126-baa0-0c4a428ac16a.
+ERROR    a2a.server.request_handlers.default_request_handler:default_request_handler.py:354 Agent execution failed
+Traceback (most recent call last):
+  File "/testbed/src/a2a/server/request_handlers/default_request_handler.py", line 347, in on_message_send
+    self._validate_task_id_match(task_id, result.id)
+  File "/testbed/src/a2a/utils/telemetry.py", line 236, in sync_wrapper
+    result = func(*args, **kwargs)
+  File "/testbed/src/a2a/server/request_handlers/default_request_handler.py", line 289, in _validate_task_id_match
+    raise ServerError(
+a2a.utils.errors.ServerError: code=-32603 data=None message='Task ID mismatch in agent response'
+_ TestJSONRPCtHandler.test_on_message_stream_new_message_send_push_notification_success _
+------------------------------ Captured log call -------------------------------
+ERROR    a2a.server.tasks.base_push_notification_sender:base_push_notification_sender.py:68 Error sending push-notification for task_id=task_123 to URL: http://example.com.
+Traceback (most recent call last):
+  File "/testbed/src/a2a/server/tasks/base_push_notification_sender.py", line 63, in _dispatch_notification
+    response.raise_for_status()
+  File "/testbed/.venv/lib/python3.10/site-packages/httpx/_models.py", line 800, in raise_for_status
+    raise RuntimeError(
+RuntimeError: Cannot call `raise_for_status` as the request instance has not been set on this response.
+WARNING  a2a.server.tasks.base_push_notification_sender:base_push_notification_sender.py:46 Some push notifications failed to send for task_id=task_123
+ERROR    a2a.server.tasks.base_push_notification_sender:base_push_notification_sender.py:68 Error sending push-notification for task_id=task_123 to URL: http://example.com.
+Traceback (most recent call last):
+  File "/testbed/src/a2a/server/tasks/base_push_notification_sender.py", line 63, in _dispatch_notification
+    response.raise_for_status()
+  File "/testbed/.venv/lib/python3.10/site-packages/httpx/_models.py", line 800, in raise_for_status
+    raise RuntimeError(
+RuntimeError: Cannot call `raise_for_status` as the request instance has not been set on this response.
+WARNING  a2a.server.tasks.base_push_notification_sender:base_push_notification_sender.py:46 Some push notifications failed to send for task_id=task_123
+ERROR    a2a.server.tasks.base_push_notification_sender:base_push_notification_sender.py:68 Error sending push-notification for task_id=task_123 to URL: http://example.com.
+Traceback (most recent call last):
+  File "/testbed/src/a2a/server/tasks/base_push_notification_sender.py", line 63, in _dispatch_notification
+    response.raise_for_status()
+  File "/testbed/.venv/lib/python3.10/site-packages/httpx/_models.py", line 800, in raise_for_status
+    raise RuntimeError(
+RuntimeError: Cannot call `raise_for_status` as the request instance has not been set on this response.
+WARNING  a2a.server.tasks.base_push_notification_sender:base_push_notification_sender.py:46 Some push notifications failed to send for task_id=task_123
+_________ TestJSONRPCtHandler.test_on_message_stream_task_id_mismatch __________
+------------------------------ Captured log call -------------------------------
+ERROR    a2a.server.request_handlers.default_request_handler:default_request_handler.py:284 Agent generated task_id=task_123 does not match the RequestContext task_id=b430a0b3-b005-4cec-b0f9-fd4bbce5f8c2.
+_______ TestJSONRPCtHandler.test_push_notifications_not_supported_error ________
+------------------------------ Captured log call -------------------------------
+ERROR    a2a.utils.helpers:helpers.py:151 Unsupported Operation: Push notifications are not supported by the agent
+____________ TestJSONRPCtHandler.test_streaming_not_supported_error ____________
+------------------------------ Captured log call -------------------------------
+ERROR    a2a.utils.helpers:helpers.py:163 Unsupported Operation: Streaming is not supported by the agent
+______________________ test_delete_info_not_found[sqlite] ______________________
+------------------------------ Captured log call -------------------------------
+WARNING  a2a.server.tasks.database_push_notification_config_store:database_push_notification_config_store.py:291 Attempted to delete push notification config for task task-1 with config_id: non-existent-config that does not exist.
+_________________ test_decryption_error_with_wrong_key[sqlite] _________________
+------------------------------ Captured log call -------------------------------
+WARNING  a2a.server.tasks.database_push_notification_config_store:database_push_notification_config_store.py:191 Failed to decrypt push notification config for task wrong-key-task, config config-1. Attempting to parse as unencrypted JSON. This may indicate an incorrect encryption key or unencrypted data in the database.
+ERROR    a2a.server.tasks.database_push_notification_config_store:database_push_notification_config_store.py:205 Failed to parse push notification config for task wrong-key-task, config config-1. Decryption failed and the data is not valid JSON. This likely indicates the data is corrupted or encrypted with a different key.
+Traceback (most recent call last):
+  File "/testbed/src/a2a/server/tasks/database_push_notification_config_store.py", line 202, in _from_orm
+    return PushNotificationConfig.model_validate_json(payload)
+  File "/testbed/.venv/lib/python3.10/site-packages/pydantic/main.py", line 746, in model_validate_json
+    return cls.__pydantic_validator__.validate_json(
+pydantic_core._pydantic_core.ValidationError: 1 validation error for PushNotificationConfig
+  Invalid JSON: expected value at line 1 column 1 [type=json_invalid, input_value=b'gAAAAABqe9whA33DKz3ElMo...BnaD8JUZWk4-83MmFK6f0o=', input_type=bytes]
+    For further information visit https://errors.pydantic.dev/2.11/v/json_invalid
+ERROR    a2a.server.tasks.database_push_notification_config_store:database_push_notification_config_store.py:259 Could not deserialize push notification config for task wrong-key-task, config config-1
+Traceback (most recent call last):
+  File "/testbed/src/a2a/server/tasks/database_push_notification_config_store.py", line 202, in _from_orm
+    return PushNotificationConfig.model_validate_json(payload)
+  File "/testbed/.venv/lib/python3.10/site-packages/pydantic/main.py", line 746, in model_validate_json
+    return cls.__pydantic_validator__.validate_json(
+pydantic_core._pydantic_core.ValidationError: 1 validation error for PushNotificationConfig
+  Invalid JSON: expected value at line 1 column 1 [type=json_invalid, input_value=b'gAAAAABqe9whA33DKz3ElMo...BnaD8JUZWk4-83MmFK6f0o=', input_type=bytes]
+    For further information visit https://errors.pydantic.dev/2.11/v/json_invalid
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/testbed/src/a2a/server/tasks/database_push_notification_config_store.py", line 257, in get_info
+    configs.append(self._from_orm(model))
+  File "/testbed/src/a2a/server/tasks/database_push_notification_config_store.py", line 220, in _from_orm
+    raise ValueError(
+ValueError: Failed to parse push notification config data. Data is not valid JSON, or it is encrypted with the wrong key.
+WARNING  a2a.server.tasks.database_push_notification_config_store:database_push_notification_config_store.py:191 Failed to decrypt push notification config for task wrong-key-task, config config-1. Attempting to parse as unencrypted JSON. This may indicate an incorrect encryption key or unencrypted data in the database.
+ERROR    a2a.server.tasks.database_push_notification_config_store:database_push_notification_config_store.py:205 Failed to parse push notification config for task wrong-key-task, config config-1. Decryption failed and the data is not valid JSON. This likely indicates the data is corrupted or encrypted with a different key.
+Traceback (most recent call last):
+  File "/testbed/src/a2a/server/tasks/database_push_notification_config_store.py", line 202, in _from_orm
+    return PushNotificationConfig.model_validate_json(payload)
+  File "/testbed/.venv/lib/python3.10/site-packages/pydantic/main.py", line 746, in model_validate_json
+    return cls.__pydantic_validator__.validate_json(
+pydantic_core._pydantic_core.ValidationError: 1 validation error for PushNotificationConfig
+  Invalid JSON: expected value at line 1 column 1 [type=json_invalid, input_value=b'gAAAAABqe9whA33DKz3ElMo...BnaD8JUZWk4-83MmFK6f0o=', input_type=bytes]
+    For further information visit https://errors.pydantic.dev/2.11/v/json_invalid
+__________________ test_decryption_error_with_no_key[sqlite] ___________________
+------------------------------ Captured log call -------------------------------
+ERROR    a2a.server.tasks.database_push_notification_config_store:database_push_notification_config_store.py:214 Failed to parse push notification config for task wrong-key-task, config config-1. Data is not valid JSON and no encryption key is configured.
+Traceback (most recent call last):
+  File "/testbed/src/a2a/server/tasks/database_push_notification_config_store.py", line 202, in _from_orm
+    return PushNotificationConfig.model_validate_json(payload)
+  File "/testbed/.venv/lib/python3.10/site-packages/pydantic/main.py", line 746, in model_validate_json
+    return cls.__pydantic_validator__.validate_json(
+pydantic_core._pydantic_core.ValidationError: 1 validation error for PushNotificationConfig
+  Invalid JSON: expected value at line 1 column 1 [type=json_invalid, input_value=b'gAAAAABqe9whOLisKb9JZPJ...ZwykOPCha-QX6d_lQ9_9ms=', input_type=bytes]
+    For further information visit https://errors.pydantic.dev/2.11/v/json_invalid
+ERROR    a2a.server.tasks.database_push_notification_config_store:database_push_notification_config_store.py:259 Could not deserialize push notification config for task wrong-key-task, config config-1
+Traceback (most recent call last):
+  File "/testbed/src/a2a/server/tasks/database_push_notification_config_store.py", line 202, in _from_orm
+    return PushNotificationConfig.model_validate_json(payload)
+  File "/testbed/.venv/lib/python3.10/site-packages/pydantic/main.py", line 746, in model_validate_json
+    return cls.__pydantic_validator__.validate_json(
+pydantic_core._pydantic_core.ValidationError: 1 validation error for PushNotificationConfig
+  Invalid JSON: expected value at line 1 column 1 [type=json_invalid, input_value=b'gAAAAABqe9whOLisKb9JZPJ...ZwykOPCha-QX6d_lQ9_9ms=', input_type=bytes]
+    For further information visit https://errors.pydantic.dev/2.11/v/json_invalid
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/testbed/src/a2a/server/tasks/database_push_notification_config_store.py", line 257, in get_info
+    configs.append(self._from_orm(model))
+  File "/testbed/src/a2a/server/tasks/database_push_notification_config_store.py", line 220, in _from_orm
+    raise ValueError(
+ValueError: Failed to parse push notification config data. Data is not valid JSON, or it is encrypted with the wrong key.
+ERROR    a2a.server.tasks.database_push_notification_config_store:database_push_notification_config_store.py:214 Failed to parse push notification config for task wrong-key-task, config config-1. Data is not valid JSON and no encryption key is configured.
+Traceback (most recent call last):
+  File "/testbed/src/a2a/server/tasks/database_push_notification_config_store.py", line 202, in _from_orm
+    return PushNotificationConfig.model_validate_json(payload)
+  File "/testbed/.venv/lib/python3.10/site-packages/pydantic/main.py", line 746, in model_validate_json
+    return cls.__pydantic_validator__.validate_json(
+pydantic_core._pydantic_core.ValidationError: 1 validation error for PushNotificationConfig
+  Invalid JSON: expected value at line 1 column 1 [type=json_invalid, input_value=b'gAAAAABqe9whOLisKb9JZPJ...ZwykOPCha-QX6d_lQ9_9ms=', input_type=bytes]
+    For further information visit https://errors.pydantic.dev/2.11/v/json_invalid
+____________ test_decryption_fallback_for_unencrypted_data[sqlite] _____________
+------------------------------ Captured log call -------------------------------
+WARNING  a2a.server.tasks.database_push_notification_config_store:database_push_notification_config_store.py:191 Failed to decrypt push notification config for task mixed-encryption-task, config config-1. Attempting to parse as unencrypted JSON. This may indicate an incorrect encryption key or unencrypted data in the database.
+____________ test_parsing_error_after_successful_decryption[sqlite] ____________
+------------------------------ Captured log call -------------------------------
+WARNING  a2a.server.tasks.database_push_notification_config_store:database_push_notification_config_store.py:191 Failed to decrypt push notification config for task corrupted-data-task, config config-1. Attempting to parse as unencrypted JSON. This may indicate an incorrect encryption key or unencrypted data in the database.
+ERROR    a2a.server.tasks.database_push_notification_config_store:database_push_notification_config_store.py:205 Failed to parse push notification config for task corrupted-data-task, config config-1. Decryption failed and the data is not valid JSON. This likely indicates the data is corrupted or encrypted with a different key.
+Traceback (most recent call last):
+  File "/testbed/src/a2a/server/tasks/database_push_notification_config_store.py", line 202, in _from_orm
+    return PushNotificationConfig.model_validate_json(payload)
+  File "/testbed/.venv/lib/python3.10/site-packages/pydantic/main.py", line 746, in model_validate_json
+    return cls.__pydantic_validator__.validate_json(
+pydantic_core._pydantic_core.ValidationError: 1 validation error for PushNotificationConfig
+  Invalid JSON: expected value at line 1 column 1 [type=json_invalid, input_value=b'gAAAAABqe9wh_eDErc3ryoj...7w9snBcZIyC2Wh8ke1Oais=', input_type=bytes]
+    For further information visit https://errors.pydantic.dev/2.11/v/json_invalid
+ERROR    a2a.server.tasks.database_push_notification_config_store:database_push_notification_config_store.py:259 Could not deserialize push notification config for task corrupted-data-task, config config-1
+Traceback (most recent call last):
+  File "/testbed/src/a2a/server/tasks/database_push_notification_config_store.py", line 202, in _from_orm
+    return PushNotificationConfig.model_validate_json(payload)
+  File "/testbed/.venv/lib/python3.10/site-packages/pydantic/main.py", line 746, in model_validate_json
+    return cls.__pydantic_validator__.validate_json(
+pydantic_core._pydantic_core.ValidationError: 1 validation error for PushNotificationConfig
+  Invalid JSON: expected value at line 1 column 1 [type=json_invalid, input_value=b'gAAAAABqe9wh_eDErc3ryoj...7w9snBcZIyC2Wh8ke1Oais=', input_type=bytes]
+    For further information visit https://errors.pydantic.dev/2.11/v/json_invalid
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/testbed/src/a2a/server/tasks/database_push_notification_config_store.py", line 257, in get_info
+    configs.append(self._from_orm(model))
+  File "/testbed/src/a2a/server/tasks/database_push_notification_config_store.py", line 220, in _from_orm
+    raise ValueError(
+ValueError: Failed to parse push notification config data. Data is not valid JSON, or it is encrypted with the wrong key.
+WARNING  a2a.server.tasks.database_push_notification_config_store:database_push_notification_config_store.py:191 Failed to decrypt push notification config for task corrupted-data-task, config config-1. Attempting to parse as unencrypted JSON. This may indicate an incorrect encryption key or unencrypted data in the database.
+ERROR    a2a.server.tasks.database_push_notification_config_store:database_push_notification_config_store.py:205 Failed to parse push notification config for task corrupted-data-task, config config-1. Decryption failed and the data is not valid JSON. This likely indicates the data is corrupted or encrypted with a different key.
+Traceback (most recent call last):
+  File "/testbed/src/a2a/server/tasks/database_push_notification_config_store.py", line 202, in _from_orm
+    return PushNotificationConfig.model_validate_json(payload)
+  File "/testbed/.venv/lib/python3.10/site-packages/pydantic/main.py", line 746, in model_validate_json
+    return cls.__pydantic_validator__.validate_json(
+pydantic_core._pydantic_core.ValidationError: 1 validation error for PushNotificationConfig
+  Invalid JSON: expected value at line 1 column 1 [type=json_invalid, input_value=b'gAAAAABqe9wh_eDErc3ryoj...7w9snBcZIyC2Wh8ke1Oais=', input_type=bytes]
+    For further information visit https://errors.pydantic.dev/2.11/v/json_invalid
+_____________________ test_delete_nonexistent_task[sqlite] _____________________
+------------------------------ Captured log call -------------------------------
+WARNING  a2a.server.tasks.database_task_store:database_task_store.py:164 Attempted to delete nonexistent task with id: nonexistent-delete-task-id
+_________________ test_in_memory_task_store_delete_nonexistent _________________
+------------------------------ Captured log call -------------------------------
+WARNING  a2a.server.tasks.inmemory_task_store:inmemory_task_store.py:56 Attempted to delete nonexistent task with id: nonexistent
+___ TestResultAggregator.test_continue_consuming_processes_remaining_events ____
+------------------------------ Captured log call -------------------------------
+ERROR    asyncio:base_events.py:1758 Task exception was never retrieved
+future: <Task finished name='Task-1414' coro=<ResultAggregator._continue_consuming() done, defined at /testbed/src/a2a/server/tasks/result_aggregator.py:169> exception=RuntimeError('cannot reuse already awaited coroutine') created at /usr/local/lib/python3.10/asyncio/tasks.py:636>
+source_traceback: Object created at (most recent call last):
+  File "/testbed/.venv/bin/pytest", line 10, in <module>
+    sys.exit(console_main())
+  File "/testbed/.venv/lib/python3.10/site-packages/_pytest/config/__init__.py", line 201, in console_main
+    code = main()
+  File "/testbed/.venv/lib/python3.10/site-packages/_pytest/config/__init__.py", line 175, in main
+    ret: ExitCode | int = config.hook.pytest_cmdline_main(config=config)
+  File "/testbed/.venv/lib/python3.10/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/testbed/.venv/lib/python3.10/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/testbed/.venv/lib/python3.10/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/testbed/.venv/lib/python3.10/site-packages/_pytest/main.py", line 336, in pytest_cmdline_main
+    return wrap_session(config, _main)
+  File "/testbed/.venv/lib/python3.10/site-packages/_pytest/main.py", line 289, in wrap_session
+    session.exitstatus = doit(config, session) or 0
+  File "/testbed/.venv/lib/python3.10/site-packages/_pytest/main.py", line 343, in _main
+    config.hook.pytest_runtestloop(session=session)
+  File "/testbed/.venv/lib/python3.10/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/testbed/.venv/lib/python3.10/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/testbed/.venv/lib/python3.10/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/testbed/.venv/lib/python3.10/site-packages/_pytest/main.py", line 367, in pytest_runtestloop
+    item.config.hook.pytest_runtest_protocol(item=item, nextitem=nextitem)
+  File "/testbed/.venv/lib/python3.10/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/testbed/.venv/lib/python3.10/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/testbed/.venv/lib/python3.10/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/testbed/.venv/lib/python3.10/site-packages/_pytest/runner.py", line 117, in pytest_runtest_protocol
+    runtestprotocol(item, nextitem=nextitem)
+  File "/testbed/.venv/lib/python3.10/site-packages/_pytest/runner.py", line 136, in runtestprotocol
+    reports.append(call_and_report(item, "call", log))
+  File "/testbed/.venv/lib/python3.10/site-packages/_pytest/runner.py", line 245, in call_and_report
+    call = CallInfo.from_call(
+  File "/testbed/.venv/lib/python3.10/site-packages/_pytest/runner.py", line 344, in from_call
+    result: TResult | None = func()
+  File "/testbed/.venv/lib/python3.10/site-packages/_pytest/runner.py", line 246, in <lambda>
+    lambda: runtest_hook(item=item, **kwds), when=when, reraise=reraise
+  File "/testbed/.venv/lib/python3.10/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/testbed/.venv/lib/python3.10/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/testbed/.venv/lib/python3.10/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/testbed/.venv/lib/python3.10/site-packages/_pytest/runner.py", line 178, in pytest_runtest_call
+    item.runtest()
+  File "/testbed/.venv/lib/python3.10/site-packages/_pytest/unittest.py", line 332, in runtest
+    testcase(result=self)
+  File "/usr/local/lib/python3.10/unittest/case.py", line 650, in __call__
+    return self.run(*args, **kwds)
+  File "/usr/local/lib/python3.10/unittest/async_case.py", line 159, in run
+    return super().run(result)
+  File "/usr/local/lib/python3.10/unittest/case.py", line 591, in run
+    self._callTestMethod(testMethod)
+  File "/usr/local/lib/python3.10/unittest/async_case.py", line 64, in _callTestMethod
+    self._callMaybeAsync(method)
+  File "/usr/local/lib/python3.10/unittest/async_case.py", line 87, in _callMaybeAsync
+    return self._asyncioTestLoop.run_until_complete(fut)
+  File "/usr/local/lib/python3.10/asyncio/base_events.py", line 636, in run_until_complete
+    self.run_forever()
+  File "/usr/local/lib/python3.10/asyncio/base_events.py", line 603, in run_forever
+    self._run_once()
+  File "/usr/local/lib/python3.10/asyncio/base_events.py", line 1901, in _run_once
+    handle._run()
+  File "/usr/local/lib/python3.10/asyncio/events.py", line 80, in _run
+    self._context.run(self._callback, *self._args)
+  File "/usr/local/lib/python3.10/unittest/async_case.py", line 101, in _asyncioLoopRunner
+    ret = await awaitable
+  File "/usr/local/lib/python3.10/unittest/mock.py", line 1396, in patched
+    return await func(*newargs, **newkeywargs)
+  File "/testbed/tests/server/tasks/test_result_aggregator.py", line 464, in test_continue_consuming_processes_remaining_events
+    _, _ = await self.aggregator.consume_and_break_on_interrupt(
+  File "/testbed/src/a2a/server/tasks/result_aggregator.py", line 162, in consume_and_break_on_interrupt
+    asyncio.create_task(  # noqa: RUF006
+  File "/usr/local/lib/python3.10/unittest/mock.py", line 1114, in __call__
+    return self._mock_call(*args, **kwargs)
+  File "/usr/local/lib/python3.10/unittest/mock.py", line 1118, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+  File "/usr/local/lib/python3.10/unittest/mock.py", line 1179, in _execute_mock_call
+    result = effect(*args, **kwargs)
+  File "/testbed/tests/server/tasks/test_result_aggregator.py", line 461, in <lambda>
+    mock_create_task.side_effect = lambda coro: asyncio.ensure_future(coro)
+  File "/usr/local/lib/python3.10/asyncio/tasks.py", line 615, in ensure_future
+    return _ensure_future(coro_or_future, loop=loop)
+  File "/usr/local/lib/python3.10/asyncio/tasks.py", line 636, in _ensure_future
+    return loop.create_task(coro_or_future)
+RuntimeError: cannot reuse already awaited coroutine
+____________ test_agent_card_default_endpoint_has_deprecated_route _____________
+------------------------------ Captured log call -------------------------------
+WARNING  a2a.server.apps.jsonrpc.jsonrpc_app:jsonrpc_app.py:555 Deprecated agent card endpoint '/.well-known/agent.json' accessed. Please use '/.well-known/agent-card.json' instead. This endpoint will be removed in a future version.
+_ test_authenticated_extended_agent_card_endpoint_supported_with_specific_extended_card_starlette _
+------------------------------ Captured log call -------------------------------
+WARNING  a2a.server.apps.jsonrpc.jsonrpc_app:jsonrpc_app.py:577 HTTP GET for authenticated extended card has been called by a client. This endpoint is deprecated in favor of agent/authenticatedExtendedCard JSON-RPC method and will be removed in a future release.
+_ test_authenticated_extended_agent_card_endpoint_supported_with_specific_extended_card_fastapi _
+------------------------------ Captured log call -------------------------------
+WARNING  a2a.server.apps.jsonrpc.jsonrpc_app:jsonrpc_app.py:577 HTTP GET for authenticated extended card has been called by a client. This endpoint is deprecated in favor of agent/authenticatedExtendedCard JSON-RPC method and will be removed in a future release.
+_____________________ test_fastapi_build_with_extra_routes _____________________
+------------------------------ Captured log call -------------------------------
+WARNING  a2a.server.apps.jsonrpc.jsonrpc_app:jsonrpc_app.py:555 Deprecated agent card endpoint '/.well-known/agent.json' accessed. Please use '/.well-known/agent-card.json' instead. This endpoint will be removed in a future version.
+______________________________ test_invalid_json _______________________________
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/testbed/src/a2a/server/apps/jsonrpc/jsonrpc_app.py", line 286, in _handle_requests
+    body = await request.json()
+  File "/testbed/.venv/lib/python3.10/site-packages/starlette/requests.py", line 250, in json
+    self._json = json.loads(body)
+  File "/usr/local/lib/python3.10/json/__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+  File "/usr/local/lib/python3.10/json/decoder.py", line 337, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+  File "/usr/local/lib/python3.10/json/decoder.py", line 355, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+------------------------------ Captured log call -------------------------------
+WARNING  a2a.server.apps.jsonrpc.jsonrpc_app:jsonrpc_app.py:249 Request Error (ID: None): Code=-32700, Message='Expecting value: line 1 column 1 (char 0)'
+________________________ test_invalid_request_structure ________________________
+------------------------------ Captured log call -------------------------------
+ERROR    a2a.server.apps.jsonrpc.jsonrpc_app:jsonrpc_app.py:311 Failed to validate base JSON-RPC request
+Traceback (most recent call last):
+  File "/testbed/src/a2a/server/apps/jsonrpc/jsonrpc_app.py", line 309, in _handle_requests
+    base_request = JSONRPCRequest.model_validate(body)
+  File "/testbed/.venv/lib/python3.10/site-packages/pydantic/main.py", line 705, in model_validate
+    return cls.__pydantic_validator__.validate_python(
+pydantic_core._pydantic_core.ValidationError: 1 validation error for JSONRPCRequest
+jsonrpc
+  Input should be '2.0' [type=literal_error, input_value='aaaa', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.11/v/literal_error
+WARNING  a2a.server.apps.jsonrpc.jsonrpc_app:jsonrpc_app.py:249 Request Error (ID: 123): Code=-32600, Message='Request payload validation error', Data=[{'type': 'literal_error', 'loc': ['jsonrpc'], 'msg': "Input should be '2.0'", 'input': 'aaaa', 'ctx': {'expected': "'2.0'"}, 'url': 'https://errors.pydantic.dev/2.11/v/literal_error'}]
+__________________ test_dynamic_extended_agent_card_modifier ___________________
+------------------------------ Captured log call -------------------------------
+WARNING  a2a.server.apps.jsonrpc.jsonrpc_app:jsonrpc_app.py:577 HTTP GET for authenticated extended card has been called by a client. This endpoint is deprecated in favor of agent/authenticatedExtendedCard JSON-RPC method and will be removed in a future release.
+WARNING  a2a.server.apps.jsonrpc.jsonrpc_app:jsonrpc_app.py:577 HTTP GET for authenticated extended card has been called by a client. This endpoint is deprecated in favor of agent/authenticatedExtendedCard JSON-RPC method and will be removed in a future release.
+_________________________ test_method_not_implemented __________________________
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/testbed/src/a2a/server/apps/jsonrpc/jsonrpc_app.py", line 353, in _handle_requests
+    return await self._process_non_streaming_request(
+  File "/testbed/src/a2a/server/apps/jsonrpc/jsonrpc_app.py", line 441, in _process_non_streaming_request
+    handler_result = await self.handler.on_get_task(
+  File "/testbed/src/a2a/utils/telemetry.py", line 196, in async_wrapper
+    result = await func(*args, **kwargs)
+  File "/testbed/src/a2a/server/request_handlers/jsonrpc_handler.py", line 335, in on_get_task
+    task = await self.request_handler.on_get_task(
+  File "/usr/local/lib/python3.10/unittest/mock.py", line 2234, in _execute_mock_call
+    raise effect
+a2a.utils.errors.MethodNotImplementedError: Not Implemented operation Error: This method is not implemented by the server
+------------------------------ Captured log call -------------------------------
+WARNING  a2a.server.apps.jsonrpc.jsonrpc_app:jsonrpc_app.py:249 Request Error (ID: 123): Code=-32004, Message='This operation is not supported'
+_____________________________ test_unknown_method ______________________________
+------------------------------ Captured log call -------------------------------
+WARNING  a2a.server.apps.jsonrpc.jsonrpc_app:jsonrpc_app.py:249 Request Error (ID: 123): Code=-32601, Message='Method not found'
+____________________________ test_validation_error _____________________________
+------------------------------ Captured log call -------------------------------
+ERROR    a2a.server.apps.jsonrpc.jsonrpc_app:jsonrpc_app.py:330 Failed to validate base JSON-RPC request
+Traceback (most recent call last):
+  File "/testbed/src/a2a/server/apps/jsonrpc/jsonrpc_app.py", line 328, in _handle_requests
+    specific_request = model_class.model_validate(body)
+  File "/testbed/.venv/lib/python3.10/site-packages/pydantic/main.py", line 705, in model_validate
+    return cls.__pydantic_validator__.validate_python(
+pydantic_core._pydantic_core.ValidationError: 3 validation errors for SendMessageRequest
+params.message.messageId
+  Field required [type=missing, input_value={'text': 'Hello'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.11/v/missing
+params.message.parts
+  Field required [type=missing, input_value={'text': 'Hello'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.11/v/missing
+params.message.role
+  Field required [type=missing, input_value={'text': 'Hello'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.11/v/missing
+WARNING  a2a.server.apps.jsonrpc.jsonrpc_app:jsonrpc_app.py:249 Request Error (ID: 123): Code=-32602, Message='Invalid parameters', Data=[{'type': 'missing', 'loc': ['params', 'message', 'messageId'], 'msg': 'Field required', 'input': {'text': 'Hello'}, 'url': 'https://errors.pydantic.dev/2.11/v/missing'}, {'type': 'missing', 'loc': ['params', 'message', 'parts'], 'msg': 'Field required', 'input': {'text': 'Hello'}, 'url': 'https://errors.pydantic.dev/2.11/v/missing'}, {'type': 'missing', 'loc': ['params', 'message', 'role'], 'msg': 'Field required', 'input': {'text': 'Hello'}, 'url': 'https://errors.pydantic.dev/2.11/v/missing'}]
+___________________________ test_unhandled_exception ___________________________
+------------------------------ Captured log call -------------------------------
+ERROR    a2a.server.apps.jsonrpc.jsonrpc_app:jsonrpc_app.py:376 Unhandled exception
+Traceback (most recent call last):
+  File "/testbed/src/a2a/server/apps/jsonrpc/jsonrpc_app.py", line 353, in _handle_requests
+    return await self._process_non_streaming_request(
+  File "/testbed/src/a2a/server/apps/jsonrpc/jsonrpc_app.py", line 441, in _process_non_streaming_request
+    handler_result = await self.handler.on_get_task(
+  File "/testbed/src/a2a/utils/telemetry.py", line 196, in async_wrapper
+    result = await func(*args, **kwargs)
+  File "/testbed/src/a2a/server/request_handlers/jsonrpc_handler.py", line 335, in on_get_task
+    task = await self.request_handler.on_get_task(
+  File "/usr/local/lib/python3.10/unittest/mock.py", line 2234, in _execute_mock_call
+    raise effect
+Exception: Unexpected error
+ERROR    a2a.server.apps.jsonrpc.jsonrpc_app:jsonrpc_app.py:249 Request Error (ID: 123): Code=-32603, Message='Unexpected error'
+______________________________ test_non_dict_json ______________________________
+------------------------------ Captured log call -------------------------------
+ERROR    a2a.server.apps.jsonrpc.jsonrpc_app:jsonrpc_app.py:311 Failed to validate base JSON-RPC request
+Traceback (most recent call last):
+  File "/testbed/src/a2a/server/apps/jsonrpc/jsonrpc_app.py", line 309, in _handle_requests
+    base_request = JSONRPCRequest.model_validate(body)
+  File "/testbed/.venv/lib/python3.10/site-packages/pydantic/main.py", line 705, in model_validate
+    return cls.__pydantic_validator__.validate_python(
+pydantic_core._pydantic_core.ValidationError: 1 validation error for JSONRPCRequest
+  Input should be a valid dictionary or instance of JSONRPCRequest [type=model_type, input_value=['not', 'a', 'dict'], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.11/v/model_type
+WARNING  a2a.server.apps.jsonrpc.jsonrpc_app:jsonrpc_app.py:249 Request Error (ID: None): Code=-32600, Message='Request payload validation error', Data=[{'type': 'model_type', 'loc': [], 'msg': 'Input should be a valid dictionary or instance of JSONRPCRequest', 'input': ['not', 'a', 'dict'], 'ctx': {'class_name': 'JSONRPCRequest'}, 'url': 'https://errors.pydantic.dev/2.11/v/model_type'}]
+_____________________ test_rest_error_handler_server_error _____________________
+------------------------------ Captured log call -------------------------------
+WARNING  a2a.utils.error_handlers:error_handlers.py:74 Request error: Code=-32600, Message='Bad request'
+__________________ test_rest_error_handler_unknown_exception ___________________
+------------------------------ Captured log call -------------------------------
+ERROR    a2a.utils.error_handlers:error_handlers.py:85 Unknown error occurred
+Traceback (most recent call last):
+  File "/testbed/src/a2a/utils/error_handlers.py", line 62, in wrapper
+    return await func(*args, **kwargs)
+  File "/testbed/tests/utils/test_error_handlers.py", line 50, in failing_func
+    raise ValueError('Unexpected error')
+ValueError: Unexpected error
+_________________ test_rest_stream_error_handler_server_error __________________
+------------------------------ Captured log call -------------------------------
+ERROR    a2a.utils.error_handlers:error_handlers.py:112 Request error: Code=-32603, Message='Internal server error'
+_________________________ test_append_artifact_to_task _________________________
+------------------------------ Captured log call -------------------------------
+WARNING  a2a.utils.helpers:helpers.py:106 Received append=True for nonexistent artifact index artifact-456 in task task-abc. Ignoring chunk.
+___________________________ test_validate_decorator ____________________________
+------------------------------ Captured log call -------------------------------
+ERROR    a2a.utils.helpers:helpers.py:163 Unsupported Operation: Condition not met
+=========================== short test summary info ============================
+PASSED tests/auth/test_user.py::TestUnauthenticatedUser::test_is_authenticated_returns_false
+PASSED tests/auth/test_user.py::TestUnauthenticatedUser::test_user_name_returns_empty_string
+PASSED tests/client/test_auth_middleware.py::test_auth_interceptor_skips_when_no_agent_card
+PASSED tests/client/test_auth_middleware.py::test_in_memory_context_credential_store
+PASSED tests/client/test_auth_middleware.py::test_client_with_simple_interceptor
+PASSED tests/client/test_auth_middleware.py::test_auth_interceptor_variants[test_case0]
+PASSED tests/client/test_auth_middleware.py::test_auth_interceptor_variants[test_case1]
+PASSED tests/client/test_auth_middleware.py::test_auth_interceptor_variants[test_case2]
+PASSED tests/client/test_auth_middleware.py::test_auth_interceptor_variants[test_case3]
+PASSED tests/client/test_auth_middleware.py::test_auth_interceptor_skips_when_scheme_not_in_security_schemes
+PASSED tests/client/test_base_client.py::test_send_message_streaming
+PASSED tests/client/test_base_client.py::test_send_message_non_streaming
+PASSED tests/client/test_base_client.py::test_send_message_non_streaming_agent_capability_false
+PASSED tests/client/test_client_factory.py::test_client_factory_selects_preferred_transport
+PASSED tests/client/test_client_factory.py::test_client_factory_selects_secondary_transport_url
+PASSED tests/client/test_client_factory.py::test_client_factory_server_preference
+PASSED tests/client/test_client_factory.py::test_client_factory_no_compatible_transport
+PASSED tests/client/test_client_task_manager.py::test_get_task_no_task_id_returns_none
+PASSED tests/client/test_client_task_manager.py::test_get_task_or_raise_no_task_raises_error
+PASSED tests/client/test_client_task_manager.py::test_save_task_event_with_task
+PASSED tests/client/test_client_task_manager.py::test_save_task_event_with_task_already_set_raises_error
+PASSED tests/client/test_client_task_manager.py::test_save_task_event_with_status_update
+PASSED tests/client/test_client_task_manager.py::test_save_task_event_with_artifact_update
+PASSED tests/client/test_client_task_manager.py::test_save_task_event_creates_task_if_not_exists
+PASSED tests/client/test_client_task_manager.py::test_process_with_task_event
+PASSED tests/client/test_client_task_manager.py::test_process_with_non_task_event
+PASSED tests/client/test_client_task_manager.py::test_update_with_message
+PASSED tests/client/test_client_task_manager.py::test_update_with_message_moves_status_message
+PASSED tests/client/test_errors.py::TestA2AClientError::test_instantiation
+PASSED tests/client/test_errors.py::TestA2AClientError::test_inheritance
+PASSED tests/client/test_errors.py::TestA2AClientHTTPError::test_instantiation
+PASSED tests/client/test_errors.py::TestA2AClientHTTPError::test_message_formatting
+PASSED tests/client/test_errors.py::TestA2AClientHTTPError::test_inheritance
+PASSED tests/client/test_errors.py::TestA2AClientHTTPError::test_with_empty_message
+PASSED tests/client/test_errors.py::TestA2AClientHTTPError::test_with_various_status_codes
+PASSED tests/client/test_errors.py::TestA2AClientJSONError::test_instantiation
+PASSED tests/client/test_errors.py::TestA2AClientJSONError::test_message_formatting
+PASSED tests/client/test_errors.py::TestA2AClientJSONError::test_inheritance
+PASSED tests/client/test_errors.py::TestA2AClientJSONError::test_with_empty_message
+PASSED tests/client/test_errors.py::TestA2AClientJSONError::test_with_various_messages
+PASSED tests/client/test_errors.py::TestExceptionHierarchy::test_exception_hierarchy
+PASSED tests/client/test_errors.py::TestExceptionHierarchy::test_catch_specific_exception
+PASSED tests/client/test_errors.py::TestExceptionHierarchy::test_catch_base_exception
+PASSED tests/client/test_errors.py::TestExceptionRaising::test_raising_http_error
+PASSED tests/client/test_errors.py::TestExceptionRaising::test_raising_json_error
+PASSED tests/client/test_errors.py::TestExceptionRaising::test_raising_base_error
+PASSED tests/client/test_errors.py::test_http_error_parametrized[400-Bad Request-HTTP Error 400: Bad Request]
+PASSED tests/client/test_errors.py::test_http_error_parametrized[404-Not Found-HTTP Error 404: Not Found]
+PASSED tests/client/test_errors.py::test_http_error_parametrized[500-Server Error-HTTP Error 500: Server Error]
+PASSED tests/client/test_errors.py::test_json_error_parametrized[Missing field-JSON Error: Missing field]
+PASSED tests/client/test_errors.py::test_json_error_parametrized[Invalid type-JSON Error: Invalid type]
+PASSED tests/client/test_errors.py::test_json_error_parametrized[Parsing failed-JSON Error: Parsing failed]
+PASSED tests/client/test_grpc_client.py::test_send_message_task_response
+PASSED tests/client/test_grpc_client.py::test_send_message_message_response
+PASSED tests/client/test_grpc_client.py::test_get_task
+PASSED tests/client/test_grpc_client.py::test_get_task_with_history
+PASSED tests/client/test_grpc_client.py::test_cancel_task
+PASSED tests/client/test_jsonrpc_client.py::TestA2ACardResolver::test_init_parameters_stored_correctly
+PASSED tests/client/test_jsonrpc_client.py::TestA2ACardResolver::test_init_strips_slashes
+PASSED tests/client/test_jsonrpc_client.py::TestA2ACardResolver::test_get_agent_card_success_public_only
+PASSED tests/client/test_jsonrpc_client.py::TestA2ACardResolver::test_get_agent_card_success_with_specified_path_for_extended_card
+PASSED tests/client/test_jsonrpc_client.py::TestA2ACardResolver::test_get_agent_card_validation_error
+PASSED tests/client/test_jsonrpc_client.py::TestA2ACardResolver::test_get_agent_card_http_status_error
+PASSED tests/client/test_jsonrpc_client.py::TestA2ACardResolver::test_get_agent_card_json_decode_error
+PASSED tests/client/test_jsonrpc_client.py::TestA2ACardResolver::test_get_agent_card_request_error
+PASSED tests/client/test_jsonrpc_client.py::TestJsonRpcTransport::test_init_with_agent_card
+PASSED tests/client/test_jsonrpc_client.py::TestJsonRpcTransport::test_init_with_url
+PASSED tests/client/test_jsonrpc_client.py::TestJsonRpcTransport::test_init_with_agent_card_and_url_prioritizes_url
+PASSED tests/client/test_jsonrpc_client.py::TestJsonRpcTransport::test_init_raises_value_error_if_no_card_or_url
+PASSED tests/client/test_jsonrpc_client.py::TestJsonRpcTransport::test_send_message_success
+PASSED tests/client/test_jsonrpc_client.py::TestJsonRpcTransport::test_send_message_error_response
+PASSED tests/client/test_jsonrpc_client.py::TestJsonRpcTransport::test_send_message_streaming_success
+PASSED tests/client/test_jsonrpc_client.py::TestJsonRpcTransport::test_send_request_http_status_error
+PASSED tests/client/test_jsonrpc_client.py::TestJsonRpcTransport::test_send_request_json_decode_error
+PASSED tests/client/test_jsonrpc_client.py::TestJsonRpcTransport::test_send_request_httpx_request_error
+PASSED tests/client/test_jsonrpc_client.py::TestJsonRpcTransport::test_send_message_client_timeout
+PASSED tests/client/test_jsonrpc_client.py::TestJsonRpcTransport::test_get_task_success
+PASSED tests/client/test_jsonrpc_client.py::TestJsonRpcTransport::test_cancel_task_success
+PASSED tests/client/test_jsonrpc_client.py::TestJsonRpcTransport::test_set_task_callback_success
+PASSED tests/client/test_jsonrpc_client.py::TestJsonRpcTransport::test_get_task_callback_success
+PASSED tests/client/test_jsonrpc_client.py::TestJsonRpcTransport::test_send_message_streaming_sse_error
+PASSED tests/client/test_jsonrpc_client.py::TestJsonRpcTransport::test_send_message_streaming_json_error
+PASSED tests/client/test_jsonrpc_client.py::TestJsonRpcTransport::test_send_message_streaming_request_error
+PASSED tests/client/test_jsonrpc_client.py::TestJsonRpcTransport::test_get_card_no_card_provided
+PASSED tests/client/test_jsonrpc_client.py::TestJsonRpcTransport::test_get_card_with_extended_card_support
+PASSED tests/client/test_jsonrpc_client.py::TestJsonRpcTransport::test_close
+PASSED tests/client/test_legacy_client.py::test_a2a_client_send_message
+PASSED tests/client/test_legacy_client.py::test_a2a_grpc_client_get_task
+PASSED tests/client/test_optionals.py::test_channel_import_failure
+PASSED tests/extensions/test_common.py::test_get_requested_extensions
+PASSED tests/extensions/test_common.py::test_find_extension_by_uri
+PASSED tests/extensions/test_common.py::test_find_extension_by_uri_no_extensions
+PASSED tests/integration/test_client_server_integration.py::test_http_transport_sends_message_streaming[JSON-RPC]
+PASSED tests/integration/test_client_server_integration.py::test_http_transport_sends_message_streaming[REST]
+PASSED tests/integration/test_client_server_integration.py::test_grpc_transport_sends_message_streaming
+PASSED tests/integration/test_client_server_integration.py::test_http_transport_sends_message_blocking[JSON-RPC]
+PASSED tests/integration/test_client_server_integration.py::test_http_transport_sends_message_blocking[REST]
+PASSED tests/integration/test_client_server_integration.py::test_grpc_transport_sends_message_blocking
+PASSED tests/integration/test_client_server_integration.py::test_http_transport_get_task[JSON-RPC]
+PASSED tests/integration/test_client_server_integration.py::test_http_transport_get_task[REST]
+PASSED tests/integration/test_client_server_integration.py::test_grpc_transport_get_task
+PASSED tests/integration/test_client_server_integration.py::test_http_transport_cancel_task[JSON-RPC]
+PASSED tests/integration/test_client_server_integration.py::test_http_transport_cancel_task[REST]
+PASSED tests/integration/test_client_server_integration.py::test_grpc_transport_cancel_task
+PASSED tests/integration/test_client_server_integration.py::test_http_transport_set_task_callback[JSON-RPC]
+PASSED tests/integration/test_client_server_integration.py::test_http_transport_set_task_callback[REST]
+PASSED tests/integration/test_client_server_integration.py::test_grpc_transport_set_task_callback
+PASSED tests/integration/test_client_server_integration.py::test_http_transport_get_task_callback[JSON-RPC]
+PASSED tests/integration/test_client_server_integration.py::test_http_transport_get_task_callback[REST]
+PASSED tests/integration/test_client_server_integration.py::test_grpc_transport_get_task_callback
+PASSED tests/integration/test_client_server_integration.py::test_http_transport_resubscribe[JSON-RPC]
+PASSED tests/integration/test_client_server_integration.py::test_http_transport_resubscribe[REST]
+PASSED tests/integration/test_client_server_integration.py::test_grpc_transport_resubscribe
+PASSED tests/integration/test_client_server_integration.py::test_http_transport_get_card[JSON-RPC]
+PASSED tests/integration/test_client_server_integration.py::test_http_transport_get_card[REST]
+PASSED tests/integration/test_client_server_integration.py::test_http_transport_get_authenticated_card
+PASSED tests/integration/test_client_server_integration.py::test_grpc_transport_get_card
+PASSED tests/server/agent_execution/test_context.py::TestRequestContext::test_init_without_params
+PASSED tests/server/agent_execution/test_context.py::TestRequestContext::test_init_with_params_no_ids
+PASSED tests/server/agent_execution/test_context.py::TestRequestContext::test_init_with_task_id
+PASSED tests/server/agent_execution/test_context.py::TestRequestContext::test_init_with_context_id
+PASSED tests/server/agent_execution/test_context.py::TestRequestContext::test_init_with_both_ids
+PASSED tests/server/agent_execution/test_context.py::TestRequestContext::test_init_with_task
+PASSED tests/server/agent_execution/test_context.py::TestRequestContext::test_get_user_input_no_params
+PASSED tests/server/agent_execution/test_context.py::TestRequestContext::test_attach_related_task
+PASSED tests/server/agent_execution/test_context.py::TestRequestContext::test_current_task_property
+PASSED tests/server/agent_execution/test_context.py::TestRequestContext::test_check_or_generate_task_id_no_params
+PASSED tests/server/agent_execution/test_context.py::TestRequestContext::test_check_or_generate_task_id_with_existing_task_id
+PASSED tests/server/agent_execution/test_context.py::TestRequestContext::test_check_or_generate_context_id_no_params
+PASSED tests/server/agent_execution/test_context.py::TestRequestContext::test_check_or_generate_context_id_with_existing_context_id
+PASSED tests/server/agent_execution/test_context.py::TestRequestContext::test_init_raises_error_on_task_id_mismatch
+PASSED tests/server/agent_execution/test_context.py::TestRequestContext::test_init_raises_error_on_context_id_mismatch
+PASSED tests/server/agent_execution/test_context.py::TestRequestContext::test_with_related_tasks_provided
+PASSED tests/server/agent_execution/test_context.py::TestRequestContext::test_message_property_without_params
+PASSED tests/server/agent_execution/test_context.py::TestRequestContext::test_message_property_with_params
+PASSED tests/server/agent_execution/test_context.py::TestRequestContext::test_metadata_property_without_content
+PASSED tests/server/agent_execution/test_context.py::TestRequestContext::test_metadata_property_with_content
+PASSED tests/server/agent_execution/test_context.py::TestRequestContext::test_init_with_existing_ids_in_message
+PASSED tests/server/agent_execution/test_context.py::TestRequestContext::test_init_with_task_id_and_existing_task_id_match
+PASSED tests/server/agent_execution/test_context.py::TestRequestContext::test_init_with_context_id_and_existing_context_id_match
+PASSED tests/server/agent_execution/test_context.py::TestRequestContext::test_extension_handling
+PASSED tests/server/agent_execution/test_simple_request_context_builder.py::TestSimpleRequestContextBuilder::test_build_basic_context_no_populate
+PASSED tests/server/agent_execution/test_simple_request_context_builder.py::TestSimpleRequestContextBuilder::test_build_populate_false_with_reference_task_ids
+PASSED tests/server/agent_execution/test_simple_request_context_builder.py::TestSimpleRequestContextBuilder::test_build_populate_true_params_none
+PASSED tests/server/agent_execution/test_simple_request_context_builder.py::TestSimpleRequestContextBuilder::test_build_populate_true_reference_ids_empty_or_none
+PASSED tests/server/agent_execution/test_simple_request_context_builder.py::TestSimpleRequestContextBuilder::test_build_populate_true_task_store_none
+PASSED tests/server/agent_execution/test_simple_request_context_builder.py::TestSimpleRequestContextBuilder::test_init_with_populate_false_task_store_none
+PASSED tests/server/agent_execution/test_simple_request_context_builder.py::TestSimpleRequestContextBuilder::test_init_with_populate_false_task_store_provided
+PASSED tests/server/agent_execution/test_simple_request_context_builder.py::TestSimpleRequestContextBuilder::test_init_with_populate_true_and_task_store
+PASSED tests/server/apps/jsonrpc/test_fastapi_app.py::TestA2AFastAPIApplicationOptionalDeps::test_create_a2a_fastapi_app_with_present_deps_succeeds
+PASSED tests/server/apps/jsonrpc/test_fastapi_app.py::TestA2AFastAPIApplicationOptionalDeps::test_create_a2a_fastapi_app_with_missing_deps_raises_importerror
+PASSED tests/server/apps/jsonrpc/test_jsonrpc_app.py::TestStarletteUserProxy::test_starlette_user_proxy_is_authenticated_true
+PASSED tests/server/apps/jsonrpc/test_jsonrpc_app.py::TestStarletteUserProxy::test_starlette_user_proxy_is_authenticated_false
+PASSED tests/server/apps/jsonrpc/test_jsonrpc_app.py::TestStarletteUserProxy::test_starlette_user_proxy_user_name
+PASSED tests/server/apps/jsonrpc/test_jsonrpc_app.py::TestStarletteUserProxy::test_starlette_user_proxy_user_name_raises_attribute_error
+PASSED tests/server/apps/jsonrpc/test_jsonrpc_app.py::TestJSONRPCApplicationSetup::test_jsonrpc_app_build_method_abstract_raises_typeerror
+PASSED tests/server/apps/jsonrpc/test_jsonrpc_app.py::TestJSONRPCApplicationOptionalDeps::test_create_jsonrpc_based_app_with_present_deps_succeeds
+PASSED tests/server/apps/jsonrpc/test_jsonrpc_app.py::TestJSONRPCApplicationOptionalDeps::test_create_jsonrpc_based_app_with_missing_deps_raises_importerror
+PASSED tests/server/apps/jsonrpc/test_jsonrpc_app.py::TestJSONRPCExtensions::test_request_with_single_extension
+PASSED tests/server/apps/jsonrpc/test_jsonrpc_app.py::TestJSONRPCExtensions::test_request_with_comma_separated_extensions
+PASSED tests/server/apps/jsonrpc/test_jsonrpc_app.py::TestJSONRPCExtensions::test_request_with_comma_separated_extensions_no_space
+PASSED tests/server/apps/jsonrpc/test_jsonrpc_app.py::TestJSONRPCExtensions::test_request_with_multiple_extension_headers
+PASSED tests/server/apps/jsonrpc/test_jsonrpc_app.py::TestJSONRPCExtensions::test_response_with_activated_extensions
+PASSED tests/server/apps/jsonrpc/test_serialization.py::test_starlette_agent_card_with_api_key_scheme_alias
+PASSED tests/server/apps/jsonrpc/test_serialization.py::test_fastapi_agent_card_with_api_key_scheme_alias
+PASSED tests/server/apps/jsonrpc/test_serialization.py::test_handle_invalid_json
+PASSED tests/server/apps/jsonrpc/test_serialization.py::test_handle_oversized_payload
+PASSED tests/server/apps/jsonrpc/test_serialization.py::test_handle_unicode_characters
+PASSED tests/server/apps/jsonrpc/test_serialization.py::test_fastapi_sub_application
+PASSED tests/server/apps/jsonrpc/test_starlette_app.py::TestA2AStarletteApplicationOptionalDeps::test_create_a2a_starlette_app_with_present_deps_succeeds
+PASSED tests/server/apps/jsonrpc/test_starlette_app.py::TestA2AStarletteApplicationOptionalDeps::test_create_a2a_starlette_app_with_missing_deps_raises_importerror
+PASSED tests/server/apps/rest/test_rest_fastapi_app.py::test_create_rest_adapter_with_present_deps_succeeds[asyncio]
+PASSED tests/server/apps/rest/test_rest_fastapi_app.py::test_create_rest_adapter_with_missing_deps_raises_importerror[asyncio]
+PASSED tests/server/apps/rest/test_rest_fastapi_app.py::test_create_a2a_rest_fastapi_app_with_present_deps_succeeds[asyncio]
+PASSED tests/server/apps/rest/test_rest_fastapi_app.py::test_create_a2a_rest_fastapi_app_with_missing_deps_raises_importerror[asyncio]
+PASSED tests/server/apps/rest/test_rest_fastapi_app.py::test_send_message_success_message[asyncio]
+PASSED tests/server/apps/rest/test_rest_fastapi_app.py::test_send_message_success_task[asyncio]
+PASSED tests/server/apps/rest/test_rest_fastapi_app.py::test_streaming_message_request_body_consumption[asyncio]
+PASSED tests/server/apps/rest/test_rest_fastapi_app.py::test_streaming_endpoint_with_invalid_content_type[asyncio]
+PASSED tests/server/apps/rest/test_rest_fastapi_app.py::test_create_rest_adapter_with_present_deps_succeeds[trio]
+PASSED tests/server/apps/rest/test_rest_fastapi_app.py::test_create_rest_adapter_with_missing_deps_raises_importerror[trio]
+PASSED tests/server/apps/rest/test_rest_fastapi_app.py::test_create_a2a_rest_fastapi_app_with_present_deps_succeeds[trio]
+PASSED tests/server/apps/rest/test_rest_fastapi_app.py::test_create_a2a_rest_fastapi_app_with_missing_deps_raises_importerror[trio]
+PASSED tests/server/apps/rest/test_rest_fastapi_app.py::test_send_message_success_message[trio]
+PASSED tests/server/apps/rest/test_rest_fastapi_app.py::test_send_message_success_task[trio]
+PASSED tests/server/apps/rest/test_rest_fastapi_app.py::test_streaming_message_request_body_consumption[trio]
+PASSED tests/server/apps/rest/test_rest_fastapi_app.py::test_streaming_endpoint_with_invalid_content_type[trio]
+PASSED tests/server/events/test_event_consumer.py::test_init_logs_debug_message
+PASSED tests/server/events/test_event_consumer.py::test_consume_one_task_event
+PASSED tests/server/events/test_event_consumer.py::test_consume_one_message_event
+PASSED tests/server/events/test_event_consumer.py::test_consume_one_a2a_error_event
+PASSED tests/server/events/test_event_consumer.py::test_consume_one_jsonrpc_error_event
+PASSED tests/server/events/test_event_consumer.py::test_consume_one_queue_empty
+PASSED tests/server/events/test_event_consumer.py::test_consume_all_multiple_events
+PASSED tests/server/events/test_event_consumer.py::test_consume_until_message
+PASSED tests/server/events/test_event_consumer.py::test_consume_message_events
+PASSED tests/server/events/test_event_consumer.py::test_consume_all_raises_stored_exception
+PASSED tests/server/events/test_event_consumer.py::test_consume_all_stops_on_queue_closed_and_confirmed_closed
+PASSED tests/server/events/test_event_consumer.py::test_consume_all_continues_on_queue_empty_if_not_really_closed
+PASSED tests/server/events/test_event_consumer.py::test_consume_all_handles_queue_empty_when_closed_python_version_agnostic
+PASSED tests/server/events/test_event_consumer.py::test_consume_all_continues_on_queue_empty_when_not_closed
+PASSED tests/server/events/test_event_consumer.py::test_agent_task_callback_sets_exception
+PASSED tests/server/events/test_event_consumer.py::test_agent_task_callback_no_exception
+PASSED tests/server/events/test_event_consumer.py::test_agent_task_callback_cancelled_task
+PASSED tests/server/events/test_event_consumer.py::test_agent_task_callback_not_done_task
+PASSED tests/server/events/test_event_consumer.py::test_consume_all_handles_validation_error
+PASSED tests/server/events/test_event_queue.py::test_constructor_default_max_queue_size
+PASSED tests/server/events/test_event_queue.py::test_constructor_max_queue_size
+PASSED tests/server/events/test_event_queue.py::test_constructor_invalid_max_queue_size
+PASSED tests/server/events/test_event_queue.py::test_enqueue_and_dequeue_event
+PASSED tests/server/events/test_event_queue.py::test_dequeue_event_no_wait
+PASSED tests/server/events/test_event_queue.py::test_dequeue_event_empty_queue_no_wait
+PASSED tests/server/events/test_event_queue.py::test_dequeue_event_wait
+PASSED tests/server/events/test_event_queue.py::test_task_done
+PASSED tests/server/events/test_event_queue.py::test_enqueue_different_event_types
+PASSED tests/server/events/test_event_queue.py::test_enqueue_event_propagates_to_children
+PASSED tests/server/events/test_event_queue.py::test_enqueue_event_when_closed
+PASSED tests/server/events/test_event_queue.py::test_dequeue_event_closed_and_empty_no_wait
+PASSED tests/server/events/test_event_queue.py::test_dequeue_event_closed_and_empty_waits_then_raises
+PASSED tests/server/events/test_event_queue.py::test_tap_creates_child_queue
+PASSED tests/server/events/test_event_queue.py::test_close_sets_flag_and_handles_internal_queue_old_python
+PASSED tests/server/events/test_event_queue.py::test_close_sets_flag_and_handles_internal_queue_new_python
+PASSED tests/server/events/test_event_queue.py::test_close_propagates_to_children
+PASSED tests/server/events/test_event_queue.py::test_close_idempotent
+PASSED tests/server/events/test_event_queue.py::test_is_closed_reflects_state
+PASSED tests/server/events/test_event_queue.py::test_close_with_immediate_true
+PASSED tests/server/events/test_event_queue.py::test_close_immediate_propagates_to_children
+PASSED tests/server/events/test_event_queue.py::test_clear_events_current_queue_only
+PASSED tests/server/events/test_event_queue.py::test_clear_events_with_children
+PASSED tests/server/events/test_event_queue.py::test_clear_events_empty_queue
+PASSED tests/server/events/test_event_queue.py::test_clear_events_closed_queue
+PASSED tests/server/events/test_inmemory_queue_manager.py::TestInMemoryQueueManager::test_init
+PASSED tests/server/events/test_inmemory_queue_manager.py::TestInMemoryQueueManager::test_add_new_queue
+PASSED tests/server/events/test_inmemory_queue_manager.py::TestInMemoryQueueManager::test_add_existing_queue
+PASSED tests/server/events/test_inmemory_queue_manager.py::TestInMemoryQueueManager::test_get_existing_queue
+PASSED tests/server/events/test_inmemory_queue_manager.py::TestInMemoryQueueManager::test_get_nonexistent_queue
+PASSED tests/server/events/test_inmemory_queue_manager.py::TestInMemoryQueueManager::test_tap_existing_queue
+PASSED tests/server/events/test_inmemory_queue_manager.py::TestInMemoryQueueManager::test_tap_nonexistent_queue
+PASSED tests/server/events/test_inmemory_queue_manager.py::TestInMemoryQueueManager::test_close_existing_queue
+PASSED tests/server/events/test_inmemory_queue_manager.py::TestInMemoryQueueManager::test_close_nonexistent_queue
+PASSED tests/server/events/test_inmemory_queue_manager.py::TestInMemoryQueueManager::test_create_or_tap_new_queue
+PASSED tests/server/events/test_inmemory_queue_manager.py::TestInMemoryQueueManager::test_create_or_tap_existing_queue
+PASSED tests/server/events/test_inmemory_queue_manager.py::TestInMemoryQueueManager::test_concurrency
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_init_default_dependencies
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_get_task_not_found
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_cancel_task_task_not_found
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_cancel_task_queue_tap_returns_none
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_cancel_task_cancels_running_agent
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_cancel_task_completes_during_cancellation
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_cancel_task_invalid_result_type
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_message_send_with_push_notification
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_message_send_with_push_notification_in_non_blocking_request
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_message_send_with_push_notification_no_existing_Task
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_message_send_no_result_from_aggregator
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_message_send_task_id_mismatch
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_message_send_non_blocking
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_message_send_interrupted_flow
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_message_send_stream_with_push_notification
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_message_send_stream_task_id_mismatch
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_cleanup_producer_task_id_not_in_running_agents
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_set_task_push_notification_config_no_notifier
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_set_task_push_notification_config_task_not_found
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_get_task_push_notification_config_no_store
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_get_task_push_notification_config_task_not_found
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_get_task_push_notification_config_info_not_found
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_get_task_push_notification_config_info_with_config
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_get_task_push_notification_config_info_with_config_no_id
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_resubscribe_to_task_task_not_found
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_resubscribe_to_task_queue_not_found
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_message_send_stream
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_list_task_push_notification_config_no_store
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_list_task_push_notification_config_task_not_found
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_list_no_task_push_notification_config_info
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_list_task_push_notification_config_info_with_config
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_list_task_push_notification_config_info_with_config_and_no_id
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_delete_task_push_notification_config_no_store
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_delete_task_push_notification_config_task_not_found
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_delete_no_task_push_notification_config_info
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_delete_task_push_notification_config_info_with_config
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_delete_task_push_notification_config_info_with_config_and_no_id
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_message_send_task_in_terminal_state[completed]
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_message_send_task_in_terminal_state[canceled]
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_message_send_task_in_terminal_state[rejected]
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_message_send_task_in_terminal_state[failed]
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_message_send_stream_task_in_terminal_state[completed]
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_message_send_stream_task_in_terminal_state[canceled]
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_message_send_stream_task_in_terminal_state[rejected]
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_message_send_stream_task_in_terminal_state[failed]
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_resubscribe_to_task_in_terminal_state[completed]
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_resubscribe_to_task_in_terminal_state[canceled]
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_resubscribe_to_task_in_terminal_state[rejected]
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_resubscribe_to_task_in_terminal_state[failed]
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_message_send_task_id_provided_but_task_not_found
+PASSED tests/server/request_handlers/test_default_request_handler.py::test_on_message_send_stream_task_id_provided_but_task_not_found
+PASSED tests/server/request_handlers/test_grpc_handler.py::test_send_message_success
+PASSED tests/server/request_handlers/test_grpc_handler.py::test_send_message_server_error
+PASSED tests/server/request_handlers/test_grpc_handler.py::test_get_task_success
+PASSED tests/server/request_handlers/test_grpc_handler.py::test_get_task_not_found
+PASSED tests/server/request_handlers/test_grpc_handler.py::test_cancel_task_server_error
+PASSED tests/server/request_handlers/test_grpc_handler.py::test_send_streaming_message
+PASSED tests/server/request_handlers/test_grpc_handler.py::test_get_agent_card
+PASSED tests/server/request_handlers/test_grpc_handler.py::test_get_agent_card_with_modifier
+PASSED tests/server/request_handlers/test_grpc_handler.py::test_abort_context_error_mapping[server_error0-StatusCode.INTERNAL-JSONParseError]
+PASSED tests/server/request_handlers/test_grpc_handler.py::test_abort_context_error_mapping[server_error1-StatusCode.INVALID_ARGUMENT-InvalidRequestError]
+PASSED tests/server/request_handlers/test_grpc_handler.py::test_abort_context_error_mapping[server_error2-StatusCode.NOT_FOUND-MethodNotFoundError]
+PASSED tests/server/request_handlers/test_grpc_handler.py::test_abort_context_error_mapping[server_error3-StatusCode.INVALID_ARGUMENT-InvalidParamsError]
+PASSED tests/server/request_handlers/test_grpc_handler.py::test_abort_context_error_mapping[server_error4-StatusCode.INTERNAL-InternalError]
+PASSED tests/server/request_handlers/test_grpc_handler.py::test_abort_context_error_mapping[server_error5-StatusCode.NOT_FOUND-TaskNotFoundError]
+PASSED tests/server/request_handlers/test_grpc_handler.py::test_abort_context_error_mapping[server_error6-StatusCode.UNIMPLEMENTED-TaskNotCancelableError]
+PASSED tests/server/request_handlers/test_grpc_handler.py::test_abort_context_error_mapping[server_error7-StatusCode.UNIMPLEMENTED-PushNotificationNotSupportedError]
+PASSED tests/server/request_handlers/test_grpc_handler.py::test_abort_context_error_mapping[server_error8-StatusCode.UNIMPLEMENTED-UnsupportedOperationError]
+PASSED tests/server/request_handlers/test_grpc_handler.py::test_abort_context_error_mapping[server_error9-StatusCode.UNIMPLEMENTED-ContentTypeNotSupportedError]
+PASSED tests/server/request_handlers/test_grpc_handler.py::test_abort_context_error_mapping[server_error10-StatusCode.INTERNAL-InvalidAgentResponseError]
+PASSED tests/server/request_handlers/test_grpc_handler.py::test_abort_context_error_mapping[server_error11-StatusCode.UNKNOWN-Unknown error]
+PASSED tests/server/request_handlers/test_grpc_handler.py::TestGrpcExtensions::test_send_message_with_extensions
+PASSED tests/server/request_handlers/test_grpc_handler.py::TestGrpcExtensions::test_send_message_with_comma_separated_extensions
+PASSED tests/server/request_handlers/test_grpc_handler.py::TestGrpcExtensions::test_send_streaming_message_with_extensions
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_default_request_handler_with_custom_components
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_get_authenticated_extended_card_not_configured
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_get_authenticated_extended_card_success
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_get_authenticated_extended_card_with_modifier
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_get_push_notification_success
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_on_cancel_task_not_found
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_on_cancel_task_not_supported
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_on_cancel_task_success
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_on_delete_push_notification
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_on_delete_push_notification_error
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_on_get_push_notification
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_on_get_push_notification_no_push_config_store
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_on_get_task_not_found
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_on_get_task_success
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_on_list_push_notification
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_on_list_push_notification_error
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_on_message_error
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_on_message_new_message_success
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_on_message_new_message_with_existing_task_success
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_on_message_send_error_handling
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_on_message_send_internal_error
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_on_message_send_task_id_mismatch
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_on_message_stream_internal_error
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_on_message_stream_new_message_existing_task_success
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_on_message_stream_new_message_send_push_notification_success
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_on_message_stream_new_message_success
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_on_message_stream_task_id_mismatch
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_on_resubscribe_existing_task_success
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_on_resubscribe_no_existing_task_error
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_on_set_push_notification_no_push_config_store
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_push_notifications_not_supported_error
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_set_push_notification_success
+PASSED tests/server/request_handlers/test_jsonrpc_handler.py::TestJSONRPCtHandler::test_streaming_not_supported_error
+PASSED tests/server/request_handlers/test_response_helpers.py::TestResponseHelpers::test_build_error_response_with_a2a_error
+PASSED tests/server/request_handlers/test_response_helpers.py::TestResponseHelpers::test_build_error_response_with_a2a_wrapping_jsonrpc_error
+PASSED tests/server/request_handlers/test_response_helpers.py::TestResponseHelpers::test_build_error_response_with_jsonrpc_error
+PASSED tests/server/request_handlers/test_response_helpers.py::TestResponseHelpers::test_build_error_response_with_request_id_int
+PASSED tests/server/request_handlers/test_response_helpers.py::TestResponseHelpers::test_build_error_response_with_request_id_none
+PASSED tests/server/request_handlers/test_response_helpers.py::TestResponseHelpers::test_build_error_response_with_request_id_string
+PASSED tests/server/request_handlers/test_response_helpers.py::TestResponseHelpers::test_prepare_response_object_specific_error_model_as_unexpected
+PASSED tests/server/request_handlers/test_response_helpers.py::TestResponseHelpers::test_prepare_response_object_successful_response
+PASSED tests/server/request_handlers/test_response_helpers.py::TestResponseHelpers::test_prepare_response_object_with_a2a_error_instance
+PASSED tests/server/request_handlers/test_response_helpers.py::TestResponseHelpers::test_prepare_response_object_with_jsonrpcerror_base_instance
+PASSED tests/server/request_handlers/test_response_helpers.py::TestResponseHelpers::test_prepare_response_object_with_request_id_int
+PASSED tests/server/request_handlers/test_response_helpers.py::TestResponseHelpers::test_prepare_response_object_with_request_id_none
+PASSED tests/server/request_handlers/test_response_helpers.py::TestResponseHelpers::test_prepare_response_object_with_request_id_string
+PASSED tests/server/tasks/test_database_push_notification_config_store.py::test_initialize_creates_table[sqlite]
+PASSED tests/server/tasks/test_database_push_notification_config_store.py::test_initialize_is_idempotent[sqlite]
+PASSED tests/server/tasks/test_database_push_notification_config_store.py::test_set_and_get_info_single_config[sqlite]
+PASSED tests/server/tasks/test_database_push_notification_config_store.py::test_set_and_get_info_multiple_configs[sqlite]
+PASSED tests/server/tasks/test_database_push_notification_config_store.py::test_set_info_updates_existing_config[sqlite]
+PASSED tests/server/tasks/test_database_push_notification_config_store.py::test_set_info_defaults_config_id_to_task_id[sqlite]
+PASSED tests/server/tasks/test_database_push_notification_config_store.py::test_get_info_not_found[sqlite]
+PASSED tests/server/tasks/test_database_push_notification_config_store.py::test_delete_info_specific_config[sqlite]
+PASSED tests/server/tasks/test_database_push_notification_config_store.py::test_delete_info_all_for_task[sqlite]
+PASSED tests/server/tasks/test_database_push_notification_config_store.py::test_delete_info_not_found[sqlite]
+PASSED tests/server/tasks/test_database_push_notification_config_store.py::test_data_is_encrypted_in_db[sqlite]
+PASSED tests/server/tasks/test_database_push_notification_config_store.py::test_decryption_error_with_wrong_key[sqlite]
+PASSED tests/server/tasks/test_database_push_notification_config_store.py::test_decryption_error_with_no_key[sqlite]
+PASSED tests/server/tasks/test_database_push_notification_config_store.py::test_custom_table_name[sqlite]
+PASSED tests/server/tasks/test_database_push_notification_config_store.py::test_set_and_get_info_multiple_configs_no_key[sqlite]
+PASSED tests/server/tasks/test_database_push_notification_config_store.py::test_data_is_not_encrypted_in_db_if_no_key_is_set[sqlite]
+PASSED tests/server/tasks/test_database_push_notification_config_store.py::test_decryption_fallback_for_unencrypted_data[sqlite]
+PASSED tests/server/tasks/test_database_push_notification_config_store.py::test_parsing_error_after_successful_decryption[sqlite]
+PASSED tests/server/tasks/test_database_task_store.py::test_initialize_creates_table[sqlite]
+PASSED tests/server/tasks/test_database_task_store.py::test_save_task[sqlite]
+PASSED tests/server/tasks/test_database_task_store.py::test_get_task[sqlite]
+PASSED tests/server/tasks/test_database_task_store.py::test_get_nonexistent_task[sqlite]
+PASSED tests/server/tasks/test_database_task_store.py::test_delete_task[sqlite]
+PASSED tests/server/tasks/test_database_task_store.py::test_delete_nonexistent_task[sqlite]
+PASSED tests/server/tasks/test_database_task_store.py::test_save_and_get_detailed_task[sqlite]
+PASSED tests/server/tasks/test_database_task_store.py::test_update_task[sqlite]
+PASSED tests/server/tasks/test_database_task_store.py::test_metadata_field_mapping[sqlite]
+PASSED tests/server/tasks/test_inmemory_push_notifications.py::TestInMemoryPushNotifier::test_constructor_stores_client
+PASSED tests/server/tasks/test_inmemory_push_notifications.py::TestInMemoryPushNotifier::test_delete_info_existing_config
+PASSED tests/server/tasks/test_inmemory_push_notifications.py::TestInMemoryPushNotifier::test_delete_info_non_existent_config
+PASSED tests/server/tasks/test_inmemory_push_notifications.py::TestInMemoryPushNotifier::test_get_info_existing_config
+PASSED tests/server/tasks/test_inmemory_push_notifications.py::TestInMemoryPushNotifier::test_get_info_non_existent_config
+PASSED tests/server/tasks/test_inmemory_push_notifications.py::TestInMemoryPushNotifier::test_send_notification_http_status_error
+PASSED tests/server/tasks/test_inmemory_push_notifications.py::TestInMemoryPushNotifier::test_send_notification_no_config
+PASSED tests/server/tasks/test_inmemory_push_notifications.py::TestInMemoryPushNotifier::test_send_notification_request_error
+PASSED tests/server/tasks/test_inmemory_push_notifications.py::TestInMemoryPushNotifier::test_send_notification_success
+PASSED tests/server/tasks/test_inmemory_push_notifications.py::TestInMemoryPushNotifier::test_send_notification_with_auth
+PASSED tests/server/tasks/test_inmemory_push_notifications.py::TestInMemoryPushNotifier::test_send_notification_with_token_success
+PASSED tests/server/tasks/test_inmemory_push_notifications.py::TestInMemoryPushNotifier::test_set_info_adds_new_config
+PASSED tests/server/tasks/test_inmemory_push_notifications.py::TestInMemoryPushNotifier::test_set_info_appends_to_existing_config
+PASSED tests/server/tasks/test_inmemory_push_notifications.py::TestInMemoryPushNotifier::test_set_info_without_config_id
+PASSED tests/server/tasks/test_inmemory_task_store.py::test_in_memory_task_store_save_and_get
+PASSED tests/server/tasks/test_inmemory_task_store.py::test_in_memory_task_store_get_nonexistent
+PASSED tests/server/tasks/test_inmemory_task_store.py::test_in_memory_task_store_delete
+PASSED tests/server/tasks/test_inmemory_task_store.py::test_in_memory_task_store_delete_nonexistent
+PASSED tests/server/tasks/test_push_notification_sender.py::TestBasePushNotificationSender::test_constructor_stores_client_and_config_store
+PASSED tests/server/tasks/test_push_notification_sender.py::TestBasePushNotificationSender::test_send_notification_http_status_error
+PASSED tests/server/tasks/test_push_notification_sender.py::TestBasePushNotificationSender::test_send_notification_multiple_configs
+PASSED tests/server/tasks/test_push_notification_sender.py::TestBasePushNotificationSender::test_send_notification_no_config
+PASSED tests/server/tasks/test_push_notification_sender.py::TestBasePushNotificationSender::test_send_notification_success
+PASSED tests/server/tasks/test_push_notification_sender.py::TestBasePushNotificationSender::test_send_notification_with_token_success
+PASSED tests/server/tasks/test_result_aggregator.py::TestResultAggregator::test_consume_all_empty_stream
+PASSED tests/server/tasks/test_result_aggregator.py::TestResultAggregator::test_consume_all_event_consumer_exception
+PASSED tests/server/tasks/test_result_aggregator.py::TestResultAggregator::test_consume_all_only_message_event
+PASSED tests/server/tasks/test_result_aggregator.py::TestResultAggregator::test_consume_all_other_event_types
+PASSED tests/server/tasks/test_result_aggregator.py::TestResultAggregator::test_consume_and_break_completes_normally
+PASSED tests/server/tasks/test_result_aggregator.py::TestResultAggregator::test_consume_and_break_event_consumer_exception
+PASSED tests/server/tasks/test_result_aggregator.py::TestResultAggregator::test_consume_and_break_non_blocking
+PASSED tests/server/tasks/test_result_aggregator.py::TestResultAggregator::test_consume_and_break_on_auth_required_status_update_event
+PASSED tests/server/tasks/test_result_aggregator.py::TestResultAggregator::test_consume_and_break_on_auth_required_task_event
+PASSED tests/server/tasks/test_result_aggregator.py::TestResultAggregator::test_consume_and_break_on_message
+PASSED tests/server/tasks/test_result_aggregator.py::TestResultAggregator::test_consume_and_emit
+PASSED tests/server/tasks/test_result_aggregator.py::TestResultAggregator::test_continue_consuming_processes_remaining_events
+PASSED tests/server/tasks/test_result_aggregator.py::TestResultAggregator::test_current_result_property_with_message_none
+PASSED tests/server/tasks/test_result_aggregator.py::TestResultAggregator::test_current_result_property_with_message_set
+PASSED tests/server/tasks/test_result_aggregator.py::TestResultAggregator::test_init_stores_task_manager
+PASSED tests/server/tasks/test_task_manager.py::test_task_manager_invalid_task_id[]
+PASSED tests/server/tasks/test_task_manager.py::test_task_manager_invalid_task_id[123]
+PASSED tests/server/tasks/test_task_manager.py::test_get_task_existing
+PASSED tests/server/tasks/test_task_manager.py::test_get_task_nonexistent
+PASSED tests/server/tasks/test_task_manager.py::test_save_task_event_new_task
+PASSED tests/server/tasks/test_task_manager.py::test_save_task_event_status_update
+PASSED tests/server/tasks/test_task_manager.py::test_save_task_event_artifact_update
+PASSED tests/server/tasks/test_task_manager.py::test_save_task_event_metadata_update
+PASSED tests/server/tasks/test_task_manager.py::test_ensure_task_existing
+PASSED tests/server/tasks/test_task_manager.py::test_ensure_task_nonexistent
+PASSED tests/server/tasks/test_task_manager.py::test_init_task_obj
+PASSED tests/server/tasks/test_task_manager.py::test_save_task
+PASSED tests/server/tasks/test_task_manager.py::test_save_task_event_mismatched_id_raises_error
+PASSED tests/server/tasks/test_task_manager.py::test_save_task_event_new_task_no_task_id
+PASSED tests/server/tasks/test_task_manager.py::test_get_task_no_task_id
+PASSED tests/server/tasks/test_task_manager.py::test_save_task_event_no_task_existing
+PASSED tests/server/tasks/test_task_updater.py::test_init
+PASSED tests/server/tasks/test_task_updater.py::test_update_status_without_message
+PASSED tests/server/tasks/test_task_updater.py::test_update_status_with_message
+PASSED tests/server/tasks/test_task_updater.py::test_update_status_final
+PASSED tests/server/tasks/test_task_updater.py::test_add_artifact_with_custom_id_and_name
+PASSED tests/server/tasks/test_task_updater.py::test_add_artifact_generates_id
+PASSED tests/server/tasks/test_task_updater.py::test_add_artifact_with_append_last_chunk[False-False]
+PASSED tests/server/tasks/test_task_updater.py::test_add_artifact_with_append_last_chunk[True-True]
+PASSED tests/server/tasks/test_task_updater.py::test_add_artifact_with_append_last_chunk[True-False]
+PASSED tests/server/tasks/test_task_updater.py::test_add_artifact_with_append_last_chunk[False-True]
+PASSED tests/server/tasks/test_task_updater.py::test_complete_without_message
+PASSED tests/server/tasks/test_task_updater.py::test_complete_with_message
+PASSED tests/server/tasks/test_task_updater.py::test_submit_without_message
+PASSED tests/server/tasks/test_task_updater.py::test_submit_with_message
+PASSED tests/server/tasks/test_task_updater.py::test_start_work_without_message
+PASSED tests/server/tasks/test_task_updater.py::test_start_work_with_message
+PASSED tests/server/tasks/test_task_updater.py::test_new_agent_message
+PASSED tests/server/tasks/test_task_updater.py::test_new_agent_message_with_metadata
+PASSED tests/server/tasks/test_task_updater.py::test_failed_without_message
+PASSED tests/server/tasks/test_task_updater.py::test_failed_with_message
+PASSED tests/server/tasks/test_task_updater.py::test_reject_without_message
+PASSED tests/server/tasks/test_task_updater.py::test_reject_with_message
+PASSED tests/server/tasks/test_task_updater.py::test_requires_input_without_message
+PASSED tests/server/tasks/test_task_updater.py::test_requires_input_with_message
+PASSED tests/server/tasks/test_task_updater.py::test_requires_input_final_true
+PASSED tests/server/tasks/test_task_updater.py::test_requires_input_with_message_and_final
+PASSED tests/server/tasks/test_task_updater.py::test_requires_auth_without_message
+PASSED tests/server/tasks/test_task_updater.py::test_requires_auth_with_message
+PASSED tests/server/tasks/test_task_updater.py::test_requires_auth_final_true
+PASSED tests/server/tasks/test_task_updater.py::test_requires_auth_with_message_and_final
+PASSED tests/server/tasks/test_task_updater.py::test_cancel_without_message
+PASSED tests/server/tasks/test_task_updater.py::test_cancel_with_message
+PASSED tests/server/tasks/test_task_updater.py::test_update_status_raises_error_if_terminal_state_reached
+PASSED tests/server/tasks/test_task_updater.py::test_concurrent_updates_race_condition
+PASSED tests/server/tasks/test_task_updater.py::test_reject_concurrently_with_complete
+PASSED tests/server/test_integration.py::test_agent_card_endpoint
+PASSED tests/server/test_integration.py::test_authenticated_extended_agent_card_endpoint_not_supported
+PASSED tests/server/test_integration.py::test_agent_card_default_endpoint_has_deprecated_route
+PASSED tests/server/test_integration.py::test_agent_card_custom_endpoint_has_no_deprecated_route
+PASSED tests/server/test_integration.py::test_authenticated_extended_agent_card_endpoint_not_supported_fastapi
+PASSED tests/server/test_integration.py::test_authenticated_extended_agent_card_endpoint_supported_with_specific_extended_card_starlette
+PASSED tests/server/test_integration.py::test_authenticated_extended_agent_card_endpoint_supported_with_specific_extended_card_fastapi
+PASSED tests/server/test_integration.py::test_agent_card_custom_url
+PASSED tests/server/test_integration.py::test_starlette_rpc_endpoint_custom_url
+PASSED tests/server/test_integration.py::test_fastapi_rpc_endpoint_custom_url
+PASSED tests/server/test_integration.py::test_starlette_build_with_extra_routes
+PASSED tests/server/test_integration.py::test_fastapi_build_with_extra_routes
+PASSED tests/server/test_integration.py::test_fastapi_build_custom_agent_card_path
+PASSED tests/server/test_integration.py::test_send_message
+PASSED tests/server/test_integration.py::test_cancel_task
+PASSED tests/server/test_integration.py::test_get_task
+PASSED tests/server/test_integration.py::test_set_push_notification_config
+PASSED tests/server/test_integration.py::test_get_push_notification_config
+PASSED tests/server/test_integration.py::test_server_auth
+PASSED tests/server/test_integration.py::test_message_send_stream
+PASSED tests/server/test_integration.py::test_task_resubscription
+PASSED tests/server/test_integration.py::test_invalid_json
+PASSED tests/server/test_integration.py::test_invalid_request_structure
+PASSED tests/server/test_integration.py::test_dynamic_agent_card_modifier
+PASSED tests/server/test_integration.py::test_dynamic_extended_agent_card_modifier
+PASSED tests/server/test_integration.py::test_fastapi_dynamic_agent_card_modifier
+PASSED tests/server/test_integration.py::test_method_not_implemented
+PASSED tests/server/test_integration.py::test_unknown_method
+PASSED tests/server/test_integration.py::test_validation_error
+PASSED tests/server/test_integration.py::test_unhandled_exception
+PASSED tests/server/test_integration.py::test_get_method_to_rpc_endpoint
+PASSED tests/server/test_integration.py::test_non_dict_json
+PASSED tests/server/test_models.py::TestPydanticType::test_process_bind_param_with_pydantic_model
+PASSED tests/server/test_models.py::TestPydanticType::test_process_bind_param_with_none
+PASSED tests/server/test_models.py::TestPydanticType::test_process_result_value
+PASSED tests/server/test_models.py::TestPydanticListType::test_process_bind_param_with_list
+PASSED tests/server/test_models.py::TestPydanticListType::test_process_result_value_with_list
+PASSED tests/server/test_models.py::test_create_task_model
+PASSED tests/server/test_models.py::test_create_push_notification_config_model
+PASSED tests/test_types.py::test_security_scheme_valid
+PASSED tests/test_types.py::test_security_scheme_invalid
+PASSED tests/test_types.py::test_agent_capabilities
+PASSED tests/test_types.py::test_agent_provider
+PASSED tests/test_types.py::test_agent_skill_valid
+PASSED tests/test_types.py::test_agent_skill_invalid
+PASSED tests/test_types.py::test_agent_card_valid
+PASSED tests/test_types.py::test_agent_card_invalid
+PASSED tests/test_types.py::test_text_part
+PASSED tests/test_types.py::test_file_part_variants
+PASSED tests/test_types.py::test_data_part
+PASSED tests/test_types.py::test_part_root_model
+PASSED tests/test_types.py::test_message
+PASSED tests/test_types.py::test_task_status
+PASSED tests/test_types.py::test_task
+PASSED tests/test_types.py::test_jsonrpc_error
+PASSED tests/test_types.py::test_jsonrpc_request
+PASSED tests/test_types.py::test_jsonrpc_error_response
+PASSED tests/test_types.py::test_jsonrpc_response_root_model
+PASSED tests/test_types.py::test_send_message_request
+PASSED tests/test_types.py::test_send_subscribe_request
+PASSED tests/test_types.py::test_get_task_request
+PASSED tests/test_types.py::test_cancel_task_request
+PASSED tests/test_types.py::test_get_task_response
+PASSED tests/test_types.py::test_send_message_response
+PASSED tests/test_types.py::test_cancel_task_response
+PASSED tests/test_types.py::test_send_message_streaming_status_update_response
+PASSED tests/test_types.py::test_send_message_streaming_artifact_update_response
+PASSED tests/test_types.py::test_set_task_push_notification_response
+PASSED tests/test_types.py::test_get_task_push_notification_response
+PASSED tests/test_types.py::test_a2a_request_root_model
+PASSED tests/test_types.py::test_a2a_request_root_model_id_validation
+PASSED tests/test_types.py::test_content_type_not_supported_error
+PASSED tests/test_types.py::test_task_not_found_error
+PASSED tests/test_types.py::test_push_notification_not_supported_error
+PASSED tests/test_types.py::test_internal_error
+PASSED tests/test_types.py::test_invalid_params_error
+PASSED tests/test_types.py::test_invalid_request_error
+PASSED tests/test_types.py::test_json_parse_error
+PASSED tests/test_types.py::test_method_not_found_error
+PASSED tests/test_types.py::test_task_not_cancelable_error
+PASSED tests/test_types.py::test_unsupported_operation_error
+PASSED tests/test_types.py::test_task_id_params_valid
+PASSED tests/test_types.py::test_task_id_params_invalid
+PASSED tests/test_types.py::test_task_push_notification_config
+PASSED tests/test_types.py::test_jsonrpc_message_valid
+PASSED tests/test_types.py::test_jsonrpc_message_invalid
+PASSED tests/test_types.py::test_file_base_valid
+PASSED tests/test_types.py::test_file_base_invalid
+PASSED tests/test_types.py::test_part_base_valid
+PASSED tests/test_types.py::test_part_base_invalid
+PASSED tests/test_types.py::test_a2a_error_validation_and_serialization
+PASSED tests/test_types.py::test_subclass_enums
+PASSED tests/test_types.py::test_get_task_push_config_params
+PASSED tests/test_types.py::test_use_get_task_push_notification_params_for_request
+PASSED tests/test_types.py::test_camelCase_access_raises_attribute_error
+PASSED tests/test_types.py::test_get_authenticated_extended_card_request
+PASSED tests/test_types.py::test_get_authenticated_extended_card_response
+PASSED tests/utils/test_artifact.py::TestArtifact::test_new_artifact_assigns_parts_name_description
+PASSED tests/utils/test_artifact.py::TestArtifact::test_new_artifact_empty_description_if_not_provided
+PASSED tests/utils/test_artifact.py::TestArtifact::test_new_artifact_generates_id
+PASSED tests/utils/test_artifact.py::TestArtifact::test_new_data_artifact_assigns_name_description
+PASSED tests/utils/test_artifact.py::TestArtifact::test_new_data_artifact_creates_single_data_part
+PASSED tests/utils/test_artifact.py::TestArtifact::test_new_data_artifact_part_contains_provided_data
+PASSED tests/utils/test_artifact.py::TestArtifact::test_new_text_artifact_assigns_name_description
+PASSED tests/utils/test_artifact.py::TestArtifact::test_new_text_artifact_creates_single_text_part
+PASSED tests/utils/test_artifact.py::TestArtifact::test_new_text_artifact_part_contains_provided_text
+PASSED tests/utils/test_constants.py::test_agent_card_constants
+PASSED tests/utils/test_constants.py::test_default_rpc_url
+PASSED tests/utils/test_error_handlers.py::test_rest_error_handler_server_error
+PASSED tests/utils/test_error_handlers.py::test_rest_error_handler_unknown_exception
+PASSED tests/utils/test_error_handlers.py::test_rest_stream_error_handler_server_error
+PASSED tests/utils/test_error_handlers.py::test_rest_stream_error_handler_reraises_exception
+PASSED tests/utils/test_error_handlers.py::test_a2a_error_to_http_status_mapping
+PASSED tests/utils/test_helpers.py::test_create_task_obj
+PASSED tests/utils/test_helpers.py::test_create_task_obj_generates_context_id
+PASSED tests/utils/test_helpers.py::test_append_artifact_to_task
+PASSED tests/utils/test_helpers.py::test_build_text_artifact
+PASSED tests/utils/test_helpers.py::test_validate_decorator
+PASSED tests/utils/test_helpers.py::test_are_modalities_compatible_client_none
+PASSED tests/utils/test_helpers.py::test_are_modalities_compatible_client_empty
+PASSED tests/utils/test_helpers.py::test_are_modalities_compatible_server_none
+PASSED tests/utils/test_helpers.py::test_are_modalities_compatible_server_empty
+PASSED tests/utils/test_helpers.py::test_are_modalities_compatible_common_mode
+PASSED tests/utils/test_helpers.py::test_are_modalities_compatible_no_common_modes
+PASSED tests/utils/test_helpers.py::test_are_modalities_compatible_exact_match
+PASSED tests/utils/test_helpers.py::test_are_modalities_compatible_server_more_but_common
+PASSED tests/utils/test_helpers.py::test_are_modalities_compatible_client_more_but_common
+PASSED tests/utils/test_helpers.py::test_are_modalities_compatible_both_none
+PASSED tests/utils/test_helpers.py::test_are_modalities_compatible_both_empty
+PASSED tests/utils/test_message.py::TestNewAgentTextMessage::test_new_agent_text_message_basic
+PASSED tests/utils/test_message.py::TestNewAgentTextMessage::test_new_agent_text_message_with_context_id
+PASSED tests/utils/test_message.py::TestNewAgentTextMessage::test_new_agent_text_message_with_task_id
+PASSED tests/utils/test_message.py::TestNewAgentTextMessage::test_new_agent_text_message_with_both_ids
+PASSED tests/utils/test_message.py::TestNewAgentTextMessage::test_new_agent_text_message_empty_text
+PASSED tests/utils/test_message.py::TestNewAgentPartsMessage::test_new_agent_parts_message
+PASSED tests/utils/test_message.py::TestGetTextParts::test_get_text_parts_single_text_part
+PASSED tests/utils/test_message.py::TestGetTextParts::test_get_text_parts_multiple_text_parts
+PASSED tests/utils/test_message.py::TestGetTextParts::test_get_text_parts_empty_list
+PASSED tests/utils/test_message.py::TestGetDataParts::test_get_data_parts_single_data_part
+PASSED tests/utils/test_message.py::TestGetDataParts::test_get_data_parts_multiple_data_parts
+PASSED tests/utils/test_message.py::TestGetDataParts::test_get_data_parts_mixed_parts
+PASSED tests/utils/test_message.py::TestGetDataParts::test_get_data_parts_no_data_parts
+PASSED tests/utils/test_message.py::TestGetDataParts::test_get_data_parts_empty_list
+PASSED tests/utils/test_message.py::TestGetFileParts::test_get_file_parts_single_file_part
+PASSED tests/utils/test_message.py::TestGetFileParts::test_get_file_parts_multiple_file_parts
+PASSED tests/utils/test_message.py::TestGetFileParts::test_get_file_parts_mixed_parts
+PASSED tests/utils/test_message.py::TestGetFileParts::test_get_file_parts_no_file_parts
+PASSED tests/utils/test_message.py::TestGetFileParts::test_get_file_parts_empty_list
+PASSED tests/utils/test_message.py::TestGetMessageText::test_get_message_text_single_part
+PASSED tests/utils/test_message.py::TestGetMessageText::test_get_message_text_multiple_parts
+PASSED tests/utils/test_message.py::TestGetMessageText::test_get_message_text_custom_delimiter
+PASSED tests/utils/test_message.py::TestGetMessageText::test_get_message_text_empty_parts
+PASSED tests/utils/test_proto_utils.py::TestToProto::test_part_unsupported_type
+PASSED tests/utils/test_proto_utils.py::TestFromProto::test_part_unsupported_type
+PASSED tests/utils/test_proto_utils.py::TestFromProto::test_task_query_params_invalid_name
+PASSED tests/utils/test_proto_utils.py::TestProtoUtils::test_roundtrip_message
+PASSED tests/utils/test_proto_utils.py::TestProtoUtils::test_enum_conversions
+PASSED tests/utils/test_proto_utils.py::TestProtoUtils::test_oauth_flows_conversion
+PASSED tests/utils/test_proto_utils.py::TestProtoUtils::test_task_id_params_from_proto_invalid_name
+PASSED tests/utils/test_proto_utils.py::TestProtoUtils::test_task_push_config_from_proto_invalid_parent
+PASSED tests/utils/test_proto_utils.py::TestProtoUtils::test_none_handling
+PASSED tests/utils/test_task.py::TestTask::test_completed_task_assigns_ids_and_artifacts
+PASSED tests/utils/test_task.py::TestTask::test_completed_task_empty_artifacts
+PASSED tests/utils/test_task.py::TestTask::test_completed_task_empty_history_if_not_provided
+PASSED tests/utils/test_task.py::TestTask::test_completed_task_invalid_artifact_type
+PASSED tests/utils/test_task.py::TestTask::test_completed_task_status
+PASSED tests/utils/test_task.py::TestTask::test_completed_task_uses_provided_history
+PASSED tests/utils/test_task.py::TestTask::test_new_task_generates_ids
+PASSED tests/utils/test_task.py::TestTask::test_new_task_initial_message_in_history
+PASSED tests/utils/test_task.py::TestTask::test_new_task_invalid_message_empty_content
+PASSED tests/utils/test_task.py::TestTask::test_new_task_invalid_message_empty_parts
+PASSED tests/utils/test_task.py::TestTask::test_new_task_invalid_message_none_role
+PASSED tests/utils/test_task.py::TestTask::test_new_task_status
+PASSED tests/utils/test_task.py::TestTask::test_new_task_uses_provided_ids
+PASSED tests/utils/test_telemetry.py::test_trace_function_sync_success
+PASSED tests/utils/test_telemetry.py::test_trace_function_sync_exception
+PASSED tests/utils/test_telemetry.py::test_trace_function_sync_attribute_extractor_called
+PASSED tests/utils/test_telemetry.py::test_trace_function_sync_attribute_extractor_error_logged
+PASSED tests/utils/test_telemetry.py::test_trace_function_async_success
+PASSED tests/utils/test_telemetry.py::test_trace_function_async_exception
+PASSED tests/utils/test_telemetry.py::test_trace_function_async_attribute_extractor_called
+PASSED tests/utils/test_telemetry.py::test_trace_function_with_args_and_attributes
+PASSED tests/utils/test_telemetry.py::test_trace_class_exclude_list
+PASSED tests/utils/test_telemetry.py::test_trace_class_include_list
+PASSED tests/utils/test_telemetry.py::test_trace_class_dunder_not_traced
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:137: POSTGRES_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:137: MYSQL_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:157: POSTGRES_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:157: MYSQL_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:168: POSTGRES_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:168: MYSQL_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:183: POSTGRES_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:183: MYSQL_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:202: POSTGRES_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:202: MYSQL_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:224: POSTGRES_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:224: MYSQL_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:239: POSTGRES_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:239: MYSQL_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:250: POSTGRES_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:250: MYSQL_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:269: POSTGRES_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:269: MYSQL_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:288: POSTGRES_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:288: MYSQL_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:297: POSTGRES_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:297: MYSQL_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:329: POSTGRES_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:329: MYSQL_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:363: POSTGRES_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:363: MYSQL_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:394: POSTGRES_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:394: MYSQL_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:443: POSTGRES_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:443: MYSQL_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:469: POSTGRES_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:469: MYSQL_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:502: POSTGRES_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:502: MYSQL_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:527: POSTGRES_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_push_notification_config_store.py:527: MYSQL_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_task_store.py:124: POSTGRES_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_task_store.py:124: MYSQL_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_task_store.py:142: POSTGRES_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_task_store.py:142: MYSQL_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_task_store.py:159: POSTGRES_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_task_store.py:159: MYSQL_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_task_store.py:174: POSTGRES_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_task_store.py:174: MYSQL_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_task_store.py:183: POSTGRES_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_task_store.py:183: MYSQL_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_task_store.py:199: POSTGRES_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_task_store.py:199: MYSQL_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_task_store.py:207: POSTGRES_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_task_store.py:207: MYSQL_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_task_store.py:260: POSTGRES_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_task_store.py:260: MYSQL_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_task_store.py:297: POSTGRES_TEST_DSN not set
+SKIPPED [1] tests/server/tasks/test_database_task_store.py:297: MYSQL_TEST_DSN not set
+FAILED tests/server/agent_execution/test_simple_request_context_builder.py::TestSimpleRequestContextBuilder::test_build_populate_true_with_reference_task_ids
+============ 1 failed, 665 passed, 54 skipped, 17 warnings in 4.88s ============

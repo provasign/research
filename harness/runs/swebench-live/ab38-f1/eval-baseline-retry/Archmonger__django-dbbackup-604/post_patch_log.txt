@@ -1,0 +1,654 @@
+cat testlog.out
+============================= test session starts ==============================
+platform linux -- Python 3.9.23, pytest-8.4.1, pluggy-1.6.0
+rootdir: /testbed
+configfile: pyproject.toml
+collected 219 items
+
+tests/commands/test_base.py ..............                               [  6%]
+tests/commands/test_dbbackup.py .......                                  [  9%]
+tests/commands/test_dbrestore.py ...........                             [ 14%]
+tests/commands/test_listbackups.py ........                              [ 18%]
+tests/commands/test_mediabackup.py ......                                [ 21%]
+tests/functional/test_commands.py ......................                 [ 31%]
+tests/test_checks.py ...............                                     [ 37%]
+tests/test_connectors/test_base.py .........                             [ 42%]
+tests/test_connectors/test_mongodb.py ........                           [ 45%]
+tests/test_connectors/test_mysql.py ...........                          [ 50%]
+tests/test_connectors/test_postgresql.py ............................... [ 64%]
+...                                                                      [ 66%]
+tests/test_connectors/test_sqlite.py ......F...F.....                    [ 73%]
+tests/test_log.py .........                                              [ 77%]
+tests/test_storage.py .....................                              [ 87%]
+tests/test_utils.py ............................                         [100%]
+
+=================================== FAILURES ===================================
+______ SqliteConnectorTest.test_restore_dump_unique_conflict_updates_row _______
+
+self = <tests.test_connectors.test_sqlite.SqliteConnectorTest testMethod=test_restore_dump_unique_conflict_updates_row>
+
+    def test_restore_dump_unique_conflict_updates_row(self):
+        """
+        Test that restoring a dump updates an existing row when a UNIQUE constraint conflict occurs,
+        verifying that INSERT OR REPLACE is used to restore the original data.
+        """
+        # Create initial row
+        obj = CharModel.objects.create(field="original")
+        obj_id = obj.id
+        # Backup
+        connector = SqliteConnector()
+        dump = connector.create_dump()
+        # Modify the existing row so that restoring will cause UNIQUE constraint failure on primary key
+        CharModel.objects.filter(id=obj_id).update(field="changed")
+        # Restore should update row back to original content via INSERT OR REPLACE retry
+        dump.seek(0)
+        connector.restore_dump(dump)
+>       self.assertEqual(CharModel.objects.get(id=obj_id).field, "original")
+E       AssertionError: 'changed' != 'original'
+E       - changed
+E       + original
+
+tests/test_connectors/test_sqlite.py:155: AssertionError
+__________ SqliteConnectorTest.test_schema_objects_use_if_not_exists ___________
+
+self = <tests.test_connectors.test_sqlite.SqliteConnectorTest testMethod=test_schema_objects_use_if_not_exists>
+
+    def test_schema_objects_use_if_not_exists(self):
+        """Test that indexes, triggers, and views use IF NOT EXISTS syntax"""
+        from io import BytesIO
+    
+        # Create a test table, index, trigger, and view
+        with connection.cursor() as c:
+            c.execute("CREATE TABLE test_schema (id INTEGER PRIMARY KEY, value TEXT)")
+            c.execute("CREATE INDEX test_idx ON test_schema(value)")
+            c.execute(
+                "CREATE TRIGGER test_trigger AFTER INSERT ON test_schema BEGIN UPDATE test_schema SET value = NEW.value || '_triggered' WHERE id = NEW.id; END"
+            )
+            c.execute("CREATE VIEW test_view AS SELECT * FROM test_schema WHERE value IS NOT NULL")
+    
+        connector = SqliteConnector()
+        dump_file = BytesIO()
+        connector._write_dump(dump_file)
+    
+        # Check that the dump contains IF NOT EXISTS for all schema objects
+        dump_content = dump_file.getvalue().decode("utf-8")
+    
+        self.assertIn("CREATE INDEX IF NOT EXISTS", dump_content, "Indexes should use IF NOT EXISTS")
+>       self.assertIn("CREATE TRIGGER IF NOT EXISTS", dump_content, "Triggers should use IF NOT EXISTS")
+E       AssertionError: 'CREATE TRIGGER IF NOT EXISTS' not found in 'CREATE TABLE IF NOT EXISTS "django_migrations" ("id" integer NOT NULL PRIMARY KEY AUTOINCREMENT, "app" varchar(255) NOT NULL, "name" varchar(255) NOT NULL, "applied" datetime NOT NULL);\nINSERT INTO "django_migrations" VALUES(1,\'testapp\',\'0001_initial\',\'2025-09-13 12:55:15.185268\');\nINSERT INTO "django_migrations" VALUES(2,\'testapp\',\'0002_textmodel\',\'2025-09-13 12:55:15.187071\');\nCREATE TABLE IF NOT EXISTS test_schema (id INTEGER PRIMARY KEY, value TEXT);\nCREATE TABLE IF NOT EXISTS "testapp_charmodel" ("id" integer NOT NULL PRIMARY KEY AUTOINCREMENT, "field" varchar(10) NOT NULL);\nCREATE TABLE IF NOT EXISTS "testapp_filemodel" ("id" integer NOT NULL PRIMARY KEY AUTOINCREMENT, "field" varchar(100) NOT NULL);\nCREATE TABLE IF NOT EXISTS "testapp_foreignkeymodel" ("id" integer NOT NULL PRIMARY KEY AUTOINCREMENT, "field_id" integer NOT NULL REFERENCES "testapp_charmodel" ("id") DEFERRABLE INITIALLY DEFERRED);\nCREATE TABLE IF NOT EXISTS "testapp_manytomanymodel" ("id" integer NOT NULL PRIMARY KEY AUTOINCREMENT);\nCREATE TABLE IF NOT EXISTS "testapp_manytomanymodel_field" ("id" integer NOT NULL PRIMARY KEY AUTOINCREMENT, "manytomanymodel_id" integer NOT NULL REFERENCES "testapp_manytomanymodel" ("id") DEFERRABLE INITIALLY DEFERRED, "charmodel_id" integer NOT NULL REFERENCES "testapp_charmodel" ("id") DEFERRABLE INITIALLY DEFERRED);\nCREATE TABLE IF NOT EXISTS "testapp_textmodel" ("id" integer NOT NULL PRIMARY KEY AUTOINCREMENT, "field" text NOT NULL);\nCREATE INDEX IF NOT EXISTS "testapp_foreignkeymodel_field_id_c156fec5" ON "testapp_foreignkeymodel" ("field_id");\nCREATE UNIQUE INDEX "testapp_manytomanymodel_field_manytomanymodel_id_charmodel_id_69e4ee78_uniq" ON "testapp_manytomanymodel_field" ("manytomanymodel_id", "charmodel_id");\nCREATE INDEX IF NOT EXISTS "testapp_manytomanymodel_field_manytomanymodel_id_5c1d9b03" ON "testapp_manytomanymodel_field" ("manytomanymodel_id");\nCREATE INDEX IF NOT EXISTS "testapp_manytomanymodel_field_charmodel_id_a89e8948" ON "testapp_manytomanymodel_field" ("charmodel_id");\nCREATE INDEX IF NOT EXISTS test_idx ON test_schema(value);\nCREATE TRIGGER test_trigger AFTER INSERT ON test_schema BEGIN UPDATE test_schema SET value = NEW.value || \'_triggered\' WHERE id = NEW.id; END;\nCREATE VIEW test_view AS SELECT * FROM test_schema WHERE value IS NOT NULL;\n' : Triggers should use IF NOT EXISTS
+
+tests/test_connectors/test_sqlite.py:178: AssertionError
+=============================== warnings summary ===============================
+tests/commands/test_dbrestore.py: 4 warnings
+tests/functional/test_commands.py: 5 warnings
+tests/test_connectors/test_sqlite.py: 3 warnings
+  /testbed/dbbackup/db/sqlite.py:119: UserWarning: Error in db restore: UNIQUE constraint failed: django_migrations.id
+    warnings.warn(f"Error in db restore: {err}")
+
+tests/commands/test_dbrestore.py: 4 warnings
+tests/functional/test_commands.py: 5 warnings
+tests/test_connectors/test_sqlite.py: 3 warnings
+  /testbed/dbbackup/db/sqlite.py:119: UserWarning: Error in db restore: index testapp_manytomanymodel_field_manytomanymodel_id_charmodel_id_69e4ee78_uniq already exists
+    warnings.warn(f"Error in db restore: {err}")
+
+tests/functional/test_commands.py::DbRestoreCommandTest::test_specify_db
+tests/test_connectors/test_sqlite.py::SqliteConnectorTest::test_restore_dump_unique_conflict_updates_row
+  /testbed/dbbackup/db/sqlite.py:119: UserWarning: Error in db restore: UNIQUE constraint failed: testapp_charmodel.id
+    warnings.warn(f"Error in db restore: {err}")
+
+tests/test_connectors/test_sqlite.py::SqliteConnectorTest::test_restore_dump
+  /testbed/dbbackup/db/sqlite.py:119: UserWarning: Error in db restore: UNIQUE constraint failed: testapp_textmodel.id
+    warnings.warn(f"Error in db restore: {err}")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+==================================== PASSES ====================================
+________________ DbbackupCommandSaveNewBackupTest.test_encrypt _________________
+------------------------------ Captured log call -------------------------------
+DEBUG    gnupg:gnupg.py:1230 35: gpg --status-fd 2 --no-tty --no-verbose --fixed-list-mode --batch --with-colons --list-config --with-colons
+DEBUG    gnupg:gnupg.py:1305 stderr reader: <Thread(Thread-1, initial daemon)>
+DEBUG    gnupg:gnupg.py:1311 stdout reader: <Thread(Thread-2, initial daemon)>
+DEBUG    gnupg:gnupg.py:1230 38: gpg --status-fd 2 --no-tty --no-verbose --fixed-list-mode --batch --with-colons --encrypt --recipient test@test --armor --output /tmp/tmpagdiu47z/default-foo-server-2026-08-12-124408.dump.gpg --trust-model always
+DEBUG    gnupg:gnupg.py:186 data copier: <Thread(Thread-3, initial daemon)>, <tempfile.SpooledTemporaryFile object at 0x7ffffc669400>, <_io.BufferedWriter name=23>
+DEBUG    gnupg:gnupg.py:179 closed output, 1956 bytes sent
+DEBUG    gnupg:gnupg.py:1305 stderr reader: <Thread(Thread-4, initial daemon)>
+DEBUG    gnupg:gnupg.py:1311 stdout reader: <Thread(Thread-5, initial daemon)>
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] KEY_CONSIDERED 74388D4E02AFC0114E2F1E79F7D1BBF01F63FDE9 0
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] KEY_CONSIDERED 74388D4E02AFC0114E2F1E79F7D1BBF01F63FDE9 0
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] KEY_CONSIDERED 74388D4E02AFC0114E2F1E79F7D1BBF01F63FDE9 0
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] BEGIN_ENCRYPTION 2 9
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] END_ENCRYPTION
+DEBUG    gnupg:gnupg.py:2156 encrypt result[:100]: b''
+________________ DbrestoreCommandRestoreBackupTest.test_decrypt ________________
+------------------------------ Captured log call -------------------------------
+DEBUG    gnupg:gnupg.py:1230 59: gpg --status-fd 2 --no-tty --no-verbose --fixed-list-mode --batch --with-colons --list-config --with-colons
+DEBUG    gnupg:gnupg.py:1305 stderr reader: <Thread(Thread-6, initial daemon)>
+DEBUG    gnupg:gnupg.py:1311 stdout reader: <Thread(Thread-7, initial daemon)>
+DEBUG    gnupg:gnupg.py:1230 62: gpg --status-fd 2 --no-tty --no-verbose --fixed-list-mode --batch --with-colons --encrypt --recipient test@test --armor --output /tmp/tmp_7h_pfiz/default-9fbbcc672b1d-2026-08-12-124408.dump.gpg --trust-model always
+DEBUG    gnupg:gnupg.py:186 data copier: <Thread(Thread-8, initial daemon)>, <tempfile.SpooledTemporaryFile object at 0x7ffffb5da1c0>, <_io.BufferedWriter name=23>
+DEBUG    gnupg:gnupg.py:179 closed output, 1956 bytes sent
+DEBUG    gnupg:gnupg.py:1305 stderr reader: <Thread(Thread-9, initial daemon)>
+DEBUG    gnupg:gnupg.py:1311 stdout reader: <Thread(Thread-10, initial daemon)>
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] KEY_CONSIDERED 74388D4E02AFC0114E2F1E79F7D1BBF01F63FDE9 0
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] KEY_CONSIDERED 74388D4E02AFC0114E2F1E79F7D1BBF01F63FDE9 0
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] KEY_CONSIDERED 74388D4E02AFC0114E2F1E79F7D1BBF01F63FDE9 0
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] BEGIN_ENCRYPTION 2 9
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] END_ENCRYPTION
+DEBUG    gnupg:gnupg.py:2156 encrypt result[:100]: b''
+DEBUG    gnupg:gnupg.py:1230 66: gpg --status-fd 2 --no-tty --no-verbose --fixed-list-mode --batch --with-colons --list-config --with-colons
+DEBUG    gnupg:gnupg.py:1305 stderr reader: <Thread(Thread-11, initial daemon)>
+DEBUG    gnupg:gnupg.py:1311 stdout reader: <Thread(Thread-12, initial daemon)>
+DEBUG    gnupg:gnupg.py:1230 69: gpg --status-fd 2 --no-tty --no-verbose --fixed-list-mode --batch --with-colons --decrypt --output /tmp/tmpv3hbodyx/default-9fbbcc672b1d-2026-08-12-124408.dump
+DEBUG    gnupg:gnupg.py:186 data copier: <Thread(Thread-13, initial daemon)>, <File: default-9fbbcc672b1d-2026-08-12-124408.dump.gpg>, <_io.BufferedWriter name=23>
+DEBUG    gnupg:gnupg.py:179 closed output, 959 bytes sent
+DEBUG    gnupg:gnupg.py:1305 stderr reader: <Thread(Thread-14, initial daemon)>
+DEBUG    gnupg:gnupg.py:1311 stdout reader: <Thread(Thread-15, initial daemon)>
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] ENC_TO 2CDDACB7B3B25173 1 0
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] KEY_CONSIDERED 74388D4E02AFC0114E2F1E79F7D1BBF01F63FDE9 0
+DEBUG    gnupg:gnupg.py:1248 gpg: encrypted with rsa1024 key, ID 2CDDACB7B3B25173, created 2015-07-21
+DEBUG    gnupg:gnupg.py:1248       "Tester <test@test>"
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] KEY_CONSIDERED 74388D4E02AFC0114E2F1E79F7D1BBF01F63FDE9 0
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] KEY_CONSIDERED 74388D4E02AFC0114E2F1E79F7D1BBF01F63FDE9 0
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] DECRYPTION_KEY 366368FCF1A7A43BE4FF1D372CDDACB7B3B25173 74388D4E02AFC0114E2F1E79F7D1BBF01F63FDE9 -
+DEBUG    gnupg:gnupg.py:441 message ignored: 'DECRYPTION_KEY', '366368FCF1A7A43BE4FF1D372CDDACB7B3B25173 74388D4E02AFC0114E2F1E79F7D1BBF01F63FDE9 -'
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] BEGIN_DECRYPTION
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] DECRYPTION_INFO 2 9 0
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] PLAINTEXT 62 1786556648
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] DECRYPTION_OKAY
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] GOODMDC
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] END_DECRYPTION
+_________________ ListbackupsCommandArgComputingTest.test_list _________________
+----------------------------- Captured stdout call -----------------------------
+Name                                     Datetime            
+2015-02-06-042810_foo.db                 02/06/15 04:28:10   
+2015-02-06-042810_foo.db.gz              02/06/15 04:28:10   
+2015-02-06-042810_foo.db.gpg             02/06/15 04:28:10   
+2015-02-06-042810_foo.db.gz.gpg          02/06/15 04:28:10   
+2015-02-06-042810_foo.tar                02/06/15 04:28:10   
+2015-02-06-042810_foo.tar.gz             02/06/15 04:28:10   
+2015-02-06-042810_foo.tar.gpg            02/06/15 04:28:10   
+2015-02-06-042810_foo.tar.gz.gpg         02/06/15 04:28:10   
+2015-02-06-042810_bar.db                 02/06/15 04:28:10   
+2015-02-06-042810_bar.db.gz              02/06/15 04:28:10   
+2015-02-06-042810_bar.db.gpg             02/06/15 04:28:10   
+2015-02-06-042810_bar.db.gz.gpg          02/06/15 04:28:10   
+2015-02-06-042810_bar.tar                02/06/15 04:28:10   
+2015-02-06-042810_bar.tar.gz             02/06/15 04:28:10   
+2015-02-06-042810_bar.tar.gpg            02/06/15 04:28:10   
+2015-02-06-042810_bar.tar.gz.gpg         02/06/15 04:28:10   
+__________ MediabackupBackupMediafilesTest.test_compress_and_encrypt ___________
+------------------------------ Captured log call -------------------------------
+DEBUG    gnupg:gnupg.py:1230 92: gpg --status-fd 2 --no-tty --no-verbose --fixed-list-mode --batch --with-colons --list-config --with-colons
+DEBUG    gnupg:gnupg.py:1305 stderr reader: <Thread(Thread-16, initial daemon)>
+DEBUG    gnupg:gnupg.py:1311 stdout reader: <Thread(Thread-17, initial daemon)>
+DEBUG    gnupg:gnupg.py:1230 95: gpg --status-fd 2 --no-tty --no-verbose --fixed-list-mode --batch --with-colons --encrypt --recipient test@test --armor --output /tmp/tmpybifwr3n/foo-server-2026-08-12-124408.tar.gz.gpg --trust-model always
+DEBUG    gnupg:gnupg.py:186 data copier: <Thread(Thread-18, initial daemon)>, <tempfile.SpooledTemporaryFile object at 0x7ffffc895d60>, <_io.BufferedWriter name=22>
+DEBUG    gnupg:gnupg.py:179 closed output, 78 bytes sent
+DEBUG    gnupg:gnupg.py:1305 stderr reader: <Thread(Thread-19, initial daemon)>
+DEBUG    gnupg:gnupg.py:1311 stdout reader: <Thread(Thread-20, initial daemon)>
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] KEY_CONSIDERED 74388D4E02AFC0114E2F1E79F7D1BBF01F63FDE9 0
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] KEY_CONSIDERED 74388D4E02AFC0114E2F1E79F7D1BBF01F63FDE9 0
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] KEY_CONSIDERED 74388D4E02AFC0114E2F1E79F7D1BBF01F63FDE9 0
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] BEGIN_ENCRYPTION 2 9
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] END_ENCRYPTION
+DEBUG    gnupg:gnupg.py:2156 encrypt result[:100]: b''
+_________________ MediabackupBackupMediafilesTest.test_encrypt _________________
+------------------------------ Captured log call -------------------------------
+DEBUG    gnupg:gnupg.py:1230 100: gpg --status-fd 2 --no-tty --no-verbose --fixed-list-mode --batch --with-colons --list-config --with-colons
+DEBUG    gnupg:gnupg.py:1305 stderr reader: <Thread(Thread-21, initial daemon)>
+DEBUG    gnupg:gnupg.py:1311 stdout reader: <Thread(Thread-22, initial daemon)>
+DEBUG    gnupg:gnupg.py:1230 103: gpg --status-fd 2 --no-tty --no-verbose --fixed-list-mode --batch --with-colons --encrypt --recipient test@test --armor --output /tmp/tmp36decc8f/foo-server-2026-08-12-124408.tar.gpg --trust-model always
+DEBUG    gnupg:gnupg.py:186 data copier: <Thread(Thread-23, initial daemon)>, <tempfile.SpooledTemporaryFile object at 0x7ffffcab0160>, <_io.BufferedWriter name=22>
+DEBUG    gnupg:gnupg.py:1305 stderr reader: <Thread(Thread-24, initial daemon)>
+DEBUG    gnupg:gnupg.py:179 closed output, 10240 bytes sent
+DEBUG    gnupg:gnupg.py:1311 stdout reader: <Thread(Thread-25, initial daemon)>
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] KEY_CONSIDERED 74388D4E02AFC0114E2F1E79F7D1BBF01F63FDE9 0
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] KEY_CONSIDERED 74388D4E02AFC0114E2F1E79F7D1BBF01F63FDE9 0
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] KEY_CONSIDERED 74388D4E02AFC0114E2F1E79F7D1BBF01F63FDE9 0
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] BEGIN_ENCRYPTION 2 9
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] END_ENCRYPTION
+DEBUG    gnupg:gnupg.py:2156 encrypt result[:100]: b''
+______________________ DbBackupCommandTest.test_compress _______________________
+----------------------------- Captured stderr call -----------------------------
+INFO Backing Up Database: /testbed/tests/../tmp/test_db.sqlite3
+INFO Writing file to default-9fbbcc672b1d-2026-08-12-124408.dump.gz
+________________ DbBackupCommandTest.test_compress_and_encrypt _________________
+----------------------------- Captured stderr call -----------------------------
+INFO Backing Up Database: /testbed/tests/../tmp/test_db.sqlite3
+INFO Writing file to default-9fbbcc672b1d-2026-08-12-124409.dump.gz.gpg
+______________________ DbBackupCommandTest.test_database _______________________
+----------------------------- Captured stderr call -----------------------------
+INFO Backing Up Database: /testbed/tests/../tmp/test_db.sqlite3
+INFO Writing file to default-9fbbcc672b1d-2026-08-12-124409.dump
+_______________________ DbBackupCommandTest.test_encrypt _______________________
+----------------------------- Captured stderr call -----------------------------
+INFO Backing Up Database: /testbed/tests/../tmp/test_db.sqlite3
+INFO Writing file to default-9fbbcc672b1d-2026-08-12-124409.dump.gpg
+____________ DbRestoreCommandTest.test_available_but_not_compressed ____________
+----------------------------- Captured stderr call -----------------------------
+INFO Backing Up Database: /testbed/tests/../tmp/test_db.sqlite3
+INFO Writing file to default-9fbbcc672b1d-2026-08-12-124409.dump
+INFO Finding latest backup
+CommandError: There's no backup file available.
+____________ DbRestoreCommandTest.test_available_but_not_encrypted _____________
+----------------------------- Captured stderr call -----------------------------
+INFO Backing Up Database: /testbed/tests/../tmp/test_db.sqlite3
+INFO Writing file to default-9fbbcc672b1d-2026-08-12-124409.dump
+INFO Finding latest backup
+CommandError: There's no backup file available.
+_____________________ DbRestoreCommandTest.test_compressed _____________________
+----------------------------- Captured stderr call -----------------------------
+INFO Backing Up Database: /testbed/tests/../tmp/test_db.sqlite3
+INFO Writing file to default-9fbbcc672b1d-2026-08-12-124409.dump.gz
+INFO Finding latest backup
+INFO Restoring backup for database 'default' and server 'None'
+INFO Restoring: default-9fbbcc672b1d-2026-08-12-124409.dump.gz
+INFO Restore tempfile created: 2.0 KiB
+______________ DbRestoreCommandTest.test_compressed_and_encrypted ______________
+----------------------------- Captured stderr call -----------------------------
+INFO Backing Up Database: /testbed/tests/../tmp/test_db.sqlite3
+INFO Writing file to default-9fbbcc672b1d-2026-08-12-124409.dump.gz.gpg
+INFO Finding latest backup
+INFO Restoring backup for database 'default' and server 'None'
+INFO Restoring: default-9fbbcc672b1d-2026-08-12-124409.dump.gz.gpg
+INFO Restore tempfile created: 2.0 KiB
+_____________________ DbRestoreCommandTest.test_encrypted ______________________
+----------------------------- Captured stderr call -----------------------------
+INFO Backing Up Database: /testbed/tests/../tmp/test_db.sqlite3
+INFO Writing file to default-9fbbcc672b1d-2026-08-12-124409.dump.gpg
+INFO Finding latest backup
+INFO Restoring backup for database 'default' and server 'None'
+INFO Restoring: default-9fbbcc672b1d-2026-08-12-124409.dump.gpg
+INFO Restore tempfile created: 2.0 KiB
+________________ DbRestoreCommandTest.test_no_backup_available _________________
+----------------------------- Captured stderr call -----------------------------
+INFO Finding latest backup
+CommandError: There's no backup file available.
+______________________ DbRestoreCommandTest.test_restore _______________________
+----------------------------- Captured stderr call -----------------------------
+INFO Backing Up Database: /testbed/tests/../tmp/test_db.sqlite3
+INFO Writing file to default-9fbbcc672b1d-2026-08-12-124409.dump
+INFO Finding latest backup
+INFO Restoring backup for database 'default' and server 'None'
+INFO Restoring: default-9fbbcc672b1d-2026-08-12-124409.dump
+INFO Restore tempfile created: 2.0 KiB
+_____________________ DbRestoreCommandTest.test_specify_db _____________________
+----------------------------- Captured stderr call -----------------------------
+INFO Backing Up Database: /testbed/tests/../tmp/test_db.sqlite3
+INFO Writing file to default-9fbbcc672b1d-2026-08-12-124410.dump
+CommandError: Database foo does not exist.
+INFO Finding latest backup
+INFO Restoring backup for database 'default' and server 'None'
+INFO Restoring: default-9fbbcc672b1d-2026-08-12-124410.dump
+INFO Restore tempfile created: 2.0 KiB
+_____________________ MediaBackupCommandTest.test_compress _____________________
+----------------------------- Captured stderr call -----------------------------
+INFO Writing file to 9fbbcc672b1d-2026-08-12-124410.tar.gz
+______________ MediaBackupCommandTest.test_compress_and_encrypted ______________
+----------------------------- Captured stderr call -----------------------------
+INFO Writing file to 9fbbcc672b1d-2026-08-12-124410.tar.gz.gpg
+_____________________ MediaBackupCommandTest.test_encrypt ______________________
+----------------------------- Captured stderr call -----------------------------
+INFO Writing file to 9fbbcc672b1d-2026-08-12-124410.tar.gpg
+__________ MediaRestoreCommandTest.test_available_but_not_compressed ___________
+----------------------------- Captured stderr call -----------------------------
+INFO Writing file to 9fbbcc672b1d-2026-08-12-124410.tar
+INFO Restoring backup for media files
+INFO Finding latest backup
+CommandError: There's no backup file available.
+___________ MediaRestoreCommandTest.test_available_but_not_encrypted ___________
+----------------------------- Captured stderr call -----------------------------
+INFO Writing file to 9fbbcc672b1d-2026-08-12-124410.tar
+INFO Restoring backup for media files
+INFO Finding latest backup
+CommandError: There's no backup file available.
+___________________ MediaRestoreCommandTest.test_compressed ____________________
+----------------------------- Captured stderr call -----------------------------
+INFO Writing file to 9fbbcc672b1d-2026-08-12-124410.tar.gz
+INFO Restoring backup for media files
+INFO Finding latest backup
+INFO Restoring: 9fbbcc672b1d-2026-08-12-124410.tar.gz
+INFO foo uploaded
+____________________ MediaRestoreCommandTest.test_encrypted ____________________
+----------------------------- Captured stderr call -----------------------------
+INFO Writing file to 9fbbcc672b1d-2026-08-12-124410.tar.gpg
+INFO Restoring backup for media files
+INFO Finding latest backup
+INFO Restoring: 9fbbcc672b1d-2026-08-12-124410.tar.gpg
+INFO foo uploaded
+_______________ MediaRestoreCommandTest.test_no_backup_available _______________
+----------------------------- Captured stderr call -----------------------------
+INFO Restoring backup for media files
+INFO Finding latest backup
+CommandError: There's no backup file available.
+_____________________ MediaRestoreCommandTest.test_restore _____________________
+----------------------------- Captured stderr call -----------------------------
+INFO Writing file to 9fbbcc672b1d-2026-08-12-124410.tar
+INFO Restoring backup for media files
+INFO Finding latest backup
+INFO Restoring: 9fbbcc672b1d-2026-08-12-124410.tar
+INFO foo uploaded
+_________ MediaRestoreCommandTest.test_restore_file_with_media_in_path _________
+----------------------------- Captured stderr call -----------------------------
+INFO Writing file to 9fbbcc672b1d-2026-08-12-124410.tar
+INFO Restoring backup for media files
+INFO Finding latest backup
+INFO Restoring: 9fbbcc672b1d-2026-08-12-124410.tar
+INFO uploads/media/images/test.jpg uploaded
+_________________ DbbackupAdminEmailHandlerTest.test_send_mail _________________
+----------------------------- Captured stderr call -----------------------------
+ERROR Super msg
+WARNING Super msg
+------------------------------ Captured log call -------------------------------
+ERROR    dbbackup:test_log.py:108 Super msg
+WARNING  dbbackup:test_log.py:111 Super msg
+____________ DbbackupAdminEmailHandlerTest.test_send_mail_is_false _____________
+----------------------------- Captured stderr call -----------------------------
+ERROR Super msg
+------------------------------ Captured log call -------------------------------
+ERROR    dbbackup:test_log.py:117 Super msg
+__________ Email_Uncaught_ExceptionTest.test_raise_error_without_mail __________
+----------------------------- Captured stderr call -----------------------------
+ERROR Exception: Foo
+  File "/testbed/dbbackup/utils.py", line 117, in wrapper
+    func(*args, **kwargs)
+  File "/testbed/tests/test_utils.py", line 83, in func
+    raise Exception("Foo")
+
+------------------------------ Captured log call -------------------------------
+ERROR    dbbackup:utils.py:123 Exception: Foo
+  File "/testbed/dbbackup/utils.py", line 117, in wrapper
+    func(*args, **kwargs)
+  File "/testbed/tests/test_utils.py", line 83, in func
+    raise Exception("Foo")
+______________ Email_Uncaught_ExceptionTest.test_raise_with_mail _______________
+----------------------------- Captured stderr call -----------------------------
+ERROR Exception: Foo
+  File "/testbed/dbbackup/utils.py", line 117, in wrapper
+    func(*args, **kwargs)
+  File "/testbed/tests/test_utils.py", line 93, in func
+    raise Exception("Foo")
+
+------------------------------ Captured log call -------------------------------
+ERROR    dbbackup:utils.py:123 Exception: Foo
+  File "/testbed/dbbackup/utils.py", line 117, in wrapper
+    func(*args, **kwargs)
+  File "/testbed/tests/test_utils.py", line 93, in func
+    raise Exception("Foo")
+__________________________ Encrypt_FileTest.test_func __________________________
+------------------------------ Captured log call -------------------------------
+DEBUG    gnupg:gnupg.py:1230 299: gpg --status-fd 2 --no-tty --no-verbose --fixed-list-mode --batch --with-colons --list-config --with-colons
+DEBUG    gnupg:gnupg.py:1305 stderr reader: <Thread(Thread-76, initial daemon)>
+DEBUG    gnupg:gnupg.py:1311 stdout reader: <Thread(Thread-77, initial daemon)>
+DEBUG    gnupg:gnupg.py:1230 302: gpg --status-fd 2 --no-tty --no-verbose --fixed-list-mode --batch --with-colons --encrypt --recipient test@test --armor --output /tmp/tmp7cfuxnqt/foo.txt.gpg --trust-model always
+DEBUG    gnupg:gnupg.py:186 data copier: <Thread(Thread-78, initial daemon)>, <_io.BufferedReader name='/tmp/tmp20ys8jwt'>, <_io.BufferedWriter name=23>
+DEBUG    gnupg:gnupg.py:1305 stderr reader: <Thread(Thread-79, initial daemon)>
+DEBUG    gnupg:gnupg.py:1311 stdout reader: <Thread(Thread-80, initial daemon)>
+DEBUG    gnupg:gnupg.py:179 closed output, 3 bytes sent
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] KEY_CONSIDERED 74388D4E02AFC0114E2F1E79F7D1BBF01F63FDE9 0
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] KEY_CONSIDERED 74388D4E02AFC0114E2F1E79F7D1BBF01F63FDE9 0
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] KEY_CONSIDERED 74388D4E02AFC0114E2F1E79F7D1BBF01F63FDE9 0
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] BEGIN_ENCRYPTION 2 9
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] END_ENCRYPTION
+DEBUG    gnupg:gnupg.py:2156 encrypt result[:100]: b''
+______________________ Unencrypt_FileTest.test_unencrypt _______________________
+------------------------------ Captured log call -------------------------------
+DEBUG    gnupg:gnupg.py:1230 311: gpg --status-fd 2 --no-tty --no-verbose --fixed-list-mode --batch --with-colons --list-config --with-colons
+DEBUG    gnupg:gnupg.py:1305 stderr reader: <Thread(Thread-81, initial daemon)>
+DEBUG    gnupg:gnupg.py:1311 stdout reader: <Thread(Thread-82, initial daemon)>
+DEBUG    gnupg:gnupg.py:1230 314: gpg --status-fd 2 --no-tty --no-verbose --fixed-list-mode --batch --with-colons --decrypt --output /tmp/tmpa59dvb5s/foofile
+DEBUG    gnupg:gnupg.py:186 data copier: <Thread(Thread-83, initial daemon)>, <_io.BufferedRandom name='/testbed/tests/testapp/blobs/test.txt.gpg'>, <_io.BufferedWriter name=23>
+DEBUG    gnupg:gnupg.py:179 closed output, 215 bytes sent
+DEBUG    gnupg:gnupg.py:1305 stderr reader: <Thread(Thread-84, initial daemon)>
+DEBUG    gnupg:gnupg.py:1311 stdout reader: <Thread(Thread-85, initial daemon)>
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] ENC_TO 2CDDACB7B3B25173 1 0
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] KEY_CONSIDERED 74388D4E02AFC0114E2F1E79F7D1BBF01F63FDE9 0
+DEBUG    gnupg:gnupg.py:1248 gpg: encrypted with rsa1024 key, ID 2CDDACB7B3B25173, created 2015-07-21
+DEBUG    gnupg:gnupg.py:1248       "Tester <test@test>"
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] KEY_CONSIDERED 74388D4E02AFC0114E2F1E79F7D1BBF01F63FDE9 0
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] KEY_CONSIDERED 74388D4E02AFC0114E2F1E79F7D1BBF01F63FDE9 0
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] DECRYPTION_KEY 366368FCF1A7A43BE4FF1D372CDDACB7B3B25173 74388D4E02AFC0114E2F1E79F7D1BBF01F63FDE9 -
+DEBUG    gnupg:gnupg.py:441 message ignored: 'DECRYPTION_KEY', '366368FCF1A7A43BE4FF1D372CDDACB7B3B25173 74388D4E02AFC0114E2F1E79F7D1BBF01F63FDE9 -'
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] BEGIN_DECRYPTION
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] DECRYPTION_INFO 2 9 0
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] PLAINTEXT 62 1437686892 test.txt
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] PLAINTEXT_LENGTH 4
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] DECRYPTION_OKAY
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] GOODMDC
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] END_DECRYPTION
+_________________________ Compress_FileTest.test_func __________________________
+------------------------------ Captured log call -------------------------------
+DEBUG    gnupg:gnupg.py:1230 323: gpg --status-fd 2 --no-tty --no-verbose --fixed-list-mode --batch --with-colons --list-config --with-colons
+DEBUG    gnupg:gnupg.py:1305 stderr reader: <Thread(Thread-86, initial daemon)>
+DEBUG    gnupg:gnupg.py:1311 stdout reader: <Thread(Thread-87, initial daemon)>
+DEBUG    gnupg:gnupg.py:1230 326: gpg --status-fd 2 --no-tty --no-verbose --fixed-list-mode --batch --with-colons --encrypt --recipient test@test --armor --output /tmp/tmpdycrdk0b/foo.txt.gpg --trust-model always
+DEBUG    gnupg:gnupg.py:186 data copier: <Thread(Thread-88, initial daemon)>, <_io.BufferedReader name='/tmp/tmpbjc3dtlh'>, <_io.BufferedWriter name=23>
+DEBUG    gnupg:gnupg.py:1305 stderr reader: <Thread(Thread-89, initial daemon)>
+DEBUG    gnupg:gnupg.py:179 closed output, 3 bytes sent
+DEBUG    gnupg:gnupg.py:1311 stdout reader: <Thread(Thread-90, initial daemon)>
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] KEY_CONSIDERED 74388D4E02AFC0114E2F1E79F7D1BBF01F63FDE9 0
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] KEY_CONSIDERED 74388D4E02AFC0114E2F1E79F7D1BBF01F63FDE9 0
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] KEY_CONSIDERED 74388D4E02AFC0114E2F1E79F7D1BBF01F63FDE9 0
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] BEGIN_ENCRYPTION 2 9
+DEBUG    gnupg:gnupg.py:1248 [GNUPG:] END_ENCRYPTION
+DEBUG    gnupg:gnupg.py:2156 encrypt result[:100]: b''
+=========================== short test summary info ============================
+PASSED tests/commands/test_base.py::BaseDbBackupCommandSetLoggerLevelTest::test_0_level
+PASSED tests/commands/test_base.py::BaseDbBackupCommandSetLoggerLevelTest::test_1_level
+PASSED tests/commands/test_base.py::BaseDbBackupCommandSetLoggerLevelTest::test_2_level
+PASSED tests/commands/test_base.py::BaseDbBackupCommandSetLoggerLevelTest::test_3_level
+PASSED tests/commands/test_base.py::BaseDbBackupCommandSetLoggerLevelTest::test_quiet
+PASSED tests/commands/test_base.py::BaseDbBackupCommandMethodsTest::test_ask_confirmation
+PASSED tests/commands/test_base.py::BaseDbBackupCommandMethodsTest::test_read_from_storage
+PASSED tests/commands/test_base.py::BaseDbBackupCommandMethodsTest::test_read_local_file
+PASSED tests/commands/test_base.py::BaseDbBackupCommandMethodsTest::test_write_local_file
+PASSED tests/commands/test_base.py::BaseDbBackupCommandMethodsTest::test_write_to_storage
+PASSED tests/commands/test_base.py::BaseDbBackupCommandCleanupOldBackupsTest::test_clean_db
+PASSED tests/commands/test_base.py::BaseDbBackupCommandCleanupOldBackupsTest::test_clean_media
+PASSED tests/commands/test_base.py::BaseDbBackupCommandCleanupOldBackupsTest::test_clean_other_db
+PASSED tests/commands/test_base.py::BaseDbBackupCommandCleanupOldBackupsTest::test_clean_other_server_db
+PASSED tests/commands/test_dbbackup.py::DbbackupCommandSaveNewBackupTest::test_compress
+PASSED tests/commands/test_dbbackup.py::DbbackupCommandSaveNewBackupTest::test_encrypt
+PASSED tests/commands/test_dbbackup.py::DbbackupCommandSaveNewBackupTest::test_func
+PASSED tests/commands/test_dbbackup.py::DbbackupCommandSaveNewBackupTest::test_get_database_keys
+PASSED tests/commands/test_dbbackup.py::DbbackupCommandSaveNewBackupTest::test_path
+PASSED tests/commands/test_dbbackup.py::DbbackupCommandSaveNewBackupTest::test_schema
+PASSED tests/commands/test_dbbackup.py::DbbackupCommandSaveNewMongoBackupTest::test_func
+PASSED tests/commands/test_dbrestore.py::DbrestoreCommandRestoreBackupTest::test_decrypt
+PASSED tests/commands/test_dbrestore.py::DbrestoreCommandRestoreBackupTest::test_no_backup_found
+PASSED tests/commands/test_dbrestore.py::DbrestoreCommandRestoreBackupTest::test_no_filename
+PASSED tests/commands/test_dbrestore.py::DbrestoreCommandRestoreBackupTest::test_path
+PASSED tests/commands/test_dbrestore.py::DbrestoreCommandRestoreBackupTest::test_schema
+PASSED tests/commands/test_dbrestore.py::DbrestoreCommandRestoreBackupTest::test_uncompress
+PASSED tests/commands/test_dbrestore.py::DbrestoreCommandFTPFileTest::test_ftp_file_restore_with_postgresql
+PASSED tests/commands/test_dbrestore.py::DbrestoreCommandGetDatabaseTest::test_give_db_name
+PASSED tests/commands/test_dbrestore.py::DbrestoreCommandGetDatabaseTest::test_no_given_db
+PASSED tests/commands/test_dbrestore.py::DbrestoreCommandGetDatabaseTest::test_no_given_db_multidb
+PASSED tests/commands/test_dbrestore.py::DbMongoRestoreCommandRestoreBackupTest::test_mongo_settings_backup_command
+PASSED tests/commands/test_listbackups.py::ListbackupsCommandTest::test_get_backup_attrs
+PASSED tests/commands/test_listbackups.py::ListbackupsCommandArgComputingTest::test_filter_compressed
+PASSED tests/commands/test_listbackups.py::ListbackupsCommandArgComputingTest::test_filter_db
+PASSED tests/commands/test_listbackups.py::ListbackupsCommandArgComputingTest::test_filter_encrypted
+PASSED tests/commands/test_listbackups.py::ListbackupsCommandArgComputingTest::test_filter_media
+PASSED tests/commands/test_listbackups.py::ListbackupsCommandArgComputingTest::test_filter_not_compressed
+PASSED tests/commands/test_listbackups.py::ListbackupsCommandArgComputingTest::test_filter_not_encrypted
+PASSED tests/commands/test_listbackups.py::ListbackupsCommandArgComputingTest::test_list
+PASSED tests/commands/test_mediabackup.py::MediabackupBackupMediafilesTest::test_compress
+PASSED tests/commands/test_mediabackup.py::MediabackupBackupMediafilesTest::test_compress_and_encrypt
+PASSED tests/commands/test_mediabackup.py::MediabackupBackupMediafilesTest::test_encrypt
+PASSED tests/commands/test_mediabackup.py::MediabackupBackupMediafilesTest::test_func
+PASSED tests/commands/test_mediabackup.py::MediabackupBackupMediafilesTest::test_output_filename
+PASSED tests/commands/test_mediabackup.py::MediabackupBackupMediafilesTest::test_write_local_file
+PASSED tests/functional/test_commands.py::DbBackupCommandTest::test_compress
+PASSED tests/functional/test_commands.py::DbBackupCommandTest::test_compress_and_encrypt
+PASSED tests/functional/test_commands.py::DbBackupCommandTest::test_database
+PASSED tests/functional/test_commands.py::DbBackupCommandTest::test_encrypt
+PASSED tests/functional/test_commands.py::DbRestoreCommandTest::test_available_but_not_compressed
+PASSED tests/functional/test_commands.py::DbRestoreCommandTest::test_available_but_not_encrypted
+PASSED tests/functional/test_commands.py::DbRestoreCommandTest::test_compressed
+PASSED tests/functional/test_commands.py::DbRestoreCommandTest::test_compressed_and_encrypted
+PASSED tests/functional/test_commands.py::DbRestoreCommandTest::test_encrypted
+PASSED tests/functional/test_commands.py::DbRestoreCommandTest::test_no_backup_available
+PASSED tests/functional/test_commands.py::DbRestoreCommandTest::test_restore
+PASSED tests/functional/test_commands.py::DbRestoreCommandTest::test_specify_db
+PASSED tests/functional/test_commands.py::MediaBackupCommandTest::test_compress
+PASSED tests/functional/test_commands.py::MediaBackupCommandTest::test_compress_and_encrypted
+PASSED tests/functional/test_commands.py::MediaBackupCommandTest::test_encrypt
+PASSED tests/functional/test_commands.py::MediaRestoreCommandTest::test_available_but_not_compressed
+PASSED tests/functional/test_commands.py::MediaRestoreCommandTest::test_available_but_not_encrypted
+PASSED tests/functional/test_commands.py::MediaRestoreCommandTest::test_compressed
+PASSED tests/functional/test_commands.py::MediaRestoreCommandTest::test_encrypted
+PASSED tests/functional/test_commands.py::MediaRestoreCommandTest::test_no_backup_available
+PASSED tests/functional/test_commands.py::MediaRestoreCommandTest::test_restore
+PASSED tests/functional/test_commands.py::MediaRestoreCommandTest::test_restore_file_with_media_in_path
+PASSED tests/test_checks.py::ChecksTest::test_Failure_recipients_warning
+PASSED tests/test_checks.py::ChecksTest::test_check
+PASSED tests/test_checks.py::ChecksTest::test_date_format_warning
+PASSED tests/test_checks.py::ChecksTest::test_db_filename_template_callable_with_slash
+PASSED tests/test_checks.py::ChecksTest::test_db_filename_template_with_slash
+PASSED tests/test_checks.py::ChecksTest::test_filename_template_is_callable
+PASSED tests/test_checks.py::ChecksTest::test_filename_template_is_string
+PASSED tests/test_checks.py::ChecksTest::test_filename_template_no_date
+PASSED tests/test_checks.py::ChecksTest::test_hostname_invalid
+PASSED tests/test_checks.py::ChecksTest::test_hostname_storage
+PASSED tests/test_checks.py::ChecksTest::test_media_filename_template_callable_with_slash
+PASSED tests/test_checks.py::ChecksTest::test_media_filename_template_is_callable
+PASSED tests/test_checks.py::ChecksTest::test_media_filename_template_is_string
+PASSED tests/test_checks.py::ChecksTest::test_media_filename_template_no_date
+PASSED tests/test_checks.py::ChecksTest::test_media_filename_template_with_slash
+PASSED tests/test_connectors/test_base.py::GetConnectorTest::test_get_connector
+PASSED tests/test_connectors/test_base.py::BaseDBConnectorTest::test_generate_filename
+PASSED tests/test_connectors/test_base.py::BaseDBConnectorTest::test_init
+PASSED tests/test_connectors/test_base.py::BaseDBConnectorTest::test_settings
+PASSED tests/test_connectors/test_base.py::BaseCommandDBConnectorTest::test_run_command
+PASSED tests/test_connectors/test_base.py::BaseCommandDBConnectorTest::test_run_command_error
+PASSED tests/test_connectors/test_base.py::BaseCommandDBConnectorTest::test_run_command_stdin
+PASSED tests/test_connectors/test_base.py::BaseCommandDBConnectorTest::test_run_command_with_env
+PASSED tests/test_connectors/test_base.py::BaseCommandDBConnectorTest::test_run_command_with_parent_env
+PASSED tests/test_connectors/test_mongodb.py::MongoDumpConnectorTest::test_create_dump
+PASSED tests/test_connectors/test_mongodb.py::MongoDumpConnectorTest::test_create_dump_password
+PASSED tests/test_connectors/test_mongodb.py::MongoDumpConnectorTest::test_create_dump_user
+PASSED tests/test_connectors/test_mongodb.py::MongoDumpConnectorTest::test_restore_dump
+PASSED tests/test_connectors/test_mongodb.py::MongoDumpConnectorTest::test_restore_dump_drop
+PASSED tests/test_connectors/test_mongodb.py::MongoDumpConnectorTest::test_restore_dump_object_check
+PASSED tests/test_connectors/test_mongodb.py::MongoDumpConnectorTest::test_restore_dump_password
+PASSED tests/test_connectors/test_mongodb.py::MongoDumpConnectorTest::test_restore_dump_user
+PASSED tests/test_connectors/test_mysql.py::MysqlDumpConnectorTest::test_create_dump
+PASSED tests/test_connectors/test_mysql.py::MysqlDumpConnectorTest::test_create_dump_exclude
+PASSED tests/test_connectors/test_mysql.py::MysqlDumpConnectorTest::test_create_dump_host
+PASSED tests/test_connectors/test_mysql.py::MysqlDumpConnectorTest::test_create_dump_password
+PASSED tests/test_connectors/test_mysql.py::MysqlDumpConnectorTest::test_create_dump_port
+PASSED tests/test_connectors/test_mysql.py::MysqlDumpConnectorTest::test_create_dump_user
+PASSED tests/test_connectors/test_mysql.py::MysqlDumpConnectorTest::test_restore_dump
+PASSED tests/test_connectors/test_mysql.py::MysqlDumpConnectorTest::test_restore_dump_host
+PASSED tests/test_connectors/test_mysql.py::MysqlDumpConnectorTest::test_restore_dump_password
+PASSED tests/test_connectors/test_mysql.py::MysqlDumpConnectorTest::test_restore_dump_port
+PASSED tests/test_connectors/test_mysql.py::MysqlDumpConnectorTest::test_restore_dump_user
+PASSED tests/test_connectors/test_postgresql.py::PgDumpConnectorTest::test_create_dump
+PASSED tests/test_connectors/test_postgresql.py::PgDumpConnectorTest::test_create_dump_drop
+PASSED tests/test_connectors/test_postgresql.py::PgDumpConnectorTest::test_create_dump_exclude
+PASSED tests/test_connectors/test_postgresql.py::PgDumpConnectorTest::test_create_dump_host
+PASSED tests/test_connectors/test_postgresql.py::PgDumpConnectorTest::test_create_dump_password_excluded
+PASSED tests/test_connectors/test_postgresql.py::PgDumpConnectorTest::test_create_dump_port
+PASSED tests/test_connectors/test_postgresql.py::PgDumpConnectorTest::test_create_dump_schema
+PASSED tests/test_connectors/test_postgresql.py::PgDumpConnectorTest::test_create_dump_user
+PASSED tests/test_connectors/test_postgresql.py::PgDumpConnectorTest::test_create_dump_without_host
+PASSED tests/test_connectors/test_postgresql.py::PgDumpConnectorTest::test_password_but_no_user
+PASSED tests/test_connectors/test_postgresql.py::PgDumpConnectorTest::test_restore_dump
+PASSED tests/test_connectors/test_postgresql.py::PgDumpConnectorTest::test_restore_dump_password_excluded
+PASSED tests/test_connectors/test_postgresql.py::PgDumpConnectorTest::test_restore_dump_schema
+PASSED tests/test_connectors/test_postgresql.py::PgDumpConnectorTest::test_restore_dump_user
+PASSED tests/test_connectors/test_postgresql.py::PgDumpConnectorTest::test_user_uses_special_characters
+PASSED tests/test_connectors/test_postgresql.py::PgDumpBinaryConnectorTest::test_create_dump
+PASSED tests/test_connectors/test_postgresql.py::PgDumpBinaryConnectorTest::test_create_dump_drop
+PASSED tests/test_connectors/test_postgresql.py::PgDumpBinaryConnectorTest::test_create_dump_exclude
+PASSED tests/test_connectors/test_postgresql.py::PgDumpBinaryConnectorTest::test_create_dump_if_exists
+PASSED tests/test_connectors/test_postgresql.py::PgDumpBinaryConnectorTest::test_create_dump_password_excluded
+PASSED tests/test_connectors/test_postgresql.py::PgDumpBinaryConnectorTest::test_create_dump_schema
+PASSED tests/test_connectors/test_postgresql.py::PgDumpBinaryConnectorTest::test_pg_options
+PASSED tests/test_connectors/test_postgresql.py::PgDumpBinaryConnectorTest::test_restore_dump
+PASSED tests/test_connectors/test_postgresql.py::PgDumpBinaryConnectorTest::test_restore_dump_password_excluded
+PASSED tests/test_connectors/test_postgresql.py::PgDumpBinaryConnectorTest::test_restore_dump_schema
+PASSED tests/test_connectors/test_postgresql.py::PgDumpBinaryConnectorTest::test_restore_prefix
+PASSED tests/test_connectors/test_postgresql.py::PgDumpBinaryConnectorTest::test_restore_suffix
+PASSED tests/test_connectors/test_postgresql.py::PgDumpGisConnectorTest::test_enable_postgis
+PASSED tests/test_connectors/test_postgresql.py::PgDumpGisConnectorTest::test_enable_postgis_host
+PASSED tests/test_connectors/test_postgresql.py::PgDumpGisConnectorTest::test_enable_postgis_port
+PASSED tests/test_connectors/test_postgresql.py::PgDumpGisConnectorTest::test_restore_dump
+PASSED tests/test_connectors/test_postgresql.py::PgDumpConnectorRunCommandTest::test_run_command
+PASSED tests/test_connectors/test_postgresql.py::PgDumpConnectorRunCommandTest::test_run_command_with_password
+PASSED tests/test_connectors/test_postgresql.py::PgDumpConnectorRunCommandTest::test_run_command_with_password_and_other
+PASSED tests/test_connectors/test_sqlite.py::SqliteConnectorTest::test_create_dump
+PASSED tests/test_connectors/test_sqlite.py::SqliteConnectorTest::test_create_dump_with_newline
+PASSED tests/test_connectors/test_sqlite.py::SqliteConnectorTest::test_create_dump_with_unicode
+PASSED tests/test_connectors/test_sqlite.py::SqliteConnectorTest::test_create_dump_with_virtual_tables
+PASSED tests/test_connectors/test_sqlite.py::SqliteConnectorTest::test_restore_dump
+PASSED tests/test_connectors/test_sqlite.py::SqliteConnectorTest::test_restore_dump_may_warn_for_already_exists
+PASSED tests/test_connectors/test_sqlite.py::SqliteConnectorTest::test_restore_dump_warns_only_for_serious_errors
+PASSED tests/test_connectors/test_sqlite.py::SqliteConnectorTest::test_restore_dump_with_multiline_js_content
+PASSED tests/test_connectors/test_sqlite.py::SqliteConnectorTest::test_restore_warns_about_already_exists_errors
+PASSED tests/test_connectors/test_sqlite.py::SqliteConnectorTest::test_write_dump
+PASSED tests/test_connectors/test_sqlite.py::SqliteCPConnectorTest::test_create_dump
+PASSED tests/test_connectors/test_sqlite.py::SqliteCPConnectorTest::test_restore_dump
+PASSED tests/test_connectors/test_sqlite.py::SqliteBackupConnectorTest::test_create_dump
+PASSED tests/test_connectors/test_sqlite.py::SqliteBackupConnectorTest::test_restore_dump
+PASSED tests/test_log.py::LoggerDefaultTestCase::test_dbbackup
+PASSED tests/test_log.py::LoggerDefaultTestCase::test_dbbackup_storage
+PASSED tests/test_log.py::LoggerDefaultTestCase::test_django
+PASSED tests/test_log.py::LoggerDefaultTestCase::test_other_module
+PASSED tests/test_log.py::LoggerDefaultTestCase::test_root
+PASSED tests/test_log.py::DbbackupAdminEmailHandlerTest::test_send_mail
+PASSED tests/test_log.py::DbbackupAdminEmailHandlerTest::test_send_mail_is_false
+PASSED tests/test_log.py::MailEnabledFilterTest::test_filter_is_false
+PASSED tests/test_log.py::MailEnabledFilterTest::test_filter_is_true
+PASSED tests/test_storage.py::Get_StorageTest::test_default_storage_class
+PASSED tests/test_storage.py::Get_StorageTest::test_func
+PASSED tests/test_storage.py::Get_StorageTest::test_get_storage_class
+PASSED tests/test_storage.py::Get_StorageTest::test_invalid_storage_class_path
+PASSED tests/test_storage.py::Get_StorageTest::test_set_options
+PASSED tests/test_storage.py::Get_StorageTest::test_set_path
+PASSED tests/test_storage.py::Get_StorageTest::test_storages_settings
+PASSED tests/test_storage.py::Get_StorageTest::test_storages_settings_options
+PASSED tests/test_storage.py::StorageListBackupsTest::test_compressed
+PASSED tests/test_storage.py::StorageListBackupsTest::test_content_type_db
+PASSED tests/test_storage.py::StorageListBackupsTest::test_content_type_media
+PASSED tests/test_storage.py::StorageListBackupsTest::test_database
+PASSED tests/test_storage.py::StorageListBackupsTest::test_encrypted
+PASSED tests/test_storage.py::StorageListBackupsTest::test_nofilter
+PASSED tests/test_storage.py::StorageListBackupsTest::test_not_compressed
+PASSED tests/test_storage.py::StorageListBackupsTest::test_not_encrypted
+PASSED tests/test_storage.py::StorageListBackupsTest::test_servername
+PASSED tests/test_storage.py::StorageGetLatestTest::test_func
+PASSED tests/test_storage.py::StorageGetMostRecentTest::test_func
+PASSED tests/test_storage.py::StorageCleanOldBackupsTest::test_func
+PASSED tests/test_storage.py::StorageCleanOldBackupsTest::test_keep_filter
+PASSED tests/test_utils.py::Bytes_To_StrTest::test_0_decimal
+PASSED tests/test_utils.py::Bytes_To_StrTest::test_2_decimal
+PASSED tests/test_utils.py::Bytes_To_StrTest::test_get_gb
+PASSED tests/test_utils.py::Handle_SizeTest::test_func
+PASSED tests/test_utils.py::MailAdminsTest::test_func
+PASSED tests/test_utils.py::MailAdminsTest::test_no_admin
+PASSED tests/test_utils.py::Email_Uncaught_ExceptionTest::test_raise_error_without_mail
+PASSED tests/test_utils.py::Email_Uncaught_ExceptionTest::test_raise_with_mail
+PASSED tests/test_utils.py::Email_Uncaught_ExceptionTest::test_success
+PASSED tests/test_utils.py::Encrypt_FileTest::test_func
+PASSED tests/test_utils.py::Unencrypt_FileTest::test_unencrypt
+PASSED tests/test_utils.py::Compress_FileTest::test_func
+PASSED tests/test_utils.py::Uncompress_FileTest::test_func
+PASSED tests/test_utils.py::Create_Spooled_Temporary_FileTest::test_func
+PASSED tests/test_utils.py::TimestampTest::test_aware_value
+PASSED tests/test_utils.py::TimestampTest::test_naive_value
+PASSED tests/test_utils.py::Datefmt_To_Regex::test_complex_pattern
+PASSED tests/test_utils.py::Datefmt_To_Regex::test_patterns
+PASSED tests/test_utils.py::Filename_To_DatestringTest::test_func
+PASSED tests/test_utils.py::Filename_To_DatestringTest::test_generated_filename
+PASSED tests/test_utils.py::Filename_To_DateTest::test_func
+PASSED tests/test_utils.py::Filename_To_DateTest::test_generated_filename
+PASSED tests/test_utils.py::Filename_GenerateTest::test_db
+PASSED tests/test_utils.py::Filename_GenerateTest::test_func
+PASSED tests/test_utils.py::Filename_GenerateTest::test_media
+PASSED tests/test_utils.py::Filename_GenerateTest::test_template_is_callable
+PASSED tests/test_utils.py::Filename_GenerateTest::test_tz_true
+PASSED tests/test_utils.py::QuoteCommandArg::test_arg_with_space
+FAILED tests/test_connectors/test_sqlite.py::SqliteConnectorTest::test_restore_dump_unique_conflict_updates_row
+FAILED tests/test_connectors/test_sqlite.py::SqliteConnectorTest::test_schema_objects_use_if_not_exists
+================== 2 failed, 217 passed, 27 warnings in 3.11s ==================

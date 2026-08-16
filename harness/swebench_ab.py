@@ -233,10 +233,51 @@ ISSUE:
 
 When done, stop — your edits to the working tree are the submission.{steer}"""
 
-TOOLS_BASE = ["Read", "Edit", "Write", "Glob", "Grep",
-              "Bash(git:*)", "Bash(grep:*)", "Bash(rg:*)", "Bash(find:*)",
-              "Bash(cat:*)", "Bash(ls:*)", "Bash(sed:*)", "Bash(head:*)",
-              "Bash(tail:*)", "Bash(python:*)", "Bash(python3:*)"]
+# TOOLS_BASE was an ENUMERATION of binaries, and it did not match how Python
+# projects are actually built. Measured over 380 denials in the 38-task run
+# (2026-08-15): `uv` 93, `pip`, `pytest`, `PYTHONPATH=... python3` 46, `env`
+# 15, absolute venv paths. None of those are dangerous; they were simply
+# absent. The cost was not noise but SIGN: corr(delta-denials, delta-turns)
+# = +0.89, and every large cost swing in that run was a cell where one arm
+# hit the allowlist harder than the other. The four denial-confounded cells
+# had median delta-cost -1.07; the other 26 had +0.035.
+#
+# An env-var prefix cannot be expressed as a binary pattern at all -- there
+# is no allowlist entry that makes `PYTHONPATH=src python3 ...` match
+# Bash(python3:*), because the leading token is the assignment.
+#
+# So: allow Bash broadly and DENY the boundary explicitly. Verified live
+# 2026-08-15 with two probes ($0.36 total):
+#
+#   allowedTools Bash + disallowedTools gh/curl/wget/WebFetch/WebSearch
+#     PYTHONPATH=. python3 -c ...   RAN      (denied under the old list)
+#     uv --version                  RAN      (denied under the old list)
+#     pip --version                 RAN      (denied under the old list)
+#     gh --version                  DENIED   <- contamination boundary holds
+#     curl https://example.com      DENIED   <- contamination boundary holds
+#
+# NOTE the harness's own 2026-08-11 comment claimed omission from
+# --allowedTools does not deny in headless mode. That was true then and is
+# NOT true now: --allowedTools alone produced all 380 denials, with
+# disallowed= never passed. Probe before trusting either mechanism again.
+TOOLS_BASE = ["Read", "Edit", "Write", "Glob", "Grep", "Bash"]
+
+# The contamination + destruction boundary, enforced by --disallowedTools.
+# gh and curl are the routes to the gold fix an agent actually tried: the
+# beets-5890 cell ran `gh pr view 5890 --json title,body,files` twice and
+# WebFetch'd github.com/beetbox/beets/pull/5890/files, all denied. The
+# instance_id leaks the PR number, so this is not hypothetical.
+# git's network path is closed separately by GIT_ALLOW_PROTOCOL=file.
+#
+# `rm` is deliberately NOT here. It was denied 27 times in the 38-task run,
+# all of it legitimate scratch-file cleanup, and blocking it produced retry
+# loops. Agents work inside a throwaway worktree the harness deletes anyway.
+# The residual risk is an agent removing something outside that worktree;
+# accepted knowingly, because a benchmark that cannot clean up after itself
+# measures the allowlist instead of the agent.
+DENIED_TOOLS = ["Bash(gh:*)", "Bash(curl:*)", "Bash(wget:*)",
+                "Bash(ssh:*)", "Bash(scp:*)", "Bash(nc:*)", "Bash(sudo:*)",
+                "WebFetch", "WebSearch"]
 
 
 def sh(*args, cwd=None, timeout=None) -> subprocess.CompletedProcess:
@@ -334,12 +375,13 @@ def run_agent(prompt: str, tools: list[str], workdir: Path, model: str = "",
     cmd = ["claude", "-p", prompt, "--output-format", "stream-json", "--verbose",
            "--strict-mcp-config", "--allowedTools", ",".join(tools)]
     if disallowed:
-        # VERIFIED 2026-08-11: omitting a tool from --allowedTools does NOT
-        # deny it in headless mode -- a live check showed grep executing
-        # with permission_denials:[] despite being absent from allowedTools.
-        # --disallowedTools is the actual enforcement mechanism (confirmed:
-        # is_error:true, populated permission_denials, command never runs).
-        # Every prism-arm cell before this fix had full grep/rg access.
+        # BOTH mechanisms enforce, as of 2026-08-15. The 2026-08-11 note here
+        # said omission from --allowedTools does not deny -- that has since
+        # changed: --allowedTools alone produced all 380 denials in the
+        # 38-task run, with this parameter never supplied. --disallowedTools
+        # still enforces too (probe: gh and curl refused under a broad Bash
+        # allow). We now rely on BOTH: Bash broadly allowed, boundary denied.
+        # Re-probe before trusting either; this behaviour has moved once.
         cmd += ["--disallowedTools", ",".join(disallowed)]
     if mcp:
         cmd += ["--mcp-config", mcp]
@@ -516,7 +558,8 @@ def run_arm(task: dict, arm: str, prism: str, model: str = "",
                                else real_prism_steering())
         prompt = BASE_PROMPT.format(repo=task["repo"], problem=task["problem_statement"],
                                     steer=steer)
-        env = run_agent(prompt, tools, wt, model, mcp=mcp_cfg)
+        env = run_agent(prompt, tools, wt, model, mcp=mcp_cfg,
+                        disallowed=DENIED_TOOLS)
         # The prediction patch = the agent's edits (exclude the .grove index).
         patch = sh("git", "-C", str(wt), "diff", "--", ".", ":(exclude).grove").stdout
         usage = env.get("usage") or {}
