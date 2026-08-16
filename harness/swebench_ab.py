@@ -62,6 +62,10 @@ Investigation discipline (applies regardless of which tools you use):
   the tests nearest the code you edited.
 - Make the smallest change that resolves the issue; do not restructure
   neighboring code the issue does not require.
+- Solve this from the code in front of you. Do not fetch task content over
+  the network -- no upstream history, releases, package downloads, issue
+  trackers or code-hosting APIs. Reading the local repository and running
+  its tests is the intended path.
 """
 
 # FAITHFUL DEPLOYMENT ARM -- what "faithful" means has changed twice, so the

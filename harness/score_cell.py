@@ -57,6 +57,42 @@ def categorize(cmd: str) -> str:
     return "other"
 
 
+# Reaching the fix over the network. Not a style rule -- measured
+# 2026-08-16: pytorch__torchtune-2066's prism arm was DENIED curl twice,
+# then used python3 -c "import urllib.request" to fetch
+# patch-diff.githubusercontent.com/.../2066.diff and applied it. Result:
+# 310 of 310 changed lines verbatim from gold, all 8 files, scored RESOLVED.
+# dynaconf-1225 did the same via api.github.com plus a `pip download` of a
+# later release containing the fix. Those two cells were the entire basis of
+# a "prism wins on large blast radius" headline.
+#
+# A denylist of binaries cannot stop this: an allowed interpreter is an HTTP
+# client. The real fix is a container with no route out. Until then, DETECT
+# and VOID -- an unscored cell is honest, a copied patch scored RESOLVED is
+# not.
+GOLD_SOURCE = re.compile(
+    r"api\.github\.com|patch-diff\.githubusercontent|raw\.githubusercontent|codeload\."
+    r"|github\.com/\S+/(?:pull|compare|commit|releases)"
+    r"|git\s+fetch|git\s+ls-remote|pip\s+(?:download|install)\s+[^\s-][^\s]*==",
+    re.I)
+NET_CLIENT = re.compile(r"urllib\.request|urlopen|import\s+requests|httpx\.|http\.client|socket\.create_connection", re.I)
+
+
+def contamination(rec: dict) -> list[str]:
+    """Evidence this cell reached outside the sandbox for task content."""
+    hits = []
+    denied = {str(d.get("tool_input", {}).get("command", ""))
+              for d in (rec.get("permission_denials") or [])}
+    for c in rec.get("tool_calls") or []:
+        blob = json.dumps(c.get("input", {}))
+        cmd = str(c.get("input", {}).get("command", ""))
+        if cmd and cmd in denied:
+            continue  # attempted and refused: not contamination
+        if GOLD_SOURCE.search(blob) or (NET_CLIENT.search(blob) and "github" in blob.lower()):
+            hits.append(blob[:140])
+    return hits
+
+
 def blast_radius(task: dict) -> tuple[int, str]:
     """Files touched by the GOLD patch, and its stratum.
 
@@ -117,6 +153,16 @@ def behaviour(rec: dict) -> dict:
     }
 
 
+# Official SWE-bench-Live images: prebuilt and dependency-complete, so no
+# extras guessing and no per-repo build hacks. Set by --official.
+OFFICIAL = False
+
+
+def _score(task: dict, patch: str) -> dict:
+    return docker_eval.score_official(task, patch) if OFFICIAL \
+        else docker_eval.score(scoreable(task), patch)
+
+
 def report(task: dict, run_dir: Path, arms=("no-prism", "prism")) -> dict | None:
     tid = task["instance_id"]
     recs = {}
@@ -139,11 +185,18 @@ def report(task: dict, run_dir: Path, arms=("no-prism", "prism")) -> dict | None
         r = recs[a]
         t0 = time.time()
         try:
-            sc = docker_eval.score(st, r["model_patch"]) if r["model_patch"].strip() \
+            sc = _score(task, r["model_patch"]) if r["model_patch"].strip() \
                 else {"resolved": False, "note": "empty patch"}
         except Exception as e:                                  # noqa: BLE001
             sc = {"resolved": None, "error": str(e)[:200]}
         sc["score_wall_s"] = round(time.time() - t0, 1)
+        contam = contamination(r)
+        if contam:
+            # Void, do not score. A cell that fetched the answer tells us
+            # nothing about the tool, and reporting it as RESOLVED is worse
+            # than reporting nothing.
+            sc = {"resolved": None, "voided": True, "contamination": contam,
+                  "score_wall_s": sc["score_wall_s"]}
         b = behaviour(r)
         out["arms"][a] = {"resolved": sc.get("resolved"), "score": sc,
                           "turns": r["turns"], "cost": r["cost_usd"],
@@ -155,8 +208,11 @@ def report(task: dict, run_dir: Path, arms=("no-prism", "prism")) -> dict | None
     print("\n  CORRECTNESS")
     for a in arms:
         s = out["arms"][a]["score"]
-        v = {True: "RESOLVED", False: "not resolved", None: "SCORING ERROR"}[s.get("resolved")]
-        extra = s.get("error") or s.get("note") or f"f2p={s.get('f2p_ok')} p2p={s.get('p2p_ok')} n_run={s.get('n_run')}"
+        v = ("VOID (contaminated)" if s.get("voided") else
+             {True: "RESOLVED", False: "not resolved", None: "SCORING ERROR"}[s.get("resolved")])
+        extra = (s["contamination"][0] if s.get("voided") else
+                 s.get("error") or s.get("note") or
+                 f"f2p={s.get('f2p_ok')} p2p={s.get('p2p_ok')} n_run={s.get('n_run')}")
         print(f"    {a:9} {v:14} ({extra})  [{s['score_wall_s']}s]")
     rs = {a: out["arms"][a]["score"].get("resolved") for a in arms}
     if len(set(rs.values())) == 1 and None not in rs.values():
@@ -186,15 +242,21 @@ def main() -> None:
     if len(sys.argv) < 3:
         print(__doc__)
         sys.exit(2)
+    global OFFICIAL
+    OFFICIAL = "--official" in sys.argv
     run_dir = Path(sys.argv[1])
     # Prefer the gold-validated subset: a task whose GOLD patch does not score
     # resolved cannot have its cells judged, and including it reproduces the
     # efficiency-only numbers this whole loop exists to prevent.
-    slice_path = next((run_dir.parent / n for n in
-                       ("slice-scoreable.json", "slice-ab38.json")
-                       if (run_dir.parent / n).exists()))
+    if "--slice" in sys.argv:
+        slice_path = Path(sys.argv[sys.argv.index("--slice") + 1])
+    else:
+        slice_path = next((run_dir.parent / n for n in
+                           ("slice-scoreable.json", "slice-ab38.json")
+                           if (run_dir.parent / n).exists()))
     tasks = {t["instance_id"]: t for t in json.load(open(slice_path))}
-    print(f"scoring against {slice_path.name} ({len(tasks)} tasks)")
+    print(f"scoring against {slice_path.name} ({len(tasks)} tasks)"
+          f"{' via OFFICIAL images' if OFFICIAL else ''}")
     done, results = set(), []
 
     def sweep():
@@ -241,12 +303,25 @@ ORDER = ["1 file", "2-3 files", "4-9 files", "10+ files"]
 
 def summarize(results: list[dict]) -> None:
     import statistics
+    voided = [r for r in results
+              if any(x["score"].get("voided") for x in r["arms"].values())]
+    results = [r for r in results if r not in voided]
     ok = collections.Counter()
     for r in results:
         for a, x in r["arms"].items():
             ok[a] += bool(x["resolved"])
     print("\n" + "=" * 78)
-    print(f"RESOLVE RATE over {len(results)} scored cells: " +
+    if voided:
+        print(f"VOIDED {len(voided)} cell(s) — reached the fix over the network, "
+              f"excluded from every number below:")
+        for r in voided:
+            who = [a for a, x in r["arms"].items() if x["score"].get("voided")]
+            print(f"    {r['instance_id']}  ({', '.join(who)})")
+        print()
+    if not results:
+        print("nothing left to score")
+        return
+    print(f"RESOLVE RATE over {len(results)} clean cells: " +
           "  ".join(f"{a} {ok[a]}/{len(results)}" for a in sorted(ok)))
 
     # Stratified by blast radius. A pooled median over a bed whose median task
