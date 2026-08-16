@@ -696,6 +696,18 @@ def main() -> None:
                 continue
             print(f"[{i+1}/{len(tasks)}] {task['instance_id']} :: {arm}", flush=True)
             rec = run_arm(task, arm, args.prism, args.model)
+            # A cell that produced no turns and no cost is a FAILED INVOCATION
+            # -- rate limit, auth, a dead CLI -- not a result. Writing it would
+            # be worse than losing it: the resume check above skips any cell
+            # whose file exists, so a rate-limit burst would silently become 28
+            # permanently-empty cells that later read as "the agent gave up".
+            # Observed 2026-08-16: a five-hour limit hit mid-run and every
+            # subsequent cell returned in ~1.2s with turns=1 and cost=0.
+            if not rec.get("cost_usd") and (rec.get("turns") or 0) <= 1:
+                print(f"      !! no work done (turns={rec.get('turns')}, "
+                      f"cost={rec.get('cost_usd')}, wall={rec.get('wall_s')}s) — "
+                      f"NOT recorded, so a resume retries it. Rate limit?", flush=True)
+                continue
             if arm.startswith("prism"):
                 rec["prism_provenance"] = prov
             json.dump(rec, open(recpath, "w"))

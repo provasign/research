@@ -35,6 +35,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import docker_eval  # noqa: E402
 
+# The agent harness caches repos here; docker_eval defaults to the older
+# gvg-corpus root and would report "worktree add" failures for every task.
+docker_eval.CLONE_ROOT = Path.home() / ".cache" / "prism-research" / "swebench-repos"
+
 CATEGORIES = [
     ("test-run", r"\b(pytest|tox|unittest|nose2?)\b"),
     ("env-setup", r"\b(pip|venv|virtualenv|conda|poetry|uv)\b|which -a|command -v"
@@ -167,7 +171,14 @@ def main() -> None:
         print(__doc__)
         sys.exit(2)
     run_dir = Path(sys.argv[1])
-    tasks = {t["instance_id"]: t for t in json.load(open(run_dir.parent / "slice-ab38.json"))}
+    # Prefer the gold-validated subset: a task whose GOLD patch does not score
+    # resolved cannot have its cells judged, and including it reproduces the
+    # efficiency-only numbers this whole loop exists to prevent.
+    slice_path = next((run_dir.parent / n for n in
+                       ("slice-scoreable.json", "slice-ab38.json")
+                       if (run_dir.parent / n).exists()))
+    tasks = {t["instance_id"]: t for t in json.load(open(slice_path))}
+    print(f"scoring against {slice_path.name} ({len(tasks)} tasks)")
     done, results = set(), []
 
     def sweep():
