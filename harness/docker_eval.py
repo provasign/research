@@ -220,7 +220,29 @@ def score_official(task: dict, agent_patch: str, timeout: int = 2400) -> dict:
     score(): resolved iff every FAIL_TO_PASS passes and no PASS_TO_PASS in the
     executed modules regresses."""
     img = official_image(task["instance_id"])
-    mods = sorted({n.split("::")[0] for n in task.get("FAIL_TO_PASS", []) if "::" in n})
+    # Run EXPLICIT NODE IDS, not whole modules. Running the module drags in
+    # every unrelated test in it -- flaky ones, ones needing live network,
+    # ones broken in the image -- and any of them failing scores the GOLD
+    # patch as not-resolved. Measured 2026-08-16: of 12 tasks that looked
+    # unscoreable, 8 pass cleanly the moment the node ids are named. That is
+    # also what SWE-bench's own harness does.
+    f2p = list(task.get("FAIL_TO_PASS", []))
+    mods = sorted({n.split("::")[0] for n in f2p if "::" in n})
+    # P2P is capped: some beds carry ~500 ids and the regression signal
+    # saturates long before that, especially under x86_64 emulation.
+    # P2P ids are NOT passed to pytest. One unresolvable node id aborts the
+    # whole invocation ("ERROR: not found: ...", no tests run), and beds
+    # carry thousands of P2P ids whose parametrized names drift between
+    # versions -- measured: conan-17514 went from scoring correctly to n=0
+    # the moment 150 P2P ids were added. Regressions are instead read off
+    # whichever listed P2P ids happen to execute alongside the F2P ones.
+    p2p_all = [n for n in task.get("PASS_TO_PASS", []) if "::" in n]
+    p2p = []
+    # Node ids are passed as DATA, never as shell words: parametrized names
+    # contain spaces and brackets (test_mul[<Tick: 5 minutes>]) and any
+    # quoting scheme eventually meets an id that breaks it -- observed as
+    # "ERROR: not found: ...test_mul[<Tick:" with the id split at the space.
+    nodes = f2p
     runner = "python -m pytest"
     for c in task.get("test_cmds") or []:
         if c.startswith("uv run"):
@@ -231,19 +253,26 @@ def score_official(task: dict, agent_patch: str, timeout: int = 2400) -> dict:
         f"git checkout -f -q {task['base_commit']}; "
         "git apply --3way /tmp/test.patch 2>&1 | tail -2 || true; "
         "if [ -s /tmp/agent.patch ]; then git apply --3way /tmp/agent.patch 2>&1 | tail -2 || true; fi; "
-        f"{runner} " + " ".join(mods) +
-        # No --timeout: pytest-timeout is not in these images and injecting
-        # plugins into a project's own environment is what the hand-rolled
-        # path did wrong. The docker timeout bounds the run instead.
-        " -v --tb=no -p no:cacheprovider -o addopts='' 2>&1 | tail -400")
+        # Node ids go in as DATA via /tmp/nodes.json, and pytest is invoked
+        # through python -c, so nothing is shell-split. No --timeout either:
+        # pytest-timeout is absent from these images and injecting plugins
+        # into a project's own environment is what the hand-rolled path got
+        # wrong. The docker timeout bounds the run.
+        + runner.replace(" -m pytest", "")
+        + " -c \"import json,sys,pytest; sys.exit(pytest.main("
+          "json.load(open('/tmp/nodes.json'))"
+          "+['-v','--tb=no','-p','no:cacheprovider','-o','addopts=']))\""
+          " 2>&1 | tail -400")
     import os
     d = tempfile.mkdtemp(prefix="swebl-")
     Path(d, "test.patch").write_text(task.get("test_patch", "") or "")
     Path(d, "agent.patch").write_text(agent_patch or "")
+    Path(d, "nodes.json").write_text(json.dumps(nodes))
     try:
         out = _sh("docker", "run", "--rm", "--platform", "linux/amd64",
                   "-v", f"{d}/test.patch:/tmp/test.patch:ro",
                   "-v", f"{d}/agent.patch:/tmp/agent.patch:ro",
+                  "-v", f"{d}/nodes.json:/tmp/nodes.json:ro",
                   img, "bash", "-lc", script, timeout=timeout, check=False)
     finally:
         import shutil
@@ -252,9 +281,12 @@ def score_official(task: dict, agent_patch: str, timeout: int = 2400) -> dict:
     if not res:
         print("  [official] nothing collected; tail:\n" +
               "\n".join("    " + l for l in out.splitlines()[-10:]))
-    f2p = task.get("FAIL_TO_PASS", [])
-    p2p = [n for n in task.get("PASS_TO_PASS", []) if n.split("::")[0] in mods]
     f2p_ok = bool(f2p) and all(res.get(n) == "PASSED" for n in f2p)
-    p2p_ok = all(res.get(n) == "PASSED" for n in p2p)
+    # Only P2P ids that actually ran can regress; unexecuted ones are
+    # unknown, not failed. Stated in the result so nobody reads a thin
+    # regression check as a thorough one.
+    p2p_seen = [n for n in p2p_all if n in res]
+    p2p_ok = all(res[n] == "PASSED" for n in p2p_seen)
     return {"resolved": bool(f2p_ok and p2p_ok), "f2p_ok": f2p_ok,
-            "p2p_ok": p2p_ok, "n_run": len(res), "image": img}
+            "p2p_ok": p2p_ok, "n_run": len(res), "image": img,
+            "p2p_checked": len(p2p_seen), "p2p_total": len(p2p_all)}
