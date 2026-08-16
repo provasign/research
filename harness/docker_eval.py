@@ -45,7 +45,8 @@ EXTRA_PIP = {
 }
 
 
-def _pytest_in_docker(worktree: Path, modules: list[str], repo: str = "") -> dict[str, str]:
+def _pytest_in_docker(worktree: Path, modules: list[str], repo: str = "",
+                      test_cmds: list[str] | None = None) -> dict[str, str]:
     """Run the given test modules in a container; return {nodeid: outcome}."""
     # Install the project (editable) + pytest; project test-extras if declared.
     # pytest-timeout guards against a single hanging test (e.g. pager/stress
@@ -61,7 +62,16 @@ def _pytest_in_docker(worktree: Path, modules: list[str], repo: str = "") -> dic
     # carries ephemeral-port-reserve — measured, its conftest ImportErrors
     # without it), or requirements files. Try them all, tolerantly; a miss
     # is harmless, a hit unblocks the repo.
-    cmd = ("export SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0 PDM_BUILD_SCM_VERSION=0.0.0; "
+    # VCS-versioning backends each need their own bypass. uv-dynamic-versioning
+    # (a2a-python and friends) raises "This does not appear to be a Git project"
+    # because the worktree's .git is a FILE pointing at an unmounted host path,
+    # so pip install -e . fails, the package is never importable, and pytest
+    # reports a collection ERROR -- which reads as "the fix did not work"
+    # rather than "the harness could not build the project". Caught 2026-08-16
+    # when the GOLD patch scored not-resolved.
+    cmd = ("export SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0 PDM_BUILD_SCM_VERSION=0.0.0 "
+           "HATCH_VCS_PRETEND_VERSION=0.0.0 UV_DYNAMIC_VERSIONING_BYPASS=0.0.0 "
+           "SETUPTOOLS_SCM_PRETEND_VERSION_FOR_A2A_SDK=0.0.0; "
            "pip install -q --upgrade pip >/dev/null 2>&1; "
            "(pip install -q -e '.[dev]' 2>/dev/null || pip install -q -e '.[test]' 2>/dev/null "
            "|| pip install -q -e '.[tests]' 2>/dev/null || pip install -q -e .) 2>&1 | tail -2; "
@@ -72,6 +82,27 @@ def _pytest_in_docker(worktree: Path, modules: list[str], repo: str = "") -> dic
            f"pip install -q pytest pytest-timeout {extra} 2>&1 | tail -2; "
            "python -m pytest " + " ".join(modules) +
            " -v --tb=no -p no:cacheprovider -o addopts='' --timeout=90")
+    # Prefer the environment the PROJECT declares. The bed carries test_cmds
+    # (e.g. ["pytest -rA", "uv run pytest -rA"]) from mining, and a repo that
+    # ships uv.lock needs `uv sync` to get its optional deps: a2a-python
+    # installs fine with plain pip and then ImportErrors on SQLAlchemy at
+    # collection, which scores the GOLD patch as not-resolved. Guessing extras
+    # (.[dev]/.[test]/...) cannot cover this; the lockfile can.
+    if any(c.startswith("uv ") or c.startswith("uv run") for c in (test_cmds or [])) \
+            or (worktree / "uv.lock").exists():
+        uv_cmd = ("export UV_DYNAMIC_VERSIONING_BYPASS=0.0.0 SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0; "
+                  "pip install -q uv 2>&1 | tail -1; "
+                  "uv sync --all-extras --frozen 2>&1 | tail -2 || uv sync --all-extras 2>&1 | tail -2; "
+                  "uv pip install -q pytest pytest-timeout 2>&1 | tail -1; "
+                  "uv run python -m pytest " + " ".join(modules) +
+                  " -v --tb=no -p no:cacheprovider -o addopts='' --timeout=90")
+        out = _sh("docker", "run", "--rm", "-v", f"{worktree}:/w", "-w", "/w",
+                  IMAGE, "bash", "-lc", uv_cmd, timeout=1800, check=False)
+        res = {m.group(1): m.group(2) for m in RESULT_RE.finditer(out)}
+        if res:
+            return res
+        print("  [docker_eval] uv path collected nothing; falling back to pip")
+
     out = _sh("docker", "run", "--rm", "-v", f"{worktree}:/w", "-w", "/w",
               IMAGE, "bash", "-lc", cmd, timeout=1200, check=False)
     res = {m.group(1): m.group(2) for m in RESULT_RE.finditer(out)}
@@ -105,12 +136,12 @@ def validate(task: dict) -> dict:
     mods = task["test_modules"]
     repo, wt = _worktree(task, [task["test_patch"]])
     try:
-        before = _pytest_in_docker(wt, mods, task["repo"])
+        before = _pytest_in_docker(wt, mods, task["repo"], task.get("test_cmds"))
     finally:
         _cleanup(repo, wt)
     repo, wt = _worktree(task, [task["test_patch"], task["patch"]])
     try:
-        after = _pytest_in_docker(wt, mods, task["repo"])
+        after = _pytest_in_docker(wt, mods, task["repo"], task.get("test_cmds"))
     finally:
         _cleanup(repo, wt)
     # A collection ERROR on the base side (0 nodeids collected) usually means
@@ -135,7 +166,7 @@ def score(task: dict, agent_patch: str) -> dict:
     mods = task["test_modules"]
     repo, wt = _worktree(task, [task["test_patch"], agent_patch])
     try:
-        res = _pytest_in_docker(wt, mods, task.get("repo", ""))
+        res = _pytest_in_docker(wt, mods, task.get("repo", ""), task.get("test_cmds"))
     finally:
         _cleanup(repo, wt)
     f2p_ok = all(res.get(n) == "PASSED" for n in task["fail_to_pass"])
