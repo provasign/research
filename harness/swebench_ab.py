@@ -90,6 +90,18 @@ Investigation discipline (applies regardless of which tools you use):
 # stripped from --allowedTools. Nothing strips it now.
 SEARCH_TOOLS = {"Grep", "Bash(grep:*)", "Bash(rg:*)"}
 
+# Everything `prism init` can create or append to inside a worktree. Excluded
+# from the prediction diff so the treatment arm's patch is the agent's work
+# and nothing else. Keep in sync with writeSteeringInstructions +
+# initRegisterMCPTools in prism's internal/cli/commands.go.
+PRISM_FOOTPRINT = [
+    ".grove", "prism.yaml", ".mcp.json",
+    "CLAUDE.md", "GEMINI.md", "Gemini.md", "AGENTS.md",
+    ".cursorrules", ".windsurfrules", ".clinerules",
+    ".cursor", ".windsurf", ".vscode", ".kiro", ".devin",
+    ".github/copilot-instructions.md", ".claude",
+]
+
 
 def prism_provenance(prism: str) -> dict:
     """Identify the binary under test, and refuse to run without one.
@@ -561,7 +573,17 @@ def run_arm(task: dict, arm: str, prism: str, model: str = "",
         env = run_agent(prompt, tools, wt, model, mcp=mcp_cfg,
                         disallowed=DENIED_TOOLS)
         # The prediction patch = the agent's edits (exclude the .grove index).
-        patch = sh("git", "-C", str(wt), "diff", "--", ".", ":(exclude).grove").stdout
+        # The prediction is the agent's edits to the PROJECT -- not prism's
+        # own footprint. `prism init` appends its steering block to whatever
+        # agent-instruction files the repo already ships, so CLAUDE.md,
+        # GEMINI.md and AGENTS.md turn up as modifications in the diff:
+        # measured 2026-08-16, 6 of 19 prism-arm patches were polluted this
+        # way against 0 baseline. It did not change a verdict in that run
+        # (checked: stripping them scored identically), but a repo whose
+        # CLAUDE.md conflicts would abort `git apply --3way` and score a
+        # correct fix as failed -- silently, and only ever in the prism arm.
+        patch = sh("git", "-C", str(wt), "diff", "--", ".",
+                   *(f":(exclude){p}" for p in PRISM_FOOTPRINT)).stdout
         usage = env.get("usage") or {}
         denials = env.get("permission_denials") or []
         # Word-boundary match on the command's LEADING token only (grep as
