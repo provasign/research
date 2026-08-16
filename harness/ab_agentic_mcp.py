@@ -32,8 +32,13 @@ CFG_DIR.mkdir(exist_ok=True)
 (CFG_DIR / "engine-b.json").write_text(json.dumps({"mcpServers": {
     "codegraph": {"type": "stdio", "command": str(HOME/".local/bin/codegraph"),
                   "args": ["serve", "--mcp"]}}}))
+# alwaysLoad mirrors what `prism init` actually writes (v0.55.0). Without it
+# this arm tests a config no user runs: Claude Code defers the tool schemas
+# behind a ToolSearch hop, which measurably changes whether cheap tiers reach
+# for prism at all.
 (CFG_DIR / "prism.json").write_text(json.dumps({"mcpServers": {
-    "prism": {"type": "stdio", "command": str(HOME/"bin/prism"), "args": ["mcp"]}}}))
+    "prism": {"type": "stdio", "command": str(HOME/"bin/prism"), "args": ["mcp"],
+              "alwaysLoad": True}}}))
 
 CONTRACT = """
 When done, output ONLY a single JSON object, exactly:

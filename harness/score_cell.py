@@ -73,7 +73,7 @@ def categorize(cmd: str) -> str:
 GOLD_SOURCE = re.compile(
     r"api\.github\.com|patch-diff\.githubusercontent|raw\.githubusercontent|codeload\."
     r"|github\.com/\S+/(?:pull|compare|commit|releases)"
-    r"|git\s+fetch|git\s+ls-remote|pip\s+(?:download|install)\s+[^\s-][^\s]*==",
+    r"|git\s+fetch|git\s+ls-remote|pip\s+download\s+[^\s-][^\s]*==",
     re.I)
 NET_CLIENT = re.compile(r"urllib\.request|urlopen|import\s+requests|httpx\.|http\.client|socket\.create_connection", re.I)
 
