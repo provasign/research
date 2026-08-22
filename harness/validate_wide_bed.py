@@ -27,6 +27,57 @@ NONPY = {"jackson-databind", "netty", "commons-lang", "gin", "grafana"}
 def sh(*a, cwd=None, timeout=600, env=None):
     return subprocess.run(a, cwd=cwd, capture_output=True, text=True, timeout=timeout, env=env)
 
+
+def run_covering_tests(wt, task):
+    """Era venv + repair loop + covering tests on an EXISTING tree.
+    Returns (returncode, detail). Extracted for the pilot scorer."""
+    import re as _re
+    repo, sha, old, new = task["repo_path"], task["sha"], task["old"], task["new"]
+    wt = Path(wt)
+    g = sh("git", "-C", str(wt), "grep", "-lw", new, "--", "test*", "tests", "*test*")
+    tests = [l for l in g.stdout.splitlines() if l.endswith(".py")][:6]
+    if not tests:
+        return 3, "no-covering-tests"
+    cdate = sh("git", "-C", repo, "show", "-s", "--format=%cI", sha).stdout.strip()[:10]
+    year = int(cdate[:4]) if cdate[:4].isdigit() else 2024
+    pyver = "3.9" if year <= 2021 else ("3.10" if year <= 2022 else ("3.11" if year <= 2023 else "3.12"))
+    vd = wt / ".venv"
+    r = sh("uv", "venv", "--python", pyver, str(vd), timeout=180, cwd=str(wt))
+    if r.returncode:
+        return 4, "uv venv: " + r.stderr[-100:]
+    py = str(vd / "bin" / "python")
+    uvpip = lambda *pkgs: sh("uv", "pip", "install", "-q", "--python", py,
+                             f"--exclude-newer={cdate}T23:59:59Z", *pkgs,
+                             timeout=420, cwd=str(wt))
+    ins = uvpip("-e", ".")
+    if ins.returncode:
+        ins = uvpip(".")
+    if ins.returncode and "exclude-newer" in (ins.stderr or ""):
+        ins = sh("uv", "pip", "install", "-q", "--python", py, "-e", ".", timeout=420, cwd=str(wt))
+    uvpip("pytest")
+    for extra in ("-e .[dev]", "-e .[test]", "-e .[tests]", "-e .[easy]"):
+        uvpip(*extra.split())
+    ignores = []
+    base = None
+    for _ in range(4):
+        args = [py, "-m", "pytest", "-x", "-q", "--continue-on-collection-errors"]
+        for ig in ignores:
+            args += ["--ignore", ig]
+        base = sh(*args, *tests, cwd=str(wt), timeout=420)
+        if base.returncode == 0:
+            break
+        blob = base.stdout + base.stderr
+        m = _re.search(r"No module named '([\w.]+)'", blob)
+        if m and uvpip(m.group(1).split(".")[0]).returncode == 0:
+            continue
+        m = _re.search(r"ERROR ([\w./-]+/conftest\.py)", blob)
+        if m and str(Path(m.group(1)).parent) not in ignores:
+            ignores.append(str(Path(m.group(1)).parent))
+            continue
+        break
+    return base.returncode, (base.stdout + base.stderr)[-200:]
+
+
 def validate(task):
     repo, sha, old, new = task["repo_path"], task["sha"], task["old"], task["new"]
     name = f'{task["repo"]}-{sha[:8]}'
@@ -168,4 +219,5 @@ def main():
     from collections import Counter
     print("\n", dict(Counter(r["outcome"] for r in results)))
 
-main()
+if __name__ == "__main__":
+    main()
