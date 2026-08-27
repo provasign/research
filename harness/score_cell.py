@@ -188,7 +188,7 @@ def _score(task: dict, patch: str) -> dict:
         else docker_eval.score(scoreable(task), patch)
 
 
-def report(task: dict, run_dir: Path, arms=("no-prism", "prism")) -> dict | None:
+def report(task: dict, run_dir: Path, arms=("baseline", "prism")) -> dict | None:
     tid = task["instance_id"]
     recs = {}
     for a in arms:
@@ -366,15 +366,15 @@ def summarize(results: list[dict]) -> None:
         g = by.get(k)
         if not g:
             continue
-        eq = [r for r in g if r["arms"]["no-prism"]["resolved"] == r["arms"]["prism"]["resolved"]
+        eq = [r for r in g if r["arms"]["baseline"]["resolved"] == r["arms"]["prism"]["resolved"]
               and r["arms"]["prism"]["resolved"] is not None]
-        rb = sum(1 for r in g if r["arms"]["no-prism"]["resolved"])
+        rb = sum(1 for r in g if r["arms"]["baseline"]["resolved"])
         rp = sum(1 for r in g if r["arms"]["prism"]["resolved"])
         ad = sum(1 for r in g if r["arms"]["prism"]["prism_used"])
         dt = dc = float("nan")
         if eq:
-            dt = statistics.median(r["arms"]["prism"]["turns"] - r["arms"]["no-prism"]["turns"] for r in eq)
-            dc = statistics.median(r["arms"]["prism"]["cost"] - r["arms"]["no-prism"]["cost"] for r in eq)
+            dt = statistics.median(r["arms"]["prism"]["turns"] - r["arms"]["baseline"]["turns"] for r in eq)
+            dc = statistics.median(r["arms"]["prism"]["cost"] - r["arms"]["baseline"]["cost"] for r in eq)
         print(f"  {k:11}{len(g):3}{len(eq):4}{rb:>7}/{len(g):<2}{rp:>8}/{len(g):<2}"
               f"{dt:12.1f}{dc:11.3f}{ad:>5}/{len(g)}")
     print("\n  Prism's measured win (RESULTS.md §9.1) is on 8-310-site change sets.")

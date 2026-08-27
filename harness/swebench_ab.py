@@ -218,6 +218,42 @@ returns full symbol bodies for a text question.
 # The live path is real_prism_steering(), which reads the block prism's own
 # `init` writes, so the arm always sees what a user sees. Left for the
 # short-steering probe; rewrite from AGENTS.md before reusing it.
+# DIRECTIVE steering (2026-08-26). Every information-channel intervention
+# measured so far is null for ROUTING: schema visibility, steering mention,
+# and a rewritten tool description all left prism_read at 6% of reads (2 of
+# ~34) while the agent reflexively called native Read. This variant tests
+# the remaining dial — imperative force. MUST, not "use"; an explicit
+# prohibition on the native equivalent, which no previous variant stated.
+# V2 (2026-08-26). V1 proved the LEVER works — routing went 6% -> 100% and
+# change_impact usage 2 -> 12 — but its CONTENT was wrong: "window a
+# 2,000-line class" turned ~5 whole-file reads into ~12 windowed reads on
+# both heavyweight cells, and since every extra turn re-reads the whole
+# transcript, cache rose 16% and cost 8%. Measured budget across 12 Java
+# cells: file content is 67% of all cache mass and DUPLICATE reads alone are
+# 23%. So v2 keeps the directive form, drops the windowing advice, and aims
+# the lever at the duplicate mass instead.
+DIRECTIVE_PRISM_STEERING = """
+## Prism — code intelligence (already in your tool list)
+
+These are REQUIREMENTS for this task, not suggestions:
+
+- You MUST use `prism_read` to read any file. Do NOT use the `Read` tool.
+  For a file over 800 lines prism_read returns an OUTLINE — every symbol
+  with its line range — instead of the body. That is the answer, not an
+  error: pick what you need from it (`prism_lookup name="Type.member"` for
+  one symbol, or `prism_read offset=/limit=` for a region). Use
+  `full=true` only when you genuinely need the entire file.
+- Do NOT re-read something you have already read. Everything already in
+  this conversation stays visible to you; re-reading only costs you.
+- You MUST use `prism_search` to locate code. `scope="text"` is a real
+  ripgrep pass at the same cost as grep.
+- Before you edit an existing symbol you MUST call `prism_change_impact`
+  on it, and relay that set as-is — re-deriving it with grep measurably
+  drops real sites.
+- `prism_lookup <name>` reads one symbol; `prism_verify` checks whether a
+  finished diff covers its blast radius.
+"""
+
 SHORT_PRISM_STEERING = """
 ## Prism — code intelligence (already in your tool list)
 
@@ -571,6 +607,7 @@ def run_arm(task: dict, arm: str, prism: str, model: str = "",
             # MCP calls to be reachable at all.
             tools = list(TOOLS_BASE) + ["mcp__prism"]
             steer += "\n" + (SHORT_PRISM_STEERING if steering_variant == "short"
+                               else DIRECTIVE_PRISM_STEERING if steering_variant == "directive"
                                else real_prism_steering())
         prompt = BASE_PROMPT.format(repo=task["repo"], problem=task["problem_statement"],
                                     steer=steer)
@@ -690,6 +727,10 @@ def main() -> None:
     ap.add_argument("--out", default="runs/swebench")
     ap.add_argument("--prism", default=str(Path.home() / "bin" / "prism"))
     ap.add_argument("--model", default="opus")
+    ap.add_argument("--steering-variant", default="full",
+                    choices=["full", "short", "directive"],
+                    help="prism-arm steering text: full (product AGENTS.md), "
+                         "short (legacy), directive (imperative MUST form)")
     args = ap.parse_args()
 
     if args.fetch:
@@ -721,7 +762,8 @@ def main() -> None:
                 print(f"[{i+1}/{len(tasks)}] {task['instance_id']} :: {arm}  SKIP (done)", flush=True)
                 continue
             print(f"[{i+1}/{len(tasks)}] {task['instance_id']} :: {arm}", flush=True)
-            rec = run_arm(task, arm, args.prism, args.model)
+            rec = run_arm(task, arm, args.prism, args.model,
+                          steering_variant=args.steering_variant)
             # A cell that produced no turns and no cost is a FAILED INVOCATION
             # -- rate limit, auth, a dead CLI -- not a result. Writing it would
             # be worse than losing it: the resume check above skips any cell
@@ -729,7 +771,12 @@ def main() -> None:
             # permanently-empty cells that later read as "the agent gave up".
             # Observed 2026-08-16: a five-hour limit hit mid-run and every
             # subsequent cell returned in ~1.2s with turns=1 and cost=0.
-            if not rec.get("cost_usd") and (rec.get("turns") or 0) <= 1:
+            # <=1 turn with no tool calls is a failed invocation regardless
+            # of a few residual cents of cost — observed 2026-08-18: a cell
+            # burned 199s and $0.004 on one toolless turn (transient API
+            # error), slipped past the cost==0 check, and its -46 "turns
+            # saved" flattered the arm's aggregate totals.
+            if (not rec.get("cost_usd") or not rec.get("tool_calls")) and (rec.get("turns") or 0) <= 1:
                 print(f"      !! no work done (turns={rec.get('turns')}, "
                       f"cost={rec.get('cost_usd')}, wall={rec.get('wall_s')}s) — "
                       f"NOT recorded, so a resume retries it. Rate limit?", flush=True)
