@@ -62,14 +62,21 @@ def show(repo, sha, path):
     return r.stdout
 
 def gold_hunks(t):
-    """[(file, start_line)] for src hunks; skips release-notes etc."""
+    """[(file, anchor_line)] for src hunks; skips release-notes etc.
+
+    anchor = the MIDDLE of the old-file range, not its start: a hunk that
+    inserts a method starts on the blank line after the previous method, and
+    scanning up from there attributed a fix to the WRONG neighbour
+    (EnumDeserializer: extractor said _getToStringLookup, the fix was in
+    useNullForUnknownEnum one method down — cost a perfect cell)."""
     out, cur = [], None
     for line in t['patch'].split('\n'):
         m = re.match(r'^\+\+\+ b/(.+)$', line)
         if m: cur = m.group(1); continue
-        m = re.match(r'^@@ -(\d+)', line)
+        m = re.match(r'^@@ -(\d+),?(\d*)', line)
         if m and cur and ('/src/' in '/' + cur or cur.startswith('src/')):
-            out.append((cur, int(m.group(1))))
+            start = int(m.group(1)); n = int(m.group(2) or 1)
+            out.append((cur, start + max(n // 2, 1)))
     return out
 
 def title_terms(t):
@@ -87,24 +94,31 @@ def oracle_terms(repo, sha, hunks):
     # oracle runs 1-6 (confirmed by faulthandler stack dump, 2026-08-26);
     # three infrastructure theories were wrong. Never put a repeated group
     # around an alternation whose branches can match the same text.
+    # QUALIFIED terms (Type.member): bare names like `clear` fan out across
+    # the whole repo and the gold declaration loses the seed race; the file's
+    # primary type disambiguates. Declaration detection requires a
+    # DECLARATION-shaped line (modifier-led), not merely "contains ident(" —
+    # the looser rule walked past the real method into a neighbour and
+    # produced terms like writeEndElement for a writeNumber fix.
     names = []
     kw = {'if', 'for', 'while', 'switch', 'catch', 'return', 'new', 'throw',
           'else', 'do', 'super', 'this', 'assert'}
-    ident = re.compile(r'([A-Za-z_][A-Za-z0-9_]*)\s*\(')
+    decl = re.compile(r'^(?:public|protected|private)\b[^=;{]*?([A-Za-z_][A-Za-z0-9_]*)\s*\(')
     for f, ln in hunks:
         body = show(repo, sha, f).split('\n')
+        typ = f.rsplit('/', 1)[-1].removesuffix('.java')
+        found = None
         for i in range(min(ln, len(body)) - 1, -1, -1):
-            line = body[i]
-            st = line.strip()
-            # declaration-shaped: starts at low indent or with a modifier,
-            # and contains ident( — good enough for term extraction.
-            if not st or st.startswith(('//', '*', '/*', '@', 'if', 'for', 'while', 'return')):
-                continue
-            m = ident.search(st)
-            if m and m.group(1) not in kw and (st.startswith(('public', 'protected', 'private', 'static', 'final', 'abstract', 'void', 'class', 'interface')) or not line.startswith('        ')):
-                if m.group(1) not in names:
-                    names.append(m.group(1))
+            st = body[i].strip()
+            m = decl.match(st)
+            if m and m.group(1) not in kw:
+                found = m.group(1)
                 break
+            if st.startswith(('class ', 'interface ', 'enum ')) or ' class ' in st.split('//')[0]:
+                break
+        term = f"{typ}.{found}" if found else typ
+        if term not in names:
+            names.append(term)
     return names[:4]
 
 def score(repo, sha, hunks, ctx):
