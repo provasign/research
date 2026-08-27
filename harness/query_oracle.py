@@ -119,7 +119,7 @@ def oracle_terms(repo, sha, hunks):
         term = f"{typ}.{found}" if found else typ
         if term not in names:
             names.append(term)
-    return names[:4]
+    return names[:8]
 
 def score(repo, sha, hunks, ctx):
     """(recall, delivered_bytes, need_bytes)"""
