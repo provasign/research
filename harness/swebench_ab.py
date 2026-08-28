@@ -238,20 +238,18 @@ DIRECTIVE_PRISM_STEERING = """
 These are REQUIREMENTS for this task, not suggestions:
 
 - You MUST use `prism_read` to read any file. Do NOT use the `Read` tool.
-  For a file over 800 lines prism_read returns an OUTLINE — every symbol
-  with its line range — instead of the body. That is the answer, not an
-  error: pick what you need from it (`prism_lookup name="Type.member"` for
-  one symbol, or `prism_read offset=/limit=` for a region). Use
-  `full=true` only when you genuinely need the entire file.
-- Do NOT re-read something you have already read. Everything already in
-  this conversation stays visible to you; re-reading only costs you.
-- You MUST use `prism_search` to locate code. `scope="text"` is a real
-  ripgrep pass at the same cost as grep.
-- Before you edit an existing symbol you MUST call `prism_change_impact`
-  on it, and relay that set as-is — re-deriving it with grep measurably
-  drops real sites.
-- `prism_lookup <name>` reads one symbol; `prism_verify` checks whether a
-  finished diff covers its blast radius.
+  It returns the same line-numbered source. If a repeat read of an
+  unchanged file returns a one-line `[prism:cached]` pointer, that is not
+  an error — the copy already in your context is current.
+- You MUST use `prism_search` to locate code; `scope="text"` is a real
+  ripgrep pass. Several names? ONE call: `query=["A","B"]`.
+- Query discipline: search CODE IDENTIFIERS named in the issue, and prefer
+  the qualified form (`Type.member`) — it goes straight to the declaration.
+  Do NOT search error-message text to decide where to edit: the error shows
+  where a problem SURFACES; the fix belongs where the value is decided.
+  Walk from the identifier to its callers (`prism_change_impact`) instead.
+- Before you edit an existing symbol, call `prism_change_impact` on it and
+  relay that set as-is.
 """
 
 SHORT_PRISM_STEERING = """
@@ -623,6 +621,13 @@ def run_arm(task: dict, arm: str, prism: str, model: str = "",
         # (checked: stripping them scored identically), but a repo whose
         # CLAUDE.md conflicts would abort `git apply --3way` and score a
         # correct fix as failed -- silently, and only ever in the prism arm.
+        # Intent-to-add first: `git diff` omits untracked files, so a fix
+        # whose gold shape is "create a new module" loses that file from the
+        # patch and ships an import of a module that does not exist (observed
+        # 2026-08-28, astropy-13398: whole coordinates package failed to
+        # import, 68 PASS_TO_PASS broke). Penalizes ONLY new-file fixes.
+        sh("git", "-C", str(wt), "add", "-N", "--", ".",
+           *(f":(exclude){p}" for p in PRISM_FOOTPRINT))
         patch = sh("git", "-C", str(wt), "diff", "--", ".",
                    *(f":(exclude){p}" for p in PRISM_FOOTPRINT)).stdout
         usage = env.get("usage") or {}
