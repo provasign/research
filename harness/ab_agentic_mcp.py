@@ -32,13 +32,14 @@ CFG_DIR.mkdir(exist_ok=True)
 (CFG_DIR / "engine-b.json").write_text(json.dumps({"mcpServers": {
     "codegraph": {"type": "stdio", "command": str(HOME/".local/bin/codegraph"),
                   "args": ["serve", "--mcp"]}}}))
-# alwaysLoad mirrors what `prism init` actually writes (v0.55.0). Without it
-# this arm tests a config no user runs: Claude Code defers the tool schemas
-# behind a ToolSearch hop, which measurably changes whether cheap tiers reach
-# for prism at all.
+# Mirrors what `prism init` writes. v0.55.0 added alwaysLoad because cheap
+# tiers stopped reaching for deferred tools; the 2026-08-29 ab_deferral A/B
+# (9 pairs, haiku) reversed that finding — zero routing losses, recall delta
+# +0.004 deferred — so init dropped it and this arm follows. Cells cached
+# before this date ran with alwaysLoad; the measured delta between the two
+# configs is ~0, but note it when comparing across that boundary.
 (CFG_DIR / "prism.json").write_text(json.dumps({"mcpServers": {
-    "prism": {"type": "stdio", "command": str(HOME/"bin/prism"), "args": ["mcp"],
-              "alwaysLoad": True}}}))
+    "prism": {"type": "stdio", "command": str(HOME/"bin/prism"), "args": ["mcp"]}}}))
 
 CONTRACT = """
 When done, output ONLY a single JSON object, exactly:
