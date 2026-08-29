@@ -69,17 +69,37 @@ def arm_for(binary: str, tag: str) -> str:
     return name
 
 
+def is_degenerate(rec: dict) -> bool:
+    """True when the CLI returned cleanly but did no real work — a transient
+    rate-limit/quota response returns valid JSON with turns=1, cost=0,
+    tokens=0 rather than raising, so it never hits run_arm's except path and
+    was silently averaged in as a zero recall delta (observed 2026-08-29:
+    3/9 cells degenerate on BOTH arms in one run, masked by the mean-delta
+    math into an apparent clean PASS). Not cached — degenerate cells must
+    re-run, never be treated as a real result."""
+    return (rec.get("turns") == 1 and (rec.get("cost_usd") or 0) == 0
+            and (rec.get("tokens_in") or 0) == 0 and "error" not in rec)
+
+
 def run_cell(arm: str, task: Task, corpus: Path, model: str,
              out: Path, binary: str, sha: str) -> dict:
     f = out / f"{task.id}.{model}.{sha}.json"
     if f.exists():
-        return json.loads(f.read_text())
+        cached = json.loads(f.read_text())
+        if not is_degenerate(cached):
+            return cached
+        print(f"  ({f.name} was degenerate — re-running, not trusting cache)")
     subprocess.run(["git", "-C", str(corpus), "checkout", "-q", task.pin],
                    capture_output=True)
     subprocess.run([binary, "index", str(corpus)], capture_output=True,
                    timeout=900)
     rec = bed.run_arm(arm, task, corpus, model)
     rec.update(task=task.id, model=model, binary_sha=sha)
+    if is_degenerate(rec):
+        # One transient retry, same shape as the recall-drop retry policy.
+        print(f"  degenerate cell (turns=1, cost=$0) — one fresh retry")
+        rec = bed.run_arm(arm, task, corpus, model)
+        rec.update(task=task.id, model=model, binary_sha=sha)
     f.write_text(json.dumps(rec, indent=2))
     return rec
 
@@ -110,6 +130,11 @@ def main() -> int:
             continue
         b = run_cell(b_arm, task, corpus, args.model, out, args.baseline, b_sha)
         c = run_cell(c_arm, task, corpus, args.model, out, args.candidate, c_sha)
+        if is_degenerate(b) or is_degenerate(c):
+            print(f"HARNESS ERROR: {task.id} still degenerate after retry "
+                  f"(base_turns={b.get('turns')} cand_turns={c.get('turns')}) "
+                  "— infra issue, not a quality signal. Fix infra and re-run.")
+            return 2
 
         def hard_fails(cand: dict) -> str:
             if "error" in cand and "error" not in b:
