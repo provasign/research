@@ -110,18 +110,33 @@ def main() -> int:
             continue
         b = run_cell(b_arm, task, corpus, args.model, out, args.baseline, b_sha)
         c = run_cell(c_arm, task, corpus, args.model, out, args.candidate, c_sha)
+
+        def hard_fails(cand: dict) -> str:
+            if "error" in cand and "error" not in b:
+                return f"candidate errored where baseline succeeded ({cand['error'][:120]})"
+            br_, cr_ = b.get("recall"), cand.get("recall")
+            if br_ is not None and cr_ is not None and cr_ < br_ - HARD_RECALL_DROP:
+                return f"recall {br_} -> {cr_} (drop > {HARD_RECALL_DROP})"
+            return ""
+
+        reason = hard_fails(c)
+        if reason:
+            # One-retry policy, calibrated to the measured ~50%/cell noise
+            # floor: a single agent derailment on a noisy cell must not
+            # veto a change (observed: recall 0.882 -> 0.02 -> 0.843 on the
+            # same candidate). The retry is FRESH (cache dropped), decided
+            # on its own, and exactly one — a reproduced failure fails.
+            print(f"{task.id:30} HARD-FAIL candidate ({reason}) — one fresh retry")
+            (out / f"{task.id}.{args.model}.{c_sha}.json").unlink(missing_ok=True)
+            c = run_cell(c_arm, task, corpus, args.model, out, args.candidate, c_sha)
+            reason = hard_fails(c)
+            if reason:
+                print(f"HARD FAIL (reproduced): {reason} on {task.id}")
+                return 1
         br, cr = b.get("recall"), c.get("recall")
         print(f"{task.id:30} base recall={br} tok={b.get('tokens_in',0)//1000}k | "
               f"cand recall={cr} tok={c.get('tokens_in',0)//1000}k")
-        if "error" in c and "error" not in b:
-            print(f"HARD FAIL: candidate errored where baseline succeeded "
-                  f"({c['error'][:120]})")
-            return 1
         if br is not None and cr is not None:
-            if cr < br - HARD_RECALL_DROP:
-                print(f"HARD FAIL: recall {br} -> {cr} on {task.id} "
-                      f"(drop > {HARD_RECALL_DROP})")
-                return 1
             drops.append(br - cr)
         cand_tok += c.get("tokens_in", 0) or 0
         base_tok += b.get("tokens_in", 0) or 0
