@@ -1,0 +1,68 @@
+diff --git a/src/main/java/org/apache/commons/collections4/list/SetUniqueList.java b/src/main/java/org/apache/commons/collections4/list/SetUniqueList.java
+index a63e18714..59852a631 100644
+--- a/src/main/java/org/apache/commons/collections4/list/SetUniqueList.java
++++ b/src/main/java/org/apache/commons/collections4/list/SetUniqueList.java
+@@ -219,6 +219,7 @@ public class SetUniqueList<E> extends AbstractSerializableListDecorator<E> {
+      */
+     @Override
+     public void add(final int index, final E object) {
++        checkIndex(index);
+         // adds element if it is not contained already
+         if (!set.contains(object)) {
+             set.add(object);
+@@ -261,6 +262,7 @@ public class SetUniqueList<E> extends AbstractSerializableListDecorator<E> {
+      */
+     @Override
+     public boolean addAll(final int index, final Collection<? extends E> coll) {
++        checkIndex(index);
+         final List<E> temp = new ArrayList<>();
+         for (final E e : coll) {
+             if (set.add(e)) {
+@@ -279,6 +281,13 @@ public class SetUniqueList<E> extends AbstractSerializableListDecorator<E> {
+         return UnmodifiableSet.unmodifiableSet(set);
+     }
+ 
++    private void checkIndex(final int index) {
++        final int size = size();
++        if (index < 0 || index > size) {
++            throw new IndexOutOfBoundsException("Index: " + index + ", Size: " + size);
++        }
++    }
++
+     @Override
+     public void clear() {
+         super.clear();
+diff --git a/src/main/java/org/apache/commons/collections4/set/ListOrderedSet.java b/src/main/java/org/apache/commons/collections4/set/ListOrderedSet.java
+index eb96dc9fe..75664629c 100644
+--- a/src/main/java/org/apache/commons/collections4/set/ListOrderedSet.java
++++ b/src/main/java/org/apache/commons/collections4/set/ListOrderedSet.java
+@@ -232,6 +232,7 @@ public class ListOrderedSet<E>
+      * @see List#add(int, Object)
+      */
+     public void add(final int index, final E object) {
++        checkIndex(index);
+         if (!contains(object)) {
+             decorated().add(object);
+             setOrder.add(index, object);
+@@ -259,6 +260,7 @@ public class ListOrderedSet<E>
+      * @see List#addAll(int, Collection)
+      */
+     public boolean addAll(final int index, final Collection<? extends E> coll) {
++        checkIndex(index);
+         boolean changed = false;
+         // collect all elements to be added for performance reasons
+         final List<E> toAdd = new ArrayList<>();
+@@ -287,6 +289,13 @@ public class ListOrderedSet<E>
+         return UnmodifiableList.unmodifiableList(setOrder);
+     }
+ 
++    private void checkIndex(final int index) {
++        final int size = setOrder.size();
++        if (index < 0 || index > size) {
++            throw new IndexOutOfBoundsException("Index: " + index + ", Size: " + size);
++        }
++    }
++
+     @Override
+     public void clear() {
+         decorated().clear();

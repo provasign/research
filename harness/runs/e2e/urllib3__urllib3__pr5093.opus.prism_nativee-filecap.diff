@@ -1,0 +1,30 @@
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 8a89488d..2feb83a2 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -917,7 +917,10 @@ class HTTPSConnection(HTTPConnection):
+         ssl_context = proxy_config.ssl_context
+         sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+             sock,
+-            cert_reqs=self.cert_reqs,
++            # When the proxy has its own SSLContext its verification settings
++            # are used as-is, the target connection's 'cert_reqs' must not
++            # leak into the proxy connection.
++            cert_reqs=None if ssl_context is not None else self.cert_reqs,
+             ssl_version=self.ssl_version,
+             ssl_minimum_version=self.ssl_minimum_version,
+             ssl_maximum_version=self.ssl_maximum_version,
+@@ -984,7 +987,12 @@ def _ssl_wrap_socket_and_match_hostname(
+     else:
+         context = ssl_context
+ 
+-    context.verify_mode = resolve_cert_reqs(cert_reqs)
++    # Only override the verify mode of a user-supplied SSLContext when
++    # 'cert_reqs' was explicitly given, otherwise the context's own
++    # configuration is respected. This matters for HTTPS proxies, where the
++    # target connection's 'cert_reqs' must not leak into 'proxy_ssl_context'.
++    if cert_reqs is not None:
++        context.verify_mode = resolve_cert_reqs(cert_reqs)
+ 
+     # In some cases, we want to verify hostnames ourselves
+     if (

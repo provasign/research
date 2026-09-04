@@ -1,0 +1,190 @@
+diff --git a/release-notes/VERSION b/release-notes/VERSION
+index a27cfe034..b8505b895 100644
+--- a/release-notes/VERSION
++++ b/release-notes/VERSION
+@@ -17,6 +17,9 @@ No changes since 3.2
+ #6028: Verification of unwrapped fields should mention type containing unwrapped POJO
+  (reported by Oliver D)
+  (fix by @cowtowncoder, w/ Claude code)
++#6031: `@JsonAlias` of a property ignored with `@JsonIgnore` (or read-only
++  access) reported as unknown property, not ignored
++ (fix by @cowtowncoder, w/ Claude code)
+ 
+ 3.2.0 (08-Jun-2026)
+ 
+diff --git a/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java b/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
+index b2753848a..4a8b30abf 100644
+--- a/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
++++ b/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
+@@ -158,6 +158,18 @@ public class POJOPropertiesCollector
+      */
+     protected HashSet<String> _nonRescuedIgnoredPropertyNames;
+ 
++    /**
++     * Alias names ({@code @JsonAlias}) of properties that got ignored: kept separate
++     * from {@link #_perPropertyIgnoredNames} since these are not property names as
++     * such (so must not affect renaming or the {@code [databind#2001]} rescue), but
++     * do need to be included in {@link #getIgnoredPropertyNames()} so that incoming
++     * aliases of ignored properties are quietly ignored, and not passed to
++     * "any setter" or reported as unknown properties ({@code [databind#6031]}).
++     *
++     * @since 3.2
++     */
++    protected HashSet<String> _ignoredAliasNames;
++
+     /**
+      * Class-level ignorals (annotation plus config overrides), computed once during
+      * {@link #_collectClassLevelIgnorals()} and exposed to the factory layer via
+@@ -1541,12 +1553,17 @@ ctor.creator()));
+                 // 20-Jul-2023, tatu: This can be harmful, see f.ex [databind#3992] so
+                 //    only use special handling for deserialization
+ 
++                // [databind#6031]: aliases must be gathered before accessors get
++                //   removed below, in case property ends up being ignored
++                final Set<String> aliases = prop.findAliasNames();
++
+                 if (isRecordType() && !_forSerialization) {
+                       // ...so can only remove ignored field and/or accessors, not constructor parameters that are needed
+                       // for instantiation...
+                       prop.removeIgnored();
+                       // ...which will then be ignored (the incoming property value) during deserialization
+                     _collectIgnorals(prop.getName());
++                    _collectIgnoredAliases(aliases);
+                     continue;
+                 }
+ 
+@@ -1556,12 +1573,14 @@ ctor.creator()));
+                 if (!prop.anyExplicitsWithoutIgnoral()) {
+                     it.remove();
+                     _collectIgnorals(prop.getName());
++                    _collectIgnoredAliases(aliases);
+                     continue;
+                 }
+                 // otherwise just remove ones marked to be ignored
+                 prop.removeIgnored();
+                 if (!prop.couldDeserialize()) {
+                     _collectIgnorals(prop.getName());
++                    _collectIgnoredAliases(aliases);
+                 }
+             }
+         }
+@@ -1605,6 +1624,25 @@ ctor.creator()));
+         }
+     }
+ 
++    /**
++     * Helper method called along with {@link #_collectIgnorals(String)} to also
++     * record {@code @JsonAlias} names of a property being ignored, so that incoming
++     * aliases are ignored the same way the primary name is ({@code [databind#6031]}).
++     * Aliases are passed in since they must be resolved before ignored accessors
++     * get removed from the property.
++     *
++     * @since 3.2
++     */
++    protected void _collectIgnoredAliases(Set<String> aliases)
++    {
++        for (String alias : aliases) {
++            if (_ignoredAliasNames == null) {
++                _ignoredAliasNames = new HashSet<>();
++            }
++            _ignoredAliasNames.add(alias);
++        }
++    }
++
+     /**
+      * Returns {@code true} if the (already-collected) properties-based creator
+      * has a parameter currently bound to the given name. Used by
+@@ -2233,16 +2271,28 @@ ctor.creator()));
+      * @since 3.2
+      */
+     private Set<String> _unionWithClassLevel(Set<String> base) {
+-        if (_classLevelIgnoredNames == null) {
++        // [databind#6031]: aliases of ignored properties are part of the ignoral set too
++        if (_classLevelIgnoredNames == null && _ignoredAliasNames == null) {
+             return (base == null) ? Collections.emptySet() : base;
+         }
+         if (base == null) {
+-            return _classLevelIgnoredNames;
++            if (_ignoredAliasNames == null) {
++                return _classLevelIgnoredNames;
++            }
++            if (_classLevelIgnoredNames == null) {
++                return _ignoredAliasNames;
++            }
++        }
++        HashSet<String> result = new HashSet<>();
++        if (base != null) {
++            result.addAll(base);
++        }
++        if (_classLevelIgnoredNames != null) {
++            result.addAll(_classLevelIgnoredNames);
++        }
++        if (_ignoredAliasNames != null) {
++            result.addAll(_ignoredAliasNames);
+         }
+-        HashSet<String> result = new HashSet<>(base.size()
+-                + _classLevelIgnoredNames.size());
+-        result.addAll(base);
+-        result.addAll(_classLevelIgnoredNames);
+         return result;
+     }
+ }
+diff --git a/src/main/java/tools/jackson/databind/introspect/POJOPropertyBuilder.java b/src/main/java/tools/jackson/databind/introspect/POJOPropertyBuilder.java
+index 61ffa0a94..12e2453b0 100644
+--- a/src/main/java/tools/jackson/databind/introspect/POJOPropertyBuilder.java
++++ b/src/main/java/tools/jackson/databind/introspect/POJOPropertyBuilder.java
+@@ -1006,6 +1006,8 @@ public class POJOPropertyBuilder
+             // and possible explicit names
+             if (parent != null) {
+                 parent._collectIgnorals(getName());
++                // [databind#6031]: aliases of ignored property must be ignored too
++                parent._collectIgnoredAliases(findAliasNames());
+                 for (PropertyName pn : findExplicitNames()) {
+                     String simpleName = pn.getSimpleName();
+                     // [databind#5975]: Skip ignoral when the explicit name is owned
+@@ -1239,6 +1241,45 @@ public class POJOPropertyBuilder
+         return false;
+     }
+ 
++    /**
++     * Method for finding simple names of all {@code @JsonAlias} aliases declared by
++     * <b>any</b> accessor of this property (not just the "primary" one).
++     * Needed for [databind#6031]: when a property gets ignored, its aliases must
++     * be ignored as well (instead of being reported as unknown properties).
++     *
++     * @since 3.2
++     */
++    public Set<String> findAliasNames()
++    {
++        if (_annotationIntrospector == null) {
++            return Collections.emptySet();
++        }
++        Set<String> names = null;
++        names = _addAliasNames(names, _fields);
++        names = _addAliasNames(names, _getters);
++        names = _addAliasNames(names, _setters);
++        names = _addAliasNames(names, _ctorParameters);
++        return (names == null) ? Collections.emptySet() : names;
++    }
++
++    private <T extends AnnotatedMember> Set<String> _addAliasNames(Set<String> names,
++            Linked<T> n)
++    {
++        for (; n != null; n = n.next) {
++            List<PropertyName> aliases = _annotationIntrospector.findPropertyAliases(_config, n.value);
++            if (aliases == null) {
++                continue;
++            }
++            for (PropertyName alias : aliases) {
++                if (names == null) {
++                    names = new HashSet<>();
++                }
++                names.add(alias.getSimpleName());
++            }
++        }
++        return names;
++    }
++
+     // @since 2.14
+     public boolean anyExplicitsWithoutIgnoral() {
+         return _anyExplicitsWithoutIgnoral(_fields)

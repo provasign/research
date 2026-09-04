@@ -1,0 +1,63 @@
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java b/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java
+index 3e63a4a6b..1425f4c7a 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java
+@@ -894,7 +894,10 @@ ClassUtil.nameOf(handledType()), ClassUtil.name(propName)));
+             // 16-May-2016, tatu: How about per-property case-insensitivity?
+             Boolean B = format.getFeature(JsonFormat.Feature.ACCEPT_CASE_INSENSITIVE_PROPERTIES);
+             if (B != null) {
+-                BeanPropertyMap propsOrig = _beanProperties;
++                // 04-Nov-2025, tatu: [databind#5962] Must use properties of the
++                //    contextual instance, to not resurrect properties that were
++                //    removed by `@JsonIgnoreProperties` handling above
++                BeanPropertyMap propsOrig = contextual._beanProperties;
+                 BeanPropertyMap props = propsOrig.withCaseInsensitivity(B.booleanValue());
+                 if (props != propsOrig) {
+                     contextual = contextual.withBeanProperties(props);
+@@ -1785,7 +1788,7 @@ ClassUtil.name(refName), ClassUtil.getTypeDescription(backRefType),
+             Object beanOrBuilder, String propName)
+         throws IOException
+     {
+-        if (IgnorePropertiesUtil.shouldIgnore(propName, _ignorableProps, _includableProps)) {
++        if (_isIgnorableProp(propName)) {
+             handleIgnoredProperty(p, ctxt, beanOrBuilder, propName);
+         } else if (_anySetter != null) {
+             try {
+@@ -1800,6 +1803,28 @@ ClassUtil.name(refName), ClassUtil.getTypeDescription(backRefType),
+         }
+     }
+ 
++    /**
++     * Helper method for checking whether given (unmatched) property is to be
++     * ignored: in addition to regular checks, also matches case-insensitively
++     * if bean properties are matched case-insensitively (see [databind#5962]).
++     *
++     * @since 2.18.9
++     */
++    private boolean _isIgnorableProp(String propName)
++    {
++        if (IgnorePropertiesUtil.shouldIgnore(propName, _ignorableProps, _includableProps)) {
++            return true;
++        }
++        if ((_ignorableProps != null) && _beanProperties.isCaseInsensitive()) {
++            for (String ignorable : _ignorableProps) {
++                if (ignorable.equalsIgnoreCase(propName)) {
++                    return true;
++                }
++            }
++        }
++        return false;
++    }
++
+     /**
+      * Method called when a JSON property is encountered that has not matching
+      * setter, any-setter or field, and thus cannot be assigned.
+@@ -1813,7 +1838,7 @@ ClassUtil.name(refName), ClassUtil.getTypeDescription(backRefType),
+             p.skipChildren();
+             return;
+         }
+-        if (IgnorePropertiesUtil.shouldIgnore(propName, _ignorableProps, _includableProps)) {
++        if (_isIgnorableProp(propName)) {
+             handleIgnoredProperty(p, ctxt, beanOrClass, propName);
+         }
+         // Otherwise use default handling (call handler(s); if not

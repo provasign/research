@@ -1,0 +1,129 @@
+diff --git a/.claude/settings.json b/.claude/settings.json
+new file mode 100644
+index 0000000..98eb003
+--- /dev/null
++++ b/.claude/settings.json
+@@ -0,0 +1 @@
++{"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "PRISM_HOOK_BIN=/private/tmp/claude-501/-Users-tapabratapal-Projects-provasign-prism/3b58659c-d56a-4934-bb18-a0b337259ca6/scratchpad/prism-cand3 python3 /private/tmp/claude-501/-Users-tapabratapal-Projects-provasign-prism/3b58659c-d56a-4934-bb18-a0b337259ca6/scratchpad/grep_subst_hook.py"}]}]}}
+\ No newline at end of file
+diff --git a/CHANGES.rst b/CHANGES.rst
+index 1c4e997..ad772d6 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -21,6 +21,10 @@ Unreleased
+     ``pytest-xdist`` to detect test pollution and race conditions. :pr:`3151`
+ -   Add contributor documentation for running stress tests, randomized
+     parallel tests, and Flask smoke tests. :pr:`3151` :pr:`3177`
++-   ``CliRunner`` isolation streams provide a real file descriptor through
++    ``fileno()``, so passing ``sys.stdout``/``sys.stderr`` to
++    ``subprocess.run()`` no longer raises ``io.UnsupportedOperation``. Output
++    written by the subprocess is captured in the result. :issue:`2523`
+ 
+ Version 8.3.2
+ -------------
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..c16f4ae 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -76,12 +76,72 @@ class BytesIOCopy(io.BytesIO):
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._fd_file: t.IO[bytes] | None = None
++        self._fd_pos = 0
++        self._peer: BytesIOCopy | None = None
++
++    def fileno(self) -> int:
++        """Return a real file descriptor backing this stream.
++
++        ``BytesIO`` has no file descriptor, so passing a captured stream to
++        something that needs one, such as ``subprocess.run(stdout=sys.stdout)``,
++        raises ``io.UnsupportedOperation``. A temporary file is created on
++        demand instead, and anything written to its descriptor is copied into
++        this stream by :meth:`_drain_fd`.
++
++        .. versionadded:: 8.3.3
++        """
++        if self._fd_file is None:
++            self._fd_file = tempfile.TemporaryFile()
++
++        return self._fd_file.fileno()
++
++    def _drain_fd(self) -> None:
++        """Copy data written to the descriptors from :meth:`fileno` into the
++        streams, preserving the order data was written in.
++
++        The peer stream is drained first, so that data a subprocess wrote to it
++        stays ahead of whatever is about to be written to this stream.
++        """
++        if self._peer is not None:
++            self._peer._drain_own_fd()
++
++        self._drain_own_fd()
++
++    def _drain_own_fd(self) -> None:
++        if self._fd_file is None:
++            return
++
++        fd = self._fd_file.fileno()
++        end = os.fstat(fd).st_size
++
++        if end <= self._fd_pos:
++            return
++
++        os.lseek(fd, self._fd_pos, os.SEEK_SET)
++        data = os.read(fd, end - self._fd_pos)
++        os.lseek(fd, end, os.SEEK_SET)
++        self._fd_pos += len(data)
++        self.copy_to.write(data)
++        io.BytesIO.write(self, data)
++
++    def _close_fd(self) -> None:
++        if self._fd_file is not None:
++            self._drain_fd()
++            self._fd_file.close()
++            self._fd_file = None
+ 
+     def flush(self) -> None:
++        self._drain_fd()
+         super().flush()
+         self.copy_to.flush()
+ 
++    def getvalue(self) -> bytes:
++        self._drain_fd()
++        return super().getvalue()
++
+     def write(self, b: ReadableBuffer) -> int:
++        self._drain_fd()
+         self.copy_to.write(b)
+         return super().write(b)
+ 
+@@ -96,8 +156,18 @@ class StreamMixer:
+ 
+     def __init__(self) -> None:
+         self.output: io.BytesIO = io.BytesIO()
+-        self.stdout: io.BytesIO = BytesIOCopy(copy_to=self.output)
+-        self.stderr: io.BytesIO = BytesIOCopy(copy_to=self.output)
++        self.stdout: BytesIOCopy = BytesIOCopy(copy_to=self.output)
++        self.stderr: BytesIOCopy = BytesIOCopy(copy_to=self.output)
++        self.stdout._peer = self.stderr
++        self.stderr._peer = self.stdout
++
++    def close_fds(self) -> None:
++        """Close the temporary files backing :meth:`BytesIOCopy.fileno`, if any.
++
++        .. versionadded:: 8.3.3
++        """
++        self.stdout._close_fd()
++        self.stderr._close_fd()
+ 
+ 
+ class _NamedTextIOWrapper(io.TextIOWrapper):
+@@ -471,6 +541,7 @@ class CliRunner:
+             _compat.should_strip_ansi = old__compat_should_strip_ansi
+             formatting.FORCED_WIDTH = old_forced_width
+             pdb.Pdb.__init__ = old_pdb_init  # type: ignore[method-assign]
++            stream_mixer.close_fds()
+ 
+     def invoke(
+         self,

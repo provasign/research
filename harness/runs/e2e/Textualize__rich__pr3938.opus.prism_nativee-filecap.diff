@@ -1,0 +1,27 @@
+diff --git a/rich/console.py b/rich/console.py
+index 994adfc..498688e 100644
+--- a/rich/console.py
++++ b/rich/console.py
+@@ -1742,7 +1742,21 @@ class Console:
+                 ):
+                     buffer_extend(line)
+             else:
+-                self._buffer.extend(new_segments)
++                # Split styled segments containing new lines, so that the style
++                # is reset before the new line and doesn't bleed on to the next line.
++                buffer_append = self._buffer.append
++                new_line_segment = Segment("\n")
++                for segment in new_segments:
++                    if segment.style and "\n" in segment.text and not segment.control:
++                        text, segment_style, _ = segment
++                        while text:
++                            _text, new_line, text = text.partition("\n")
++                            if _text:
++                                buffer_append(Segment(_text, segment_style))
++                            if new_line:
++                                buffer_append(new_line_segment)
++                    else:
++                        buffer_append(segment)
+ 
+     def print_json(
+         self,

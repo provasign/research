@@ -1,0 +1,67 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..39f35d4 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -76,11 +76,53 @@ class BytesIOCopy(io.BytesIO):
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._real_file: t.IO[bytes] | None = None
++        self._real_file_pos = 0
++
++    def fileno(self) -> int:
++        """Return a real file descriptor backed by a temporary file, so that
++        code passing this stream to APIs that require an OS-level file, such as
++        ``subprocess.run(stdout=sys.stdout)``, keeps working during isolation.
++
++        Anything written to that descriptor is copied into this buffer when it
++        is flushed or read.
++
++        .. versionadded:: 8.3.2
++        """
++        if self._real_file is None:
++            self._real_file = tempfile.TemporaryFile()
++
++        return self._real_file.fileno()
++
++    def _drain_real_file(self) -> None:
++        """Copy anything written to the file descriptor into this buffer."""
++        if self._real_file is None:
++            return
++
++        self._real_file.seek(self._real_file_pos)
++        data = self._real_file.read()
++        self._real_file_pos = self._real_file.tell()
++
++        if data:
++            self.write(data)
+ 
+     def flush(self) -> None:
++        self._drain_real_file()
+         super().flush()
+         self.copy_to.flush()
+ 
++    def getvalue(self) -> bytes:
++        self._drain_real_file()
++        return super().getvalue()
++
++    def _close_real_file(self) -> None:
++        """Drain and release the temporary file, if one was created."""
++        if self._real_file is not None:
++            self._drain_real_file()
++            self._real_file.close()
++            self._real_file = None
++            self._real_file_pos = 0
++
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+         return super().write(b)
+@@ -471,6 +513,8 @@ class CliRunner:
+             _compat.should_strip_ansi = old__compat_should_strip_ansi
+             formatting.FORCED_WIDTH = old_forced_width
+             pdb.Pdb.__init__ = old_pdb_init  # type: ignore[method-assign]
++            stream_mixer.stdout._close_real_file()  # type: ignore[attr-defined]
++            stream_mixer.stderr._close_real_file()  # type: ignore[attr-defined]
+ 
+     def invoke(
+         self,

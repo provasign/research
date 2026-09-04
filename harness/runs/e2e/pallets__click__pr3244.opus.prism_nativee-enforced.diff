@@ -1,0 +1,97 @@
+diff --git a/CHANGES.rst b/CHANGES.rst
+index 1c4e997..4e7f65e 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -17,6 +17,10 @@ Unreleased
+     ``breakpoint()``, and debuggers subclassing ``pdb.Pdb`` (ipdb, pdbpp) can
+     interact with the real terminal instead of the captured I/O streams.
+     :issue:`654` :issue:`824` :issue:`843` :pr:`951` :pr:`3235`
++-   The streams ``CliRunner`` installs during isolation now report the file
++    descriptor of the stream they replace, so ``subprocess`` calls that pass
++    ``sys.stdout``/``sys.stderr`` no longer fail with
++    ``io.UnsupportedOperation: fileno``. :issue:`2466`
+ -   Add optional randomized parallel test execution using ``pytest-randomly`` and
+     ``pytest-xdist`` to detect test pollution and race conditions. :pr:`3151`
+ -   Add contributor documentation for running stress tests, randomized
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..28b8813 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -100,13 +100,42 @@ class StreamMixer:
+         self.stderr: io.BytesIO = BytesIOCopy(copy_to=self.output)
+ 
+ 
++def _get_fileno(stream: t.IO[t.Any] | None) -> int | None:
++    """Return the file descriptor of ``stream``, or ``None`` if it has none."""
++    try:
++        return stream.fileno()  # type: ignore[union-attr]
++    except Exception:
++        return None
++
++
+ class _NamedTextIOWrapper(io.TextIOWrapper):
+     def __init__(
+-        self, buffer: t.BinaryIO, name: str, mode: str, **kwargs: t.Any
++        self,
++        buffer: t.BinaryIO,
++        name: str,
++        mode: str,
++        fileno: int | None = None,
++        **kwargs: t.Any,
+     ) -> None:
+         super().__init__(buffer, **kwargs)
+         self._name = name
+         self._mode = mode
++        self._fileno = fileno
++
++    def fileno(self) -> int:
++        """Return the descriptor of the real stream this one replaces.
++
++        The isolated stream is backed by an in-memory buffer, which has no
++        file descriptor. Consumers that need a real one, such as
++        ``subprocess.run(stdout=sys.stderr)``, would otherwise fail with
++        ``io.UnsupportedOperation``.
++
++        .. versionadded:: 8.3.3
++        """
++        if self._fileno is not None:
++            return self._fileno
++
++        return super().fileno()
+ 
+     def close(self) -> None:
+         """
+@@ -327,7 +356,11 @@ class CliRunner:
+             )
+ 
+         sys.stdin = text_input = _NamedTextIOWrapper(
+-            bytes_input, encoding=self.charset, name="<stdin>", mode="r"
++            bytes_input,
++            encoding=self.charset,
++            name="<stdin>",
++            mode="r",
++            fileno=_get_fileno(old_stdin),
+         )
+ 
+         if self.echo_stdin:
+@@ -336,7 +369,11 @@ class CliRunner:
+             text_input._CHUNK_SIZE = 1  # type: ignore
+ 
+         sys.stdout = _NamedTextIOWrapper(
+-            stream_mixer.stdout, encoding=self.charset, name="<stdout>", mode="w"
++            stream_mixer.stdout,
++            encoding=self.charset,
++            name="<stdout>",
++            mode="w",
++            fileno=_get_fileno(old_stdout),
+         )
+ 
+         sys.stderr = _NamedTextIOWrapper(
+@@ -345,6 +382,7 @@ class CliRunner:
+             name="<stderr>",
+             mode="w",
+             errors="backslashreplace",
++            fileno=_get_fileno(old_stderr),
+         )
+ 
+         @_pause_echo(echo_input)  # type: ignore

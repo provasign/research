@@ -1,0 +1,56 @@
+diff --git a/changelog/3477.bugfix.rst b/changelog/3477.bugfix.rst
+new file mode 100644
+index 00000000..ea6276cb
+--- /dev/null
++++ b/changelog/3477.bugfix.rst
+@@ -0,0 +1 @@
++Fixed a bug where the connection's ``ssl_context`` verification settings would override those of a proxy's ``proxy_ssl_context``, making it impossible to verify the proxy connection while skipping verification of the proxied connection.
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 8a89488d..24acfbc6 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -843,9 +843,14 @@ class HTTPSConnection(HTTPConnection):
+             else:
+                 ssl_context = self.ssl_context
+ 
++            # When wrapping with an SSLContext that isn't the connection's own
++            # we must not force the connection's 'cert_reqs' onto it, otherwise
++            # the proxy's verification settings would be overridden.
++            cert_reqs = _cert_reqs_for_context(ssl_context, self)
++
+             sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+                 sock=sock,
+-                cert_reqs=self.cert_reqs,
++                cert_reqs=cert_reqs,
+                 ssl_version=self.ssl_version,
+                 ssl_minimum_version=self.ssl_minimum_version,
+                 ssl_maximum_version=self.ssl_maximum_version,
+@@ -917,7 +922,7 @@ class HTTPSConnection(HTTPConnection):
+         ssl_context = proxy_config.ssl_context
+         sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+             sock,
+-            cert_reqs=self.cert_reqs,
++            cert_reqs=_cert_reqs_for_context(ssl_context, self),
+             ssl_version=self.ssl_version,
+             ssl_minimum_version=self.ssl_minimum_version,
+             ssl_maximum_version=self.ssl_maximum_version,
+@@ -948,6 +953,19 @@ class _WrappedAndVerifiedSocket(typing.NamedTuple):
+     is_verified: bool
+ 
+ 
++def _cert_reqs_for_context(
++    ssl_context: ssl.SSLContext | None, conn: HTTPSConnection
++) -> int | str | None:
++    """Determine the 'cert_reqs' to apply when wrapping a socket with
++    ``ssl_context``. If the context isn't the connection's own SSLContext
++    (for example a proxy's SSLContext) we use that context's own verify_mode
++    so the connection's settings don't leak into it.
++    """
++    if ssl_context is not None and ssl_context is not conn.ssl_context:
++        return ssl_context.verify_mode
++    return conn.cert_reqs
++
++
+ def _ssl_wrap_socket_and_match_hostname(
+     sock: socket.socket,
+     *,

@@ -1,0 +1,84 @@
+diff --git a/release-notes/VERSION b/release-notes/VERSION
+index 1f6167396..98ed1fe2e 100644
+--- a/release-notes/VERSION
++++ b/release-notes/VERSION
+@@ -7,7 +7,8 @@ Versions: 3.x (for earlier see VERSION-2.x)
+ 
+ 3.3.0 (not yet released)
+ 
+-No changes since 3.2
++#1127: Eagerly fail on `@JsonTypeInfo(include = As.EXTERNAL_PROPERTY)` use
++  for Container types
+ 
+ 3.2.1 (not yet released)
+ 
+diff --git a/src/main/java/tools/jackson/databind/jsontype/TypeResolverProvider.java b/src/main/java/tools/jackson/databind/jsontype/TypeResolverProvider.java
+index 325e4fd3c..b47455a5e 100644
+--- a/src/main/java/tools/jackson/databind/jsontype/TypeResolverProvider.java
++++ b/src/main/java/tools/jackson/databind/jsontype/TypeResolverProvider.java
+@@ -113,6 +113,8 @@ public class TypeResolverProvider
+         if (!baseType.isContainerType() && !baseType.isReferenceType()) {
+             b = _findTypeResolver(config, accessor, baseType);
+         } else {
++            // [databind#1127]: EXTERNAL_PROPERTY cannot work for Container types: fail eagerly
++            _verifyNoExternalPropertyForContainer(ctxt, accessor, baseType);
+             // [databind#1391]: For container/reference types, only check for @JsonTypeInfo(Id.NONE)
+             // to allow disabling of default typing (other type info settings apply to content)
+             TypeResolverBuilder<?> marker = _findTypeResolver(config, accessor, baseType);
+@@ -148,6 +150,8 @@ public class TypeResolverProvider
+         if (!baseType.isContainerType() && !baseType.isReferenceType()) {
+             b = _findTypeResolver(config, accessor, baseType);
+         } else {
++            // [databind#1127]: EXTERNAL_PROPERTY cannot work for Container types: fail eagerly
++            _verifyNoExternalPropertyForContainer(ctxt, accessor, baseType);
+             // [databind#1391]: For container/reference types, only check for @JsonTypeInfo(Id.NONE)
+             // to allow disabling of default typing (other type info settings apply to content)
+             TypeResolverBuilder<?> marker = _findTypeResolver(config, accessor, baseType);
+@@ -189,6 +193,8 @@ public class TypeResolverProvider
+         if (contentType == null) {
+             throw new IllegalArgumentException("Must call method with a container or reference type (got "+containerType+")");
+         }
++        // [databind#1127]: EXTERNAL_PROPERTY cannot work for Container types: fail eagerly
++        _verifyNoExternalPropertyForContainer(ctxt, accessor, containerType);
+         final SerializationConfig config = ctxt.getConfig();
+         TypeResolverBuilder<?> b = _findTypeResolver(config, accessor, containerType);
+         // No annotation on property? Then base it on actual type (and further, default typing if need be)
+@@ -215,6 +221,8 @@ public class TypeResolverProvider
+         if (contentType == null) {
+             throw new IllegalArgumentException("Must call method with a container or reference type (got "+containerType+")");
+         }
++        // [databind#1127]: EXTERNAL_PROPERTY cannot work for Container types: fail eagerly
++        _verifyNoExternalPropertyForContainer(ctxt, accessor, containerType);
+         TypeResolverBuilder<?> b = _findTypeResolver(config, accessor, containerType);
+         if (b == null) {
+             return findTypeDeserializer(ctxt, contentType, ctxt.introspectClassAnnotations(contentType));
+@@ -242,6 +250,29 @@ public class TypeResolverProvider
+     /**********************************************************************
+      */
+ 
++    /**
++     * Helper method called to eagerly fail if {@code JsonTypeInfo.As.EXTERNAL_PROPERTY}
++     * is used for a Container type (Collection, Map, array) property: inclusion mechanism
++     * that can only work for scalar/POJO valued properties.
++     *
++     * @since 3.3
++     */
++    protected void _verifyNoExternalPropertyForContainer(DatabindContext ctxt,
++            Annotated ann, JavaType containerType)
++    {
++        if (!containerType.isContainerType()) {
++            return;
++        }
++        JsonTypeInfo.Value typeInfo = ctxt.getAnnotationIntrospector()
++                .findPolymorphicTypeInfo(ctxt.getConfig(), ann);
++        if ((typeInfo != null)
++                && (typeInfo.getInclusionType() == JsonTypeInfo.As.EXTERNAL_PROPERTY)) {
++            ctxt.reportBadDefinition(containerType, String.format(
++"Cannot use `JsonTypeInfo.As.EXTERNAL_PROPERTY` with Container types (property '%s'): not supported",
++                    ann.getName()));
++        }
++    }
++
+     protected TypeResolverBuilder<?> _findTypeResolver(MapperConfig<?> config,
+             Annotated ann, JavaType baseType)
+     {

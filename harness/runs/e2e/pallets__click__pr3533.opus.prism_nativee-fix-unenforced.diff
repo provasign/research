@@ -1,0 +1,51 @@
+diff --git a/CHANGES.rst b/CHANGES.rst
+index a39471f..e1f4083 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -17,6 +17,9 @@ Unreleased
+ -   ``echo_via_pager`` flushes after each write, so passing a generator streams
+     output to the pager incrementally instead of staying hidden until the pipe
+     buffer fills. :issue:`3242` :issue:`2542` :pr:`3534`
++-   ``echo_via_pager`` no longer closes a borrowed output stream, so
++    ``CliRunner.invoke`` does not fail with "I/O operation on closed file".
++    :issue:`3449`
+ 
+ 
+ Version 8.4.1
+diff --git a/src/click/_termui_impl.py b/src/click/_termui_impl.py
+index 3336c37..197358f 100644
+--- a/src/click/_termui_impl.py
++++ b/src/click/_termui_impl.py
+@@ -442,16 +442,29 @@ def get_pager_file(color: bool | None = None) -> t.Generator[t.TextIO, None, Non
+         # Split streams by capabilities rather than the abstract TextIO /
+         # BinaryIO annotations: buffered text streams can be unwrapped to bytes,
+         # while text-only streams are yielded as-is.
++        wrapper: MaybeStripAnsi | None = None
+         if _has_binary_buffer(stream):
+             # Text stream backed by a binary buffer.
+-            stream = MaybeStripAnsi(stream.buffer, color=color, encoding=encoding)
++            wrapper = MaybeStripAnsi(stream.buffer, color=color, encoding=encoding)
++            stream = wrapper
+         elif isinstance(stream, t.BinaryIO):
+             # Binary stream
+-            stream = MaybeStripAnsi(stream, color=color, encoding=encoding)
++            wrapper = MaybeStripAnsi(stream, color=color, encoding=encoding)
++            stream = wrapper
+         try:
+             yield stream
+         finally:
+-            stream.flush()
++            try:
++                stream.flush()
++            finally:
++                # Hand the binary buffer back to the pager that produced it
++                # rather than letting this TextIOWrapper close it on garbage
++                # collection. The pager owns the buffer's lifecycle: subprocess
++                # pipes and temp files are closed by their own helpers, while a
++                # borrowed stdout must stay open for the caller. detach() runs
++                # even if flush() raised, so the buffer is never closed here.
++                if wrapper is not None:
++                    wrapper.detach()
+ 
+ 
+ @contextlib.contextmanager

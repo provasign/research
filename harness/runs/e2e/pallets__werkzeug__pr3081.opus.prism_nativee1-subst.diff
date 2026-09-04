@@ -1,0 +1,25 @@
+diff --git a/.claude/settings.json b/.claude/settings.json
+new file mode 100644
+index 00000000..f26bea48
+--- /dev/null
++++ b/.claude/settings.json
+@@ -0,0 +1 @@
++{"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "PRISM_HOOK_BIN=/private/tmp/claude-501/-Users-tapabratapal-Projects-provasign-prism/3b58659c-d56a-4934-bb18-a0b337259ca6/scratchpad/prism-cand python3 /private/tmp/claude-501/-Users-tapabratapal-Projects-provasign-prism/3b58659c-d56a-4934-bb18-a0b337259ca6/scratchpad/grep_subst_hook.py"}]}]}}
+\ No newline at end of file
+diff --git a/src/werkzeug/sansio/multipart.py b/src/werkzeug/sansio/multipart.py
+index 279b25e7..677ecc9a 100644
+--- a/src/werkzeug/sansio/multipart.py
++++ b/src/werkzeug/sansio/multipart.py
+@@ -286,8 +286,10 @@ class MultipartDecoder:
+                 data_end = del_index = self.last_newline(data[data_start:]) + data_start
+             more_data = match is None
+ 
+-        # Keep \r\n sequence intact rather than splitting across chunks.
+-        if data_end > data_start and data[data_end - 1] == 0x0D:
++        # Keep \r\n sequence intact rather than splitting across chunks. Only
++        # defer when more data may follow, otherwise the terminating boundary
++        # was found and the \r is known to be part of the data.
++        if more_data and data_end > data_start and data[data_end - 1] == 0x0D:
+             data_end -= 1
+             del_index -= 1
+ 

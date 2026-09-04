@@ -1,0 +1,58 @@
+diff --git a/CHANGES.rst b/CHANGES.rst
+index a39471f..23f25bd 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -17,6 +17,9 @@ Unreleased
+ -   ``echo_via_pager`` flushes after each write, so passing a generator streams
+     output to the pager incrementally instead of staying hidden until the pipe
+     buffer fills. :issue:`3242` :issue:`2542` :pr:`3534`
++-   When the configured pager binary cannot be found, falling back to stdout no
++    longer closes the output stream, so ``CliRunner.invoke`` doesn't fail with
++    "I/O operation on closed file". :issue:`3449`
+ 
+ 
+ Version 8.4.1
+diff --git a/src/click/_termui_impl.py b/src/click/_termui_impl.py
+index 3336c37..5e44ca1 100644
+--- a/src/click/_termui_impl.py
++++ b/src/click/_termui_impl.py
+@@ -472,7 +472,8 @@ def _pipepager(
+     # Split the command into the invoked CLI and its parameters.
+     if not cmd_parts:
+         stdout = _default_text_stdout() or StringIO()
+-        yield stdout, "utf-8", False
++        # Don't close the fallback stream, it belongs to someone else.
++        yield _SkipClose(stdout), "utf-8", False  # type: ignore[misc]
+         return
+ 
+     import shutil
+@@ -483,7 +484,8 @@ def _pipepager(
+     cmd_filepath = shutil.which(cmd)
+     if not cmd_filepath:
+         stdout = _default_text_stdout() or StringIO()
+-        yield stdout, "utf-8", False
++        # Don't close the fallback stream, it belongs to someone else.
++        yield _SkipClose(stdout), "utf-8", False  # type: ignore[misc]
+         return
+ 
+     # Produces a normalized absolute path string.
+@@ -572,7 +574,8 @@ def _tempfilepager(
+     # Split the command into the invoked CLI and its parameters.
+     if not cmd_parts:
+         stdout = _default_text_stdout() or StringIO()
+-        yield stdout, "utf-8", False
++        # Don't close the fallback stream, it belongs to someone else.
++        yield _SkipClose(stdout), "utf-8", False  # type: ignore[misc]
+         return
+ 
+     import shutil
+@@ -583,7 +586,8 @@ def _tempfilepager(
+     cmd_filepath = shutil.which(cmd)
+     if not cmd_filepath:
+         stdout = _default_text_stdout() or StringIO()
+-        yield stdout, "utf-8", False
++        # Don't close the fallback stream, it belongs to someone else.
++        yield _SkipClose(stdout), "utf-8", False  # type: ignore[misc]
+         return
+ 
+     # Produces a normalized absolute path string.

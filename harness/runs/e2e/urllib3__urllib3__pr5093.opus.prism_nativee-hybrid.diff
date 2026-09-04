@@ -1,0 +1,61 @@
+diff --git a/changelog/3434.bugfix.rst b/changelog/3434.bugfix.rst
+new file mode 100644
+index 00000000..1b02cac3
+--- /dev/null
++++ b/changelog/3434.bugfix.rst
+@@ -0,0 +1 @@
++Fixed a ``ValueError`` when connecting to an HTTPS proxy with a ``proxy_ssl_context`` that verifies certificates while the connection's ``ssl_context`` disables verification. The proxy connection now uses the verification mode of the ``proxy_ssl_context`` instead of the target connection's ``cert_reqs``.
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 8a89488d..cd1eca76 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -840,12 +840,17 @@ class HTTPSConnection(HTTPConnection):
+             # ``ProxyManager.__init__``.
+             if self.proxy_is_forwarding and self.proxy_config is not None:
+                 ssl_context = self.proxy_config.ssl_context
++                # The connection being established is the one to the proxy, so
++                # the proxy SSLContext decides how it's verified instead of the
++                # ``cert_reqs`` that applies to the target.
++                cert_reqs = _proxy_cert_reqs(ssl_context, self.cert_reqs)
+             else:
+                 ssl_context = self.ssl_context
++                cert_reqs = self.cert_reqs
+ 
+             sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+                 sock=sock,
+-                cert_reqs=self.cert_reqs,
++                cert_reqs=cert_reqs,
+                 ssl_version=self.ssl_version,
+                 ssl_minimum_version=self.ssl_minimum_version,
+                 ssl_maximum_version=self.ssl_maximum_version,
+@@ -917,7 +922,9 @@ class HTTPSConnection(HTTPConnection):
+         ssl_context = proxy_config.ssl_context
+         sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+             sock,
+-            cert_reqs=self.cert_reqs,
++            # The target's ``cert_reqs`` doesn't apply to the proxy connection,
++            # the proxy SSLContext (if any) decides how the proxy is verified.
++            cert_reqs=_proxy_cert_reqs(ssl_context, self.cert_reqs),
+             ssl_version=self.ssl_version,
+             ssl_minimum_version=self.ssl_minimum_version,
+             ssl_maximum_version=self.ssl_maximum_version,
+@@ -938,6 +945,19 @@ class HTTPSConnection(HTTPConnection):
+         return sock_and_verified.socket  # type: ignore[return-value]
+ 
+ 
++def _proxy_cert_reqs(
++    proxy_ssl_context: ssl.SSLContext | None, cert_reqs: int | str | None
++) -> int | str | None:
++    """Resolve the ``cert_reqs`` to use for the connection to the proxy.
++
++    When a proxy SSLContext is given its own ``verify_mode`` is authoritative,
++    otherwise we fall back to the connection's ``cert_reqs``.
++    """
++    if proxy_ssl_context is not None:
++        return proxy_ssl_context.verify_mode
++    return cert_reqs
++
++
+ class _WrappedAndVerifiedSocket(typing.NamedTuple):
+     """
+     Wrapped socket and whether the connection is

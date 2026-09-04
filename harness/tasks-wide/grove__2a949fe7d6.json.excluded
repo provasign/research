@@ -1,0 +1,49 @@
+{
+ "instance_id": "grove__2a949fe7d6",
+ "kind": "mandated_wide",
+ "project": "grove",
+ "task_kind": "capability_change",
+ "repo_path": "/Users/tapabratapal/Projects/provasign/grove",
+ "base_commit": "8488b52196b42abb2d0335354f8447e7ccad74b5",
+ "gold_commit": "2a949fe7d61f4eef6691ffb878f648da677fac48",
+ "subject": "graph,store,cli,mcp: index the hot lookups, sort the snapshots",
+ "body": "Perf, all edge-set-neutral (flask/gin/guava edge dumps byte-identical\nto before), plus the determinism holes the same code paths exposed.\n\nCodeGraph gains a byName index built once per install, replacing the\nscan-all-70k-symbols-then-sort that opened ChangeImpact,\nMissingImplementations, hasIndexedType and the bare-name resolver.\nNeighbors' \"out\" branch scanned the entire edge list to find one\nsymbol's out-edges while the \"in\" branch beside it already used the\ninbound index; it now uses outbound. ComputeICR called Deps \u2014 an\nO(all-edges) prefix scan \u2014 once per seed, and Search returns 20 seeds\nthat routinely share a file; it now scans once per unique file.\n\nimportFilesForQualifier is memoized per (file, qualifier) in a\nsync.Map (the parallel call workers share it) and no longer allocates\na Split slice plus a Join string per import segment per call site, nor\nrecomputes \"/\"+impNorm inside two whole-table loops. Measured on\nguava: edge/calls 1.74s -> 1.72s \u2014 smaller than hoped, so this is\nrecorded as an allocation win, not a speedup claim.\n\nAllSymbols/AllEdges/EdgesBySource preallocate from a COUNT(*) instead\nof doubling a 600k-element slice ~20 times. The count is taken BEFORE\nthe row",
+ "gt_files": [
+  "internal/cli/commands.go",
+  "internal/graph/changeimpact.go",
+  "internal/graph/edges.go",
+  "internal/graph/graph.go",
+  "internal/graph/missingimpl.go",
+  "internal/mcp/server.go",
+  "internal/store/store.go"
+ ],
+ "gt_modified": [
+  "internal/cli/commands.go",
+  "internal/graph/changeimpact.go",
+  "internal/graph/edges.go",
+  "internal/graph/graph.go",
+  "internal/graph/missingimpl.go",
+  "internal/mcp/server.go",
+  "internal/store/store.go"
+ ],
+ "gt_deleted": [],
+ "unscored_added": [],
+ "gt_all_files": [
+  "internal/cli/commands.go",
+  "internal/graph/changeimpact.go",
+  "internal/graph/edges.go",
+  "internal/graph/graph.go",
+  "internal/graph/missingimpl.go",
+  "internal/mcp/server.go",
+  "internal/store/store.go"
+ ],
+ "gt_symbols": [
+  "computeImportFilesForQualifier",
+  "countRows",
+  "edges",
+  "idsNamed",
+  "qualifierFileSet",
+  "seedFiles",
+  "symbols"
+ ]
+}

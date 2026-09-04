@@ -1,0 +1,110 @@
+diff --git a/src/main/java/tools/jackson/databind/ValueDeserializer.java b/src/main/java/tools/jackson/databind/ValueDeserializer.java
+index 34d1ff850..75c7b55b1 100644
+--- a/src/main/java/tools/jackson/databind/ValueDeserializer.java
++++ b/src/main/java/tools/jackson/databind/ValueDeserializer.java
+@@ -498,6 +498,23 @@ public abstract class ValueDeserializer<T>
+         return false;
+     }
+ 
++    /**
++     * Introspection method for checking whether this deserializer is able to
++     * enumerate names of all properties it may handle, via
++     * {@link #collectAllPropertyNamesTo}. Needed for "unwrapped" (see
++     * {@link com.fasterxml.jackson.annotation.JsonUnwrapped}) handling: if
++     * deserializer cannot enumerate names, all otherwise unrecognized properties
++     * need to be passed to it (as with "any setter").
++     *<p>
++     * Default implementation returns {@code false} since default implementation
++     * of {@link #collectAllPropertyNamesTo} adds no names.
++     *
++     * @since 3.2
++     */
++    public boolean knowsAllPropertyNames() {
++        return false;
++    }
++
+     /*
+     /**********************************************************************
+     /* Helper classes
+diff --git a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializerBase.java b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializerBase.java
+index 6cb875c15..ab7788fab 100644
+--- a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializerBase.java
++++ b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializerBase.java
+@@ -1326,6 +1326,14 @@ ClassUtil.getTypeDescription(ct));
+         return _anySetter != null;
+     }
+ 
++    @Override
++    public boolean knowsAllPropertyNames() {
++        // Can enumerate own properties; but only if nested unwrapped handling (if any)
++        // can do the same
++        return (_unwrappedPropertyHandler == null)
++                || _unwrappedPropertyHandler.knowsAllPropertyNames();
++    }
++
+     /**
+      * Accessor for checking number of deserialized properties.
+      */
+diff --git a/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java b/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
+index 070c2df39..eeb8e6df6 100644
+--- a/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
++++ b/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
+@@ -207,6 +207,17 @@ public class UnwrappedPropertyHandler
+         _collectUnwrappedPropertyNames(_properties, _creatorProperties, names);
+     }
+ 
++    /**
++     * Method for checking whether all unwrapped deserializers are able to enumerate
++     * names of properties they handle: if not, all otherwise unknown properties need
++     * to be passed to them.
++     *
++     * @since 3.2
++     */
++    public boolean knowsAllPropertyNames() {
++        return !_hasUnwrappedAnySetter;
++    }
++
+     /**
+      * Helper method to collect unwrapped property names.
+      *
+@@ -246,7 +257,9 @@ public class UnwrappedPropertyHandler
+             if (deser != null) {
+                 // Recursively collect property names
+             	deser.collectAllPropertyNamesTo(names);
+-                return deser.hasAnySetter();
++                // [databind#6001]: custom unwrapping deserializers cannot necessarily
++                // enumerate names they handle; if so, must pass everything to them
++                return deser.hasAnySetter() || !deser.knowsAllPropertyNames();
+             }
+         }
+         return false;
+diff --git a/src/main/java/tools/jackson/databind/deser/std/DelegatingDeserializer.java b/src/main/java/tools/jackson/databind/deser/std/DelegatingDeserializer.java
+index fd2b09469..c26c1e6fd 100644
+--- a/src/main/java/tools/jackson/databind/deser/std/DelegatingDeserializer.java
++++ b/src/main/java/tools/jackson/databind/deser/std/DelegatingDeserializer.java
+@@ -189,4 +189,9 @@ public abstract class DelegatingDeserializer
+     public boolean hasAnySetter() {
+     	return _delegatee.hasAnySetter();
+     }
++
++    @Override
++    public boolean knowsAllPropertyNames() {
++    	return _delegatee.knowsAllPropertyNames();
++    }
+ }
+diff --git a/src/main/java/tools/jackson/databind/deser/std/ReferenceTypeDeserializer.java b/src/main/java/tools/jackson/databind/deser/std/ReferenceTypeDeserializer.java
+index 24b2ea773..bfe03d26c 100644
+--- a/src/main/java/tools/jackson/databind/deser/std/ReferenceTypeDeserializer.java
++++ b/src/main/java/tools/jackson/databind/deser/std/ReferenceTypeDeserializer.java
+@@ -103,6 +103,11 @@ public abstract class ReferenceTypeDeserializer<T>
+         return (_valueDeserializer != null) && _valueDeserializer.hasAnySetter();
+     }
+ 
++    @Override
++    public boolean knowsAllPropertyNames() {
++        return (_valueDeserializer != null) && _valueDeserializer.knowsAllPropertyNames();
++    }
++
+     /*
+     /**********************************************************************
+     /* Partial NullValueProvider impl

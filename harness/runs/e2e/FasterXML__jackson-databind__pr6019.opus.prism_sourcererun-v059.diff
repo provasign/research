@@ -1,0 +1,25 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java
+index 439adb8d4..ccfe68474 100644
+--- a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java
++++ b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java
+@@ -885,7 +885,9 @@ public class BeanDeserializer
+             }
+         }
+ 
+-        p.assignCurrentValue(bean);
++        // [databind#5980]: Must NOT assign "current value" here:
++        //   we have already encountered END_OBJECT, so the parser context has been
++        //   popped and assignment would overwrite the value of the ENCLOSING context.
+         // [databind#4938] Since 2.19, allow returning `null` from creator,
+         //  but if so, need to skip all possibly relevant content
+         if (bean == null) {
+@@ -1332,7 +1334,8 @@ public class BeanDeserializer
+         } catch (Exception e) {
+             return wrapInstantiationProblem(ctxt, e);
+         }
+-        p.assignCurrentValue(bean);
++        // [databind#5980]: see `_deserializeUsingPropertyBased()`
++        //   for why "current value" must not be assigned here
+ 
+         // [databind#4938] Since 2.19, allow returning `null` from creator,
+         //  but if so, need to skip all possibly relevant content

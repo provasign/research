@@ -1,0 +1,78 @@
+diff --git a/CHANGES.rst b/CHANGES.rst
+index 4de49f4..34dfb87 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -7,6 +7,8 @@ Unreleased
+ 
+ -   Supported versions of Windows enable ANSI terminal styles by default.
+     Colorama is no longer a dependency and is not used. :issue:`2986` :pr:`3505`
++-   ``Argument`` accepts a ``help`` string, shown in a new ``Arguments``
++    section of the help page. :issue:`587`
+ 
+ 
+ Version 8.4.2
+diff --git a/src/click/core.py b/src/click/core.py
+index b422bd4..6e0806c 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -1199,12 +1199,21 @@ class Command:
+                 formatter.write_text(text)
+ 
+     def format_options(self, ctx: Context, formatter: HelpFormatter) -> None:
+-        """Writes all the options into the formatter if they exist."""
++        """Writes all the arguments and options into the formatter if they
++        exist."""
++        args = []
+         opts = []
+         for param in self.get_params(ctx):
+             rv = param.get_help_record(ctx)
+             if rv is not None:
+-                opts.append(rv)
++                if param.param_type_name == "argument":
++                    args.append(rv)
++                else:
++                    opts.append(rv)
++
++        if args:
++            with formatter.section(_("Arguments")):
++                formatter.write_dl(args)
+ 
+         if opts:
+             with formatter.section(_("Options")):
+@@ -2098,6 +2107,7 @@ class Parameter(ABC):
+                   the arity of the tuple). If ``nargs=-1``, all remaining
+                   parameters are collected.
+     :param metavar: how the value is represented in the help page.
++    :param help: the help string shown for this parameter in the help page.
+     :param expose_value: if this is `True` then the value is passed onwards
+                          to the command callback and stored on the context,
+                          otherwise it's skipped.
+@@ -2183,6 +2193,7 @@ class Parameter(ABC):
+         nargs: int | None = None,
+         multiple: bool = False,
+         metavar: str | None = None,
++        help: str | None = None,
+         expose_value: bool = True,
+         is_eager: bool = False,
+         envvar: str | cabc.Sequence[str] | None = None,
+@@ -2222,6 +2233,7 @@ class Parameter(ABC):
+         self._default_explicit: bool = default is not UNSET
+         self.is_eager = is_eager
+         self.metavar = metavar
++        self.help = inspect.cleandoc(help) if help else help
+         self.envvar = envvar
+         self._custom_shell_complete = shell_complete
+         self.deprecated = deprecated
+@@ -3517,6 +3529,12 @@ class Argument(Parameter):
+     def get_usage_pieces(self, ctx: Context) -> list[str]:
+         return [self.make_metavar(ctx)]
+ 
++    def get_help_record(self, ctx: Context) -> tuple[str, str] | None:
++        if not self.help:
++            return None
++
++        return self.make_metavar(ctx), self.help
++
+     def get_error_hint(self, ctx: Context | None) -> str:
+         if ctx is not None:
+             return f"'{self.make_metavar(ctx)}'"

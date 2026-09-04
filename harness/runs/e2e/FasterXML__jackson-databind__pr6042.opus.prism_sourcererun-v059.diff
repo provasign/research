@@ -1,0 +1,18 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/jdk/StringCollectionDeserializer.java b/src/main/java/tools/jackson/databind/deser/jdk/StringCollectionDeserializer.java
+index 405dab1b6..97cc2f766 100644
+--- a/src/main/java/tools/jackson/databind/deser/jdk/StringCollectionDeserializer.java
++++ b/src/main/java/tools/jackson/databind/deser/jdk/StringCollectionDeserializer.java
+@@ -248,8 +248,11 @@ public final class StringCollectionDeserializer
+                             // custom) one, can hard-code empty String
+                             value = "";
+                         } else {
+-                            // Fail case: delegate to _parseString which will throw proper error
+-                            value = _parseString(p, ctxt, _nullProvider);
++                            // [databind#6040]: Fail case; report the original START_ARRAY
++                            // as the offending token since parser has already advanced
++                            // past it (points to END_ARRAY now)
++                            value = (String) ctxt.handleUnexpectedToken(ctxt.constructType(String.class),
++                                    JsonToken.START_ARRAY, p, null);
+                         }
+                     } else {
+                         // Non-empty array: delegate to _parseString which will throw proper error

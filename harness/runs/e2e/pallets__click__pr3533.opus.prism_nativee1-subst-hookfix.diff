@@ -1,0 +1,66 @@
+diff --git a/.claude/settings.json b/.claude/settings.json
+new file mode 100644
+index 0000000..f26bea4
+--- /dev/null
++++ b/.claude/settings.json
+@@ -0,0 +1 @@
++{"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "PRISM_HOOK_BIN=/private/tmp/claude-501/-Users-tapabratapal-Projects-provasign-prism/3b58659c-d56a-4934-bb18-a0b337259ca6/scratchpad/prism-cand python3 /private/tmp/claude-501/-Users-tapabratapal-Projects-provasign-prism/3b58659c-d56a-4934-bb18-a0b337259ca6/scratchpad/grep_subst_hook.py"}]}]}}
+\ No newline at end of file
+diff --git a/CHANGES.rst b/CHANGES.rst
+index a39471f..730c3cc 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -17,6 +17,9 @@ Unreleased
+ -   ``echo_via_pager`` flushes after each write, so passing a generator streams
+     output to the pager incrementally instead of staying hidden until the pipe
+     buffer fills. :issue:`3242` :issue:`2542` :pr:`3534`
++-   The pager fallbacks used when the pager command is unset or not installed
++    no longer close ``sys.stdout``, which raised ``ValueError: I/O operation on
++    closed file`` afterwards. :issue:`3449`
+ 
+ 
+ Version 8.4.1
+diff --git a/src/click/_termui_impl.py b/src/click/_termui_impl.py
+index 3336c37..bdf2861 100644
+--- a/src/click/_termui_impl.py
++++ b/src/click/_termui_impl.py
+@@ -472,7 +472,8 @@ def _pipepager(
+     # Split the command into the invoked CLI and its parameters.
+     if not cmd_parts:
+         stdout = _default_text_stdout() or StringIO()
+-        yield stdout, "utf-8", False
++        # Don't close a stream that came from elsewhere, such as ``sys.stdout``.
++        yield t.cast("t.TextIO", _SkipClose(stdout)), "utf-8", False
+         return
+ 
+     import shutil
+@@ -483,7 +484,8 @@ def _pipepager(
+     cmd_filepath = shutil.which(cmd)
+     if not cmd_filepath:
+         stdout = _default_text_stdout() or StringIO()
+-        yield stdout, "utf-8", False
++        # Don't close a stream that came from elsewhere, such as ``sys.stdout``.
++        yield t.cast("t.TextIO", _SkipClose(stdout)), "utf-8", False
+         return
+ 
+     # Produces a normalized absolute path string.
+@@ -572,7 +574,8 @@ def _tempfilepager(
+     # Split the command into the invoked CLI and its parameters.
+     if not cmd_parts:
+         stdout = _default_text_stdout() or StringIO()
+-        yield stdout, "utf-8", False
++        # Don't close a stream that came from elsewhere, such as ``sys.stdout``.
++        yield t.cast("t.TextIO", _SkipClose(stdout)), "utf-8", False
+         return
+ 
+     import shutil
+@@ -583,7 +586,8 @@ def _tempfilepager(
+     cmd_filepath = shutil.which(cmd)
+     if not cmd_filepath:
+         stdout = _default_text_stdout() or StringIO()
+-        yield stdout, "utf-8", False
++        # Don't close a stream that came from elsewhere, such as ``sys.stdout``.
++        yield t.cast("t.TextIO", _SkipClose(stdout)), "utf-8", False
+         return
+ 
+     # Produces a normalized absolute path string.

@@ -1,0 +1,103 @@
+diff --git a/CHANGES.rst b/CHANGES.rst
+index 1c4e997..3772d4e 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -21,6 +21,11 @@ Unreleased
+     ``pytest-xdist`` to detect test pollution and race conditions. :pr:`3151`
+ -   Add contributor documentation for running stress tests, randomized
+     parallel tests, and Flask smoke tests. :pr:`3151` :pr:`3177`
++-   ``CliRunner`` isolated streams provide a real file descriptor from
++    ``fileno()``, so passing ``sys.stdout`` or ``sys.stderr`` to APIs such as
++    :func:`subprocess.run` no longer raises ``io.UnsupportedOperation``. Output
++    written to the descriptor is captured with the rest of the output.
++    :issue:`2400`
+ 
+ Version 8.3.2
+ -------------
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..e87fedc 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -76,11 +76,55 @@ class BytesIOCopy(io.BytesIO):
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._fd_file: t.IO[bytes] | None = None
++        self._fd_pos = 0
++
++    def fileno(self) -> int:
++        """Return a real file descriptor, backed by a temporary file.
++
++        ``io.BytesIO`` has no file descriptor, so passing an isolated
++        stream to an API that needs one, such as
++        ``subprocess.run(..., stdout=sys.stderr)``, would raise
++        ``io.UnsupportedOperation``. Anything written to the descriptor
++        is copied into this buffer on the next flush or read.
++
++        .. versionadded:: 8.3.3
++        """
++        if self._fd_file is None:
++            self._fd_file = tempfile.TemporaryFile()
++
++        return self._fd_file.fileno()
++
++    def _drain_fd(self) -> None:
++        """Copy anything written to the file descriptor into this buffer."""
++        if self._fd_file is None:
++            return
++
++        self._fd_file.seek(self._fd_pos)
++        data = self._fd_file.read()
++
++        if data:
++            self._fd_pos += len(data)
++            self.write(data)
++
++    def _close_fd(self) -> None:
++        """Drain and discard the temporary file backing the descriptor."""
++        if self._fd_file is None:
++            return
++
++        self._drain_fd()
++        self._fd_file.close()
++        self._fd_file = None
+ 
+     def flush(self) -> None:
++        self._drain_fd()
+         super().flush()
+         self.copy_to.flush()
+ 
++    def getvalue(self) -> bytes:
++        self._drain_fd()
++        return super().getvalue()
++
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+         return super().write(b)
+@@ -96,8 +140,16 @@ class StreamMixer:
+ 
+     def __init__(self) -> None:
+         self.output: io.BytesIO = io.BytesIO()
+-        self.stdout: io.BytesIO = BytesIOCopy(copy_to=self.output)
+-        self.stderr: io.BytesIO = BytesIOCopy(copy_to=self.output)
++        self.stdout: BytesIOCopy = BytesIOCopy(copy_to=self.output)
++        self.stderr: BytesIOCopy = BytesIOCopy(copy_to=self.output)
++
++    def close(self) -> None:
++        """Release the file descriptors backing the streams, if any.
++
++        .. versionadded:: 8.3.3
++        """
++        self.stdout._close_fd()
++        self.stderr._close_fd()
+ 
+ 
+ class _NamedTextIOWrapper(io.TextIOWrapper):
+@@ -471,6 +523,7 @@ class CliRunner:
+             _compat.should_strip_ansi = old__compat_should_strip_ansi
+             formatting.FORCED_WIDTH = old_forced_width
+             pdb.Pdb.__init__ = old_pdb_init  # type: ignore[method-assign]
++            stream_mixer.close()
+ 
+     def invoke(
+         self,

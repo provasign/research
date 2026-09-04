@@ -1,0 +1,86 @@
+diff --git a/CHANGES.rst b/CHANGES.rst
+index 4de49f4..4d3ec53 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -7,6 +7,8 @@ Unreleased
+ 
+ -   Supported versions of Windows enable ANSI terminal styles by default.
+     Colorama is no longer a dependency and is not used. :issue:`2986` :pr:`3505`
++-   ``Argument`` accepts a ``help`` parameter. Arguments with help text are
++    shown in an ``Arguments`` section in ``--help``. :issue:`587`
+ 
+ 
+ Version 8.4.2
+diff --git a/src/click/core.py b/src/click/core.py
+index b422bd4..62b16a4 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -1199,12 +1199,23 @@ class Command:
+                 formatter.write_text(text)
+ 
+     def format_options(self, ctx: Context, formatter: HelpFormatter) -> None:
+-        """Writes all the options into the formatter if they exist."""
++        """Writes all the arguments and options into the formatter if they
++        exist.
++        """
++        args = []
+         opts = []
++
+         for param in self.get_params(ctx):
+             rv = param.get_help_record(ctx)
+             if rv is not None:
+-                opts.append(rv)
++                if param.param_type_name == "argument":
++                    args.append(rv)
++                else:
++                    opts.append(rv)
++
++        if args:
++            with formatter.section(_("Arguments")):
++                formatter.write_dl(args)
+ 
+         if opts:
+             with formatter.section(_("Options")):
+@@ -3450,6 +3461,12 @@ class Argument(Parameter):
+     and are required by default.
+ 
+     All parameters are passed onwards to the constructor of :class:`Parameter`.
++
++    :param help: the help string shown for this argument in ``--help``. If not
++        given, the argument is not listed in the help page.
++
++    .. versionchanged:: 8.5.0
++        Added the ``help`` parameter.
+     """
+ 
+     param_type_name = "argument"
+@@ -3458,6 +3475,7 @@ class Argument(Parameter):
+         self,
+         param_decls: cabc.Sequence[str],
+         required: bool | None = None,
++        help: str | None = None,
+         **attrs: t.Any,
+     ) -> None:
+         # Auto-detect the requirement status of the argument if not explicitly set.
+@@ -3475,6 +3493,8 @@ class Argument(Parameter):
+ 
+         super().__init__(param_decls, required=required, **attrs)
+ 
++        self.help = help
++
+     @property
+     def human_readable_name(self) -> str:
+         if self.metavar is not None:
+@@ -3517,6 +3537,12 @@ class Argument(Parameter):
+     def get_usage_pieces(self, ctx: Context) -> list[str]:
+         return [self.make_metavar(ctx)]
+ 
++    def get_help_record(self, ctx: Context) -> tuple[str, str] | None:
++        if self.help is None:
++            return None
++
++        return self.make_metavar(ctx), inspect.cleandoc(self.help)
++
+     def get_error_hint(self, ctx: Context | None) -> str:
+         if ctx is not None:
+             return f"'{self.make_metavar(ctx)}'"

@@ -1,0 +1,81 @@
+diff --git a/CHANGES.rst b/CHANGES.rst
+index 81dd7df8..fd6e2d28 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -5,6 +5,9 @@ Version 3.2.0
+ 
+ Unreleased
+ 
++-   Add ``Map(subdomain_matching)`` parameter, moved from Flask.
++    ``bind_to_environ`` will not detect the subdomain from the host unless it is
++    enabled. :issue:`2400`
+ -   ``redirect`` returns a ``303`` status code by default instead of ``302``.
+     This tells the client to always switch to ``GET``, rather than only
+     switching ``POST`` to ``GET``. This preserves the current behavior of
+diff --git a/src/werkzeug/routing/map.py b/src/werkzeug/routing/map.py
+index f757d59b..18d6e61f 100644
+--- a/src/werkzeug/routing/map.py
++++ b/src/werkzeug/routing/map.py
+@@ -66,6 +66,11 @@ class Map:
+                           feature and disables the subdomain one.  If
+                           enabled the `host` parameter to rules is used
+                           instead of the `subdomain` one.
++    :param subdomain_matching: Consider the subdomain relative to the
++        ``server_name`` when matching. Not compatible with ``host_matching``.
++
++    .. versionchanged:: 3.2
++        The ``subdomain_matching`` parameter was added.
+ 
+     .. versionchanged:: 3.0
+         The ``charset`` and ``encoding_errors`` parameters were removed.
+@@ -102,7 +107,11 @@ class Map:
+         sort_parameters: bool = False,
+         sort_key: t.Callable[[t.Any], t.Any] | None = None,
+         host_matching: bool = False,
++        subdomain_matching: bool = False,
+     ) -> None:
++        if host_matching and subdomain_matching:
++            raise ValueError("host matching and subdomain matching are not compatible")
++
+         self._matcher = StateMachineMatcher(merge_slashes)
+         self._rules_by_endpoint: dict[t.Any, list[Rule]] = {}
+         self._remap = True
+@@ -112,6 +121,7 @@ class Map:
+         self.strict_slashes = strict_slashes
+         self.redirect_defaults = redirect_defaults
+         self.host_matching = host_matching
++        self.subdomain_matching = subdomain_matching
+ 
+         self.converters = self.default_converters.copy()
+         if converters:
+@@ -263,8 +273,8 @@ class Map:
+         `HTTP_HOST` if provided) as used `server_name` with disabled subdomain
+         feature.
+ 
+-        If `subdomain` is `None` but an environment and a server name is
+-        provided it will calculate the current subdomain automatically.
++        If `subdomain` is `None` and :attr:`subdomain_matching` is enabled, it
++        will calculate the current subdomain automatically.
+         Example: `server_name` is ``'example.com'`` and the `SERVER_NAME`
+         in the wsgi `environ` is ``'staging.dev.example.com'`` the calculated
+         subdomain will be ``'staging.dev'``.
+@@ -275,6 +285,10 @@ class Map:
+         :class:`MapAdapter` so that you don't have to pass the path info to
+         the match method.
+ 
++        .. versionchanged:: 3.2
++            The subdomain is only detected if ``subdomain_matching`` is
++            enabled on the map.
++
+         .. versionchanged:: 1.0.0
+             If the passed server name specifies port 443, it will match
+             if the incoming scheme is ``https`` without a port.
+@@ -318,7 +332,7 @@ class Map:
+             elif scheme in {"https", "wss"} and server_name.endswith(":443"):
+                 server_name = server_name[:-4]
+ 
+-        if subdomain is None and not self.host_matching:
++        if subdomain is None and self.subdomain_matching:
+             cur_server_name = wsgi_server_name.split(".")
+             real_server_name = server_name.split(".")
+             offset = -len(real_server_name)

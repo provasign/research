@@ -1,0 +1,39 @@
+{
+ "task": "prism__4f22f3947c",
+ "arm": "prism_plus",
+ "model": "sonnet",
+ "project": "prism",
+ "wall_s": 74.2,
+ "turns": 20,
+ "cost_usd": 0.2512864,
+ "tool_trace": {
+  "Bash": 13,
+  "Read": 3,
+  "Edit": 3
+ },
+ "file_recall": 0.125,
+ "files_found": 1,
+ "files_expected": 8,
+ "missed_files": [
+  "internal/cli/commands.go",
+  "internal/compression/compressor.go",
+  "internal/compression/symbol_key_test.go",
+  "internal/mcp/graphcache.go",
+  "internal/mcp/tools.go",
+  "internal/mcp/verify.go",
+  "internal/textsearch/native.go"
+ ],
+ "extra_files": 2,
+ "symbol_recall": 0.0,
+ "symbols_missed": [
+  "TestNativeSearchDoesNotFollowSymlinksOutsideRoot",
+  "TestSemanticDelta_StaleIndexCannotMaskEdit",
+  "attachStaleWarning",
+  "computeSymbolSHAs",
+  "graphDelivery",
+  "refreshIndexBestEffort",
+  "toolIndex"
+ ],
+ "build": "pass",
+ "diff": "diff --git a/go.mod b/go.mod\nindex 94fab1c..8da1cd8 100644\n--- a/go.mod\n+++ b/go.mod\n@@ -4,7 +4,7 @@ go 1.26\n \n require (\n \tgithub.com/fsnotify/fsnotify v1.9.0\n-\tgithub.com/provasign/grove v0.28.1\n+\tgithub.com/provasign/grove v0.29.0\n )\n \n require (\n@@ -12,7 +12,7 @@ require (\n \tgithub.com/google/uuid v1.6.0 // indirect\n \tgithub.com/mattn/go-isatty v0.0.20 // indirect\n \tgithub.com/ncruces/go-strftime v1.0.0 // indirect\n-\tgithub.com/provasign/astkit v0.4.22 // indirect\n+\tgithub.com/provasign/astkit v0.4.23 // indirect\n \tgithub.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect\n \tgithub.com/smacker/go-tree-sitter v0.0.0-20240827094217-dd81d9e9be82 // indirect\n \tgolang.org/x/mod v0.37.0 // indirect\ndiff --git a/go.sum b/go.sum\nindex 0e00e7b..086b878 100644\n--- a/go.sum\n+++ b/go.sum\n@@ -16,10 +16,10 @@ github.com/ncruces/go-strftime v1.0.0 h1:HMFp8mLCTPp341M/ZnA4qaf7ZlsbTc+miZjCLOF\n github.com/ncruces/go-strftime v1.0.0/go.mod h1:Fwc5htZGVVkseilnfgOVb9mKy6w1naJmn9CehxcKcls=\n github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRIccs7FGNTlIRMkT8wgtp5eCXdBlqhYGL6U=\n github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=\n-github.com/provasign/astkit v0.4.22 h1:5vDjVM+bQs6vqXuTJTcN60ACMi7qN9BS560ztyVnZEE=\n-github.com/provasign/astkit v0.4.22/go.mod h1:uSQxIxw3dVpK/6KmHvqIE8+DK/nhxDuPklKv7g96Jr4=\n-github.com/provasign/grove v0.28.1 h1:D8eGPpOPfyfW0blvwTrtJbI3Q+jFTck399MIdqeDboM=\n-github.com/provasign/grove v0.28.1/go.mod h1:bZbmW/4qpL1kfkhTabBiho/yqNpUN+7rxfwFWaDTV+M=\n+github.com/provasign/astkit v0.4.23 h1:iSLZ3Ehn0dgVhRqGZAfK5Q8t3iiXN2cmlmACRD4h1uE=\n+github.com/provasign/astkit v0.4.23/go.mod h1:uSQxIxw3dVpK/6KmHvqIE8+DK/nhxDuPklKv7g96Jr4=\n+github.com/provasign/grove v0.29.0 h1:o1cmh8+SQORKjeGCTa1NmLFTVjpxdo/RAbRR2AQx8oM=\n+github.com/provasign/grove v0.29.0/go.mod h1:32qyNh06j8uImJUH0Qal7GgBeVfaqHbhdq2bYiswomw=\n github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec h1:W09IVJc94icq4NjY3clb7Lk8O1qJ8BdBEF8z0ibU0rE=\n github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec/go.mod h1:qqbHyh8v60DhA7CoWK5oRCqLrMHRGoxYCSS9EjAz6Eo=\n github.com/smacker/go-tree-sitter v0.0.0-20240827094217-dd81d9e9be82 h1:6C8qej6f1bStuePVkLSFxoU22XBS165D3klxlzRg8F4=\ndiff --git a/internal/grove/client.go b/internal/grove/client.go\nindex ac64d7b..092e2ea 100644\n--- a/internal/grove/client.go\n+++ b/internal/grove/client.go\n@@ -143,7 +143,11 @@ func (c *Client) FileSymbols(ctx context.Context, relPath string) ([]SymbolRecor\n \tif err != nil {\n \t\treturn nil, err\n \t}\n-\treturn convertSymbols(e.FileSymbols(ctx, relPath)), nil\n+\tsyms, err := e.FileSymbols(ctx, relPath)\n+\tif err != nil {\n+\t\treturn nil, err\n+\t}\n+\treturn convertSymbols(syms), nil\n }\n \n // DiffFile diffs the symbols delivered earlier (before) against the file's\n@@ -162,7 +166,11 @@ func (c *Client) DiffFile(ctx context.Context, before []SymbolRecord, relPath st\n \t\t}\n \t\tbeforeEng = append(beforeEng, es)\n \t}\n-\td := groveeng.Diff(beforeEng, e.FileSymbols(ctx, relPath))\n+\tafterEng, err := e.FileSymbols(ctx, relPath)\n+\tif err != nil {\n+\t\treturn nil, err\n+\t}\n+\td := groveeng.Diff(beforeEng, afterEng)\n \treturn &FileGraphDiff{\n \t\tAdded:    convertSymbols(d.Added),\n \t\tRemoved:  convertSymbols(d.Removed),\n@@ -637,7 +645,10 @@ func (c *Client) SnapshotGraph(ctx context.Context) ([]SymbolRecord, []Edge, err\n \tif err != nil {\n \t\treturn nil, nil, err\n \t}\n-\tsyms, edges := e.SnapshotGraph(ctx)\n+\tsyms, edges, err := e.SnapshotGraph(ctx)\n+\tif err != nil {\n+\t\treturn nil, nil, err\n+\t}\n \tout := make([]Edge, 0, len(edges))\n \tfor _, ed := range edges {\n \t\tout = append(out, Edge{\n"
+}

@@ -1,0 +1,38 @@
+diff --git a/changelog/1361.bugfix.rst b/changelog/1361.bugfix.rst
+new file mode 100644
+index 00000000..46c46679
+--- /dev/null
++++ b/changelog/1361.bugfix.rst
+@@ -0,0 +1,3 @@
++Replaced obsolete line folding (obs-fold) in received response headers with a
++single space instead of keeping the line break in the header value, as required
++by RFC 7230, Section 3.2.4.
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 443cb01b..ef7373b3 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -78,6 +78,12 @@ RECENT_DATE = datetime.date(2025, 1, 1)
+ 
+ _CONTAINS_CONTROL_CHAR_RE = re.compile(r"[^-!#$%&'*+.^_`|~0-9a-zA-Z]")
+ 
++# An obs-fold is a line break followed by whitespace, used by obsolete
++# implementations to continue a header value on the next line. A user agent
++# must replace each obs-fold with one or more spaces before interpreting the
++# field value. See https://tools.ietf.org/html/rfc7230#section-3.2.4
++_OBS_FOLD_RE = re.compile(r"[\r\n]+[ \t]+")
++
+ 
+ class HTTPConnection(_HTTPConnection):
+     """
+@@ -616,7 +622,10 @@ class HTTPConnection(_HTTPConnection):
+                 exc_info=True,
+             )
+ 
+-        headers = HTTPHeaderDict(httplib_response.msg.items())
++        headers = HTTPHeaderDict(
++            (name, _OBS_FOLD_RE.sub(" ", value))
++            for name, value in httplib_response.msg.items()
++        )
+ 
+         response = HTTPResponse(
+             body=httplib_response,

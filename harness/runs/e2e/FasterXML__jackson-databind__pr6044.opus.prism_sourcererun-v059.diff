@@ -1,0 +1,66 @@
+diff --git a/src/main/java/tools/jackson/databind/jsontype/TypeResolverProvider.java b/src/main/java/tools/jackson/databind/jsontype/TypeResolverProvider.java
+index 325e4fd3c..1f0e90a79 100644
+--- a/src/main/java/tools/jackson/databind/jsontype/TypeResolverProvider.java
++++ b/src/main/java/tools/jackson/databind/jsontype/TypeResolverProvider.java
+@@ -13,6 +13,7 @@ import tools.jackson.databind.introspect.AnnotatedMember;
+ import tools.jackson.databind.jsontype.impl.NoOpTypeDeserializer;
+ import tools.jackson.databind.jsontype.impl.NoOpTypeSerializer;
+ import tools.jackson.databind.jsontype.impl.StdTypeResolverBuilder;
++import tools.jackson.databind.util.ClassUtil;
+ 
+ /**
+  * Abstraction used for allowing construction and registration of custom
+@@ -189,6 +190,8 @@ public class TypeResolverProvider
+         if (contentType == null) {
+             throw new IllegalArgumentException("Must call method with a container or reference type (got "+containerType+")");
+         }
++        // [databind#1127]: cannot support "external property" for Container types
++        _verifyNonContainerExternalProperty(ctxt, accessor, containerType);
+         final SerializationConfig config = ctxt.getConfig();
+         TypeResolverBuilder<?> b = _findTypeResolver(config, accessor, containerType);
+         // No annotation on property? Then base it on actual type (and further, default typing if need be)
+@@ -215,6 +218,8 @@ public class TypeResolverProvider
+         if (contentType == null) {
+             throw new IllegalArgumentException("Must call method with a container or reference type (got "+containerType+")");
+         }
++        // [databind#1127]: cannot support "external property" for Container types
++        _verifyNonContainerExternalProperty(ctxt, accessor, containerType);
+         TypeResolverBuilder<?> b = _findTypeResolver(config, accessor, containerType);
+         if (b == null) {
+             return findTypeDeserializer(ctxt, contentType, ctxt.introspectClassAnnotations(contentType));
+@@ -242,6 +247,35 @@ public class TypeResolverProvider
+     /**********************************************************************
+      */
+ 
++    /**
++     * Helper method called to verify that an unsupported combination of
++     * {@link JsonTypeInfo.As#EXTERNAL_PROPERTY} inclusion and Container
++     * (Collection, Map, array) type is not being used: if it is, fail
++     * eagerly instead of producing content that cannot be read back.
++     *
++     * @since 3.2
++     */
++    protected void _verifyNonContainerExternalProperty(DatabindContext ctxt,
++            Annotated accessor, JavaType containerType)
++    {
++        // Only Containers (Collections, Maps, arrays) problematic; Reference
++        // types (like `AtomicReference`) work fine
++        if (!containerType.isContainerType()) {
++            return;
++        }
++        final MapperConfig<?> config = ctxt.getConfig();
++        JsonTypeInfo.Value typeInfo = config.getAnnotationIntrospector()
++                .findPolymorphicTypeInfo(config, accessor);
++        if ((typeInfo == null)
++                || (typeInfo.getIdType() == JsonTypeInfo.Id.NONE)
++                || (typeInfo.getInclusionType() != JsonTypeInfo.As.EXTERNAL_PROPERTY)) {
++            return;
++        }
++        ctxt.reportBadDefinition(containerType, String.format(
++"Cannot use `@JsonTypeInfo(include=JsonTypeInfo.As.EXTERNAL_PROPERTY)` with Container type %s: `EXTERNAL_PROPERTY` only supported for scalar and Bean (POJO) types",
++                ClassUtil.getTypeDescription(containerType)));
++    }
++
+     protected TypeResolverBuilder<?> _findTypeResolver(MapperConfig<?> config,
+             Annotated ann, JavaType baseType)
+     {

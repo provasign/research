@@ -1,0 +1,65 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index a3b06bd..c91fa2e 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
+ - Fixed extraneous blank line on non-interactive disabled `Progress` https://github.com/Textualize/rich/pull/3905
+ - Fixed extra padding on first cell in columns https://github.com/Textualize/rich/pull/3935
+ - Fixed trailing whitespace removed when soft_wrap=True https://github.com/Textualize/rich/pull/3937
++- Fixed background color extending on to the following line when soft_wrap=True https://github.com/Textualize/rich/issues/3939
+ 
+ ### Added
+ 
+diff --git a/rich/console.py b/rich/console.py
+index 994adfc..eb316bd 100644
+--- a/rich/console.py
++++ b/rich/console.py
+@@ -1742,7 +1742,11 @@ class Console:
+                 ):
+                     buffer_extend(line)
+             else:
+-                self._buffer.extend(new_segments)
++                # Split in to lines so that new lines are not styled, otherwise
++                # a background color would extend to the end of the terminal line.
++                buffer_extend = self._buffer.extend
++                for line in Segment.split_lines(new_segments, include_new_lines=True):
++                    buffer_extend(line)
+ 
+     def print_json(
+         self,
+diff --git a/rich/segment.py b/rich/segment.py
+index edcb52d..8427639 100644
+--- a/rich/segment.py
++++ b/rich/segment.py
+@@ -247,17 +247,21 @@ class Segment(NamedTuple):
+             return filterfalse(attrgetter("control"), segments)
+ 
+     @classmethod
+-    def split_lines(cls, segments: Iterable["Segment"]) -> Iterable[List["Segment"]]:
++    def split_lines(
++        cls, segments: Iterable["Segment"], include_new_lines: bool = False
++    ) -> Iterable[List["Segment"]]:
+         """Split a sequence of segments in to a list of lines.
+ 
+         Args:
+             segments (Iterable[Segment]): Segments potentially containing line feeds.
++            include_new_lines (bool): Append an unstyled newline segment to each line.
+ 
+         Yields:
+             Iterable[List[Segment]]: Iterable of segment lists, one per line.
+         """
+         line: List[Segment] = []
+         append = line.append
++        new_line_segment = cls("\n")
+ 
+         for segment in segments:
+             if "\n" in segment.text and not segment.control:
+@@ -267,6 +271,8 @@ class Segment(NamedTuple):
+                     if _text:
+                         append(cls(_text, style))
+                     if new_line:
++                        if include_new_lines:
++                            append(new_line_segment)
+                         yield line
+                         line = []
+                         append = line.append

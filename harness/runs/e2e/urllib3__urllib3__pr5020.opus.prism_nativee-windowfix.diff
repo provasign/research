@@ -1,0 +1,38 @@
+diff --git a/changelog/1341.bugfix.rst b/changelog/1341.bugfix.rst
+new file mode 100644
+index 00000000..f8b94e24
+--- /dev/null
++++ b/changelog/1341.bugfix.rst
+@@ -0,0 +1 @@
++Replaced obsolete line folding (obs-fold) in received HTTP/1.1 response header values with a single space, as required by RFC 7230, instead of leaving the CRLF in the header value.
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 443cb01b..7ffd81a4 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -78,6 +78,10 @@ RECENT_DATE = datetime.date(2025, 1, 1)
+ 
+ _CONTAINS_CONTROL_CHAR_RE = re.compile(r"[^-!#$%&'*+.^_`|~0-9a-zA-Z]")
+ 
++# Obsolete line folding (RFC 7230 section 3.2.4): a CRLF followed by at least
++# one space or horizontal tab inside a received header field value.
++_OBS_FOLD_RE = re.compile(r"\r?\n[\t ]+")
++
+ 
+ class HTTPConnection(_HTTPConnection):
+     """
+@@ -616,7 +620,14 @@ class HTTPConnection(_HTTPConnection):
+                 exc_info=True,
+             )
+ 
+-        headers = HTTPHeaderDict(httplib_response.msg.items())
++        # RFC 7230 section 3.2.4: a user agent that receives an obs-fold in a
++        # response message that is not within a message/http container MUST
++        # replace each received obs-fold with one or more SP octets prior to
++        # interpreting the field value.
++        headers = HTTPHeaderDict(
++            (name, _OBS_FOLD_RE.sub(" ", value))
++            for name, value in httplib_response.msg.items()
++        )
+ 
+         response = HTTPResponse(
+             body=httplib_response,

@@ -1,0 +1,62 @@
+{
+ "instance_id": "prism__4f22f3947c",
+ "kind": "mandated_wide",
+ "project": "prism",
+ "task_kind": "capability_change",
+ "repo_path": "/Users/tapabratapal/Projects/provasign/prism",
+ "base_commit": "a9add27c4e298f17820359a6cd5fbe1597952e5e",
+ "gold_commit": "4f22f3947c2e53bc8a673359e8528cf31b2f5dd5",
+ "subject": "fix: stale-delta honesty, index-root guard, fail-closed verify; route-discipline steering (v0.40.0)",
+ "body": "Fixes from the 2026-08-09 cross-repo audit:\n\n- prism_read: symbol SHAs are computed from the delivered file's bytes at\n  each span, never the index's RawText \u2014 a stale index can no longer mask\n  a fresh edit behind a [prism:cached] pointer.\n- prism_index: foreign dirs are rejected like every other tool (the engine\n  previously walked the other tree while pruning this root's database).\n- prism_verify: failed index refresh, unparsable base version, or failed\n  contract diff degrade the verdict to review instead of noting-and-passing.\n- Freshness: refreshIndexBestEffort failures surface as staleWarning on\n  graph-tool results; prism_arch_check refreshes before validating;\n  AutoIndexIfEmpty fails loudly when Status errors.\n- Removed the dead \"tests\" edge kind from every advertised surface.\n- Native text-search fallback rejects symlinks resolving outside the root.\n- Steering rewritten for route discipline: one call per need, small\n  results for exploratory work, prism_index only on failure (indexing is\n  now automatic on every whole-repo graph op).\n- deps: grove v0.28.1 -> v0.29.0 (error propagation \u2014 breaking),\n  astkit v0.4.22 -> v0.4.23.\n\nEngine invariants harness: all corpora at/ab",
+ "gt_files": [
+  "internal/cli/commands.go",
+  "internal/compression/compressor.go",
+  "internal/compression/symbol_key_test.go",
+  "internal/grove/client.go",
+  "internal/mcp/graphcache.go",
+  "internal/mcp/tools.go",
+  "internal/mcp/verify.go",
+  "internal/textsearch/native.go"
+ ],
+ "gt_modified": [
+  "internal/cli/commands.go",
+  "internal/compression/compressor.go",
+  "internal/compression/symbol_key_test.go",
+  "internal/grove/client.go",
+  "internal/mcp/graphcache.go",
+  "internal/mcp/tools.go",
+  "internal/mcp/verify.go",
+  "internal/textsearch/native.go"
+ ],
+ "gt_deleted": [],
+ "unscored_added": [
+  "internal/compression/staledelta_test.go",
+  "internal/textsearch/symlink_test.go"
+ ],
+ "gt_all_files": [
+  "AGENTS.md",
+  "CLAUDE.md",
+  "GEMINI.md",
+  "go.mod",
+  "go.sum",
+  "internal/cli/commands.go",
+  "internal/compression/compressor.go",
+  "internal/compression/staledelta_test.go",
+  "internal/compression/symbol_key_test.go",
+  "internal/grove/client.go",
+  "internal/mcp/graphcache.go",
+  "internal/mcp/tools.go",
+  "internal/mcp/verify.go",
+  "internal/textsearch/native.go",
+  "internal/textsearch/symlink_test.go"
+ ],
+ "gt_symbols": [
+  "TestNativeSearchDoesNotFollowSymlinksOutsideRoot",
+  "TestSemanticDelta_StaleIndexCannotMaskEdit",
+  "attachStaleWarning",
+  "computeSymbolSHAs",
+  "graphDelivery",
+  "refreshIndexBestEffort",
+  "toolIndex"
+ ]
+}

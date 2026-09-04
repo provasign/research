@@ -1,0 +1,75 @@
+diff --git a/CHANGES.rst b/CHANGES.rst
+index 1c4e997..e2a3a66 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -17,6 +17,10 @@ Unreleased
+     ``breakpoint()``, and debuggers subclassing ``pdb.Pdb`` (ipdb, pdbpp) can
+     interact with the real terminal instead of the captured I/O streams.
+     :issue:`654` :issue:`824` :issue:`843` :pr:`951` :pr:`3235`
++-   ``CliRunner`` isolation streams provide a real file descriptor from
++    ``fileno()``, so passing ``sys.stdout``/``sys.stderr`` to ``subprocess`` no
++    longer raises ``io.UnsupportedOperation``. Output written to the descriptor
++    is captured in the result. :issue:`2419`
+ -   Add optional randomized parallel test execution using ``pytest-randomly`` and
+     ``pytest-xdist`` to detect test pollution and race conditions. :pr:`3151`
+ -   Add contributor documentation for running stress tests, randomized
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..ada4614 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -76,11 +76,55 @@ class BytesIOCopy(io.BytesIO):
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._fd_file: t.IO[bytes] | None = None
++        self._fd_pos = 0
++
++    def fileno(self) -> int:
++        """Return a real file descriptor for this stream.
++
++        ``io.BytesIO`` has no descriptor, so passing the isolated
++        ``sys.stdout``/``sys.stderr`` to something that needs one, such as
++        :mod:`subprocess`, raises ``io.UnsupportedOperation``. Back the stream
++        with a temporary file the first time a descriptor is asked for. What is
++        written to that file is drained into the buffer, so output from
++        subprocesses is captured as well.
++
++        .. versionadded:: 8.3.3
++        """
++        if self._fd_file is None:
++            self._fd_file = tempfile.TemporaryFile()
++
++        return self._fd_file.fileno()
++
++    def _drain_fd_file(self) -> None:
++        """Copy anything written to the file descriptor into the buffer."""
++        if self._fd_file is None:
++            return
++
++        self._fd_file.seek(self._fd_pos)
++        data = self._fd_file.read()
++
++        if data:
++            self._fd_pos += len(data)
++            self.write(data)
+ 
+     def flush(self) -> None:
++        self._drain_fd_file()
+         super().flush()
+         self.copy_to.flush()
+ 
++    def getvalue(self) -> bytes:
++        self._drain_fd_file()
++        return super().getvalue()
++
++    def close(self) -> None:
++        if self._fd_file is not None:
++            self._drain_fd_file()
++            self._fd_file.close()
++            self._fd_file = None
++
++        super().close()
++
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+         return super().write(b)

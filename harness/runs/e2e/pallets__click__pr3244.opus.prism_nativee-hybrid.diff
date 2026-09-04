@@ -1,0 +1,104 @@
+diff --git a/CHANGES.rst b/CHANGES.rst
+index 1c4e997..3b9eac4 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -17,6 +17,10 @@ Unreleased
+     ``breakpoint()``, and debuggers subclassing ``pdb.Pdb`` (ipdb, pdbpp) can
+     interact with the real terminal instead of the captured I/O streams.
+     :issue:`654` :issue:`824` :issue:`843` :pr:`951` :pr:`3235`
++-   ``CliRunner`` isolation streams support ``fileno()``, backed by a
++    temporary file whose contents are captured, so passing ``sys.stdout`` or
++    ``sys.stderr`` to ``subprocess`` no longer raises
++    ``io.UnsupportedOperation``. :issue:`2416`
+ -   Add optional randomized parallel test execution using ``pytest-randomly`` and
+     ``pytest-xdist`` to detect test pollution and race conditions. :pr:`3151`
+ -   Add contributor documentation for running stress tests, randomized
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..1ba382e 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -107,6 +107,61 @@ class _NamedTextIOWrapper(io.TextIOWrapper):
+         super().__init__(buffer, **kwargs)
+         self._name = name
+         self._mode = mode
++        self._fd_file: t.IO[bytes] | None = None
++        self._fd_pos = 0
++
++    def fileno(self) -> int:
++        """Return a real file descriptor for this stream.
++
++        The wrapped buffer is an in-memory ``BytesIO``, which has no file
++        descriptor. Writable streams are therefore backed by a lazily
++        created temporary file, so code such as
++        ``subprocess.run(..., stdout=sys.stderr)`` works during isolation.
++        Anything written to the descriptor is copied back into the buffer
++        by :meth:`flush`, so it is still captured in the result.
++
++        .. versionadded:: 8.3.2
++        """
++        if "w" not in self._mode:
++            return super().fileno()
++
++        if self._fd_file is None:
++            # Flush pending text first so ordering is preserved.
++            super().flush()
++            self._fd_file = tempfile.TemporaryFile()
++
++        return self._fd_file.fileno()
++
++    def flush(self) -> None:
++        # Text written before ``fileno()`` handed out the descriptor was
++        # already flushed there, so descriptor output comes first.
++        self._sync_fd_file()
++        super().flush()
++
++    def _sync_fd_file(self) -> None:
++        """Copy anything written to the file descriptor returned by
++        :meth:`fileno` into the wrapped buffer.
++        """
++        if self._fd_file is None:
++            return
++
++        self._fd_file.seek(self._fd_pos)
++        data = self._fd_file.read()
++        self._fd_pos = self._fd_file.tell()
++
++        if data:
++            self.buffer.write(data)
++
++    def _close_fd_file(self) -> None:
++        """Copy any remaining descriptor output and release the temporary
++        file backing :meth:`fileno`.
++        """
++        if self._fd_file is None:
++            return
++
++        self._sync_fd_file()
++        self._fd_file.close()
++        self._fd_file = None
+ 
+     def close(self) -> None:
+         """
+@@ -335,11 +390,11 @@ class CliRunner:
+             # large chunk which is echoed early.
+             text_input._CHUNK_SIZE = 1  # type: ignore
+ 
+-        sys.stdout = _NamedTextIOWrapper(
++        sys.stdout = text_output = _NamedTextIOWrapper(
+             stream_mixer.stdout, encoding=self.charset, name="<stdout>", mode="w"
+         )
+ 
+-        sys.stderr = _NamedTextIOWrapper(
++        sys.stderr = text_error = _NamedTextIOWrapper(
+             stream_mixer.stderr,
+             encoding=self.charset,
+             name="<stderr>",
+@@ -461,6 +516,8 @@ class CliRunner:
+                         pass
+                 else:
+                     os.environ[key] = value
++            text_output._close_fd_file()
++            text_error._close_fd_file()
+             sys.stdout = old_stdout
+             sys.stderr = old_stderr
+             sys.stdin = old_stdin

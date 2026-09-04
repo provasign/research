@@ -1,0 +1,42 @@
+diff --git a/src/main/java/org/apache/commons/collections4/multimap/AbstractListValuedMap.java b/src/main/java/org/apache/commons/collections4/multimap/AbstractListValuedMap.java
+index a073e4355..e2a4e865e 100644
+--- a/src/main/java/org/apache/commons/collections4/multimap/AbstractListValuedMap.java
++++ b/src/main/java/org/apache/commons/collections4/multimap/AbstractListValuedMap.java
+@@ -126,10 +126,12 @@ public abstract class AbstractListValuedMap<K, V> extends AbstractMultiValuedMap
+ 
+         @Override
+         public void add(final int index, final V value) {
+-            List<V> list = getMapping();
++            final List<V> list = getMapping();
+             if (list == null) {
+-                list = createCollection();
+-                getMap().put(key, list);
++                final List<V> newList = createCollection();
++                newList.add(index, value);
++                getMap().put(key, newList);
++                return;
+             }
+             list.add(index, value);
+         }
+diff --git a/src/main/java/org/apache/commons/collections4/multimap/AbstractMultiValuedMap.java b/src/main/java/org/apache/commons/collections4/multimap/AbstractMultiValuedMap.java
+index 4f7323c0b..99dede930 100644
+--- a/src/main/java/org/apache/commons/collections4/multimap/AbstractMultiValuedMap.java
++++ b/src/main/java/org/apache/commons/collections4/multimap/AbstractMultiValuedMap.java
+@@ -441,10 +441,14 @@ public abstract class AbstractMultiValuedMap<K, V> implements MultiValuedMap<K,
+ 
+         @Override
+         public boolean addAll(final Collection<? extends V> other) {
+-            Collection<V> coll = getMapping();
++            final Collection<V> coll = getMapping();
+             if (coll == null) {
+-                coll = createCollection();
+-                AbstractMultiValuedMap.this.map.put(key, coll);
++                final Collection<V> newColl = createCollection();
++                final boolean changed = newColl.addAll(other);
++                if (changed) {
++                    AbstractMultiValuedMap.this.map.put(key, newColl);
++                }
++                return changed;
+             }
+             return coll.addAll(other);
+         }

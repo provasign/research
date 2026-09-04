@@ -1,0 +1,29 @@
+{
+ "instance_id": "a2aproject__a2a-python-219",
+ "arm": "mason",
+ "model": "ollama:qwen3-coder-ctx16k",
+ "turns": -1,
+ "cost_usd": 0.0,
+ "fresh_input_tokens": 0,
+ "cache_read_tokens": 0,
+ "output_tokens": 0,
+ "tool_calls": [],
+ "prism_used": true,
+ "mason_meta": {
+  "ok": true,
+  "reply": "## Summary\n\nI have successfully fixed the bug where push notifications were not being sent for non-streaming message handling in the `DefaultRequestHandler`.\n\n### Problem\nThe `on_message_send` method (non-streaming) was missing logic to send push notifications at the end of processing, while the `on_message_send_stream` method (streaming) properly handled this. This inconsistency meant that push notifications would only be sent for streaming message handling but not for regular message sending.\n\n### Solution\nI added the missing push notification sending logic to the `on_message_send` method in `src/a2a/server/request_handlers/default_request_handler.py`:\n\n```python\n# Send push notification if configured\nif (\n    self._push_notifier\n    and params.configuration\n    and params.configuration.pushNotificationConfig\n    and isinstance(result, Task)\n):\n    await self._push_notifier.send_notification(result)\n```\n\nThis code was placed right before the return statement, ensuring notifications are sent after processing completes, but only when:\n1. A push notifier exists\n2. Configuration is provided \n3. The result is a Task object (not a Message)\n\n### Verification\n- The fix maintains consistency with the existing streaming implementation pattern\n- Python syntax compiles correctly with no errors\n- The change follows the same conditional logic as used elsewhere in the codebase\n- No existing functionality was broken\n\nThe fix ensures both streaming and non-streaming message handling now properly send push notifications when configured, making the behavior consistent across all message handling paths.",
+  "model": "ollama:qwen3-coder-ctx16k",
+  "usage": {
+   "inputTokens": 314341,
+   "outputTokens": 3131,
+   "costUSD": 0
+  },
+  "changedFiles": [
+   ".shale/",
+   "src/a2a/server/request_handlers/default_request_handler.py"
+  ],
+  "durationMs": 1071707
+ },
+ "model_patch": "diff --git a/src/a2a/server/request_handlers/default_request_handler.py b/src/a2a/server/request_handlers/default_request_handler.py\nindex 4ef889a..8ca6aec 100644\n--- a/src/a2a/server/request_handlers/default_request_handler.py\n+++ b/src/a2a/server/request_handlers/default_request_handler.py\n@@ -260,6 +260,15 @@ class DefaultRequestHandler(RequestHandler):\n             else:\n                 await self._cleanup_producer(producer_task, task_id)\n \n+        # Send push notification if configured\n+        if (\n+            self._push_notifier\n+            and params.configuration\n+            and params.configuration.pushNotificationConfig\n+            and isinstance(result, Task)\n+        ):\n+            await self._push_notifier.send_notification(result)\n+\n         return result\n \n     async def on_message_send_stream(\n",
+ "empty_patch": false
+}

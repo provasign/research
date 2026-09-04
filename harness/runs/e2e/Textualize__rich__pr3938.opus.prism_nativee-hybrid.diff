@@ -1,0 +1,39 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index a3b06bd..4884706 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
+ - Fixed extraneous blank line on non-interactive disabled `Progress` https://github.com/Textualize/rich/pull/3905
+ - Fixed extra padding on first cell in columns https://github.com/Textualize/rich/pull/3935
+ - Fixed trailing whitespace removed when soft_wrap=True https://github.com/Textualize/rich/pull/3937
++- Fixed background color bleeding on to the following line when printing with a style and soft_wrap=True
+ 
+ ### Added
+ 
+diff --git a/rich/console.py b/rich/console.py
+index 994adfc..e1601e8 100644
+--- a/rich/console.py
++++ b/rich/console.py
+@@ -1742,7 +1742,21 @@ class Console:
+                 ):
+                     buffer_extend(line)
+             else:
+-                self._buffer.extend(new_segments)
++                # Split styled text on new lines, so that styles (such as background
++                # colors) don't bleed on to the following line.
++                append = self._buffer.append
++                new_line_segment = Segment.line()
++                for segment in new_segments:
++                    text, segment_style, control = segment
++                    if control or segment_style is None or "\n" not in text:
++                        append(segment)
++                        continue
++                    while text:
++                        _text, new_line, text = text.partition("\n")
++                        if _text:
++                            append(Segment(_text, segment_style))
++                        if new_line:
++                            append(new_line_segment)
+ 
+     def print_json(
+         self,

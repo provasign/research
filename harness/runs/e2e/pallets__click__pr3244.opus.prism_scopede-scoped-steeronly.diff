@@ -1,0 +1,99 @@
+diff --git a/CHANGES.rst b/CHANGES.rst
+index 1c4e997..bf88d2f 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -17,6 +17,10 @@ Unreleased
+     ``breakpoint()``, and debuggers subclassing ``pdb.Pdb`` (ipdb, pdbpp) can
+     interact with the real terminal instead of the captured I/O streams.
+     :issue:`654` :issue:`824` :issue:`843` :pr:`951` :pr:`3235`
++-   ``CliRunner``'s captured output streams support ``fileno()``, so passing
++    ``sys.stdout`` or ``sys.stderr`` to ``subprocess`` no longer raises
++    ``io.UnsupportedOperation``. Output written by the subprocess is captured
++    in the result. :issue:`2523`
+ -   Add optional randomized parallel test execution using ``pytest-randomly`` and
+     ``pytest-xdist`` to detect test pollution and race conditions. :pr:`3151`
+ -   Add contributor documentation for running stress tests, randomized
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..bcc4bf3 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -76,11 +76,59 @@ class BytesIOCopy(io.BytesIO):
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._fd_file: t.IO[bytes] | None = None
++        self._fd_pos = 0
++
++    def fileno(self) -> int:
++        """Return a real file descriptor, so that this stream can be passed to
++        subprocesses. Anything written to the descriptor is copied into this
++        buffer.
++
++        .. versionadded:: 8.3.2
++        """
++        if self._fd_file is None:
++            self._fd_file = tempfile.TemporaryFile("w+b")
++
++        return self._fd_file.fileno()
++
++    def _drain_fd(self) -> None:
++        """Copy data written to the real file descriptor into this buffer."""
++        if self._fd_file is None:
++            return
++
++        fd = self._fd_file.fileno()
++
++        while True:
++            if hasattr(os, "pread"):
++                # Read without moving the file offset, which is shared with
++                # any subprocess writing to the descriptor.
++                data = os.pread(fd, io.DEFAULT_BUFFER_SIZE, self._fd_pos)
++            else:
++                self._fd_file.seek(self._fd_pos)
++                data = self._fd_file.read(io.DEFAULT_BUFFER_SIZE)
++
++            if not data:
++                break
++
++            self._fd_pos += len(data)
++            self.write(data)
++
++    def _close_fd(self) -> None:
++        """Drain and release the file descriptor created by :meth:`fileno`."""
++        if self._fd_file is not None:
++            self._drain_fd()
++            self._fd_file.close()
++            self._fd_file = None
+ 
+     def flush(self) -> None:
++        self._drain_fd()
+         super().flush()
+         self.copy_to.flush()
+ 
++    def getvalue(self) -> bytes:
++        self._drain_fd()
++        return super().getvalue()
++
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+         return super().write(b)
+@@ -96,8 +144,8 @@ class StreamMixer:
+ 
+     def __init__(self) -> None:
+         self.output: io.BytesIO = io.BytesIO()
+-        self.stdout: io.BytesIO = BytesIOCopy(copy_to=self.output)
+-        self.stderr: io.BytesIO = BytesIOCopy(copy_to=self.output)
++        self.stdout: BytesIOCopy = BytesIOCopy(copy_to=self.output)
++        self.stderr: BytesIOCopy = BytesIOCopy(copy_to=self.output)
+ 
+ 
+ class _NamedTextIOWrapper(io.TextIOWrapper):
+@@ -471,6 +519,8 @@ class CliRunner:
+             _compat.should_strip_ansi = old__compat_should_strip_ansi
+             formatting.FORCED_WIDTH = old_forced_width
+             pdb.Pdb.__init__ = old_pdb_init  # type: ignore[method-assign]
++            stream_mixer.stdout._close_fd()
++            stream_mixer.stderr._close_fd()
+ 
+     def invoke(
+         self,

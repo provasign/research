@@ -1,0 +1,37 @@
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 443cb01b..b523ceaa 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -616,7 +616,10 @@ class HTTPConnection(_HTTPConnection):
+                 exc_info=True,
+             )
+ 
+-        headers = HTTPHeaderDict(httplib_response.msg.items())
++        headers = HTTPHeaderDict(
++            (name, _replace_obs_fold(value))
++            for name, value in httplib_response.msg.items()
++        )
+ 
+         response = HTTPResponse(
+             body=httplib_response,
+@@ -1147,6 +1150,20 @@ def _wrap_proxy_error(err: Exception, proxy_scheme: str | None) -> ProxyError:
+     return new_err
+ 
+ 
++_OBS_FOLD_RE = re.compile(r"[\r\n]+[ \t]+")
++
++
++def _replace_obs_fold(value: str) -> str:
++    """Replace obsolete line folding in a received header value with a single space.
++
++    A user agent that receives an obs-fold in a response message that is not
++    within a message/http container MUST replace each received obs-fold with
++    one or more SP octets prior to interpreting the field value.
++    See https://datatracker.ietf.org/doc/html/rfc9112#section-5.2
++    """
++    return _OBS_FOLD_RE.sub(" ", value)
++
++
+ def _get_default_user_agent() -> str:
+     return f"python-urllib3/{__version__}"
+ 

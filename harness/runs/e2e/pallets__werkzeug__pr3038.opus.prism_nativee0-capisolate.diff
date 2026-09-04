@@ -1,0 +1,40 @@
+diff --git a/CHANGES.rst b/CHANGES.rst
+index f63b059e..c29e93e7 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -43,6 +43,9 @@ Unreleased
+     are closed to prevent a ``ResourceWarning``. :pr:`3101`
+ -   ``SpooledTemporaryFile`` is always used for multipart file parsing.
+     :pr:`3101`
++-   Adding a rule to a ``Map`` that matches the same URLs and methods as an
++    existing rule raises a ``ValueError``, rather than silently being
++    unreachable. :issue:`3097`
+ 
+ 
+ Version 3.1.5
+diff --git a/src/werkzeug/routing/matcher.py b/src/werkzeug/routing/matcher.py
+index 9174061b..57be9b7a 100644
+--- a/src/werkzeug/routing/matcher.py
++++ b/src/werkzeug/routing/matcher.py
+@@ -50,6 +50,21 @@ class StateMachineMatcher:
+                     new_state = State()
+                     state.dynamic.append((part, new_state))
+                     state = new_state
++        for other in state.rules:
++            if other.websocket != rule.websocket:
++                continue
++
++            if (
++                rule.methods is None
++                or other.methods is None
++                or rule.methods & other.methods
++            ):
++                raise ValueError(
++                    f"The rule {rule!r} conflicts with the existing rule {other!r}."
++                    " They match the same URLs and methods, so only the existing"
++                    " rule would be used."
++                )
++
+         state.rules.append(rule)
+ 
+     def update(self) -> None:

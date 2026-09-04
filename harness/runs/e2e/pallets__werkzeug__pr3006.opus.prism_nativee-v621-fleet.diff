@@ -1,0 +1,85 @@
+diff --git a/CHANGES.rst b/CHANGES.rst
+index 81dd7df8..b4ce0032 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -18,6 +18,9 @@ Unreleased
+     part of the HTTP spec. :pr:`3092`
+ -   ``EnvironBuilder.close`` closes all open files in ``files`` rather than only
+     the first for each key. :pr:`3092`
++-   ``Map`` takes a ``subdomain_matching`` parameter. ``bind_to_environ`` only
++    detects the subdomain from the host if it is enabled, otherwise the
++    ``server_name`` no longer restricts what hosts will match.
+ 
+ 
+ Version 3.1.5
+diff --git a/src/werkzeug/routing/map.py b/src/werkzeug/routing/map.py
+index f757d59b..09fae828 100644
+--- a/src/werkzeug/routing/map.py
++++ b/src/werkzeug/routing/map.py
+@@ -66,6 +66,12 @@ class Map:
+                           feature and disables the subdomain one.  If
+                           enabled the `host` parameter to rules is used
+                           instead of the `subdomain` one.
++    :param subdomain_matching: Consider the subdomain relative to the
++        ``server_name`` when matching. :meth:`bind_to_environ` will only detect
++        the subdomain if this is enabled.
++
++    .. versionchanged:: 3.2
++        Added the ``subdomain_matching`` parameter.
+ 
+     .. versionchanged:: 3.0
+         The ``charset`` and ``encoding_errors`` parameters were removed.
+@@ -102,6 +108,7 @@ class Map:
+         sort_parameters: bool = False,
+         sort_key: t.Callable[[t.Any], t.Any] | None = None,
+         host_matching: bool = False,
++        subdomain_matching: bool = False,
+     ) -> None:
+         self._matcher = StateMachineMatcher(merge_slashes)
+         self._rules_by_endpoint: dict[t.Any, list[Rule]] = {}
+@@ -112,6 +119,7 @@ class Map:
+         self.strict_slashes = strict_slashes
+         self.redirect_defaults = redirect_defaults
+         self.host_matching = host_matching
++        self.subdomain_matching = subdomain_matching
+ 
+         self.converters = self.default_converters.copy()
+         if converters:
+@@ -263,11 +271,12 @@ class Map:
+         `HTTP_HOST` if provided) as used `server_name` with disabled subdomain
+         feature.
+ 
+-        If `subdomain` is `None` but an environment and a server name is
+-        provided it will calculate the current subdomain automatically.
+-        Example: `server_name` is ``'example.com'`` and the `SERVER_NAME`
+-        in the wsgi `environ` is ``'staging.dev.example.com'`` the calculated
+-        subdomain will be ``'staging.dev'``.
++        If `subdomain` is `None` and ``subdomain_matching`` is enabled on the
++        map, and an environment and a server name is provided, it will
++        calculate the current subdomain automatically. Example: `server_name`
++        is ``'example.com'`` and the `SERVER_NAME` in the wsgi `environ` is
++        ``'staging.dev.example.com'`` the calculated subdomain will be
++        ``'staging.dev'``.
+ 
+         If the object passed as environ has an environ attribute, the value of
+         this attribute is used instead.  This allows you to pass request
+@@ -275,6 +284,10 @@ class Map:
+         :class:`MapAdapter` so that you don't have to pass the path info to
+         the match method.
+ 
++        .. versionchanged:: 3.2
++            The subdomain is only detected if ``subdomain_matching`` is enabled
++            on the map.
++
+         .. versionchanged:: 1.0.0
+             If the passed server name specifies port 443, it will match
+             if the incoming scheme is ``https`` without a port.
+@@ -318,7 +331,7 @@ class Map:
+             elif scheme in {"https", "wss"} and server_name.endswith(":443"):
+                 server_name = server_name[:-4]
+ 
+-        if subdomain is None and not self.host_matching:
++        if subdomain is None and self.subdomain_matching and not self.host_matching:
+             cur_server_name = wsgi_server_name.split(".")
+             real_server_name = server_name.split(".")
+             offset = -len(real_server_name)

@@ -1,0 +1,31 @@
+diff --git a/CHANGES.rst b/CHANGES.rst
+index 385d97e2..a916ceb9 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -7,6 +7,8 @@ Unreleased
+ 
+ -   Fix ``AttributeError`` when initializing ``DebuggedApplication`` with
+     ``pin_security=False``. :issue:`3075`
++-   Multipart part data that ends with ``\r`` is no longer truncated by one
++    byte. :issue:`3082`
+ 
+ 
+ Version 3.1.4
+diff --git a/src/werkzeug/sansio/multipart.py b/src/werkzeug/sansio/multipart.py
+index 279b25e7..3045cb92 100644
+--- a/src/werkzeug/sansio/multipart.py
++++ b/src/werkzeug/sansio/multipart.py
+@@ -286,8 +286,11 @@ class MultipartDecoder:
+                 data_end = del_index = self.last_newline(data[data_start:]) + data_start
+             more_data = match is None
+ 
+-        # Keep \r\n sequence intact rather than splitting across chunks.
+-        if data_end > data_start and data[data_end - 1] == 0x0D:
++        # If more data is expected, a trailing \r may be the start of the
++        # \r\n before the next boundary. Hold it back rather than splitting
++        # the sequence across chunks. If a boundary was found, data_end is
++        # already exact and a trailing \r is part of the data.
++        if more_data and data_end > data_start and data[data_end - 1] == 0x0D:
+             data_end -= 1
+             del_index -= 1
+ 

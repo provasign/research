@@ -1,0 +1,85 @@
+diff --git a/.claude/settings.json b/.claude/settings.json
+new file mode 100644
+index 00000000..98eb0032
+--- /dev/null
++++ b/.claude/settings.json
+@@ -0,0 +1 @@
++{"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "PRISM_HOOK_BIN=/private/tmp/claude-501/-Users-tapabratapal-Projects-provasign-prism/3b58659c-d56a-4934-bb18-a0b337259ca6/scratchpad/prism-cand3 python3 /private/tmp/claude-501/-Users-tapabratapal-Projects-provasign-prism/3b58659c-d56a-4934-bb18-a0b337259ca6/scratchpad/grep_subst_hook.py"}]}]}}
+\ No newline at end of file
+diff --git a/CHANGES.rst b/CHANGES.rst
+index 81dd7df8..1f05b6e4 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -18,6 +18,9 @@ Unreleased
+     part of the HTTP spec. :pr:`3092`
+ -   ``EnvironBuilder.close`` closes all open files in ``files`` rather than only
+     the first for each key. :pr:`3092`
++-   Added the ``subdomain_matching`` parameter to ``Map``. If it is not
++    enabled, ``Map.bind_to_environ`` will not extract a subdomain from the
++    host, so passing ``server_name`` does not restrict routing.
+ 
+ 
+ Version 3.1.5
+diff --git a/src/werkzeug/routing/map.py b/src/werkzeug/routing/map.py
+index f757d59b..8cef6c4f 100644
+--- a/src/werkzeug/routing/map.py
++++ b/src/werkzeug/routing/map.py
+@@ -66,6 +66,12 @@ class Map:
+                           feature and disables the subdomain one.  If
+                           enabled the `host` parameter to rules is used
+                           instead of the `subdomain` one.
++    :param subdomain_matching: Enable subdomain matching. If disabled,
++        :meth:`bind_to_environ` will not extract a subdomain from the host,
++        so routing is not restricted to the configured ``server_name``.
++
++    .. versionchanged:: 3.2
++        The ``subdomain_matching`` parameter was added.
+ 
+     .. versionchanged:: 3.0
+         The ``charset`` and ``encoding_errors`` parameters were removed.
+@@ -102,6 +108,7 @@ class Map:
+         sort_parameters: bool = False,
+         sort_key: t.Callable[[t.Any], t.Any] | None = None,
+         host_matching: bool = False,
++        subdomain_matching: bool = False,
+     ) -> None:
+         self._matcher = StateMachineMatcher(merge_slashes)
+         self._rules_by_endpoint: dict[t.Any, list[Rule]] = {}
+@@ -112,6 +119,7 @@ class Map:
+         self.strict_slashes = strict_slashes
+         self.redirect_defaults = redirect_defaults
+         self.host_matching = host_matching
++        self.subdomain_matching = subdomain_matching
+ 
+         self.converters = self.default_converters.copy()
+         if converters:
+@@ -263,11 +271,15 @@ class Map:
+         `HTTP_HOST` if provided) as used `server_name` with disabled subdomain
+         feature.
+ 
+-        If `subdomain` is `None` but an environment and a server name is
+-        provided it will calculate the current subdomain automatically.
+-        Example: `server_name` is ``'example.com'`` and the `SERVER_NAME`
+-        in the wsgi `environ` is ``'staging.dev.example.com'`` the calculated
+-        subdomain will be ``'staging.dev'``.
++        If `subdomain` is `None` and the map has ``subdomain_matching``
++        enabled, the current subdomain is calculated automatically from the
++        server name. Example: `server_name` is ``'example.com'`` and the
++        `SERVER_NAME` in the wsgi `environ` is ``'staging.dev.example.com'``
++        the calculated subdomain will be ``'staging.dev'``.
++
++        .. versionchanged:: 3.2
++            A subdomain is only extracted if ``subdomain_matching`` is enabled
++            on the map.
+ 
+         If the object passed as environ has an environ attribute, the value of
+         this attribute is used instead.  This allows you to pass request
+@@ -318,7 +330,7 @@ class Map:
+             elif scheme in {"https", "wss"} and server_name.endswith(":443"):
+                 server_name = server_name[:-4]
+ 
+-        if subdomain is None and not self.host_matching:
++        if subdomain is None and self.subdomain_matching and not self.host_matching:
+             cur_server_name = wsgi_server_name.split(".")
+             real_server_name = server_name.split(".")
+             offset = -len(real_server_name)

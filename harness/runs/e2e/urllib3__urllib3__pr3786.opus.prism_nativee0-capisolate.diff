@@ -1,0 +1,71 @@
+diff --git a/changelog/2577.bugfix.rst b/changelog/2577.bugfix.rst
+new file mode 100644
+index 00000000..2ab01498
+--- /dev/null
++++ b/changelog/2577.bugfix.rst
+@@ -0,0 +1,4 @@
++Fixed HTTPS proxies in forwarding mode (``use_forwarding_for_https=True``) using
++``ssl_context`` instead of ``proxy_ssl_context`` for the TLS connection to the proxy.
++Specifying ``ssl_context`` together with ``use_forwarding_for_https=True`` now raises
++a ``ValueError``.
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 84e1dab9..fa285c21 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -793,6 +793,17 @@ class HTTPSConnection(HTTPConnection):
+             # Remove trailing '.' from fqdn hostnames to allow certificate validation
+             server_hostname_rm_dot = server_hostname.rstrip(".")
+ 
++            # When forwarding to an HTTPS proxy this TLS handshake is with the
++            # proxy, not the origin, so the proxy's TLS configuration is used.
++            if self.proxy_is_forwarding and self.proxy_config is not None:
++                ssl_context = self.proxy_config.ssl_context
++                assert_hostname = self.proxy_config.assert_hostname
++                assert_fingerprint = self.proxy_config.assert_fingerprint
++            else:
++                ssl_context = self.ssl_context
++                assert_hostname = self.assert_hostname
++                assert_fingerprint = self.assert_fingerprint
++
+             sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+                 sock=sock,
+                 cert_reqs=self.cert_reqs,
+@@ -806,10 +817,10 @@ class HTTPSConnection(HTTPConnection):
+                 key_file=self.key_file,
+                 key_password=self.key_password,
+                 server_hostname=server_hostname_rm_dot,
+-                ssl_context=self.ssl_context,
++                ssl_context=ssl_context,
+                 tls_in_tls=tls_in_tls,
+-                assert_hostname=self.assert_hostname,
+-                assert_fingerprint=self.assert_fingerprint,
++                assert_hostname=assert_hostname,
++                assert_fingerprint=assert_fingerprint,
+             )
+             self.sock = sock_and_verified.socket
+ 
+diff --git a/src/urllib3/poolmanager.py b/src/urllib3/poolmanager.py
+index 3914dec2..3f901c99 100644
+--- a/src/urllib3/poolmanager.py
++++ b/src/urllib3/poolmanager.py
+@@ -585,6 +585,20 @@ class ProxyManager(PoolManager):
+             port = port_by_scheme.get(proxy.scheme, 80)
+             proxy = proxy._replace(port=port)
+ 
++        # When forwarding, the only TLS connection made is the one to the proxy
++        # so 'ssl_context' (which configures the connection to the origin) can't
++        # be honored. 'proxy_ssl_context' must be used instead.
++        if (
++            proxy.scheme == "https"
++            and use_forwarding_for_https
++            and connection_pool_kw.get("ssl_context") is not None
++        ):
++            raise ValueError(
++                "Can't specify 'ssl_context' when 'use_forwarding_for_https' "
++                "is True, use 'proxy_ssl_context' instead as the only TLS "
++                "connection established is the one to the proxy"
++            )
++
+         self.proxy = proxy
+         self.proxy_headers = proxy_headers or {}
+         self.proxy_ssl_context = proxy_ssl_context

@@ -1,0 +1,73 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index b422bd4..7031ebc 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -1200,11 +1200,19 @@ class Command:
+ 
+     def format_options(self, ctx: Context, formatter: HelpFormatter) -> None:
+         """Writes all the options into the formatter if they exist."""
++        args = []
+         opts = []
+         for param in self.get_params(ctx):
+             rv = param.get_help_record(ctx)
+             if rv is not None:
+-                opts.append(rv)
++                if param.param_type_name == "argument":
++                    args.append(rv)
++                else:
++                    opts.append(rv)
++
++        if args:
++            with formatter.section(_("Arguments")):
++                formatter.write_dl(args)
+ 
+         if opts:
+             with formatter.section(_("Options")):
+@@ -2098,6 +2106,7 @@ class Parameter(ABC):
+                   the arity of the tuple). If ``nargs=-1``, all remaining
+                   parameters are collected.
+     :param metavar: how the value is represented in the help page.
++    :param help: the help string describing this parameter on the help page.
+     :param expose_value: if this is `True` then the value is passed onwards
+                          to the command callback and stored on the context,
+                          otherwise it's skipped.
+@@ -2118,6 +2127,10 @@ class Parameter(ABC):
+                         by using a string as the value. A deprecated parameter
+                         cannot be required, a ValueError will be raised otherwise.
+ 
++    .. versionchanged:: 8.4.0
++        ``help`` is supported by arguments as well as options. Arguments with
++        help text are listed in an "Arguments" section of the help page.
++
+     .. versionchanged:: 8.2.0
+         Introduction of ``deprecated``.
+ 
+@@ -2183,6 +2196,7 @@ class Parameter(ABC):
+         nargs: int | None = None,
+         multiple: bool = False,
+         metavar: str | None = None,
++        help: str | None = None,
+         expose_value: bool = True,
+         is_eager: bool = False,
+         envvar: str | cabc.Sequence[str] | None = None,
+@@ -2222,6 +2236,7 @@ class Parameter(ABC):
+         self._default_explicit: bool = default is not UNSET
+         self.is_eager = is_eager
+         self.metavar = metavar
++        self.help = inspect.cleandoc(help) if help else help
+         self.envvar = envvar
+         self._custom_shell_complete = shell_complete
+         self.deprecated = deprecated
+@@ -3514,6 +3529,12 @@ class Argument(Parameter):
+             )
+         return name, [arg], []
+ 
++    def get_help_record(self, ctx: Context) -> tuple[str, str] | None:
++        if not self.help:
++            return None
++
++        return self.make_metavar(ctx), self.help
++
+     def get_usage_pieces(self, ctx: Context) -> list[str]:
+         return [self.make_metavar(ctx)]
+ 

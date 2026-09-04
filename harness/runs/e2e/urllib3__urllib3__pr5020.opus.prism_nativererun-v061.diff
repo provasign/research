@@ -1,0 +1,56 @@
+diff --git a/changelog/1340.bugfix.rst b/changelog/1340.bugfix.rst
+new file mode 100644
+index 00000000..50d92b7d
+--- /dev/null
++++ b/changelog/1340.bugfix.rst
+@@ -0,0 +1 @@
++Replaced obsolete line folding (``obs-fold``) in header values with a single space, as required by RFC 7230 section 3.2.4, instead of keeping the line break in the value.
+diff --git a/src/urllib3/_collections.py b/src/urllib3/_collections.py
+index ee9ca662..726de94d 100644
+--- a/src/urllib3/_collections.py
++++ b/src/urllib3/_collections.py
+@@ -1,5 +1,6 @@
+ from __future__ import annotations
+ 
++import re
+ import typing
+ from collections import OrderedDict
+ from enum import Enum, auto
+@@ -36,6 +37,20 @@ ValidHTTPHeaderSource = typing.Union[
+ ]
+ 
+ 
++# An obs-fold is a line break followed by at least one SP or HTAB, used by the
++# obsolete line folding of header field values. RFC 7230 section 3.2.4 requires
++# a user agent to replace each received obs-fold with one or more SP octets
++# before interpreting the field value.
++_OBS_FOLD_RE = re.compile(r"(?:\r\n|\r|\n)[\t ]+")
++
++
++def _unfold_header_value(val: str) -> str:
++    """Replaces obs-folds in a header value with a single space (RFC 7230 3.2.4)."""
++    if isinstance(val, str) and ("\n" in val or "\r" in val):
++        return _OBS_FOLD_RE.sub(" ", val)
++    return val
++
++
+ class _Sentinel(Enum):
+     not_passed = auto()
+ 
+@@ -252,7 +267,7 @@ class HTTPHeaderDict(typing.MutableMapping[str, str]):
+         # avoid a bytes/str comparison by decoding before httplib
+         if isinstance(key, bytes):
+             key = key.decode("latin-1")
+-        self._container[key.lower()] = [key, val]
++        self._container[key.lower()] = [key, _unfold_header_value(val)]
+ 
+     def __getitem__(self, key: str) -> str:
+         if isinstance(key, bytes):
+@@ -325,6 +340,7 @@ class HTTPHeaderDict(typing.MutableMapping[str, str]):
+         # avoid a bytes/str comparison by decoding before httplib
+         if isinstance(key, bytes):
+             key = key.decode("latin-1")
++        val = _unfold_header_value(val)
+         key_lower = key.lower()
+         new_vals = [key, val]
+         # Keep the common case aka no item present as fast as possible

@@ -1,0 +1,60 @@
+{
+ "instance_id": "prism__a0cabbe6a5",
+ "kind": "mandated_wide",
+ "project": "prism",
+ "task_kind": "capability_change",
+ "repo_path": "/Users/tapabratapal/Projects/provasign/prism",
+ "base_commit": "3fd6369e20c00a430fa4078ed12273b5675d7c86",
+ "gold_commit": "a0cabbe6a523e2ed4acb697e2edb365e309f5118",
+ "subject": "audit: fix every defect from the 2026-08-09 full review",
+ "body": "H1  All 19 CLI parsers now reject unknown flags via one shared guard.\n    Silent dropping was the mechanism behind two shipped bugs (--format on\n    map/cycles, --scope on search); 18 parsers still did it.\n\nH2  The \"verbatim, identical to Read\" claims were false since the v0.38.5\n    line clamp. Delivery header and prism_query description now state the\n    1200-char truncation and tell the agent to Read before editing a\n    truncated line.\n\nH3  prism.yaml's generated comment claimed model auto-detection from the MCP\n    initialize handshake. No such code exists \u2014 the handler reads only the\n    protocol version. The comment now says there is no auto-detection and\n    what unset actually means.\n\nH4  Tracker.Lookup returns a defensive copy (SymbolSHAs deep-copied). Five\n    call sites read entry fields after the mutex released; under the\n    concurrent HTTP server that was a data race on live structs, and the\n    same aliasing already produced the graphcache seen-count bug.\n\nH5  (found by the new pinning test) Invoke had no panic recovery: one\n    nil-pointer in one tool killed the whole stdio MCP server \u2014 the agent's\n    entire session. A panic now fails that call only.\n\nM1  The grep",
+ "gt_files": [
+  "internal/cli/commands.go",
+  "internal/cli/viewcmds.go",
+  "internal/cli/watch.go",
+  "internal/httpapi/http.go",
+  "internal/mcp/delivery.go",
+  "internal/mcp/mcp_test.go",
+  "internal/mcp/tools.go",
+  "internal/mcp/verify.go",
+  "internal/session/tracker.go",
+  "internal/textsearch/textsearch.go"
+ ],
+ "gt_modified": [
+  "internal/cli/commands.go",
+  "internal/cli/viewcmds.go",
+  "internal/cli/watch.go",
+  "internal/httpapi/http.go",
+  "internal/mcp/delivery.go",
+  "internal/mcp/mcp_test.go",
+  "internal/mcp/tools.go",
+  "internal/mcp/verify.go",
+  "internal/session/tracker.go",
+  "internal/textsearch/textsearch.go"
+ ],
+ "gt_deleted": [],
+ "unscored_added": [],
+ "gt_all_files": [
+  "go.mod",
+  "go.sum",
+  "internal/cli/commands.go",
+  "internal/cli/viewcmds.go",
+  "internal/cli/watch.go",
+  "internal/httpapi/http.go",
+  "internal/mcp/delivery.go",
+  "internal/mcp/mcp_test.go",
+  "internal/mcp/tools.go",
+  "internal/mcp/verify.go",
+  "internal/session/tracker.go",
+  "internal/textsearch/textsearch.go"
+ ],
+ "gt_symbols": [
+  "DispatchableTools",
+  "Invoke",
+  "TestDispatchableToolsAllDispatch",
+  "hiddenDirNames",
+  "isTestFilePath",
+  "out",
+  "rejectUnknownFlag"
+ ]
+}

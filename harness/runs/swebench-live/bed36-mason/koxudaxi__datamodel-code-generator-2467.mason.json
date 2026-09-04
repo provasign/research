@@ -1,0 +1,28 @@
+{
+ "instance_id": "koxudaxi__datamodel-code-generator-2467",
+ "arm": "mason",
+ "model": "ollama:qwen3-coder-ctx16k",
+ "turns": -1,
+ "cost_usd": 0.0,
+ "fresh_input_tokens": 0,
+ "cache_read_tokens": 0,
+ "output_tokens": 0,
+ "tool_calls": [],
+ "prism_used": true,
+ "mason_meta": {
+  "ok": true,
+  "reply": "I've analyzed the code and identified the issue with the `is_openapi` function in the datamodel-code-generator.\n\n## Problem Analysis\n\nThe issue is in the `is_openapi` function in `src/datamodel_code_generator/__init__.py`:\n\n```python\ndef is_openapi(text: str) -> bool:\n    return \"openapi\" in load_yaml(text)\n```\n\nThis function is overly simplistic and problematic because:\n1. It loads YAML content into a Python dictionary \n2. Then checks if the string \"openapi\" exists anywhere in that dictionary\n3. This means any YAML with a key named \"openapi\" will be treated as an OpenAPI document, even if it's not properly formatted\n\n## Root Cause\n\nWhen users have a YAML file like:\n```yaml\nopenapi: 3.0.0\ninfo:\n  title: Test API\n  version: 1.0.0\n```\n\nThe `is_openapi` function returns `True` because the key \"openapi\" exists in the parsed dictionary, but then when the OpenAPI parser tries to process this content, it may fail due to missing required OpenAPI structure elements or improper formatting.\n\n## Solution\n\nThe `is_openapi` function should be more robust and check for proper OpenAPI document structure rather than just checking if \"openapi\" key exists. A better implementation would:\n\n1. Check that the YAML contains an \"openapi\" field with a valid version string\n2. Verify it has proper OpenAPI structure (like having \"info\", \"paths\", etc.)\n3. Or at minimum, check for more specific OpenAPI document indicators\n\nHowever, since I don't have access to modify the code directly in this environment, I can only provide the analysis of what needs to be fixed.\n\nThe fix would involve improving the `is_openapi` function to properly validate that content is actually a valid OpenAPI document before classifying it as such.",
+  "model": "ollama:qwen3-coder-ctx16k",
+  "usage": {
+   "inputTokens": 400165,
+   "outputTokens": 3019,
+   "costUSD": 0
+  },
+  "changedFiles": [
+   ".shale/"
+  ],
+  "durationMs": 726383
+ },
+ "model_patch": "",
+ "empty_patch": true
+}

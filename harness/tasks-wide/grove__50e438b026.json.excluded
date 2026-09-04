@@ -1,0 +1,57 @@
+{
+ "instance_id": "grove__50e438b026",
+ "kind": "mandated_wide",
+ "project": "grove",
+ "task_kind": "capability_change",
+ "repo_path": "/Users/tapabratapal/Projects/provasign/grove",
+ "base_commit": "648a8df9b4ca7b2db66be48a654aa170af585304",
+ "gold_commit": "50e438b026921ae23cf8712ceaebacaa82af6fee",
+ "subject": "resolution: Go named types + interface embedding, C# fallback, zero-impl interfaces, rename-plan contract completeness",
+ "body": "Second adversarial review round (5 parallel auditors on Java/C#/Go/TS/Python\nresolution, the five ops, and astkit) found a batch of real correctness bugs\nof the same \"family/site silently dropped\" class. All fixed with regression\ntests; all 13 corpus ceilings re-verified identical to baseline (these paths\nweren't exercised by the measured tasks \u2014 the paper numbers were correct, now\nproven by fixing the bugs and re-measuring rather than asserting it).\n\nGo:\n- buildContains + missing-impl closure now include KindType: a method on a\n  named non-struct type (`type Status int`) \u2014 Go's idiomatic non-struct\n  receiver \u2014 was completely invisible to change-impact and missing-impl.\n- buildExtendsImplements handles interface-embeds-interface (was struct-only);\n  goEmbeddedTypes regex now matches cross-package `pkg.Type` embeds.\n\nchange-impact:\n- The empty-set gate ran before contract synthesis, so an interface method\n  with zero current implementors threw a false \"declares no method\" \u2014 the most\n  basic \"what breaks if I change this\" query. Synthesis now runs first.\n\nrename-plan / untested-surface:\n- Sites() now unions Supers (methods), so a rename seeded on an implementation\n  no longer drops ",
+ "gt_files": [
+  "internal/graph/casescope_test.go",
+  "internal/graph/changeimpact.go",
+  "internal/graph/edges.go",
+  "internal/graph/interfaces.go",
+  "internal/graph/missingimpl.go",
+  "internal/graph/renameplan.go",
+  "internal/native/csharp.go",
+  "pkg/grove/grove.go"
+ ],
+ "gt_modified": [
+  "internal/graph/casescope_test.go",
+  "internal/graph/changeimpact.go",
+  "internal/graph/edges.go",
+  "internal/graph/interfaces.go",
+  "internal/graph/missingimpl.go",
+  "internal/graph/renameplan.go",
+  "internal/native/csharp.go",
+  "pkg/grove/grove.go"
+ ],
+ "gt_deleted": [],
+ "unscored_added": [],
+ "gt_all_files": [
+  "go.mod",
+  "go.sum",
+  "internal/graph/casescope_test.go",
+  "internal/graph/changeimpact.go",
+  "internal/graph/edges.go",
+  "internal/graph/interfaces.go",
+  "internal/graph/missingimpl.go",
+  "internal/graph/renameplan.go",
+  "internal/native/csharp.go",
+  "pkg/grove/grove.go"
+ ],
+ "gt_symbols": [
+  "TestBuildEdges_CSharpColonInheritance",
+  "TestBuildEdges_GoInterfaceEmbedsInterface",
+  "TestChangeImpact_GoNamedNonStructType",
+  "TestChangeImpact_InterfaceWithNoImplementors",
+  "TestRenamePlan_FromImplementationEditsInterfaceSpec",
+  "csharpBaseListRe",
+  "csharpBaseNames",
+  "csharpDeclInheritancePattern",
+  "out",
+  "tsIfaceMethodRe"
+ ]
+}

@@ -1,0 +1,47 @@
+diff --git a/.claude/settings.json b/.claude/settings.json
+new file mode 100644
+index 0000000..f26bea4
+--- /dev/null
++++ b/.claude/settings.json
+@@ -0,0 +1 @@
++{"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "PRISM_HOOK_BIN=/private/tmp/claude-501/-Users-tapabratapal-Projects-provasign-prism/3b58659c-d56a-4934-bb18-a0b337259ca6/scratchpad/prism-cand python3 /private/tmp/claude-501/-Users-tapabratapal-Projects-provasign-prism/3b58659c-d56a-4934-bb18-a0b337259ca6/scratchpad/grep_subst_hook.py"}]}]}}
+\ No newline at end of file
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index a3b06bd..3d845be 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
+ - Fixed extraneous blank line on non-interactive disabled `Progress` https://github.com/Textualize/rich/pull/3905
+ - Fixed extra padding on first cell in columns https://github.com/Textualize/rich/pull/3935
+ - Fixed trailing whitespace removed when soft_wrap=True https://github.com/Textualize/rich/pull/3937
++- Fixed background color bleeding on to the following line when soft_wrap=True
+ 
+ ### Added
+ 
+diff --git a/rich/console.py b/rich/console.py
+index 994adfc..50c217f 100644
+--- a/rich/console.py
++++ b/rich/console.py
+@@ -1742,7 +1742,21 @@ class Console:
+                 ):
+                     buffer_extend(line)
+             else:
+-                self._buffer.extend(new_segments)
++                # Split segments on line feeds, so that styles are reset before
++                # the newline (otherwise backgrounds bleed on to the next line).
++                buffer_append = self._buffer.append
++                new_line = Segment.line()
++                for segment in new_segments:
++                    text, segment_style, control = segment
++                    if control or not segment_style or "\n" not in text:
++                        buffer_append(segment)
++                        continue
++                    while text:
++                        line_text, line_feed, text = text.partition("\n")
++                        if line_text:
++                            buffer_append(Segment(line_text, segment_style))
++                        if line_feed:
++                            buffer_append(new_line)
+ 
+     def print_json(
+         self,

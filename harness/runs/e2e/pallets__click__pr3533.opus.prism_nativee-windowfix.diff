@@ -1,0 +1,74 @@
+diff --git a/CHANGES.rst b/CHANGES.rst
+index a39471f..9cba403 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -17,6 +17,9 @@ Unreleased
+ -   ``echo_via_pager`` flushes after each write, so passing a generator streams
+     output to the pager incrementally instead of staying hidden until the pipe
+     buffer fills. :issue:`3242` :issue:`2542` :pr:`3534`
++-   When no pager program is available, ``echo_via_pager`` falls back to stdout
++    without closing it, so ``CliRunner.invoke`` no longer fails with
++    ``ValueError: I/O operation on closed file``.
+ 
+ 
+ Version 8.4.1
+diff --git a/src/click/_termui_impl.py b/src/click/_termui_impl.py
+index 3336c37..431ee24 100644
+--- a/src/click/_termui_impl.py
++++ b/src/click/_termui_impl.py
+@@ -471,8 +471,12 @@ def _pipepager(
+     """
+     # Split the command into the invoked CLI and its parameters.
+     if not cmd_parts:
++        # No usable pager: fall back to stdout through _nullpager so the
++        # borrowed stream gets the same don't-close handling and is not closed
++        # by the wrapper built around it.
+         stdout = _default_text_stdout() or StringIO()
+-        yield stdout, "utf-8", False
++        with _nullpager(stdout, color) as rv:
++            yield rv
+         return
+ 
+     import shutil
+@@ -482,8 +486,12 @@ def _pipepager(
+ 
+     cmd_filepath = shutil.which(cmd)
+     if not cmd_filepath:
++        # No usable pager: fall back to stdout through _nullpager so the
++        # borrowed stream gets the same don't-close handling and is not closed
++        # by the wrapper built around it.
+         stdout = _default_text_stdout() or StringIO()
+-        yield stdout, "utf-8", False
++        with _nullpager(stdout, color) as rv:
++            yield rv
+         return
+ 
+     # Produces a normalized absolute path string.
+@@ -571,8 +579,12 @@ def _tempfilepager(
+     """
+     # Split the command into the invoked CLI and its parameters.
+     if not cmd_parts:
++        # No usable pager: fall back to stdout through _nullpager so the
++        # borrowed stream gets the same don't-close handling and is not closed
++        # by the wrapper built around it.
+         stdout = _default_text_stdout() or StringIO()
+-        yield stdout, "utf-8", False
++        with _nullpager(stdout, color) as rv:
++            yield rv
+         return
+ 
+     import shutil
+@@ -582,8 +594,12 @@ def _tempfilepager(
+ 
+     cmd_filepath = shutil.which(cmd)
+     if not cmd_filepath:
++        # No usable pager: fall back to stdout through _nullpager so the
++        # borrowed stream gets the same don't-close handling and is not closed
++        # by the wrapper built around it.
+         stdout = _default_text_stdout() or StringIO()
+-        yield stdout, "utf-8", False
++        with _nullpager(stdout, color) as rv:
++            yield rv
+         return
+ 
+     # Produces a normalized absolute path string.

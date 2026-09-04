@@ -1,0 +1,47 @@
+diff --git a/src/main/java/tools/jackson/databind/ser/bean/BeanSerializerBase.java b/src/main/java/tools/jackson/databind/ser/bean/BeanSerializerBase.java
+index e626eb5dc..3178212a2 100644
+--- a/src/main/java/tools/jackson/databind/ser/bean/BeanSerializerBase.java
++++ b/src/main/java/tools/jackson/databind/ser/bean/BeanSerializerBase.java
+@@ -378,8 +378,9 @@ public abstract class BeanSerializerBase
+         }
+ 
+         // seenNames grows as we go so a later unwrapped property's names are
+-        // also checked against earlier unwrapped properties'.
+-        final Set<String> seenNames = new HashSet<>(_props.length);
++        // also checked against earlier unwrapped properties'. Value is a
++        // description of where the name came from, for error reporting.
++        final Map<String, String> seenNames = new HashMap<>(_props.length);
+         for (BeanPropertyWriter p : _props) {
+             // Skip unwrapped props here (handled below); also skip AnyGetterWriter,
+             // since its emitted property names come from runtime map keys rather
+@@ -387,7 +388,7 @@ public abstract class BeanSerializerBase
+             if (p instanceof UnwrappingBeanPropertyWriter || p instanceof AnyGetterWriter) {
+                 continue;
+             }
+-            seenNames.add(p.getName());
++            seenNames.put(p.getName(), String.format("regular property '%s'", p.getName()));
+         }
+         for (BeanPropertyWriter p : _props) {
+             if (!(p instanceof UnwrappingBeanPropertyWriter unwrapped)) {
+@@ -421,12 +422,17 @@ public abstract class BeanSerializerBase
+                     continue;
+                 }
+                 String name = innerProp.getName();
+-                if (!seenNames.add(name)) {
++                String unwrappedDesc = String.format("unwrapped property '%s' (of type %s)",
++                        unwrapped.getName(), ClassUtil.getTypeDescription(unwrapped.getType()));
++                String conflictsWith = seenNames.putIfAbsent(name, unwrappedDesc);
++                if (conflictsWith != null) {
+                     ctxt.reportBadDefinition(_beanType, String.format(
+-"Conflict between unwrapped property '%s' (of type %s)"
+-+" and another property with same name;"
++"Conflict between unwrapped property '%s' (of type %s, contributed via property '%s'"
+++" of type %s) and %s of same name;"
+ +" consider using `@JsonUnwrapped(prefix=...)` to avoid name collision",
+-                            name, ClassUtil.getTypeDescription(unwrapped.getType())));
++                            name, ClassUtil.getTypeDescription(unwrapped.getType()),
++                            unwrapped.getName(), ClassUtil.getTypeDescription(_beanType),
++                            conflictsWith));
+                 }
+             }
+         }

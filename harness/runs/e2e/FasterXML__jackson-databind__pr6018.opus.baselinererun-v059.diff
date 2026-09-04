@@ -1,0 +1,77 @@
+diff --git a/src/main/java/tools/jackson/databind/ser/std/StdConvertingSerializer.java b/src/main/java/tools/jackson/databind/ser/std/StdConvertingSerializer.java
+index b4beda28a..d33e6533a 100644
+--- a/src/main/java/tools/jackson/databind/ser/std/StdConvertingSerializer.java
++++ b/src/main/java/tools/jackson/databind/ser/std/StdConvertingSerializer.java
+@@ -8,6 +8,7 @@ import tools.jackson.databind.jsontype.TypeSerializer;
+ import tools.jackson.databind.ser.impl.PropertySerializerMap;
+ import tools.jackson.databind.util.ClassUtil;
+ import tools.jackson.databind.util.Converter;
++import tools.jackson.databind.util.NameTransformer;
+ 
+ /**
+  * Serializer implementation where given Java type is first converted
+@@ -99,6 +100,28 @@ public class StdConvertingSerializer
+         return new StdConvertingSerializer(converter, delegateType, delegateSerializer, prop);
+     }
+ 
++    /**
++     * Overridden to support {@code @JsonUnwrapped} by unwrapping the delegate
++     * serializer (if it supports unwrapping at all).
++     *
++     * @since 3.2
++     */
++    @SuppressWarnings("unchecked")
++    @Override
++    public ValueSerializer<Object> unwrappingSerializer(NameTransformer unwrapper)
++    {
++        // [databind#6017]: with dynamically resolved delegate nothing much we can do
++        if (_delegateSerializer == null) {
++            return this;
++        }
++        // Also: cannot assume delegate actually supports unwrapping (cf [databind#2565])
++        ValueSerializer<?> unwrapping = _delegateSerializer.unwrappingSerializer(unwrapper);
++        if (unwrapping == _delegateSerializer) {
++            return this;
++        }
++        return (ValueSerializer<Object>) withDelegate(_converter, _delegateType, unwrapping, _property);
++    }
++
+     /*
+     /**********************************************************************
+     /* Contextualization
+@@ -155,6 +178,12 @@ public class StdConvertingSerializer
+         return _delegateSerializer;
+     }
+ 
++    // @since 3.2
++    @Override
++    public boolean isUnwrappingSerializer() {
++        return (_delegateSerializer != null) && _delegateSerializer.isUnwrappingSerializer();
++    }
++
+     /*
+     /**********************************************************************
+     /* Serialization
+@@ -168,7 +197,10 @@ public class StdConvertingSerializer
+         Object delegateValue = convertValue(ctxt, value);
+         // should we accept nulls?
+         if (delegateValue == null) {
+-            ctxt.defaultSerializeNullValue(gen);
++            // [databind#6017]: when unwrapping, cannot write "null" without a name
++            if (!isUnwrappingSerializer()) {
++                ctxt.defaultSerializeNullValue(gen);
++            }
+             return;
+         }
+         // 02-Apr-2015, tatu: As per [databind#731] may need to do dynamic lookup
+@@ -189,7 +221,9 @@ public class StdConvertingSerializer
+         Object delegateValue = convertValue(ctxt, value);
+         // consider null (to be consistent with serialize method above)
+         if (delegateValue == null) {
+-            ctxt.defaultSerializeNullValue(gen);
++            if (!isUnwrappingSerializer()) {
++                ctxt.defaultSerializeNullValue(gen);
++            }
+             return;
+         }
+         ValueSerializer<Object> ser = _delegateSerializer;

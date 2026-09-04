@@ -1,0 +1,65 @@
+diff --git a/src/main/java/tools/jackson/databind/jsontype/TypeResolverProvider.java b/src/main/java/tools/jackson/databind/jsontype/TypeResolverProvider.java
+index 325e4fd3c..dc4d9939b 100644
+--- a/src/main/java/tools/jackson/databind/jsontype/TypeResolverProvider.java
++++ b/src/main/java/tools/jackson/databind/jsontype/TypeResolverProvider.java
+@@ -13,6 +13,7 @@ import tools.jackson.databind.introspect.AnnotatedMember;
+ import tools.jackson.databind.jsontype.impl.NoOpTypeDeserializer;
+ import tools.jackson.databind.jsontype.impl.NoOpTypeSerializer;
+ import tools.jackson.databind.jsontype.impl.StdTypeResolverBuilder;
++import tools.jackson.databind.util.ClassUtil;
+ 
+ /**
+  * Abstraction used for allowing construction and registration of custom
+@@ -202,7 +203,13 @@ public class TypeResolverProvider
+         }
+         Collection<NamedType> subtypes = config.getSubtypeResolver().collectAndResolveSubtypesByClass(
+                 config, accessor, contentType);
+-        return b.buildTypeSerializer(ctxt, contentType, subtypes);
++        TypeSerializer typeSer = b.buildTypeSerializer(ctxt, contentType, subtypes);
++        // [databind#1127]: EXTERNAL_PROPERTY cannot work for contents of Container
++        // (or Reference) types: fail eagerly instead of producing invalid content
++        if ((typeSer != null) && (typeSer.getTypeInclusion() == JsonTypeInfo.As.EXTERNAL_PROPERTY)) {
++            ctxt.reportBadDefinition(containerType, _unsupportedExternalPropertyMessage(containerType));
++        }
++        return typeSer;
+     }
+ 
+     public TypeDeserializer findPropertyContentTypeDeserializer(DeserializationContext ctxt,
+@@ -233,7 +240,13 @@ public class TypeResolverProvider
+                 b = b.withDefaultImpl(defaultType.getRawClass());
+             }
+         }
+-        return b.buildTypeDeserializer(ctxt, contentType, subtypes);
++        TypeDeserializer typeDeser = b.buildTypeDeserializer(ctxt, contentType, subtypes);
++        // [databind#1127]: EXTERNAL_PROPERTY cannot work for contents of Container
++        // (or Reference) types: fail eagerly instead of failing in confusing ways later on
++        if ((typeDeser != null) && (typeDeser.getTypeInclusion() == JsonTypeInfo.As.EXTERNAL_PROPERTY)) {
++            ctxt.reportBadDefinition(containerType, _unsupportedExternalPropertyMessage(containerType));
++        }
++        return typeDeser;
+     }
+ 
+     /*
+@@ -242,6 +255,22 @@ public class TypeResolverProvider
+     /**********************************************************************
+      */
+ 
++    /**
++     * @since 3.0
++     */
++    protected String _unsupportedExternalPropertyMessage(JavaType containerType) {
++        return String.format(
++"Cannot use `@JsonTypeInfo(include=JsonTypeInfo.As.EXTERNAL_PROPERTY)` for %s type %s: "
+++"`EXTERNAL_PROPERTY` type id is written next to the property itself and cannot be used for "
+++"values contained in Collection, Map, array or Reference types.%n"
+++"Working alternatives:%n"
+++"1. Use `@JsonTypeInfo(include=JsonTypeInfo.As.PROPERTY)` - type ID inside value object%n"
+++"2. Use `@JsonTypeInfo(include=JsonTypeInfo.As.WRAPPER_ARRAY)` - wrap value with type%n"
+++"3. Use `@JsonTypeInfo(include=JsonTypeInfo.As.WRAPPER_OBJECT)` - wrap value with type",
++                containerType.isContainerType() ? "Container" : "Reference",
++                ClassUtil.getTypeDescription(containerType));
++    }
++
+     protected TypeResolverBuilder<?> _findTypeResolver(MapperConfig<?> config,
+             Annotated ann, JavaType baseType)
+     {

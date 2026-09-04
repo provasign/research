@@ -1,0 +1,79 @@
+diff --git a/CHANGES.rst b/CHANGES.rst
+index 1c4e997..24e2c41 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -13,6 +13,11 @@ Unreleased
+     ``semver.Version``. :issue:`3298` :pr:`3299`
+ -   Fix pager test pollution under parallel execution by using pytest's
+     ``tmp_path`` fixture instead of a shared temporary file path. :pr:`3238`
++-   The captured ``sys.stdout`` and ``sys.stderr`` streams in ``CliRunner``
++    isolation support ``fileno()``, backed by a temporary file whose contents
++    are merged into the captured output. Passing them to APIs such as
++    ``subprocess.run`` no longer raises ``io.UnsupportedOperation``.
++    :issue:`2461`
+ -   Patch ``pdb.Pdb`` in ``CliRunner`` isolation so ``pdb.set_trace()``,
+     ``breakpoint()``, and debuggers subclassing ``pdb.Pdb`` (ipdb, pdbpp) can
+     interact with the real terminal instead of the captured I/O streams.
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..6f19400 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -76,11 +76,58 @@ class BytesIOCopy(io.BytesIO):
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._fd_file: t.IO[bytes] | None = None
++        self._fd_pos = 0
++
++    def fileno(self) -> int:
++        """Return a real file descriptor backing this stream.
++
++        ``io.BytesIO`` has no descriptor, so handing the captured
++        ``sys.stdout``/``sys.stderr`` to an API that needs one, such as
++        :func:`subprocess.run`, raised ``io.UnsupportedOperation``. A
++        temporary file is created on demand instead, and whatever is
++        written to its descriptor is copied into this buffer the next
++        time it is flushed or read.
++
++        .. versionadded:: 8.3.3
++        """
++        if self._fd_file is None:
++            self._fd_file = tempfile.TemporaryFile()
++
++        return self._fd_file.fileno()
++
++    def _drain_fd(self) -> None:
++        """Copy anything written to the descriptor into this buffer."""
++        if self._fd_file is None:
++            return
++
++        fd = self._fd_file.fileno()
++        size = os.fstat(fd).st_size
++
++        if size <= self._fd_pos:
++            return
++
++        n = size - self._fd_pos
++
++        try:
++            data = os.pread(fd, n, self._fd_pos)
++        except (AttributeError, OSError):
++            # os.pread is not available everywhere, fall back to seeking.
++            self._fd_file.seek(self._fd_pos)
++            data = self._fd_file.read(n)
++
++        self._fd_pos += len(data)
++        self.write(data)
+ 
+     def flush(self) -> None:
++        self._drain_fd()
+         super().flush()
+         self.copy_to.flush()
+ 
++    def getvalue(self) -> bytes:
++        self._drain_fd()
++        return super().getvalue()
++
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+         return super().write(b)

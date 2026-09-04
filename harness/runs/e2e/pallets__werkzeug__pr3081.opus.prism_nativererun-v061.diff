@@ -1,0 +1,31 @@
+diff --git a/CHANGES.rst b/CHANGES.rst
+index 385d97e2..972093bc 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -7,6 +7,8 @@ Unreleased
+ 
+ -   Fix ``AttributeError`` when initializing ``DebuggedApplication`` with
+     ``pin_security=False``. :issue:`3075`
++-   Multipart parsing does not drop a ``\r`` at the end of a part's data.
++    :issue:`3081`
+ 
+ 
+ Version 3.1.4
+diff --git a/src/werkzeug/sansio/multipart.py b/src/werkzeug/sansio/multipart.py
+index 279b25e7..2cda0536 100644
+--- a/src/werkzeug/sansio/multipart.py
++++ b/src/werkzeug/sansio/multipart.py
+@@ -286,8 +286,11 @@ class MultipartDecoder:
+                 data_end = del_index = self.last_newline(data[data_start:]) + data_start
+             more_data = match is None
+ 
+-        # Keep \r\n sequence intact rather than splitting across chunks.
+-        if data_end > data_start and data[data_end - 1] == 0x0D:
++        # A \r at the end of an incomplete part may be the start of the
++        # \r\n that precedes the boundary, with the \n in the next chunk.
++        # Defer it rather than treating it as data. Only do this if the
++        # boundary wasn't found, otherwise the \r is known to be data.
++        if more_data and data_end > data_start and data[data_end - 1] == 0x0D:
+             data_end -= 1
+             del_index -= 1
+ 

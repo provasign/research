@@ -1,0 +1,56 @@
+diff --git a/changelog/2577.bugfix.rst b/changelog/2577.bugfix.rst
+new file mode 100644
+index 00000000..80619f34
+--- /dev/null
++++ b/changelog/2577.bugfix.rst
+@@ -0,0 +1 @@
++Fixed forwarding HTTPS proxies to use ``proxy_ssl_context`` instead of ``ssl_context`` when establishing the TLS connection to the proxy.
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 84e1dab9..674fc0d6 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -793,6 +793,23 @@ class HTTPSConnection(HTTPConnection):
+             # Remove trailing '.' from fqdn hostnames to allow certificate validation
+             server_hostname_rm_dot = server_hostname.rstrip(".")
+ 
++            if self.proxy_is_forwarding:
++                # We're speaking TLS to the proxy itself, not to the origin,
++                # so the proxy's TLS configuration is the one that applies.
++                proxy_config = typing.cast(ProxyConfig, self.proxy_config)
++                ssl_context = proxy_config.ssl_context
++                assert_hostname = proxy_config.assert_hostname
++                assert_fingerprint = proxy_config.assert_fingerprint
++                # Features that aren't implemented for proxies yet:
++                cert_file = key_file = key_password = None
++            else:
++                ssl_context = self.ssl_context
++                assert_hostname = self.assert_hostname
++                assert_fingerprint = self.assert_fingerprint
++                cert_file = self.cert_file
++                key_file = self.key_file
++                key_password = self.key_password
++
+             sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+                 sock=sock,
+                 cert_reqs=self.cert_reqs,
+@@ -802,14 +819,14 @@ class HTTPSConnection(HTTPConnection):
+                 ca_certs=self.ca_certs,
+                 ca_cert_dir=self.ca_cert_dir,
+                 ca_cert_data=self.ca_cert_data,
+-                cert_file=self.cert_file,
+-                key_file=self.key_file,
+-                key_password=self.key_password,
++                cert_file=cert_file,
++                key_file=key_file,
++                key_password=key_password,
+                 server_hostname=server_hostname_rm_dot,
+-                ssl_context=self.ssl_context,
++                ssl_context=ssl_context,
+                 tls_in_tls=tls_in_tls,
+-                assert_hostname=self.assert_hostname,
+-                assert_fingerprint=self.assert_fingerprint,
++                assert_hostname=assert_hostname,
++                assert_fingerprint=assert_fingerprint,
+             )
+             self.sock = sock_and_verified.socket
+ 

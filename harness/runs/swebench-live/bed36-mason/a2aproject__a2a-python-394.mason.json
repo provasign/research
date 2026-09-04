@@ -1,0 +1,28 @@
+{
+ "instance_id": "a2aproject__a2a-python-394",
+ "arm": "mason",
+ "model": "ollama:qwen3-coder-ctx16k",
+ "turns": -1,
+ "cost_usd": 0.0,
+ "fresh_input_tokens": 0,
+ "cache_read_tokens": 0,
+ "output_tokens": 0,
+ "tool_calls": [],
+ "prism_used": true,
+ "mason_meta": {
+  "ok": true,
+  "reply": "Looking at the problem more carefully, I realize I need to understand exactly what's failing. Let me approach this systematically by looking at the actual error from the test.\n\nThe issue is that in `on_message_send_stream`, when `blocking=False` is set, it should behave like the non-blocking case in `on_message_send`. But looking at the code more carefully:\n\n1. In `on_message_send`: When `blocking=False`, it calls `consume_and_break_on_interrupt` which returns immediately after first meaningful event\n2. In `on_message_send_stream`: It always uses `consume_and_emit` and yields all events\n\nBut actually, that's not the problem. The problem is likely in how push notifications are being sent.\n\nLooking at the test failure more carefully, I think the issue might be that we're sending too many push notifications in streaming mode when we should only send one (like in non-blocking mode).\n\nHowever, let me re-read the failing test to understand what it's actually testing. The test is calling `on_message_send` with `blocking=False`, not `on_message_send_stream`. So the issue might be that the streaming handler isn't properly handling the blocking parameter.\n\nBut wait - I think I misunderstood the problem. Let me check if there are any other tests or if I can understand what's actually failing by looking at the git diff or error messages.\n\nActually, let me just make a targeted fix to ensure that when `blocking=False` is set in streaming mode, we don't send multiple push notifications unnecessarily:",
+  "model": "ollama:qwen3-coder-ctx16k",
+  "usage": {
+   "inputTokens": 401766,
+   "outputTokens": 4638,
+   "costUSD": 0
+  },
+  "changedFiles": [
+   ".shale/"
+  ],
+  "durationMs": 2315227
+ },
+ "model_patch": "",
+ "empty_patch": true
+}

@@ -1,0 +1,34 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..5ffd2fe 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -117,6 +117,29 @@ class _NamedTextIOWrapper(io.TextIOWrapper):
+         """
+         ...
+ 
++    def fileno(self) -> int:
++        """The isolated streams are backed by ``BytesIO`` objects, which have
++        no file descriptor. Fall back to the descriptor of the real stream
++        this one stands in for, so that code passing ``sys.stdout`` or
++        ``sys.stderr`` to something requiring a real file, such as
++        :func:`subprocess.run`, keeps working during isolation.
++
++        .. versionadded:: 8.3.2
++        """
++        real_stream = {
++            "<stdin>": sys.__stdin__,
++            "<stdout>": sys.__stdout__,
++            "<stderr>": sys.__stderr__,
++        }.get(self._name)
++
++        if real_stream is not None:
++            try:
++                return real_stream.fileno()
++            except (OSError, ValueError, io.UnsupportedOperation):
++                pass
++
++        return super().fileno()
++
+     @property
+     def name(self) -> str:
+         return self._name

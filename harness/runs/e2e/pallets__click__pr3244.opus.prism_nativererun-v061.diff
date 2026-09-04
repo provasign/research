@@ -1,0 +1,65 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..3746730 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -73,9 +73,26 @@ class BytesIOCopy(io.BytesIO):
+     .. versionadded:: 8.2
+     """
+ 
+-    def __init__(self, copy_to: io.BytesIO) -> None:
++    def __init__(
++        self, copy_to: io.BytesIO, fileno_from: t.IO[t.Any] | None = None
++    ) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._fileno_from = fileno_from
++
++    def fileno(self) -> int:
++        """Return the descriptor of the real stream this one replaces.
++
++        ``BytesIO`` has no descriptor, so APIs that need one, such as
++        ``subprocess.run(stdout=sys.stderr)``, fail during isolation.
++        Deferring to the replaced stream keeps them working.
++
++        .. versionadded:: 8.3.2
++        """
++        if self._fileno_from is None:
++            return super().fileno()
++
++        return self._fileno_from.fileno()
+ 
+     def flush(self) -> None:
+         super().flush()
+@@ -94,10 +111,18 @@ class StreamMixer:
+     .. versionadded:: 8.2
+     """
+ 
+-    def __init__(self) -> None:
++    def __init__(
++        self,
++        stdout_fileno_from: t.IO[t.Any] | None = None,
++        stderr_fileno_from: t.IO[t.Any] | None = None,
++    ) -> None:
+         self.output: io.BytesIO = io.BytesIO()
+-        self.stdout: io.BytesIO = BytesIOCopy(copy_to=self.output)
+-        self.stderr: io.BytesIO = BytesIOCopy(copy_to=self.output)
++        self.stdout: io.BytesIO = BytesIOCopy(
++            copy_to=self.output, fileno_from=stdout_fileno_from
++        )
++        self.stderr: io.BytesIO = BytesIOCopy(
++            copy_to=self.output, fileno_from=stderr_fileno_from
++        )
+ 
+ 
+ class _NamedTextIOWrapper(io.TextIOWrapper):
+@@ -319,7 +344,9 @@ class CliRunner:
+ 
+         env = self.make_env(env)
+ 
+-        stream_mixer = StreamMixer()
++        stream_mixer = StreamMixer(
++            stdout_fileno_from=old_stdout, stderr_fileno_from=old_stderr
++        )
+ 
+         if self.echo_stdin:
+             bytes_input = echo_input = t.cast(

@@ -1,0 +1,37 @@
+diff --git a/src/main/java/org/apache/commons/collections4/bag/AbstractMapBag.java b/src/main/java/org/apache/commons/collections4/bag/AbstractMapBag.java
+index ddbd039f1..5759c14a4 100644
+--- a/src/main/java/org/apache/commons/collections4/bag/AbstractMapBag.java
++++ b/src/main/java/org/apache/commons/collections4/bag/AbstractMapBag.java
+@@ -206,12 +206,12 @@ public abstract class AbstractMapBag<E> implements Bag<E> {
+         modCount++;
+         if (nCopies > 0) {
+             final MutableInteger mut = map.get(object);
+-            size += nCopies;
++            size = (int) Math.min((long) size + nCopies, Integer.MAX_VALUE);
+             if (mut == null) {
+                 map.put(object, new MutableInteger(nCopies));
+                 return true;
+             }
+-            mut.value += nCopies;
++            mut.value = (int) Math.min((long) mut.value + nCopies, Integer.MAX_VALUE);
+         }
+         return false;
+     }
+diff --git a/src/main/java/org/apache/commons/collections4/multiset/AbstractMapMultiSet.java b/src/main/java/org/apache/commons/collections4/multiset/AbstractMapMultiSet.java
+index 4d62bc47a..83129103e 100644
+--- a/src/main/java/org/apache/commons/collections4/multiset/AbstractMapMultiSet.java
++++ b/src/main/java/org/apache/commons/collections4/multiset/AbstractMapMultiSet.java
+@@ -326,11 +326,11 @@ public abstract class AbstractMapMultiSet<E> extends AbstractMultiSet<E> {
+ 
+         if (occurrences > 0) {
+             modCount++;
+-            size += occurrences;
++            size = (int) Math.min((long) size + occurrences, Integer.MAX_VALUE);
+             if (mut == null) {
+                 map.put(object, new MutableInteger(occurrences));
+             } else {
+-                mut.value += occurrences;
++                mut.value = (int) Math.min((long) mut.value + occurrences, Integer.MAX_VALUE);
+             }
+         }
+         return oldCount;

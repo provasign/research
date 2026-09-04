@@ -1,0 +1,42 @@
+diff --git a/CHANGES.rst b/CHANGES.rst
+index f63b059e..59246ede 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -5,6 +5,8 @@ Version 3.2.0
+ 
+ Unreleased
+ 
++-   ``Map.add`` raises a ``ValueError`` when adding a rule that could never
++    match because an existing rule already matches the same URL and methods.
+ -   Drop support for Python 3.9. :pr:`3098`
+ -   Remove previous deprecated code: :pr:`3099`
+ 
+diff --git a/src/werkzeug/routing/matcher.py b/src/werkzeug/routing/matcher.py
+index 9174061b..4d7c0746 100644
+--- a/src/werkzeug/routing/matcher.py
++++ b/src/werkzeug/routing/matcher.py
+@@ -50,6 +50,24 @@ class StateMachineMatcher:
+                     new_state = State()
+                     state.dynamic.append((part, new_state))
+                     state = new_state
++
++        for other in state.rules:
++            if other.websocket != rule.websocket:
++                continue
++
++            # The existing rule is tried first, so the new rule can only ever
++            # match if it handles a method the existing rule doesn't.
++            if other.methods is not None and (
++                rule.methods is None or not rule.methods <= other.methods
++            ):
++                continue
++
++            raise ValueError(
++                f"The rule {rule.rule!r} for endpoint {rule.endpoint!r} conflicts"
++                f" with the existing rule {other.rule!r} for endpoint"
++                f" {other.endpoint!r}. Only the first rule would ever match."
++            )
++
+         state.rules.append(rule)
+ 
+     def update(self) -> None:

@@ -1,0 +1,108 @@
+diff --git a/.claude/settings.json b/.claude/settings.json
+new file mode 100644
+index 0000000..f26bea4
+--- /dev/null
++++ b/.claude/settings.json
+@@ -0,0 +1 @@
++{"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "PRISM_HOOK_BIN=/private/tmp/claude-501/-Users-tapabratapal-Projects-provasign-prism/3b58659c-d56a-4934-bb18-a0b337259ca6/scratchpad/prism-cand python3 /private/tmp/claude-501/-Users-tapabratapal-Projects-provasign-prism/3b58659c-d56a-4934-bb18-a0b337259ca6/scratchpad/grep_subst_hook.py"}]}]}}
+\ No newline at end of file
+diff --git a/src/click/core.py b/src/click/core.py
+index b422bd4..2db3990 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -1199,12 +1199,21 @@ class Command:
+                 formatter.write_text(text)
+ 
+     def format_options(self, ctx: Context, formatter: HelpFormatter) -> None:
+-        """Writes all the options into the formatter if they exist."""
++        """Writes all the arguments and options into the formatter if they
++        exist."""
++        args = []
+         opts = []
+         for param in self.get_params(ctx):
+             rv = param.get_help_record(ctx)
+             if rv is not None:
+-                opts.append(rv)
++                if param.param_type_name == "argument":
++                    args.append(rv)
++                else:
++                    opts.append(rv)
++
++        if args:
++            with formatter.section(_("Arguments")):
++                formatter.write_dl(args)
+ 
+         if opts:
+             with formatter.section(_("Options")):
+@@ -2098,6 +2107,7 @@ class Parameter(ABC):
+                   the arity of the tuple). If ``nargs=-1``, all remaining
+                   parameters are collected.
+     :param metavar: how the value is represented in the help page.
++    :param help: the help text describing the parameter, shown in the help page.
+     :param expose_value: if this is `True` then the value is passed onwards
+                          to the command callback and stored on the context,
+                          otherwise it's skipped.
+@@ -2191,6 +2201,7 @@ class Parameter(ABC):
+         ]
+         | None = None,
+         deprecated: bool | str = False,
++        help: str | None = None,
+     ) -> None:
+         self.name: str
+         self.opts: list[str]
+@@ -2225,6 +2236,7 @@ class Parameter(ABC):
+         self.envvar = envvar
+         self._custom_shell_complete = shell_complete
+         self.deprecated = deprecated
++        self.help = inspect.cleandoc(help) if help else help
+ 
+         if __debug__:
+             if self.type.is_composite and nargs != self.type.arity:
+@@ -2815,11 +2827,13 @@ class Option(Parameter):
+         deprecated: bool | str = False,
+         **attrs: t.Any,
+     ) -> None:
+-        if help:
+-            help = inspect.cleandoc(help)
+-
+         super().__init__(
+-            param_decls, type=type, multiple=multiple, deprecated=deprecated, **attrs
++            param_decls,
++            type=type,
++            multiple=multiple,
++            deprecated=deprecated,
++            help=help,
++            **attrs,
+         )
+ 
+         if prompt is True:
+@@ -2834,7 +2848,7 @@ class Option(Parameter):
+ 
+         if deprecated:
+             label = _format_deprecated_label(deprecated)
+-            help = f"{help} {label}" if help else label
++            self.help = f"{self.help} {label}" if self.help else label
+ 
+         self.prompt = prompt_text
+         self.confirmation_prompt = confirmation_prompt
+@@ -2934,7 +2948,6 @@ class Option(Parameter):
+                 self.default = 0
+ 
+         self.allow_from_autoenv = allow_from_autoenv
+-        self.help = help
+         self.show_default = show_default
+         self.show_choices = show_choices
+         self.show_envvar = show_envvar
+@@ -3514,6 +3527,12 @@ class Argument(Parameter):
+             )
+         return name, [arg], []
+ 
++    def get_help_record(self, ctx: Context) -> tuple[str, str] | None:
++        if not self.help:
++            return None
++
++        return self.make_metavar(ctx), self.help
++
+     def get_usage_pieces(self, ctx: Context) -> list[str]:
+         return [self.make_metavar(ctx)]
+ 

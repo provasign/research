@@ -82,3 +82,41 @@ cross-model spot check.
   (engine ground truth, free) and "does the agent find it" (agent
   cells). R1 steering variants are premature until the bed can detect
   a completeness delta at all.
+
+## R1 — routing share via substitution hooks (2026-08-30)
+
+Measured base (65 e2e sessions, opus, v0.59–v0.61 reruns):
+- Bash 810 calls (~14/cell): SEARCH 334, READ 192, TEST 187, LIST 43.
+- prism 52 calls total; change_impact 0. Routing share ≈ 8%.
+- 29/34 sessions re-read files prism_query delivered; 88 bash ops hit
+  files with delivered-but-elided windows, 40 hit name-only mentions.
+
+E1 (running): PreToolUse hook substitutes simple grep/rg with
+`prism search --scope text` results in the deny reason — v0.50's
+channel+consequence, minus its flaw (denying without answering).
+Harness-only arm (settings.json injected per-worktree by the driver);
+product untouched pending the A/B. Probe (click pr3228): hook fired,
+same resolve/cost, one fewer turn. Fleet = 12-task python bed vs
+rerun-v061 reference, fail-fast at 2 resolve regressions.
+
+E2 (queued): extend the hook to `sed -n A,Bp` / `cat` → prism_read.
+READ is the largest interceptable class (192), and repeat-reads get
+prism_read's cached-pointer dedup, which sed cannot provide.
+
+E3 (queued): change_impact reach via response-embedded steering in
+prism_query output when the task is modification-shaped. 0/65 today.
+
+## R1 verdict (2026-08-30)
+
+Decisive isolation test, same 12-task bed:
+- cap-only (v0.61.1, no hook): -9.2% cost, -7.1% turns vs pre-cap reference
+- hooked (v0.61.1 + substitution hook): +5.4% cost (WORSE than reference)
+
+The hook's steering-overuse side effect outweighs its turn-reduction
+benefit. Recommendation: do NOT rebuild `prism hook pretooluse`. Ship
+the cap alone (already done, v0.61.1). E1 served its purpose as a probe
+that surfaced the unbounded-context bug; the hook itself is shelved.
+
+E2/E3 remain open, see memory `routing-program.md` for the discipline
+required before either is trusted (code-path isolation on every
+"surprise" swing; a change-impact-shaped bed for E3).

@@ -1,0 +1,62 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index a3b06bd..6764840 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
+ - Fixed extraneous blank line on non-interactive disabled `Progress` https://github.com/Textualize/rich/pull/3905
+ - Fixed extra padding on first cell in columns https://github.com/Textualize/rich/pull/3935
+ - Fixed trailing whitespace removed when soft_wrap=True https://github.com/Textualize/rich/pull/3937
++- Fixed background color carrying on to the following line when soft_wrap=True
+ 
+ ### Added
+ 
+diff --git a/rich/console.py b/rich/console.py
+index 994adfc..58c5633 100644
+--- a/rich/console.py
++++ b/rich/console.py
+@@ -1742,7 +1742,7 @@ class Console:
+                 ):
+                     buffer_extend(line)
+             else:
+-                self._buffer.extend(new_segments)
++                self._buffer.extend(Segment.split_newlines(new_segments))
+ 
+     def print_json(
+         self,
+diff --git a/rich/segment.py b/rich/segment.py
+index edcb52d..c75582a 100644
+--- a/rich/segment.py
++++ b/rich/segment.py
+@@ -275,6 +275,32 @@ class Segment(NamedTuple):
+         if line:
+             yield line
+ 
++    @classmethod
++    def split_newlines(cls, segments: Iterable["Segment"]) -> Iterable["Segment"]:
++        """Split segments so that line feeds are in their own unstyled segments.
++
++        This ensures styles (such as background colors) don't extend beyond the
++        end of a line.
++
++        Args:
++            segments (Iterable[Segment]): Segments potentially containing line feeds.
++
++        Yields:
++            Iterable[Segment]: Segments where no styled segment contains a line feed.
++        """
++        new_line_segment = cls("\n")
++        for segment in segments:
++            text, style, control = segment
++            if style and "\n" in text and not control:
++                while text:
++                    _text, new_line, text = text.partition("\n")
++                    if _text:
++                        yield cls(_text, style)
++                    if new_line:
++                        yield new_line_segment
++            else:
++                yield segment
++
+     @classmethod
+     def split_and_crop_lines(
+         cls,

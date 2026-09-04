@@ -1,0 +1,75 @@
+diff --git a/src/main/java/org/apache/commons/collections4/bag/AbstractMapBag.java b/src/main/java/org/apache/commons/collections4/bag/AbstractMapBag.java
+index ddbd039f1..aa4569a06 100644
+--- a/src/main/java/org/apache/commons/collections4/bag/AbstractMapBag.java
++++ b/src/main/java/org/apache/commons/collections4/bag/AbstractMapBag.java
+@@ -143,6 +143,18 @@ public abstract class AbstractMapBag<E> implements Bag<E> {
+         }
+     }
+ 
++    /**
++     * Adds two non-negative counts, saturating at {@link Integer#MAX_VALUE} instead of overflowing.
++     *
++     * @param count the current count
++     * @param addend the count to add
++     * @return the sum, clamped to {@link Integer#MAX_VALUE}
++     */
++    private static int addClamped(final int count, final int addend) {
++        final int sum = count + addend;
++        return sum < 0 ? Integer.MAX_VALUE : sum;
++    }
++
+     /** The map to use to store the data */
+     private transient Map<E, MutableInteger> map;
+ 
+@@ -206,12 +218,12 @@ public abstract class AbstractMapBag<E> implements Bag<E> {
+         modCount++;
+         if (nCopies > 0) {
+             final MutableInteger mut = map.get(object);
+-            size += nCopies;
++            size = addClamped(size, nCopies);
+             if (mut == null) {
+                 map.put(object, new MutableInteger(nCopies));
+                 return true;
+             }
+-            mut.value += nCopies;
++            mut.value = addClamped(mut.value, nCopies);
+         }
+         return false;
+     }
+diff --git a/src/main/java/org/apache/commons/collections4/multiset/AbstractMapMultiSet.java b/src/main/java/org/apache/commons/collections4/multiset/AbstractMapMultiSet.java
+index 4d62bc47a..d9d1083b3 100644
+--- a/src/main/java/org/apache/commons/collections4/multiset/AbstractMapMultiSet.java
++++ b/src/main/java/org/apache/commons/collections4/multiset/AbstractMapMultiSet.java
+@@ -277,6 +277,18 @@ public abstract class AbstractMapMultiSet<E> extends AbstractMultiSet<E> {
+         }
+     }
+ 
++    /**
++     * Adds two non-negative counts, saturating at {@link Integer#MAX_VALUE} instead of overflowing.
++     *
++     * @param count the current count
++     * @param addend the count to add
++     * @return the sum, clamped to {@link Integer#MAX_VALUE}
++     */
++    private static int addClamped(final int count, final int addend) {
++        final int sum = count + addend;
++        return sum < 0 ? Integer.MAX_VALUE : sum;
++    }
++
+     /** The map to use to store the data */
+     private transient Map<E, MutableInteger> map;
+ 
+@@ -326,11 +338,11 @@ public abstract class AbstractMapMultiSet<E> extends AbstractMultiSet<E> {
+ 
+         if (occurrences > 0) {
+             modCount++;
+-            size += occurrences;
++            size = addClamped(size, occurrences);
+             if (mut == null) {
+                 map.put(object, new MutableInteger(occurrences));
+             } else {
+-                mut.value += occurrences;
++                mut.value = addClamped(mut.value, occurrences);
+             }
+         }
+         return oldCount;

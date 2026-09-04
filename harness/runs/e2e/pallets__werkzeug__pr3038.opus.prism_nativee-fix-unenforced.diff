@@ -1,0 +1,42 @@
+diff --git a/CHANGES.rst b/CHANGES.rst
+index f63b059e..2799d4ba 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -38,6 +38,9 @@ Unreleased
+ -   If a request object is passed to ``Map.bind_to_environ``, the host is
+     validated against ``request.trusted_hosts``. An invalid host will raise a
+     400 error. :issue:`3007`
++-   Adding a rule to a ``Map`` that duplicates an existing rule, same path,
++    host, and overlapping methods, raises a ``ValueError`` instead of silently
++    being unreachable. :issue:`2757`
+ -   Watchdog reloader is more efficient at ignoring events. :issue:`3090`
+ -   If multipart parsing fails after some files have already been parsed, they
+     are closed to prevent a ``ResourceWarning``. :pr:`3101`
+diff --git a/src/werkzeug/routing/matcher.py b/src/werkzeug/routing/matcher.py
+index 9174061b..199acebf 100644
+--- a/src/werkzeug/routing/matcher.py
++++ b/src/werkzeug/routing/matcher.py
+@@ -50,6 +50,23 @@ class StateMachineMatcher:
+                     new_state = State()
+                     state.dynamic.append((part, new_state))
+                     state = new_state
++
++        for existing in state.rules:
++            if (
++                existing.rule == rule.rule
++                and existing.websocket == rule.websocket
++                and (
++                    existing.methods is None
++                    or rule.methods is None
++                    or not existing.methods.isdisjoint(rule.methods)
++                )
++            ):
++                raise ValueError(
++                    f"The rule {rule!r} conflicts with the existing rule"
++                    f" {existing!r}. Each rule must have a unique combination of"
++                    " path, host, and methods."
++                )
++
+         state.rules.append(rule)
+ 
+     def update(self) -> None:

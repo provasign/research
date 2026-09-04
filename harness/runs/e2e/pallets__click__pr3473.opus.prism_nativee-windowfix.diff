@@ -1,0 +1,137 @@
+diff --git a/CHANGES.rst b/CHANGES.rst
+index 4de49f4..70fe82e 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -7,6 +7,9 @@ Unreleased
+ 
+ -   Supported versions of Windows enable ANSI terminal styles by default.
+     Colorama is no longer a dependency and is not used. :issue:`2986` :pr:`3505`
++-   :class:`~click.Argument` accepts a ``help`` parameter. Arguments with help
++    text are listed in an ``Arguments`` section of the ``--help`` output.
++    :issue:`587`
+ 
+ 
+ Version 8.4.2
+diff --git a/docs/arguments.md b/docs/arguments.md
+index 90d37c1..ebd142b 100644
+--- a/docs/arguments.md
++++ b/docs/arguments.md
+@@ -16,6 +16,7 @@ Useful and often used kwargs are:
+ 
+ * `default`: Passes a default.
+ * `nargs`: Sets the number of arguments. Set to -1 to take an arbitrary number.
++* `help`: Documents the argument in the help page.
+ 
+ ## Basic Arguments
+ 
+diff --git a/docs/documentation.md b/docs/documentation.md
+index 73a0ea7..e8750f7 100644
+--- a/docs/documentation.md
++++ b/docs/documentation.md
+@@ -113,8 +113,25 @@ The help epilog is printed at the end of the help and is useful for showing exam
+ 
+ ## Documenting Arguments
+ 
+-{class}`click.argument` does not take a `help` parameter. This follows the Unix Command Line Tools convention of using arguments only for necessary things and documenting them in the command help text
+-by name. This should then be done via the docstring.
++{class}`click.argument` takes an optional `help` parameter. Arguments given
++help text are listed in an `Arguments` section of the help page:
++
++```{eval-rst}
++.. click:example::
++
++    @click.command()
++    @click.argument('filename', help='The name of the file to check.')
++    def touch(filename):
++        """Print FILENAME."""
++        click.echo(filename)
++
++.. click:run::
++    invoke(touch, args=['--help'])
++```
++
++Following the Unix Command Line Tools convention, arguments are used only for
++necessary things and are often documented by name in the command help text
++instead. This is done via the docstring.
+ 
+ A brief example:
+ 
+diff --git a/src/click/core.py b/src/click/core.py
+index b422bd4..f3b1f07 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -1199,13 +1199,27 @@ class Command:
+                 formatter.write_text(text)
+ 
+     def format_options(self, ctx: Context, formatter: HelpFormatter) -> None:
+-        """Writes all the options into the formatter if they exist."""
++        """Writes all the arguments and options into the formatter if they
++        exist.
++
++        .. versionchanged:: 8.5.0
++            Arguments with a ``help`` text are written in their own section.
++        """
++        args = []
+         opts = []
+         for param in self.get_params(ctx):
+             rv = param.get_help_record(ctx)
+-            if rv is not None:
++            if rv is None:
++                continue
++            if isinstance(param, Argument):
++                args.append(rv)
++            else:
+                 opts.append(rv)
+ 
++        if args:
++            with formatter.section(_("Arguments")):
++                formatter.write_dl(args)
++
+         if opts:
+             with formatter.section(_("Options")):
+                 formatter.write_dl(opts)
+@@ -3449,7 +3463,14 @@ class Argument(Parameter):
+     provide fewer features than options but can have infinite ``nargs``
+     and are required by default.
+ 
+-    All parameters are passed onwards to the constructor of :class:`Parameter`.
++    :param help: The help text shown for this argument in the ``--help``
++        output. If not given, the argument is not listed.
++
++    All other parameters are passed onwards to the constructor of
++    :class:`Parameter`.
++
++    .. versionchanged:: 8.5.0
++        Added the ``help`` parameter.
+     """
+ 
+     param_type_name = "argument"
+@@ -3458,6 +3479,7 @@ class Argument(Parameter):
+         self,
+         param_decls: cabc.Sequence[str],
+         required: bool | None = None,
++        help: str | None = None,
+         **attrs: t.Any,
+     ) -> None:
+         # Auto-detect the requirement status of the argument if not explicitly set.
+@@ -3475,6 +3497,20 @@ class Argument(Parameter):
+ 
+         super().__init__(param_decls, required=required, **attrs)
+ 
++        self.help = help
++
++    def get_help_record(self, ctx: Context) -> tuple[str, str] | None:
++        if self.help is None:
++            return None
++
++        help = inspect.cleandoc(self.help)
++
++        if self.deprecated:
++            label = _format_deprecated_label(self.deprecated)
++            help = f"{help} {label}" if help else label
++
++        return self.make_metavar(ctx), help
++
+     @property
+     def human_readable_name(self) -> str:
+         if self.metavar is not None:

@@ -1,0 +1,61 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java
+index 439adb8d4..cbde4bfc6 100644
+--- a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java
++++ b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java
+@@ -733,6 +733,8 @@ public class BeanDeserializer
+         TokenBuffer unknown = null;
+         final Class<?> activeView = _needViewProcesing ? ctxt.getActiveView() : null;
+         final boolean skipUnknown = _shouldSkipUnknowns(ctxt);
++        // [databind#5980]: need to remember context of the Object being built
++        final TokenStreamContext beanCtxt = p.streamReadContext();
+         JsonToken t = p.currentToken();
+         List<BeanReferring> referrings = null;
+ 
+@@ -885,7 +887,7 @@ public class BeanDeserializer
+             }
+         }
+ 
+-        p.assignCurrentValue(bean);
++        _assignCurrentValueIfInContext(p, beanCtxt, bean);
+         // [databind#4938] Since 2.19, allow returning `null` from creator,
+         //  but if so, need to skip all possibly relevant content
+         if (bean == null) {
+@@ -914,6 +916,20 @@ public class BeanDeserializer
+         return bean;
+     }
+ 
++    /**
++     * Helper method used to assign "current value" of the parser for Bean constructed
++     * using a property-based Creator: needs to avoid assignment in case parser has
++     * already closed the context of the Object being built -- otherwise we would
++     * wrongly overwrite "current value" of the enclosing context (see [databind#5980]).
++     */
++    private void _assignCurrentValueIfInContext(JsonParser p,
++            TokenStreamContext beanCtxt, Object bean)
++    {
++        if (p.streamReadContext() == beanCtxt) {
++            p.assignCurrentValue(bean);
++        }
++    }
++
+     private BeanReferring handleUnresolvedReference(DeserializationContext ctxt,
+             SettableBeanProperty prop, PropertyValueBuffer buffer,
+             UnresolvedForwardReference reference)
+@@ -1234,6 +1250,8 @@ public class BeanDeserializer
+ 
+         final Class<?> activeView = _needViewProcesing ? ctxt.getActiveView() : null;
+         boolean hasUnwrappedContent = false;
++        // [databind#5980]: need to remember context of the Object being built
++        final TokenStreamContext beanCtxt = p.streamReadContext();
+         JsonToken t = p.currentToken();
+         for (; t == JsonToken.PROPERTY_NAME; t = p.nextToken()) {
+             String propName = p.currentName();
+@@ -1332,7 +1350,7 @@ public class BeanDeserializer
+         } catch (Exception e) {
+             return wrapInstantiationProblem(ctxt, e);
+         }
+-        p.assignCurrentValue(bean);
++        _assignCurrentValueIfInContext(p, beanCtxt, bean);
+ 
+         // [databind#4938] Since 2.19, allow returning `null` from creator,
+         //  but if so, need to skip all possibly relevant content

@@ -1,0 +1,47 @@
+diff --git a/changelog/2577.bugfix.rst b/changelog/2577.bugfix.rst
+new file mode 100644
+index 00000000..9f70716e
+--- /dev/null
++++ b/changelog/2577.bugfix.rst
+@@ -0,0 +1,3 @@
++Fixed HTTPS proxies in forwarding mode (``use_forwarding_for_https=True``) using the
++origin's ``ssl_context``, ``assert_hostname`` and ``assert_fingerprint`` instead of the
++proxy's (``proxy_ssl_context``, ``proxy_assert_hostname``, ``proxy_assert_fingerprint``).
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 84e1dab9..72b9c606 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -780,6 +780,19 @@ class HTTPSConnection(HTTPConnection):
+             if self.server_hostname is not None:
+                 server_hostname = self.server_hostname
+ 
++            # When forwarding through an HTTPS proxy the TLS connection we're
++            # about to establish is with the proxy, not with the origin, so we
++            # have to use the proxy's TLS configuration instead of our own.
++            if self.proxy_is_forwarding:
++                proxy_config = typing.cast(ProxyConfig, self.proxy_config)
++                ssl_context = proxy_config.ssl_context
++                assert_hostname = proxy_config.assert_hostname
++                assert_fingerprint = proxy_config.assert_fingerprint
++            else:
++                ssl_context = self.ssl_context
++                assert_hostname = self.assert_hostname
++                assert_fingerprint = self.assert_fingerprint
++
+             is_time_off = datetime.date.today() < RECENT_DATE
+             if is_time_off:
+                 warnings.warn(
+@@ -806,10 +819,10 @@ class HTTPSConnection(HTTPConnection):
+                 key_file=self.key_file,
+                 key_password=self.key_password,
+                 server_hostname=server_hostname_rm_dot,
+-                ssl_context=self.ssl_context,
++                ssl_context=ssl_context,
+                 tls_in_tls=tls_in_tls,
+-                assert_hostname=self.assert_hostname,
+-                assert_fingerprint=self.assert_fingerprint,
++                assert_hostname=assert_hostname,
++                assert_fingerprint=assert_fingerprint,
+             )
+             self.sock = sock_and_verified.socket
+ 

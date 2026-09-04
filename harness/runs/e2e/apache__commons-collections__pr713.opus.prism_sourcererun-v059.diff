@@ -1,0 +1,78 @@
+diff --git a/src/main/java/org/apache/commons/collections4/list/SetUniqueList.java b/src/main/java/org/apache/commons/collections4/list/SetUniqueList.java
+index a63e18714..e042152c4 100644
+--- a/src/main/java/org/apache/commons/collections4/list/SetUniqueList.java
++++ b/src/main/java/org/apache/commons/collections4/list/SetUniqueList.java
+@@ -219,6 +219,7 @@ public class SetUniqueList<E> extends AbstractSerializableListDecorator<E> {
+      */
+     @Override
+     public void add(final int index, final E object) {
++        checkIndex(index);
+         // adds element if it is not contained already
+         if (!set.contains(object)) {
+             set.add(object);
+@@ -261,6 +262,7 @@ public class SetUniqueList<E> extends AbstractSerializableListDecorator<E> {
+      */
+     @Override
+     public boolean addAll(final int index, final Collection<? extends E> coll) {
++        checkIndex(index);
+         final List<E> temp = new ArrayList<>();
+         for (final E e : coll) {
+             if (set.add(e)) {
+@@ -270,6 +272,18 @@ public class SetUniqueList<E> extends AbstractSerializableListDecorator<E> {
+         return super.addAll(index, temp);
+     }
+ 
++    /**
++     * Throws an exception if the index is out of range, before any mutation occurs.
++     *
++     * @param index  The index to check
++     * @throws IndexOutOfBoundsException if the index is out of range [0, size]
++     */
++    private void checkIndex(final int index) {
++        if (index < 0 || index > size()) {
++            throw new IndexOutOfBoundsException("Index: " + index + ", Size: " + size());
++        }
++    }
++
+     /**
+      * Gets an unmodifiable view as a Set.
+      *
+diff --git a/src/main/java/org/apache/commons/collections4/set/ListOrderedSet.java b/src/main/java/org/apache/commons/collections4/set/ListOrderedSet.java
+index eb96dc9fe..db8c2bbda 100644
+--- a/src/main/java/org/apache/commons/collections4/set/ListOrderedSet.java
++++ b/src/main/java/org/apache/commons/collections4/set/ListOrderedSet.java
+@@ -232,6 +232,7 @@ public class ListOrderedSet<E>
+      * @see List#add(int, Object)
+      */
+     public void add(final int index, final E object) {
++        checkIndex(index);
+         if (!contains(object)) {
+             decorated().add(object);
+             setOrder.add(index, object);
+@@ -259,6 +260,7 @@ public class ListOrderedSet<E>
+      * @see List#addAll(int, Collection)
+      */
+     public boolean addAll(final int index, final Collection<? extends E> coll) {
++        checkIndex(index);
+         boolean changed = false;
+         // collect all elements to be added for performance reasons
+         final List<E> toAdd = new ArrayList<>();
+@@ -287,6 +289,18 @@ public class ListOrderedSet<E>
+         return UnmodifiableList.unmodifiableList(setOrder);
+     }
+ 
++    /**
++     * Throws an exception if the index is out of range, before any mutation occurs.
++     *
++     * @param index  The index to check
++     * @throws IndexOutOfBoundsException if the index is out of range [0, size]
++     */
++    private void checkIndex(final int index) {
++        if (index < 0 || index > setOrder.size()) {
++            throw new IndexOutOfBoundsException("Index: " + index + ", Size: " + setOrder.size());
++        }
++    }
++
+     @Override
+     public void clear() {
+         decorated().clear();

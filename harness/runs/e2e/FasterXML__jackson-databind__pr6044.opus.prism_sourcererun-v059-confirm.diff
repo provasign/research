@@ -1,0 +1,46 @@
+diff --git a/src/main/java/tools/jackson/databind/jsontype/TypeResolverProvider.java b/src/main/java/tools/jackson/databind/jsontype/TypeResolverProvider.java
+index 325e4fd3c..87aaf7b30 100644
+--- a/src/main/java/tools/jackson/databind/jsontype/TypeResolverProvider.java
++++ b/src/main/java/tools/jackson/databind/jsontype/TypeResolverProvider.java
+@@ -202,7 +202,12 @@ public class TypeResolverProvider
+         }
+         Collection<NamedType> subtypes = config.getSubtypeResolver().collectAndResolveSubtypesByClass(
+                 config, accessor, contentType);
+-        return b.buildTypeSerializer(ctxt, contentType, subtypes);
++        TypeSerializer typeSer = b.buildTypeSerializer(ctxt, contentType, subtypes);
++        // [databind#1127]: `EXTERNAL_PROPERTY` not supported for contents of Container types
++        if ((typeSer != null) && (typeSer.getTypeInclusion() == JsonTypeInfo.As.EXTERNAL_PROPERTY)) {
++            ctxt.reportBadDefinition(containerType, _externalPropertyNotSupported(accessor, containerType));
++        }
++        return typeSer;
+     }
+ 
+     public TypeDeserializer findPropertyContentTypeDeserializer(DeserializationContext ctxt,
+@@ -233,7 +238,26 @@ public class TypeResolverProvider
+                 b = b.withDefaultImpl(defaultType.getRawClass());
+             }
+         }
+-        return b.buildTypeDeserializer(ctxt, contentType, subtypes);
++        TypeDeserializer typeDeser = b.buildTypeDeserializer(ctxt, contentType, subtypes);
++        // [databind#1127]: `EXTERNAL_PROPERTY` not supported for contents of Container types
++        if ((typeDeser != null) && (typeDeser.getTypeInclusion() == JsonTypeInfo.As.EXTERNAL_PROPERTY)) {
++            ctxt.reportBadDefinition(containerType, _externalPropertyNotSupported(accessor, containerType));
++        }
++        return typeDeser;
++    }
++
++    /**
++     * Helper method for constructing failure message for [databind#1127]: use of
++     * {@code JsonTypeInfo.As.EXTERNAL_PROPERTY} for Container (Collection, Map, array)
++     * types is not supported.
++     *
++     * @since 3.2
++     */
++    protected String _externalPropertyNotSupported(AnnotatedMember accessor, JavaType containerType)
++    {
++        return String.format(
++"Cannot use `@JsonTypeInfo(include=JsonTypeInfo.As.EXTERNAL_PROPERTY)` for property '%s' (of type %s): `EXTERNAL_PROPERTY` not supported for Container types (Collections, Maps, arrays)",
++                accessor.getName(), containerType);
+     }
+ 
+     /*

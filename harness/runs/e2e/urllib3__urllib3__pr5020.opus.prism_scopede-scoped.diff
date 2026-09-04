@@ -1,0 +1,28 @@
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 443cb01b..1947d8bd 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -78,6 +78,11 @@ RECENT_DATE = datetime.date(2025, 1, 1)
+ 
+ _CONTAINS_CONTROL_CHAR_RE = re.compile(r"[^-!#$%&'*+.^_`|~0-9a-zA-Z]")
+ 
++# An obs-fold within a received header value: a line break followed by at least
++# one space or horizontal tab. RFC 7230, Section 3.2.4 requires a user agent to
++# replace each obs-fold with one or more SP octets before interpreting the value.
++_OBS_FOLD_RE = re.compile(r"\r?\n[ \t]+")
++
+ 
+ class HTTPConnection(_HTTPConnection):
+     """
+@@ -616,7 +621,10 @@ class HTTPConnection(_HTTPConnection):
+                 exc_info=True,
+             )
+ 
+-        headers = HTTPHeaderDict(httplib_response.msg.items())
++        headers = HTTPHeaderDict(
++            (key, _OBS_FOLD_RE.sub(" ", value))
++            for key, value in httplib_response.msg.items()
++        )
+ 
+         response = HTTPResponse(
+             body=httplib_response,

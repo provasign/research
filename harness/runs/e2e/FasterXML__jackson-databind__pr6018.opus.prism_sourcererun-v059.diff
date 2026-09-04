@@ -1,0 +1,45 @@
+diff --git a/src/main/java/tools/jackson/databind/ser/std/StdConvertingSerializer.java b/src/main/java/tools/jackson/databind/ser/std/StdConvertingSerializer.java
+index b4beda28a..1e177fc9c 100644
+--- a/src/main/java/tools/jackson/databind/ser/std/StdConvertingSerializer.java
++++ b/src/main/java/tools/jackson/databind/ser/std/StdConvertingSerializer.java
+@@ -8,6 +8,7 @@ import tools.jackson.databind.jsontype.TypeSerializer;
+ import tools.jackson.databind.ser.impl.PropertySerializerMap;
+ import tools.jackson.databind.util.ClassUtil;
+ import tools.jackson.databind.util.Converter;
++import tools.jackson.databind.util.NameTransformer;
+ 
+ /**
+  * Serializer implementation where given Java type is first converted
+@@ -140,12 +141,32 @@ public class StdConvertingSerializer
+         return withDelegate(_converter, delegateType, delSer, property);
+     }
+ 
++    // @since 3.2: [databind#6017]
++    @Override
++    public ValueSerializer<Object> unwrappingSerializer(NameTransformer unwrapper)
++    {
++        if (_delegateSerializer == null) {
++            return this;
++        }
++        ValueSerializer<?> unwrapping = _delegateSerializer.unwrappingSerializer(unwrapper);
++        if (unwrapping == _delegateSerializer) {
++            return this;
++        }
++        return withDelegate(_converter, _delegateType, unwrapping, _property);
++    }
++
+     /*
+     /**********************************************************************
+     /* Accessors
+     /**********************************************************************
+      */
+ 
++    // @since 3.2: [databind#6017]
++    @Override
++    public boolean isUnwrappingSerializer() {
++        return (_delegateSerializer != null) && _delegateSerializer.isUnwrappingSerializer();
++    }
++
+     public Converter<Object, ?> getConverter() {
+         return _converter;
+     }
