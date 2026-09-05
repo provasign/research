@@ -74,10 +74,27 @@ def gold_hunks(t):
         m = re.match(r'^\+\+\+ b/(.+)$', line)
         if m: cur = m.group(1); continue
         m = re.match(r'^@@ -(\d+),?(\d*)', line)
-        if m and cur and ('/src/' in '/' + cur or cur.startswith('src/')):
+        if m and cur and is_src(cur):
             start = int(m.group(1)); n = int(m.group(2) or 1)
             out.append((cur, start + max(n // 2, 1)))
     return out
+
+NON_SRC_SEGS = {'test', 'tests', 'testing', 'doc', 'docs', 'examples', 'benchmarks'}
+
+def is_src(path):
+    """Java keeps the original /src/ rule (baseline comparability). Python
+    packages are flat (casbin/, matplotlib/lib/, mypy/) — the /src/ rule
+    silently dropped 24/37 bed37 tasks (2026-09-04), so a .py hunk counts
+    unless it sits under a test/doc segment or is a test_ module."""
+    if path.endswith('.java'):
+        return '/src/' in '/' + path or path.startswith('src/')
+    if not path.endswith('.py'):
+        return False
+    segs = path.split('/')
+    if any(s in NON_SRC_SEGS for s in segs[:-1]):
+        return False
+    name = segs[-1]
+    return not (name.startswith('test_') or name.endswith('_test.py') or name == 'conftest.py')
 
 def title_terms(t):
     toks = re.findall(r'[A-Za-z_][A-Za-z0-9_]{3,}', t['problem_statement'].split('\n')[0])
@@ -106,6 +123,11 @@ def oracle_terms(repo, sha, hunks):
     decl = re.compile(r'^(?:public|protected|private)\b[^=;{]*?([A-Za-z_][A-Za-z0-9_]*)\s*\(')
     for f, ln in hunks:
         body = show(repo, sha, f).split('\n')
+        if f.endswith('.py'):
+            term = py_enclosing(body, ln, f)
+            if term not in names:
+                names.append(term)
+            continue
         typ = f.rsplit('/', 1)[-1].removesuffix('.java')
         found = None
         for i in range(min(ln, len(body)) - 1, -1, -1):
@@ -120,6 +142,38 @@ def oracle_terms(repo, sha, hunks):
         if term not in names:
             names.append(term)
     return names[:8]
+
+PY_DEF = re.compile(r'^(\s*)(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(')
+PY_CLASS = re.compile(r'^(\s*)class\s+([A-Za-z_][A-Za-z0-9_]*)\b')
+
+def py_enclosing(body, ln, path):
+    """Type.method / func / Class for the def+class enclosing line ln, by
+    indentation: walk up, take the first def whose indent is below the
+    hunk line's, then the first class shallower than that def. Module-level
+    hunks fall back to the module name (parent package for __init__.py) —
+    the same file-name fallback the Java branch uses, minus the suffix."""
+    i = min(ln, len(body)) - 1
+    while i >= 0 and not body[i].strip():
+        i -= 1
+    cur_indent = len(body[i]) - len(body[i].lstrip()) if i >= 0 else 0
+    func = cls = None
+    for j in range(i, -1, -1):
+        st = body[j]
+        if not st.strip():
+            continue
+        m = PY_DEF.match(st)
+        if m and func is None and (len(m.group(1)) < cur_indent or j == i):
+            func = m.group(2); cur_indent = len(m.group(1)); continue
+        m = PY_CLASS.match(st)
+        if m and len(m.group(1)) < cur_indent:
+            cls = m.group(2); break
+    if cls and func:
+        return f"{cls}.{func}"
+    if func or cls:
+        return func or cls
+    segs = path.split('/')
+    stem = segs[-1].removesuffix('.py')
+    return segs[-2] if stem == '__init__' and len(segs) > 1 else stem
 
 def score(repo, sha, hunks, ctx):
     """(recall, delivered_bytes, need_bytes)"""
