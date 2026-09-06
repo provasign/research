@@ -186,14 +186,16 @@ def check_ceiling_regression(prism: Path, corpus_root: Path, baseline: dict) -> 
     log("\n=== Ceiling regression ===")
     failures = []
 
-    def check(name: str, recall: float, precision: float, gt: int, sites: int) -> None:
+    def check(name: str, recall: float, precision: float, gt: int, sites: int,
+              weak: float | None = None) -> None:
         base = baseline["ceilings"][name]
         tol = base.get("tolerance", 0.005)
         ok_r = recall >= base["recall"] - tol
         ok_p = precision >= base["precision"] - tol
         status = "OK" if ok_r and ok_p else "REGRESSION"
         log(f"  {name:<28} GT={gt:<4} recall={recall:.4f} (base {base['recall']:.4f}) "
-            f"precision={precision:.4f} (base {base['precision']:.4f}) sites={sites}  [{status}]")
+            f"precision={precision:.4f} (base {base['precision']:.4f}) sites={sites}"
+            f"{'' if weak is None or weak == recall else f' weak_recall={weak:.4f}'}  [{status}]")
         if not (ok_r and ok_p):
             failures.append(f"{name}: recall {recall:.4f} < {base['recall']-tol:.4f} or "
                              f"precision {precision:.4f} < {base['precision']-tol:.4f}")
@@ -216,7 +218,8 @@ def check_ceiling_regression(prism: Path, corpus_root: Path, baseline: dict) -> 
         raw, _ = engine_sites(prism, query, workdir)
         card = score(task, Answer(sites=[Site.parse(s) for s in raw], complete=True, unresolved=[]),
                      "CI", 0)
-        check(task_id, card.recall, card.precision, len(task.ground_truth), len(raw))
+        check(task_id, card.recall, card.precision, len(task.ground_truth), len(raw),
+              card.weak_recall)
 
     # Go: multi-method queries hardcoded (no automatic FQN derivation).
     for task_id, queries in GO_QUERIES.items():
@@ -230,7 +233,8 @@ def check_ceiling_regression(prism: Path, corpus_root: Path, baseline: dict) -> 
                 seen[s] = True
         card = score(task, Answer(sites=[Site.parse(s) for s in seen], complete=True, unresolved=[]),
                      "CI", 0)
-        check(task_id, card.recall, card.precision, len(task.ground_truth), len(seen))
+        check(task_id, card.recall, card.precision, len(task.ground_truth), len(seen),
+              card.weak_recall)
 
     return failures
 
@@ -302,6 +306,20 @@ def main() -> None:
     prism = Path(args.prism)
     corpus_root = Path(args.corpus_root)
     baseline = json.loads(BASELINE_FILE.read_text())
+
+    # The ceilings are numbers under ONE matching contract. When score.py
+    # went strict (2026-09-06) every prism version scored below the old
+    # floors by identical amounts — it looked like an engine regression
+    # across three releases and cost an evening's bisect. Refuse to compare
+    # across scorer versions; re-baselining is a deliberate edit of the
+    # JSON, not something a run may do on its own.
+    from score import SCORER_VERSION
+    if baseline.get("scorer_version") != SCORER_VERSION:
+        log(f"HARNESS ERROR: ci_baseline.json was measured under scorer version "
+            f"{baseline.get('scorer_version')}, score.py is now version {SCORER_VERSION}. "
+            f"Re-baseline deliberately (run, inspect with ci_site_diff.py, then edit the "
+            f"file and its _comment) — a ceiling under another contract is not a regression signal.")
+        sys.exit(2)
 
     all_failures: list[str] = []
     all_failures += check_ceiling_regression(prism, corpus_root, baseline)
