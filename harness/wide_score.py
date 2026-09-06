@@ -15,7 +15,10 @@ credited a TODO comment dropped at the right line. Now:
     proximity, removed, substituted, exact.
   site_recall   = substituted-level (old-contract line gone AND real code
                 added in its place); exact/removed/proximity reported beside
-                it. Measured on v070sample: agents' replacement lines differ
+                it. This is EDIT COVERAGE at the required regions, not
+                correctness: `-OldAPI() +WrongAPI()` scores substituted.
+                Whether the replacement is right is the build/test oracle's
+                question (run_wide `build`), never this scorer's. Measured on v070sample: agents' replacement lines differ
                 textually from gold's on most sites of an otherwise complete
                 sweep (dubbo__86dd98899b: exact 1/20, removed 17/20), so
                 `exact` is a secondary signal, not the headline.
@@ -207,7 +210,13 @@ def score_diff(task: dict, agent_diff: str, gold: str | None = None,
 
     exact, subst, removed, prox = (at_least("exact"), at_least("substituted"),
                                    at_least("removed"), at_least("proximity"))
-    files_hit = {s.file for s in sites if rank[levels[str(s)]] >= rank["substituted"]}
+    # A file is complete only when EVERY one of its sites is substituted —
+    # one substituted site out of five used to count the file (review).
+    by_file_levels: dict[str, list[str]] = {}
+    for s in sites:
+        by_file_levels.setdefault(s.file, []).append(levels[str(s)])
+    files_hit = {f for f, lv in by_file_levels.items()
+                 if all(rank[v] >= rank["substituted"] for v in lv)}
     extra = sorted(set(a) - set(gt))
 
     # Precision at the site level: every contiguous region the agent changed

@@ -88,6 +88,16 @@ def test_wrong_place_in_right_file_costs_precision():
     assert s["extra_files_strict"] == 0  # the old metric still says "clean"
 
 
+def test_files_complete_requires_every_site_in_the_file():
+    # Review 2026-09-06: one substituted site out of two used to count the
+    # file as complete.
+    agent = _diff("a/x.go", [(10, [("-", "\tOldFn(a)"), ("+", "\tNewFn(a)")])])
+    s = W.score_diff(TASK, agent, GOLD)
+    assert s["files_complete"] == 0 and s["files_expected_strict"] == 1
+    s = W.score_diff(TASK, GOLD, GOLD)
+    assert s["files_complete"] == 1
+
+
 def test_clean_sweep_has_full_site_precision():
     s = W.score_diff(TASK, GOLD, GOLD)
     assert s["site_precision"] == 1.0 and s["false_edit_regions"] == 0

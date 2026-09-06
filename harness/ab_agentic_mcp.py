@@ -101,6 +101,11 @@ def run_arm(arm: str, task: Task, corpus: Path, model: str) -> dict:
         rec["tokens_uncached"] = u.get("input_tokens", 0)
         rec["tokens_cache_write"] = u.get("cache_creation_input_tokens", 0)
         rec["tokens_cache_read"] = u.get("cache_read_input_tokens", 0)
+        # The normalized total every comparison should use (proposal §4.1).
+        rec["tokens_request"] = (rec["tokens_uncached"] + rec["tokens_cache_write"]
+                                 + rec["tokens_cache_read"])
+        rec["usage_raw"] = u
+        rec["pricing_basis"] = "claude-cli total_cost_usd"
         rec["session_id"] = j.get("session_id")
         answer = Answer.parse(j.get("result", ""))
         _sc = score(task, answer, arm, 1)

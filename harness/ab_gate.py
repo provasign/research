@@ -70,9 +70,12 @@ def arm_for(binary: str, tag: str) -> str:
     """Register an ab_agentic_mcp arm bound to a specific prism binary."""
     cfg = Path(f"/tmp/ab-agentic-mcp/gate-{tag}.json")
     cfg.parent.mkdir(exist_ok=True)
+    # No alwaysLoad: the shipped install (prism init) leaves the tools
+    # deferred, so the gate must pay the same ToolSearch discovery turn a
+    # real session pays (proposal §8.1).
     cfg.write_text(json.dumps({"mcpServers": {"prism": {
         "type": "stdio", "command": str(Path(binary).resolve()),
-        "args": ["mcp"], "alwaysLoad": True}}}))
+        "args": ["mcp"]}}}))
     name = f"gate-{tag}"
     bed.ARMS[name] = dict(bed.ARMS["prism"], mcp=str(cfg))
     return name
@@ -137,8 +140,10 @@ def main() -> int:
     b_arm = arm_for(args.baseline, "base")
     c_arm = arm_for(args.candidate, "cand")
 
-    drops, cand_tok, base_tok = [], 0, 0
+    drops, pdrops, cand_tok, base_tok = [], [], 0, 0
     cand_cost = base_cost = 0.0  # summed over pairs where both cells have a cost
+    unpriced = 0  # pairs excluded from the cost sum — reported, never silent
+    planned = len(TASKS[: args.limit])
     for tp in TASKS[: args.limit]:
         task = Task.load(tp)
         corpus = Path(task.workdir or task.repo)
@@ -169,23 +174,43 @@ def main() -> int:
             # same candidate). The retry is FRESH (cache dropped), decided
             # on its own, and exactly one — a reproduced failure fails.
             print(f"{task.id:30} HARD-FAIL candidate ({reason}) — one fresh retry")
-            (out / f"{task.id}.{args.model}.{c_sha}.s{SCORER_VERSION}.json").unlink(missing_ok=True)
+            # Immutable attempts (proposal §8.2): the failed first attempt
+            # stays on disk as .attempt1.json — its cost and answer are
+            # evidence, and deleting it was a selection bias in the
+            # candidate's favour. The retry becomes the canonical cell and
+            # says what it is a retry of.
+            canon = out / f"{task.id}.{args.model}.{c_sha}.s{SCORER_VERSION}.json"
+            first = canon.with_suffix(".attempt1.json")
+            if canon.exists():
+                canon.rename(first)
             c = run_cell(c_arm, task, corpus, args.model, out, args.candidate, c_sha)
+            c["retry_of"] = first.name
+            c["attempt1_cost_usd"] = json.loads(first.read_text()).get("cost_usd") if first.exists() else None
+            canon.write_text(json.dumps(c, indent=2))
             reason = hard_fails(c)
             if reason:
                 print(f"HARD FAIL (reproduced): {reason} on {task.id}")
                 return 1
         br, cr = b.get("recall"), c.get("recall")
+        bp, cp = b.get("precision"), c.get("precision")
         bc, cc = b.get("cost_usd") or 0, c.get("cost_usd") or 0
-        print(f"{task.id:30} base recall={br} tok={b.get('tokens_in',0)//1000}k ${bc:.2f} | "
-              f"cand recall={cr} tok={c.get('tokens_in',0)//1000}k ${cc:.2f}")
+        # Request tokens = every category the model was shown (uncached +
+        # cache write + cache read); the old tokens_in dropped cache writes.
+        bt, ct = b.get("tokens_request", b.get("tokens_in", 0)), c.get("tokens_request", c.get("tokens_in", 0))
+        print(f"{task.id:30} base R={br} P={bp} tok={bt//1000}k ${bc:.2f} | "
+              f"cand R={cr} P={cp} tok={ct//1000}k ${cc:.2f}"
+              + (f"  (retry of {c['retry_of']}, attempt1 ${c.get('attempt1_cost_usd') or 0:.2f})" if c.get("retry_of") else ""))
         if br is not None and cr is not None:
             drops.append(br - cr)
+        if bp is not None and cp is not None:
+            pdrops.append(bp - cp)
         if bc > 0 and cc > 0:
             base_cost += bc
-            cand_cost += cc
-        cand_tok += c.get("tokens_in", 0) or 0
-        base_tok += b.get("tokens_in", 0) or 0
+            cand_cost += cc + (c.get("attempt1_cost_usd") or 0)  # a retry's first attempt was paid too
+        else:
+            unpriced += 1
+        cand_tok += ct or 0
+        base_tok += bt or 0
 
     if not drops:
         print("HARNESS ERROR: no scored pairs")
@@ -193,10 +218,14 @@ def main() -> int:
     mean_drop = sum(drops) / len(drops)
     tok_delta = (cand_tok - base_tok) / max(base_tok, 1) * 100
     cost_ratio = cand_cost / base_cost if base_cost > 0 else None
-    print(f"\npairs={len(drops)} mean recall delta={-mean_drop:+.3f} "
-          f"tokens {tok_delta:+.0f}% aggregate billed cost "
-          f"${cand_cost:.2f} vs ${base_cost:.2f} = "
-          + (f"{cost_ratio:.2f}x" if cost_ratio else "n/a"))
+    mean_pdrop = sum(pdrops) / len(pdrops) if pdrops else 0.0
+    # completed/planned and the stop reason are part of the result: a
+    # fail-fast run that stopped early must never read as a full-bed PASS.
+    print(f"\ncompleted {len(drops)}/{planned} pairs; mean recall delta={-mean_drop:+.3f} "
+          f"mean precision delta={-mean_pdrop:+.3f} request tokens {tok_delta:+.0f}% "
+          f"aggregate billed cost ${cand_cost:.2f} vs ${base_cost:.2f} = "
+          + (f"{cost_ratio:.2f}x" if cost_ratio else "n/a")
+          + (f" ({unpriced} pair(s) unpriced — cost comparison incomplete)" if unpriced else ""))
     if mean_drop > MEAN_RECALL_DROP:
         print(f"FAIL: mean recall drop {mean_drop:.3f} > {MEAN_RECALL_DROP}")
         return 1

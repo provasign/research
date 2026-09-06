@@ -270,7 +270,14 @@ def provenance(task: dict, arm: str, model: str) -> dict:
     """Everything a later reader needs to know what was measured: binary,
     steering, corpus commit, CLI version, model — pinned together."""
     p = {"model": model, "claude_version": usage_account.claude_version(),
-         "corpus_commit": task["base_commit"], "gold_commit": task["gold_commit"]}
+         "corpus_commit": task["base_commit"], "gold_commit": task["gold_commit"],
+         # Manifest identity (proposal §8.4): what was asked, what counts as
+         # right, and which scorer said so — so a stored answer can be
+         # rescored later without re-running the model.
+         "task_hash": _sha(json.dumps(task["subject"]) + json.dumps(task.get("body") or "")),
+         "gt_hash": _sha(json.dumps(sorted(task["gt_files"])) + json.dumps(sorted(task.get("gt_symbols") or []))),
+         "scorer_version": wide_score.SCORER_VERSION,
+         "pricing_basis": "claude-cli total_cost_usd"}
     if arm.startswith("prism"):
         if not Path(_REAL_PRISM).exists():
             raise RuntimeError(f"prism binary missing: {_REAL_PRISM}")
