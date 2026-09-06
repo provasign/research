@@ -16,15 +16,17 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 
 from schema import Answer, Task
 from score import SCORER_VERSION, score
+import usage_account
 
 HOME = Path.home()
-CFG_DIR = Path("/tmp/ab-agentic-mcp")
-CFG_DIR.mkdir(exist_ok=True)
+# Every process owns its configs; importing a runner cannot retarget another.
+CFG_DIR = Path(tempfile.mkdtemp(prefix="ab-agentic-mcp-"))
 
 # MCP server configs (stdio).
 # The vendor renamed the binary engine-b -> codegraph (v1.5.0); the old path
@@ -91,22 +93,30 @@ def run_arm(arm: str, task: Task, corpus: Path, model: str) -> dict:
     try:
         j = json.loads(r.stdout)
         rec["turns"] = j.get("num_turns")
-        rec["cost_usd"] = j.get("total_cost_usd")
-        u = j.get("usage", {}) or {}
+        rec["usage"] = usage_account.cli_usage(j)
+        u = rec["usage"]["tokens"]
+        rec["cost_usd"] = rec["usage"]["cost_usd_cli"]
         # tokens_in kept for older readers; cache CREATION tokens are billed
         # too and were dropped here until 2026-09-05 — all four categories
         # are now recorded separately.
-        rec["tokens_in"] = u.get("input_tokens", 0) + u.get("cache_read_input_tokens", 0)
-        rec["tokens_out"] = u.get("output_tokens", 0)
-        rec["tokens_uncached"] = u.get("input_tokens", 0)
-        rec["tokens_cache_write"] = u.get("cache_creation_input_tokens", 0)
-        rec["tokens_cache_read"] = u.get("cache_read_input_tokens", 0)
+        rec["tokens_in"] = (u["input_uncached"] + u["cache_read"]
+                            if u["input_uncached"] is not None and u["cache_read"] is not None else None)
+        rec["tokens_out"] = u["output"]
+        rec["tokens_uncached"] = u["input_uncached"]
+        rec["tokens_cache_write"] = u["cache_creation"]
+        rec["tokens_cache_read"] = u["cache_read"]
         # The normalized total every comparison should use (proposal §4.1).
-        rec["tokens_request"] = (rec["tokens_uncached"] + rec["tokens_cache_write"]
-                                 + rec["tokens_cache_read"])
-        rec["usage_raw"] = u
+        rec["tokens_request"] = rec["usage"]["input_total"]
+        rec["usage_raw"] = rec["usage"]["raw_usage"]
         rec["pricing_basis"] = "claude-cli total_cost_usd"
         rec["session_id"] = j.get("session_id")
+        rec["raw_result"] = j
+        rec["exit_code"] = r.returncode
+        if not rec["usage"]["usage_complete"]:
+            rec["measurement_error"] = "missing or invalid final usage"
+            rec["error"] = rec["measurement_error"]
+        elif r.returncode or j.get("is_error"):
+            rec["error"] = f"agent failed: exit={r.returncode}, is_error={j.get('is_error')}"
         answer = Answer.parse(j.get("result", ""))
         _sc = score(task, answer, arm, 1)
         # The parsed answer itself, so a future scorer change can rescore

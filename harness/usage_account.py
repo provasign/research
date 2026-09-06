@@ -22,10 +22,44 @@ from __future__ import annotations
 
 import functools
 import json
+import math
 import subprocess
 from pathlib import Path
 
 PROJECTS = Path.home() / ".claude" / "projects"
+
+USAGE_VERSION = 3
+TOKEN_FIELDS = {
+    "input_uncached": "input_tokens",
+    "cache_creation": "cache_creation_input_tokens",
+    "cache_read": "cache_read_input_tokens",
+    "output": "output_tokens",
+}
+
+
+def normalized_tokens(usage: dict) -> dict:
+    """Missing/invalid counters remain unknown, never free tokens."""
+    usage = usage if isinstance(usage, dict) else {}
+    result = {}
+    for name, source in TOKEN_FIELDS.items():
+        value = usage.get(source)
+        result[name] = value if type(value) is int and value >= 0 else None
+    return result
+
+
+def input_total(tokens: dict) -> int | None:
+    values = [tokens.get(k) for k in ("input_uncached", "cache_creation", "cache_read")]
+    return sum(values) if all(type(v) is int and v >= 0 for v in values) else None
+
+
+def content_bytes(body) -> int:
+    text = body if isinstance(body, str) else json.dumps(body, ensure_ascii=False, separators=(",", ":"))
+    return len(text.encode("utf-8"))
+
+
+def transcript_lines(path: Path):
+    with path.open(errors="replace") as stream:
+        yield from stream
 
 
 @functools.lru_cache(maxsize=1)
@@ -39,16 +73,18 @@ def claude_version() -> str:
 
 def cli_usage(j: dict) -> dict:
     u = j.get("usage") or {}
+    tokens = normalized_tokens(u)
+    cost = j.get("total_cost_usd")
+    valid_cost = type(cost) in (int, float) and math.isfinite(cost) and cost >= 0
     return {
+        "usage_version": USAGE_VERSION,
         "session_id": j.get("session_id"),
-        "tokens": {
-            "input_uncached": u.get("input_tokens", 0),
-            "cache_creation": u.get("cache_creation_input_tokens", 0),
-            "cache_read": u.get("cache_read_input_tokens", 0),
-            "output": u.get("output_tokens", 0),
-        },
+        "tokens": tokens,
+        "input_total": input_total(tokens),
+        "usage_complete": all(v is not None for v in tokens.values()) and valid_cost,
+        "raw_usage": u,
         "model_usage": j.get("modelUsage"),
-        "cost_usd_cli": j.get("total_cost_usd"),
+        "cost_usd_cli": cost if valid_cost else None,
         "pricing_source": f"claude-cli total_cost_usd ({claude_version()})",
     }
 
@@ -69,52 +105,114 @@ def transcript_usage(session_id: str | None) -> dict:
     p = transcript_path(session_id)
     if p is None:
         return {"_unavailable": "no transcript for session"}
-    seen: set[str] = set()
+    return analyze_transcript(p)
+
+
+def analyze_transcript(p: Path) -> dict:
+    """Count main-loop messages and tool IDs once; retain final streamed usage."""
+    messages: dict[str, dict] = {}
     lines = dup = 0
-    tok = {"input_uncached": 0, "cache_creation": 0, "cache_read": 0, "output": 0}
     requests: set[str] = set()
     calls: dict[str, int] = {}
     result_bytes: dict[str, int] = {}
     pending: dict[str, str] = {}  # tool_use_id -> tool name
-    for line in p.open(errors="ignore"):
+    results: dict[str, int] = {}
+    warnings: set[str] = set()
+    final_usage = None
+    for line in transcript_lines(p):
         try:
             j = json.loads(line)
-        except Exception:
+        except (ValueError, TypeError):
+            warnings.add("malformed transcript event")
+            continue
+        if not isinstance(j, dict):
+            warnings.add("non-object transcript event")
+            continue
+        if j.get("parent_tool_use_id") or j.get("isSidechain"):
             continue
         t = j.get("type")
+        if t == "result" and isinstance(j.get("usage"), dict):
+            final_usage = normalized_tokens(j["usage"])
         if t == "assistant":
             lines += 1
             m = j.get("message") or {}
+            if not isinstance(m, dict):
+                warnings.add("invalid assistant message")
+                continue
             for c in m.get("content") or []:
                 if isinstance(c, dict) and c.get("type") == "tool_use":
-                    calls[c["name"]] = calls.get(c["name"], 0) + 1
-                    pending[c.get("id", "")] = c["name"]
+                    tid, name = c.get("id"), c.get("name")
+                    if not tid or not name:
+                        warnings.add("tool use missing identity")
+                        continue
+                    if tid not in pending:
+                        calls[name] = calls.get(name, 0) + 1
+                        pending[tid] = name
             mid = m.get("id")
-            if mid in seen:
-                dup += 1
+            if not mid:
+                warnings.add("assistant message missing identity")
                 continue
-            seen.add(mid)
+            if mid in messages:
+                dup += 1
             if j.get("requestId"):
                 requests.add(j["requestId"])
             u = m.get("usage") or {}
-            tok["input_uncached"] += u.get("input_tokens", 0)
-            tok["cache_creation"] += u.get("cache_creation_input_tokens", 0)
-            tok["cache_read"] += u.get("cache_read_input_tokens", 0)
-            tok["output"] += u.get("output_tokens", 0)
+            if not isinstance(u, dict):
+                warnings.add("invalid assistant usage")
+                u = {}
+            previous = messages.setdefault(mid, {})
+            # Streaming fragments may carry only some counters.
+            previous.update({k: v for k, v in u.items() if k in TOKEN_FIELDS.values()})
         elif t == "user":
-            for c in ((j.get("message") or {}).get("content") or []):
+            m = j.get("message") or {}
+            if not isinstance(m, dict):
+                warnings.add("invalid user message")
+                continue
+            for c in (m.get("content") or []):
                 if isinstance(c, dict) and c.get("type") == "tool_result":
-                    name = pending.get(c.get("tool_use_id", ""), "?")
-                    body = c.get("content")
-                    n = len(body) if isinstance(body, str) else len(json.dumps(body or ""))
-                    result_bytes[name] = result_bytes.get(name, 0) + n
-    ctx = tok["input_uncached"] + tok["cache_creation"] + tok["cache_read"]
+                    tid = c.get("tool_use_id")
+                    if not tid:
+                        warnings.add("tool result missing identity")
+                        continue
+                    results[tid] = content_bytes(c.get("content"))
+    for tid, size in results.items():
+        name = pending.get(tid, "?")
+        result_bytes[name] = result_bytes.get(name, 0) + size
+    normalized = [normalized_tokens(u) for u in messages.values()]
+    tok = {}
+    for key in TOKEN_FIELDS:
+        values = [u[key] for u in normalized]
+        tok[key] = sum(values) if values and all(v is not None for v in values) else None
+    # Transcript step output may be a streaming placeholder, so never use it
+    # as the authoritative output total without a final aggregate.
+    observed_output = tok["output"]
+    tok["output"] = final_usage.get("output") if final_usage is not None else None
+    diagnostics_complete = not warnings and input_total(tok) is not None
+    if not diagnostics_complete:
+        warnings.add("transcript diagnostics incomplete")
+    # Session JSONL normally lacks the CLI stdout result. This is an expected
+    # source boundary, not a failed cell or a missing transcript input counter.
+    aggregate_status = "not_present_in_transcript" if final_usage is None else (
+        "present" if tok["output"] is not None else "invalid")
+    usage_complete = (all(v is not None for v in tok.values()) and diagnostics_complete
+                      if final_usage is not None else None)
+    notes = ["no final aggregate in transcript; use the saved CLI result for total usage"] if final_usage is None else []
+    if aggregate_status == "invalid":
+        warnings.add("invalid final aggregate in transcript")
+    ctx = input_total(tok)
     return {
+        "usage_version": USAGE_VERSION,
         "transcript": str(p),
-        "messages": len(seen),
+        "messages": len(messages),
         "duplicate_lines": dup,
         "requests": len(requests),
         "tokens": tok,
+        "step_output_observed": observed_output,
+        "usage_complete": usage_complete,
+        "diagnostics_complete": diagnostics_complete,
+        "aggregate_status": aggregate_status,
+        "notes": notes,
+        "warnings": sorted(warnings),
         "cache_hit_rate": round(tok["cache_read"] / ctx, 3) if ctx else None,
         "tool_calls": calls,
         "tool_result_bytes": result_bytes,
