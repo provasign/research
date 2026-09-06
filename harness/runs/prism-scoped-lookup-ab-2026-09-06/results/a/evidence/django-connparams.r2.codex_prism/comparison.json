@@ -1,0 +1,142 @@
+{
+  "arm": "codex_prism",
+  "wall_s": 33.067,
+  "exit_code": 0,
+  "timed_out": false,
+  "task": "django-connparams",
+  "scorer_version": 3,
+  "model": "gpt-5.5",
+  "usage_raw": [
+    {
+      "input_tokens": 38634,
+      "cached_input_tokens": 31744,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 871,
+      "reasoning_output_tokens": 600
+    }
+  ],
+  "measurement_complete": true,
+  "input_tokens": 38634,
+  "output_tokens": 871,
+  "cache_read_tokens": 31744,
+  "cost_usd": 0.076452,
+  "cost_basis": "API-equivalent estimate: GPT-5.5 $5/$0.50/$30 per M input/cached/output; not subscription billing",
+  "agent_error": false,
+  "tool_calls": 2,
+  "prism_calls": 2,
+  "calls": [
+    {
+      "id": "item_1",
+      "type": "mcp_tool_call",
+      "server": "prism",
+      "tool": "prism_change_impact",
+      "arguments": {
+        "query": "BaseDatabaseWrapper.get_connection_params",
+        "file": "django/db/backends/base/base.py",
+        "context_used": 1000
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "// BaseDatabaseWrapper.get_connection_params \u2014 change-impact: 12 site(s)\ncompleteness: closed\n// includes name-derived references: completeness describes indexed scope, not receiver certainty. Verify ambiguous expressions; per-edge provenance is unavailable here.\n// Indexed call expressions below are name-matched within reported callers, not independent receiver-resolution proof. Snippet limits never remove sites. Inspect ambiguous receivers, omitted evidence, or behavior needed by the task.\ndeclarations (1):\n  BaseDatabaseWrapper.get_connection_params  django/db/backends/base/base.py:208\n    def get_connection_params(self):\nfamily (4):\n  DatabaseWrapper.get_connection_params  django/db/backends/mysql/base.py:214\n    def get_connection_params(self):\n  DatabaseWrapper.get_connection_params  django/db/backends/oracle/base.py:294\n    def get_connection_params(self):\n  DatabaseWrapper.get_connection_params  django/db/backends/postgresql/base.py:250\n    def get_connection_params(self):\n  DatabaseWrapper.get_connection_params  django/db/backends/sqlite3/base.py:154\n    def get_connection_params(self):\ncallers (7):\n  BaseDatabaseWrapper.connect  django/db/backends/base/base.py:237\n    255: conn_params = self.get_connection_params()\n  DatabaseWrapper.pool  django/db/backends/oracle/base.py:259\n    270: connect_kwargs = self.get_connection_params()\n  DatabaseWrapper.pool  django/db/backends/postgresql/base.py:194\n    215: connect_kwargs = self.get_connection_params()\n  Tests.test_database_name_too_long  tests/backends/postgresql/tests.py:138  [test]\n    150: DatabaseWrapper(settings).get_connection_params()\n  Tests.test_database_name_empty  tests/backends/postgresql/tests.py:152  [test]\n    162: DatabaseWrapper(settings).get_connection_params()\n  Tests.test_service_name  tests/backends/postgresql/tests.py:164  [test]\n    170: params = DatabaseWrapper(settings).get_connection_params()\n  Tests.test_service_name_default_db  tests/backends/postgresql/tests.py:174  [test]\n    181: params = DatabaseWrapper(settings).get_connection_params()\n"
+          }
+        ],
+        "structured_content": null
+      },
+      "error": null,
+      "status": "completed"
+    },
+    {
+      "id": "item_2",
+      "type": "mcp_tool_call",
+      "server": "prism",
+      "tool": "prism_search",
+      "arguments": {
+        "query": "get_connection_params",
+        "path": "django/",
+        "scope": "text",
+        "context": 2,
+        "exhaustive": true,
+        "limit": 2000
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "// root: /private/tmp/prism-scoped-ab-1_9slfbq/a/work/django-connparams.r2.codex_prism\ndjango/db/backends/base/base.py:\n  206-     # ##### Backend-specific methods for creating connections and cursors #####\n  207- \n  208:     def get_connection_params(self):\n  209-         \"\"\"Return a dict of parameters suitable for get_new_connection.\"\"\"\n  210-         raise NotImplementedError(\n  211:             \"subclasses of BaseDatabaseWrapper may require a get_connection_params() \"\n  212-             \"method\"\n  213-         )\n  --\n  253-         self.health_check_done = True\n  254-         # Establish the connection\n  255:         conn_params = self.get_connection_params()\n  256-         self.connection = self.get_new_connection(conn_params)\n  257-         self.set_autocommit(self.settings_dict[\"AUTOCOMMIT\"])\ndjango/db/backends/mysql/base.py:\n  212-         return self.mysql_version\n  213- \n  214:     def get_connection_params(self):\n  215-         kwargs = {\n  216-             \"conv\": django_conversions,\ndjango/db/backends/oracle/base.py:\n  268-         pool_key = (self.alias, self.settings_dict[\"USER\"])\n  269-         if pool_key not in self._connection_pools:\n  270:             connect_kwargs = self.get_connection_params()\n  271-             pool_options = connect_kwargs.pop(\"pool\")\n  272-             if pool_options is not True:\n  --\n  292-         return self.oracle_version\n  293- \n  294:     def get_connection_params(self):\n  295-         conn_params = self.settings_dict[\"OPTIONS\"].copy()\n  296-         if \"use_returning_into\" in conn_params:\ndjango/db/backends/postgresql/base.py:\n  213-                 ) from err\n  214- \n  215:             connect_kwargs = self.get_connection_params()\n  216-             # Ensure we run in autocommit, Django properly sets it later on.\n  217-             connect_kwargs[\"autocommit\"] = True\n  --\n  248-         return divmod(self.pg_version, 10000)\n  249- \n  250:     def get_connection_params(self):\n  251-         settings_dict = self.settings_dict\n  252-         # None may be used to connect to the default 'postgres' db\ndjango/db/backends/sqlite3/base.py:\n  152-     ops_class = DatabaseOperations\n  153- \n  154:     def get_connection_params(self):\n  155-         settings_dict = self.settings_dict\n  156-         if not settings_dict[\"NAME\"]:\n"
+          }
+        ],
+        "structured_content": null
+      },
+      "error": null,
+      "status": "completed"
+    }
+  ],
+  "total_tokens": 39505,
+  "answer": {
+    "sites": [
+      "django/db/backends/base/base.py:get_connection_params",
+      "django/db/backends/base/base.py:connect",
+      "django/db/backends/mysql/base.py:get_connection_params",
+      "django/db/backends/oracle/base.py:pool",
+      "django/db/backends/oracle/base.py:get_connection_params",
+      "django/db/backends/postgresql/base.py:pool",
+      "django/db/backends/postgresql/base.py:get_connection_params",
+      "django/db/backends/sqlite3/base.py:get_connection_params"
+    ],
+    "complete": true,
+    "unresolved": []
+  },
+  "score": {
+    "task_id": "django-connparams",
+    "arm": "codex_prism",
+    "trial": 2,
+    "recall": 1.0,
+    "precision": 1.0,
+    "f1": 1.0,
+    "found": [
+      "django/db/backends/base/base.py:connect",
+      "django/db/backends/base/base.py:get_connection_params",
+      "django/db/backends/mysql/base.py:get_connection_params",
+      "django/db/backends/oracle/base.py:get_connection_params",
+      "django/db/backends/oracle/base.py:pool",
+      "django/db/backends/postgresql/base.py:get_connection_params",
+      "django/db/backends/postgresql/base.py:pool",
+      "django/db/backends/sqlite3/base.py:get_connection_params"
+    ],
+    "missed": [],
+    "extra": [],
+    "weak_matches": [],
+    "claimed_complete": true,
+    "overconfident": false,
+    "surfaced_gap": false,
+    "weak_recall": 1.0
+  },
+  "valid": true,
+  "audited_total_tokens": 39505,
+  "prism_successful_calls": [
+    "prism_change_impact",
+    "prism_search"
+  ],
+  "tool_errors": [],
+  "native_commands": [],
+  "violations": [],
+  "cell_id": "django-connparams.r2.codex_prism",
+  "trial": 2,
+  "started_at": 1788728356.136953,
+  "source_changed": [],
+  "setup_abort": false,
+  "audited_valid": true,
+  "variant": "before",
+  "comparison_id": "django-connparams.r2.before",
+  "evidence_path": "a/evidence/django-connparams.r2.codex_prism",
+  "diagnostics": {
+    "successful_impact_calls": 1,
+    "searches_after_impact": 1,
+    "lookups_after_impact": 0,
+    "native_commands_after_impact": 0,
+    "successful_batch_calls": 0,
+    "batch_names_requested": 0
+  }
+}

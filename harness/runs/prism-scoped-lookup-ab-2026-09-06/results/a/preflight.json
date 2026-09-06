@@ -1,0 +1,313 @@
+[
+  {
+    "id": 1,
+    "jsonrpc": "2.0",
+    "result": {
+      "capabilities": {
+        "tools": {}
+      },
+      "protocolVersion": "2024-11-05",
+      "serverInfo": {
+        "name": "prism",
+        "version": "dev"
+      }
+    }
+  },
+  {
+    "id": 2,
+    "jsonrpc": "2.0",
+    "result": {
+      "tools": [
+        {
+          "description": "Edit-ready context for the symbols in terms=[...] (the only retrieval key): one hop through the call graph plus a full-text pass, delivered as line-numbered source windows with callers and a 'tested by' file:line. Do not re-read the files it shows. Size with budget= and max_files=. To merely locate, use prism_search.",
+          "inputSchema": {
+            "properties": {
+              "budget": {
+                "description": "Token budget (default 8000).",
+                "type": "integer"
+              },
+              "context_used": {
+                "description": "Tokens in your context now. Optional.",
+                "type": "integer"
+              },
+              "delivery": {
+                "description": "source = line-numbered windows + callers; symbols = compact list. Default source.",
+                "enum": [
+                  "source",
+                  "symbols"
+                ],
+                "type": "string"
+              },
+              "include": {
+                "description": "graph (callers/callees), docs (filenames). Default [\"graph\"].",
+                "items": {
+                  "enum": [
+                    "graph",
+                    "docs"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "limit": {
+                "description": "Max candidates before ranking cutoff (default 50).",
+                "type": "integer"
+              },
+              "max_files": {
+                "description": "source only: max files shown as windows. Default 5.",
+                "type": "integer"
+              },
+              "model": {
+                "description": "Your model ID; sizes budgets. Optional.",
+                "type": "string"
+              },
+              "profile": {
+                "description": "default|implement_feature|fix_bug|code_review",
+                "type": "string"
+              },
+              "task": {
+                "description": "Label for the response header only.",
+                "type": "string"
+              },
+              "terms": {
+                "description": "REQUIRED retrieval key, e.g. [\"AccessCount\"], expanded via the call graph. No name yet? Guess ONE keyword.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "task",
+              "terms"
+            ],
+            "type": "object"
+          },
+          "name": "prism_query"
+        },
+        {
+          "description": "Read a file, whole or by line range (offset/limit), line-numbered. A repeat read of an unchanged file returns a `// [prism:cached]` pointer \u2014 use the copy you already have. For one function use prism_lookup.",
+          "inputSchema": {
+            "properties": {
+              "context_used": {
+                "description": "Tokens in your context now. Optional.",
+                "type": "integer"
+              },
+              "file": {
+                "description": "File path relative to project root.",
+                "type": "string"
+              },
+              "limit": {
+                "description": "Lines from offset. Omit both for the whole file.",
+                "type": "integer"
+              },
+              "model": {
+                "description": "Your model ID; sizes budgets. Optional.",
+                "type": "string"
+              },
+              "offset": {
+                "description": "First line (1-based); with limit, an exact window.",
+                "type": "integer"
+              },
+              "task": {
+                "description": "Log label only.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "file"
+            ],
+            "type": "object"
+          },
+          "name": "prism_read"
+        },
+        {
+          "description": "Locate unknown names or paths: symbol names AND raw text (real rg/grep). Known symbol? Use lookup for bodies or change_impact for affected sites directly. Batch up to 10 terms in query=[...]. scope=\"text\" is pure grep, cheapest \u2014 use it wherever you would run grep/rg. Narrow with path=/glob=/files_only. context=N adds the lines around each hit (grep -C) \u2014 no follow-up read. exhaustive=true requests full coverage; heed partial-result warnings.",
+          "inputSchema": {
+            "properties": {
+              "context": {
+                "description": "Lines around each match (grep -C N, max 15) \u2014 instead of a follow-up read. Whole function? prism_lookup.",
+                "type": "integer"
+              },
+              "exhaustive": {
+                "description": "Raises text caps to 100000 hits / 10000 per file, symbols to 2000. Deadlines still apply. Partial results are marked; narrow path=/glob= if incomplete.",
+                "type": "boolean"
+              },
+              "files_only": {
+                "description": "Paths only, no lines \u2014 cheapest \"where does this live\".",
+                "type": "boolean"
+              },
+              "glob": {
+                "description": "Only files matching, e.g. \"*.py\".",
+                "items": {
+                  "type": "string"
+                },
+                "type": [
+                  "string",
+                  "array"
+                ]
+              },
+              "limit": {
+                "description": "Max results (default 25, maximum 2000; non-positive uses default).",
+                "type": "integer"
+              },
+              "path": {
+                "description": "Restrict to repo-relative files/dirs, e.g. \"src/\" or [\"src/\",\"tests/\"].",
+                "items": {
+                  "type": "string"
+                },
+                "type": [
+                  "string",
+                  "array"
+                ]
+              },
+              "query": {
+                "description": "One term or an array of up to 10 (batch them). Regex when regex=true.",
+                "items": {
+                  "type": "string"
+                },
+                "type": [
+                  "string",
+                  "array"
+                ]
+              },
+              "regex": {
+                "description": "Regex for the text pass (invalid \u2192 literal).",
+                "type": "boolean"
+              },
+              "rollup_only": {
+                "description": "On a truncated search return only hitRollup (grouped counts), no sample lines.",
+                "type": "boolean"
+              },
+              "scope": {
+                "description": "\"text\" = pure grep (cheapest); \"symbols\" = index only. Default \"both\".",
+                "enum": [
+                  "both",
+                  "text",
+                  "symbols"
+                ],
+                "type": "string"
+              },
+              "task": {
+                "description": "Optional caller label only; does not affect retrieval or scope and is not echoed in results.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "query"
+            ],
+            "type": "object"
+          },
+          "name": "prism_search"
+        },
+        {
+          "description": "Read whole symbol bodies by qualified name. Batch related methods in name=[...] (up to 10) instead of separate lookups; file disambiguates the batch. For a small local bug, read the relevant methods together; impact is for affected-site questions. fields=[...] narrows to signature/doc/body/...; omit for whole bodies.",
+          "inputSchema": {
+            "properties": {
+              "fields": {
+                "description": "Columns to read; omit for the full body.",
+                "items": {
+                  "enum": [
+                    "signature",
+                    "doc",
+                    "body",
+                    "kind",
+                    "parent",
+                    "modifiers"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "file": {
+                "description": "Disambiguate a shared name: file path or substring.",
+                "type": "string"
+              },
+              "name": {
+                "description": "One qualified symbol name, or up to 10 names to read together. file and fields apply to every name; oversized batch results are listed as omitted, never silently cut.",
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 10,
+                    "minItems": 1,
+                    "type": "array"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "type": "object"
+          },
+          "name": "prism_lookup"
+        },
+        {
+          "description": "Every site that must change when a symbol does. Pass 'Type.method' and get, in one call: declarations, the full override/implementation family, breaking sibling contracts (supers), all resolved callers, and declaringTypes. Reach for this before a signature change or affected-site enumeration. Includes signatures, test labels, and bounded matching call expressions so those facts do not need separate lookups. Read bodies only for behavior or evidence gaps. completeness:'closed' describes indexed scope, not proof of heuristic edge resolution; heed warnings. 'project-local' + overridesExternal = the method implements an external contract whose signature must not change. Relay the set as-is \u2014 re-filtering through grep drops real sites.",
+          "inputSchema": {
+            "properties": {
+              "context_used": {
+                "description": "Tokens in your context now. Optional.",
+                "type": "integer"
+              },
+              "file": {
+                "description": "Disambiguate same-named types in different packages: only types declared in a file whose path contains this seed the closure (change_impact only; the result says when this is needed).",
+                "type": "string"
+              },
+              "model": {
+                "description": "Your model ID; sizes budgets. Optional.",
+                "type": "string"
+              },
+              "query": {
+                "description": "Type.method or Type.method(ParamType, ...) \u2014 e.g. \"JsonSerializer.serialize(T, JsonGenerator, SerializerProvider)\". A bare member name (\"serialize\") or file:line (\"src/Foo.java:120\") also works when it resolves to exactly one symbol; if several match, the error lists the candidates.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "query"
+            ],
+            "type": "object"
+          },
+          "name": "prism_change_impact"
+        },
+        {
+          "description": "Prism tool: prism_verify",
+          "inputSchema": {
+            "properties": {
+              "base": {
+                "description": "Git ref to diff the working tree against (default \"HEAD\"). The change-set is computed relative to this.",
+                "type": "string"
+              },
+              "removed_symbols": {
+                "description": "MID-LOOP fast path: instead of the full diff gate, report every remaining reference to each listed removed identifier (exhaustive, comments/docs included) \u2014 one call replacing the repeated per-identifier greps of a removal task. Run the plain (no-arg) verify before declaring the change done.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "name": "prism_verify"
+        }
+      ]
+    }
+  },
+  {
+    "id": 3,
+    "jsonrpc": "2.0",
+    "result": {
+      "content": [
+        {
+          "text": "// root: /private/tmp/prism-scoped-ab-1_9slfbq/a/preflight\nREADME.md:1: PrismPanelPreflightSentinel\n",
+          "type": "text"
+        }
+      ]
+    }
+  }
+]

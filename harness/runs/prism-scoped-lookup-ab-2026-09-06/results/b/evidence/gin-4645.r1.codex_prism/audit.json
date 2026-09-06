@@ -1,0 +1,226 @@
+{
+  "arm": "codex_prism",
+  "wall_s": 52.115,
+  "exit_code": 0,
+  "timed_out": false,
+  "task": "gin-4645",
+  "scorer_version": 3,
+  "model": "gpt-5.5",
+  "usage_raw": [
+    {
+      "input_tokens": 76456,
+      "cached_input_tokens": 65024,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 1378,
+      "reasoning_output_tokens": 1033
+    }
+  ],
+  "measurement_complete": true,
+  "input_tokens": 76456,
+  "output_tokens": 1378,
+  "cache_read_tokens": 65024,
+  "cost_usd": 0.131012,
+  "cost_basis": "API-equivalent estimate: GPT-5.5 $5/$0.50/$30 per M input/cached/output; not subscription billing",
+  "agent_error": false,
+  "tool_calls": 6,
+  "prism_calls": 6,
+  "calls": [
+    {
+      "id": "item_1",
+      "type": "mcp_tool_call",
+      "server": "prism",
+      "tool": "prism_lookup",
+      "arguments": {
+        "name": [
+          "Hijack",
+          "CloseNotify",
+          "Flush"
+        ],
+        "fields": [
+          "signature",
+          "body"
+        ]
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "// lookup Hijack\nname: responseWriter.Hijack\nfile: response_writer.go\nline: 111\nsignature: func (w *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error)\nbody: func (w *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {\n\t// Allow hijacking before any data is written (size == -1) or after headers are written (size == 0),\n\t// but not after body data is written (size > 0). For compatibility with websocket libraries (e.g., github.com/coder/websocket)\n\tif w.size > 0 {\n\t\treturn nil, nil, errHijackAlreadyWritten\n\t}\n\tif w.size < 0 {\n\t\tw.size = 0\n\t}\n\treturn w.ResponseWriter.(http.Hijacker).Hijack()\n}\n// lookup CloseNotify\nname: responseWriter.CloseNotify\nfile: response_writer.go\nline: 124\nsignature: func (w *responseWriter) CloseNotify() <-chan bool\nbody: func (w *responseWriter) CloseNotify() <-chan bool {\n\treturn w.ResponseWriter.(http.CloseNotifier).CloseNotify()\n}\n// lookup Flush\nname: responseWriter.Flush\nfile: response_writer.go\nline: 129\nsignature: func (w *responseWriter) Flush()\nbody: func (w *responseWriter) Flush() {\n\tw.WriteHeaderNow()\n\tif f, ok := w.ResponseWriter.(http.Flusher); ok {\n\t\tf.Flush()\n\t}\n}\n"
+          }
+        ],
+        "structured_content": null
+      },
+      "error": null,
+      "status": "completed"
+    },
+    {
+      "id": "item_2",
+      "type": "mcp_tool_call",
+      "server": "prism",
+      "tool": "prism_change_impact",
+      "arguments": {
+        "query": "responseWriter.Hijack",
+        "file": "response_writer.go"
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "// responseWriter.Hijack \u2014 change-impact: 1 site(s)\ncompleteness: closed\ndeclarations (1):\n  responseWriter.Hijack  response_writer.go:111\n    func (w *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error)\n"
+          }
+        ],
+        "structured_content": null
+      },
+      "error": null,
+      "status": "completed"
+    },
+    {
+      "id": "item_3",
+      "type": "mcp_tool_call",
+      "server": "prism",
+      "tool": "prism_change_impact",
+      "arguments": {
+        "query": "responseWriter.CloseNotify",
+        "file": "response_writer.go"
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "// responseWriter.CloseNotify \u2014 change-impact: 1 site(s)\ncompleteness: closed\ndeclarations (1):\n  responseWriter.CloseNotify  response_writer.go:124\n    func (w *responseWriter) CloseNotify() <-chan bool\n"
+          }
+        ],
+        "structured_content": null
+      },
+      "error": null,
+      "status": "completed"
+    },
+    {
+      "id": "item_4",
+      "type": "mcp_tool_call",
+      "server": "prism",
+      "tool": "prism_search",
+      "arguments": {
+        "query": [
+          "Hijack()",
+          "CloseNotify()",
+          "http.Hijacker",
+          "http.CloseNotifier"
+        ],
+        "scope": "text",
+        "context": 3,
+        "limit": 200,
+        "exhaustive": true
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "// root: /private/tmp/prism-scoped-ab-1_9slfbq/b/work/gin-4645.r1.codex_prism\n\u2500\u2500 Hijack() \u2500\u2500\nresponse_writer.go:\n  108- }\n  109- \n  110- // Hijack implements the http.Hijacker interface.\n  111: func (w *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {\n  112- \t// Allow hijacking before any data is written (size == -1) or after headers are written (size == 0),\n  113- \t// but not after body data is written (size > 0). For compatibility with websocket libraries (e.g., github.com/coder/websocket)\n  114- \tif w.size > 0 {\n  --\n  117- \tif w.size < 0 {\n  118- \t\tw.size = 0\n  119- \t}\n  120: \treturn w.ResponseWriter.(http.Hijacker).Hijack()\n  121- }\n  122- \n  123- // CloseNotify implements the http.CloseNotifier interface.\nresponse_writer_test.go:\n  16- )\n  17- \n  18- // TODO\n  19: // func (w *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {\n  20- // func (w *responseWriter) CloseNotify() <-chan bool {\n  21- // func (w *responseWriter) Flush() {\n  22- \n  --\n  114- \tw := ResponseWriter(writer)\n  115- \n  116- \tassert.Panics(t, func() {\n  117: \t\t_, _, err := w.Hijack()\n  118- \t\trequire.NoError(t, err)\n  119- \t})\n  120- \tassert.True(t, w.Written())\n  --\n  132- }\n  133- \n  134- // Hijack implements the http.Hijacker interface. It just records that it was called.\n  135: func (m *mockHijacker) Hijack() (net.Conn, *bufio.ReadWriter, error) {\n  136- \tm.hijacked = true\n  137- \treturn nil, nil, nil\n  138- }\n  --\n  184- \t\t\tassert.Equal(t, tc.expectWrittenBeforeHijack, w.Written(), \"unexpected w.Written() state before hijack\")\n  185- \n  186- \t\t\t// Attempt to hijack\n  187: \t\t\t_, _, hijackErr := w.Hijack()\n  188- \n  189- \t\t\t// Check results\n  190: \t\t\trequire.ErrorIs(t, hijackErr, tc.expectError, \"unexpected error from Hijack()\")\n  191- \t\t\tassert.Equal(t, tc.expectHijackSuccess, hijacker.hijacked, \"unexpected hijacker.hijacked state\")\n  192- \t\t\tassert.Equal(t, tc.expectWrittenAfterHijack, w.Written(), \"unexpected w.Written() state after hijack\")\n  193- \t\t})\nresponse_writer_test.go: +2 more matches\n\u2500\u2500 CloseNotify() \u2500\u2500\ncontext.go:\n  1354- // indicates \"Is client disconnected in middle of stream\"\n  1355- func (c *Context) Stream(step func(w io.Writer) bool) bool {\n  1356- \tw := c.Writer\n  1357: \tclientGone := w.CloseNotify()\n  1358- \tfor {\n  1359- \t\tselect {\n  1360- \t\tcase <-clientGone:\ncontext_test.go:\n  3086- \tcloseChannel chan bool\n  3087- }\n  3088- \n  3089: func (r *TestResponseRecorder) CloseNotify() <-chan bool {\n  3090- \treturn r.closeChannel\n  3091- }\n  3092- \nresponse_writer.go:\n  121- }\n  122- \n  123- // CloseNotify implements the http.CloseNotifier interface.\n  124: func (w *responseWriter) CloseNotify() <-chan bool {\n  125: \treturn w.ResponseWriter.(http.CloseNotifier).CloseNotify()\n  126- }\n  127- \n  128- // Flush implements the http.Flusher interface.\nresponse_writer_test.go:\n  17- \n  18- // TODO\n  19- // func (w *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {\n  20: // func (w *responseWriter) CloseNotify() <-chan bool {\n  21- // func (w *responseWriter) Flush() {\n  22- \n  23- var (\n  --\n  120- \tassert.True(t, w.Written())\n  121- \n  122- \tassert.Panics(t, func() {\n  123: \t\tw.CloseNotify()\n  124- \t})\n  125- \n  126- \tw.Flush()\n\u2500\u2500 http.Hijacker \u2500\u2500\nresponse_writer.go:\n  22- // ResponseWriter ...\n  23- type ResponseWriter interface {\n  24- \thttp.ResponseWriter\n  25: \thttp.Hijacker\n  26- \thttp.Flusher\n  27- \thttp.CloseNotifier\n  28- \n  --\n  107- \treturn w.size != noWritten\n  108- }\n  109- \n  110: // Hijack implements the http.Hijacker interface.\n  111- func (w *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {\n  112- \t// Allow hijacking before any data is written (size == -1) or after headers are written (size == 0),\n  113- \t// but not after body data is written (size > 0). For compatibility with websocket libraries (e.g., github.com/coder/websocket)\nresponse_writer.go: 1 line(s) already shown under an earlier term\nresponse_writer_test.go:\n  24- \t_ ResponseWriter      = &responseWriter{}\n  25- \t_ http.ResponseWriter = &responseWriter{}\n  26- \t_ http.ResponseWriter = ResponseWriter(&responseWriter{})\n  27: \t_ http.Hijacker       = ResponseWriter(&responseWriter{})\n  28- \t_ http.Flusher        = ResponseWriter(&responseWriter{})\n  29- \t_ http.CloseNotifier  = ResponseWriter(&responseWriter{})\n  30- )\n  --\n  131- \thijacked bool\n  132- }\n  133- \n  134: // Hijack implements the http.Hijacker interface. It just records that it was called.\n  135- func (m *mockHijacker) Hijack() (net.Conn, *bufio.ReadWriter, error) {\n  136- \tm.hijacked = true\n  137- \treturn nil, nil, nil\n\u2500\u2500 http.CloseNotifier \u2500\u2500\nresponse_writer.go:\n  24- \thttp.ResponseWriter\n  25- \thttp.Hijacker\n  26- \thttp.Flusher\n  27: \thttp.CloseNotifier\n  28- \n  29- \t// Status returns the HTTP response status code of the current request.\n  30- \tStatus() int\n  --\n  120- \treturn w.ResponseWriter.(http.Hijacker).Hijack()\n  121- }\n  122- \n  123: // CloseNotify implements the http.CloseNotifier interface.\n  124- func (w *responseWriter) CloseNotify() <-chan bool {\n  125- \treturn w.ResponseWriter.(http.CloseNotifier).CloseNotify()\n  126- }\nresponse_writer.go: 1 line(s) already shown under an earlier term\nresponse_writer_test.go:\n  26- \t_ http.ResponseWriter = ResponseWriter(&responseWriter{})\n  27- \t_ http.Hijacker       = ResponseWriter(&responseWriter{})\n  28- \t_ http.Flusher        = ResponseWriter(&responseWriter{})\n  29: \t_ http.CloseNotifier  = ResponseWriter(&responseWriter{})\n  30- )\n  31- \n  32- func init() {\n"
+          }
+        ],
+        "structured_content": null
+      },
+      "error": null,
+      "status": "completed"
+    },
+    {
+      "id": "item_5",
+      "type": "mcp_tool_call",
+      "server": "prism",
+      "tool": "prism_lookup",
+      "arguments": {
+        "name": [
+          "TestResponseWriterHijackCloseNotifyFlush"
+        ],
+        "file": "response_writer_test.go",
+        "fields": [
+          "signature",
+          "body"
+        ]
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "// lookup TestResponseWriterHijackCloseNotifyFlush\n// NO EXACT MATCH\n// no symbol named \"TestResponseWriterHijackCloseNotifyFlush\" in the index \u2014 check the spelling, or use prism_search for a name fragment\n"
+          }
+        ],
+        "structured_content": null
+      },
+      "error": null,
+      "status": "completed"
+    },
+    {
+      "id": "item_6",
+      "type": "mcp_tool_call",
+      "server": "prism",
+      "tool": "prism_search",
+      "arguments": {
+        "query": "assert.Panics",
+        "path": "response_writer_test.go",
+        "scope": "text",
+        "context": 8,
+        "limit": 50
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "// root: /private/tmp/prism-scoped-ab-1_9slfbq/b/work/gin-4645.r1.codex_prism\nresponse_writer_test.go:\n  108- }\n  109- \n  110- func TestResponseWriterHijack(t *testing.T) {\n  111- \ttestWriter := httptest.NewRecorder()\n  112- \twriter := &responseWriter{}\n  113- \twriter.reset(testWriter)\n  114- \tw := ResponseWriter(writer)\n  115- \n  116: \tassert.Panics(t, func() {\n  117- \t\t_, _, err := w.Hijack()\n  118- \t\trequire.NoError(t, err)\n  119- \t})\n  120- \tassert.True(t, w.Written())\n  121- \n  122: \tassert.Panics(t, func() {\n  123- \t\tw.CloseNotify()\n  124- \t})\n  125- \n  126- \tw.Flush()\n  127- }\n  128- \n  129- type mockHijacker struct {\n  130- \t*httptest.ResponseRecorder\n"
+          }
+        ],
+        "structured_content": null
+      },
+      "error": null,
+      "status": "completed"
+    }
+  ],
+  "total_tokens": 77834,
+  "answer": {
+    "sites": [
+      "response_writer.go:Hijack",
+      "response_writer.go:CloseNotify"
+    ],
+    "complete": true,
+    "unresolved": []
+  },
+  "score": {
+    "task_id": "gin-4645",
+    "arm": "codex_prism",
+    "trial": 1,
+    "recall": 1.0,
+    "precision": 1.0,
+    "f1": 1.0,
+    "found": [
+      "response_writer.go:CloseNotify",
+      "response_writer.go:Hijack"
+    ],
+    "missed": [],
+    "extra": [],
+    "weak_matches": [],
+    "claimed_complete": true,
+    "overconfident": false,
+    "surfaced_gap": false,
+    "weak_recall": 1.0
+  },
+  "valid": true,
+  "audited_total_tokens": 77834,
+  "prism_successful_calls": [
+    "prism_lookup",
+    "prism_change_impact",
+    "prism_change_impact",
+    "prism_search",
+    "prism_lookup",
+    "prism_search"
+  ],
+  "tool_errors": [],
+  "native_commands": [],
+  "violations": [],
+  "cell_id": "gin-4645.r1.codex_prism",
+  "trial": 1,
+  "started_at": 1788728260.544461,
+  "source_changed": [],
+  "setup_abort": false,
+  "audited_valid": true
+}

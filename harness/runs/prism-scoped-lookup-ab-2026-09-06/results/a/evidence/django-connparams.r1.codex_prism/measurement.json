@@ -1,0 +1,230 @@
+{
+  "arm": "codex_prism",
+  "wall_s": 41.104,
+  "exit_code": 0,
+  "timed_out": false,
+  "task": "django-connparams",
+  "scorer_version": 3,
+  "model": "gpt-5.5",
+  "usage_raw": [
+    {
+      "input_tokens": 52485,
+      "cached_input_tokens": 42496,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 1251,
+      "reasoning_output_tokens": 781
+    }
+  ],
+  "measurement_complete": true,
+  "input_tokens": 52485,
+  "output_tokens": 1251,
+  "cache_read_tokens": 42496,
+  "cost_usd": 0.108723,
+  "cost_basis": "API-equivalent estimate: GPT-5.5 $5/$0.50/$30 per M input/cached/output; not subscription billing",
+  "agent_error": false,
+  "tool_calls": 6,
+  "prism_calls": 6,
+  "calls": [
+    {
+      "id": "item_1",
+      "type": "mcp_tool_call",
+      "server": "prism",
+      "tool": "prism_change_impact",
+      "arguments": {
+        "query": "BaseDatabaseWrapper.get_connection_params",
+        "file": "django/db/backends/base/base.py",
+        "context_used": 1000
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "// BaseDatabaseWrapper.get_connection_params \u2014 change-impact: 12 site(s)\ncompleteness: closed\n// includes name-derived references: completeness describes indexed scope, not receiver certainty. Verify ambiguous expressions; per-edge provenance is unavailable here.\n// Indexed call expressions below are name-matched within reported callers, not independent receiver-resolution proof. Snippet limits never remove sites. Inspect ambiguous receivers, omitted evidence, or behavior needed by the task.\ndeclarations (1):\n  BaseDatabaseWrapper.get_connection_params  django/db/backends/base/base.py:208\n    def get_connection_params(self):\nfamily (4):\n  DatabaseWrapper.get_connection_params  django/db/backends/mysql/base.py:214\n    def get_connection_params(self):\n  DatabaseWrapper.get_connection_params  django/db/backends/oracle/base.py:294\n    def get_connection_params(self):\n  DatabaseWrapper.get_connection_params  django/db/backends/postgresql/base.py:250\n    def get_connection_params(self):\n  DatabaseWrapper.get_connection_params  django/db/backends/sqlite3/base.py:154\n    def get_connection_params(self):\ncallers (7):\n  BaseDatabaseWrapper.connect  django/db/backends/base/base.py:237\n    255: conn_params = self.get_connection_params()\n  DatabaseWrapper.pool  django/db/backends/oracle/base.py:259\n    270: connect_kwargs = self.get_connection_params()\n  DatabaseWrapper.pool  django/db/backends/postgresql/base.py:194\n    215: connect_kwargs = self.get_connection_params()\n  Tests.test_database_name_too_long  tests/backends/postgresql/tests.py:138  [test]\n    150: DatabaseWrapper(settings).get_connection_params()\n  Tests.test_database_name_empty  tests/backends/postgresql/tests.py:152  [test]\n    162: DatabaseWrapper(settings).get_connection_params()\n  Tests.test_service_name  tests/backends/postgresql/tests.py:164  [test]\n    170: params = DatabaseWrapper(settings).get_connection_params()\n  Tests.test_service_name_default_db  tests/backends/postgresql/tests.py:174  [test]\n    181: params = DatabaseWrapper(settings).get_connection_params()\n"
+          }
+        ],
+        "structured_content": null
+      },
+      "error": null,
+      "status": "completed"
+    },
+    {
+      "id": "item_2",
+      "type": "mcp_tool_call",
+      "server": "prism",
+      "tool": "prism_lookup",
+      "arguments": {
+        "name": [
+          "BaseDatabaseWrapper.connect",
+          "DatabaseWrapper.pool",
+          "DatabaseWrapper.get_connection_params"
+        ],
+        "file": "django/db/backends/base/base.py",
+        "fields": [
+          "signature",
+          "body"
+        ]
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "// lookup BaseDatabaseWrapper.connect\nname: BaseDatabaseWrapper.connect\nfile: django/db/backends/base/base.py\nline: 237\nsignature: def connect(self):\nbody: def connect(self):\n        \"\"\"Connect to the database. Assume that the connection is closed.\"\"\"\n        # Check for invalid configurations.\n        self.check_settings()\n        # In case the previous connection was closed while in an atomic block\n        self.in_atomic_block = False\n        self.savepoint_ids = []\n        self.atomic_blocks = []\n        self.needs_rollback = False\n        # Reset parameters defining when to close/health-check the connection.\n        self.health_check_enabled = self.settings_dict[\"CONN_HEALTH_CHECKS\"]\n        max_age = self.settings_dict[\"CONN_MAX_AGE\"]\n        self.close_at = None if max_age is None else time.monotonic() + max_age\n        self.closed_in_transaction = False\n        self.errors_occurred = False\n        # New connections are healthy.\n        self.health_check_done = True\n        # Establish the connection\n        conn_params = self.get_connection_params()\n        self.connection = self.get_new_connection(conn_params)\n        self.set_autocommit(self.settings_dict[\"AUTOCOMMIT\"])\n        self.init_connection_state()\n        connection_created.send(sender=self.__class__, connection=self)\n\n        self.run_on_commit = []\n// lookup DatabaseWrapper.pool\nname: DatabaseWrapper.pool\nfile: django/db/backends/oracle/base.py\nline: 259\nsignature: def pool(self):\nbody: def pool(self):\n        if not self.is_pool:\n            return None\n\n        if self.settings_dict.get(\"CONN_MAX_AGE\", 0) != 0:\n            raise ImproperlyConfigured(\n                \"Pooling doesn't support persistent connections.\"\n            )\n\n        pool_key = (self.alias, self.settings_dict[\"USER\"])\n        if pool_key not in self._connection_pools:\n            connect_kwargs = self.get_connection_params()\n            pool_options = connect_kwargs.pop(\"pool\")\n            if pool_options is not True:\n                connect_kwargs.update(pool_options)\n\n            pool = Database.create_pool(\n                user=self.settings_dict[\"USER\"],\n                password=self.settings_dict[\"PASSWORD\"],\n                dsn=dsn(self.settings_dict),\n                **connect_kwargs,\n            )\n            self._connection_pools.setdefault(pool_key, pool)\n\n        return self._connection_pools[pool_key]\n// AMBIGUOUS \u2014 same score for:\n//   DatabaseWrapper.pool (django/db/backends/oracle/base.py)\n//   DatabaseWrapper.pool (django/db/backends/postgresql/base.py)\n// lookup DatabaseWrapper.get_connection_params\nname: BaseDatabaseWrapper.get_connection_params\nfile: django/db/backends/base/base.py\nline: 208\nsignature: def get_connection_params(self):\nbody: def get_connection_params(self):\n        \"\"\"Return a dict of parameters suitable for get_new_connection.\"\"\"\n        raise NotImplementedError(\n            \"subclasses of BaseDatabaseWrapper may require a get_connection_params() \"\n            \"method\"\n        )\n"
+          }
+        ],
+        "structured_content": null
+      },
+      "error": null,
+      "status": "completed"
+    },
+    {
+      "id": "item_3",
+      "type": "mcp_tool_call",
+      "server": "prism",
+      "tool": "prism_lookup",
+      "arguments": {
+        "name": [
+          "DatabaseWrapper.pool",
+          "DatabaseWrapper.get_connection_params"
+        ],
+        "file": "django/db/backends/postgresql/base.py",
+        "fields": [
+          "signature",
+          "body"
+        ]
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "// lookup DatabaseWrapper.pool\nname: DatabaseWrapper.pool\nfile: django/db/backends/postgresql/base.py\nline: 194\nsignature: def pool(self):\nbody: def pool(self):\n        pool_options = self.settings_dict[\"OPTIONS\"].get(\"pool\")\n        if self.alias == NO_DB_ALIAS or not pool_options:\n            return None\n\n        if self.alias not in self._connection_pools:\n            if self.settings_dict.get(\"CONN_MAX_AGE\", 0) != 0:\n                raise ImproperlyConfigured(\n                    \"Pooling doesn't support persistent connections.\"\n                )\n            # Set the default options.\n            if pool_options is True:\n                pool_options = {}\n\n            try:\n                from psycopg_pool import ConnectionPool\n            except ImportError as err:\n                raise ImproperlyConfigured(\n                    \"Error loading psycopg_pool module.\\nDid you install psycopg[pool]?\"\n                ) from err\n\n            connect_kwargs = self.get_connection_params()\n            # Ensure we run in autocommit, Django properly sets it later on.\n            connect_kwargs[\"autocommit\"] = True\n            enable_checks = self.settings_dict[\"CONN_HEALTH_CHECKS\"]\n            # Copy to avoid mutating the user's settings dict.\n            pool_options = {**pool_options}\n            pool_options.setdefault(\n                \"check\", ConnectionPool.check_connection if enable_checks else None\n            )\n            pool = ConnectionPool(\n                kwargs=connect_kwargs,\n                open=False,  # Do not open the pool during startup.\n                configure=self._configure_connection,\n                **pool_options,\n            )\n            # setdefault() ensures that multiple threads don't set this in\n            # parallel. Since we do not open the pool during it's init above,\n            # this means that at worst during startup multiple threads generate\n            # pool objects and the first to set it wins.\n            self._connection_pools.setdefault(self.alias, pool)\n\n        return self._connection_pools[self.alias]\n// lookup DatabaseWrapper.get_connection_params\nname: DatabaseWrapper.get_connection_params\nfile: django/db/backends/postgresql/base.py\nline: 250\nsignature: def get_connection_params(self):\nbody: def get_connection_params(self):\n        settings_dict = self.settings_dict\n        # None may be used to connect to the default 'postgres' db\n        if settings_dict[\"NAME\"] == \"\" and not settings_dict[\"OPTIONS\"].get(\"service\"):\n            raise ImproperlyConfigured(\n                \"settings.DATABASES is improperly configured. \"\n                \"Please supply the NAME or OPTIONS['service'] value.\"\n            )\n        if len(settings_dict[\"NAME\"] or \"\") > self.ops.max_name_length():\n            raise ImproperlyConfigured(\n                \"The database name '%s' (%d characters) is longer than \"\n                \"PostgreSQL's limit of %d characters. Supply a shorter NAME \"\n                \"in settings.DATABASES.\"\n                % (\n                    settings_dict[\"NAME\"],\n                    len(settings_dict[\"NAME\"]),\n                    self.ops.max_name_length(),\n                )\n            )\n        if settings_dict[\"NAME\"]:\n            conn_params = {\n                \"dbname\": settings_dict[\"NAME\"],\n                **settings_dict[\"OPTIONS\"],\n            }\n        elif settings_dict[\"NAME\"] is None:\n            # Connect to the default 'postgres' db.\n            settings_dict[\"OPTIONS\"].pop(\"service\", None)\n            conn_params = {\"dbname\": \"postgres\", **settings_dict[\"OPTIONS\"]}\n        else:\n            conn_params = {**settings_dict[\"OPTIONS\"]}\n        conn_params[\"client_encoding\"] = \"UTF8\"\n\n        conn_params.pop(\"assume_role\", None)\n        conn_params.pop(\"isolation_level\", None)\n\n        pool_options = conn_params.pop(\"pool\", None)\n        if pool_options and not is_psycopg3:\n            raise ImproperlyConfigured(\"Database pooling requires psycopg >= 3\")\n\n        server_side_binding = conn_params.pop(\"server_side_binding\", None)\n        conn_params.setdefault(\n            \"cursor_factory\",\n            (\n                ServerBindingCursor\n                if is_psycopg3 and server_side_binding is True\n                else Cursor\n            ),\n        )\n        if settings_dict[\"USER\"]:\n            conn_params[\"user\"] = settings_dict[\"USER\"]\n        if settings_dict[\"PASSWORD\"]:\n            conn_params[\"password\"] = settings_dict[\"PASSWORD\"]\n        if settings_dict[\"HOST\"]:\n            conn_params[\"host\"] = settings_dict[\"HOST\"]\n        if settings_dict[\"PORT\"]:\n            conn_params[\"port\"] = settings_dict[\"PORT\"]\n        if is_psycopg3:\n            conn_params[\"context\"] = get_adapters_template(\n                settings.USE_TZ, self.timezone\n            )\n            # Disable prepared statements by default to keep connection poolers\n            # working. Can be reenabled via OPTIONS in the settings dict.\n            conn_params[\"prepare_threshold\"] = conn_params.pop(\n                \"prepare_threshold\", None\n            )\n        return conn_params\n"
+          }
+        ],
+        "structured_content": null
+      },
+      "error": null,
+      "status": "completed"
+    },
+    {
+      "id": "item_4",
+      "type": "mcp_tool_call",
+      "server": "prism",
+      "tool": "prism_lookup",
+      "arguments": {
+        "name": [
+          "DatabaseWrapper.get_connection_params"
+        ],
+        "file": "django/db/backends/mysql/base.py",
+        "fields": [
+          "signature",
+          "body"
+        ]
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "// lookup DatabaseWrapper.get_connection_params\nname: DatabaseWrapper.get_connection_params\nfile: django/db/backends/mysql/base.py\nline: 214\nsignature: def get_connection_params(self):\nbody: def get_connection_params(self):\n        kwargs = {\n            \"conv\": django_conversions,\n            \"charset\": \"utf8mb4\",\n        }\n        settings_dict = self.settings_dict\n        if settings_dict[\"USER\"]:\n            kwargs[\"user\"] = settings_dict[\"USER\"]\n        if settings_dict[\"NAME\"]:\n            kwargs[\"database\"] = settings_dict[\"NAME\"]\n        if settings_dict[\"PASSWORD\"]:\n            kwargs[\"password\"] = settings_dict[\"PASSWORD\"]\n        if settings_dict[\"HOST\"].startswith(\"/\"):\n            kwargs[\"unix_socket\"] = settings_dict[\"HOST\"]\n        elif settings_dict[\"HOST\"]:\n            kwargs[\"host\"] = settings_dict[\"HOST\"]\n        if settings_dict[\"PORT\"]:\n            kwargs[\"port\"] = int(settings_dict[\"PORT\"])\n        # We need the number of potentially affected rows after an\n        # \"UPDATE\", not the number of changed rows.\n        kwargs[\"client_flag\"] = CLIENT.FOUND_ROWS\n        # Validate the transaction isolation level, if specified.\n        options = settings_dict[\"OPTIONS\"].copy()\n        isolation_level = options.pop(\"isolation_level\", \"read committed\")\n        if isolation_level:\n            isolation_level = isolation_level.lower()\n            if isolation_level not in self.isolation_levels:\n                raise ImproperlyConfigured(\n                    \"Invalid transaction isolation level '%s' specified.\\n\"\n                    \"Use one of %s, or None.\"\n                    % (\n                        isolation_level,\n                        \", \".join(\"'%s'\" % s for s in sorted(self.isolation_levels)),\n                    )\n                )\n        self.isolation_level = isolation_level\n        kwargs.update(options)\n        return kwargs\n"
+          }
+        ],
+        "structured_content": null
+      },
+      "error": null,
+      "status": "completed"
+    },
+    {
+      "id": "item_5",
+      "type": "mcp_tool_call",
+      "server": "prism",
+      "tool": "prism_lookup",
+      "arguments": {
+        "name": [
+          "DatabaseWrapper.get_connection_params"
+        ],
+        "file": "django/db/backends/oracle/base.py",
+        "fields": [
+          "signature",
+          "body"
+        ]
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "// lookup DatabaseWrapper.get_connection_params\nname: DatabaseWrapper.get_connection_params\nfile: django/db/backends/oracle/base.py\nline: 294\nsignature: def get_connection_params(self):\nbody: def get_connection_params(self):\n        conn_params = self.settings_dict[\"OPTIONS\"].copy()\n        if \"use_returning_into\" in conn_params:\n            del conn_params[\"use_returning_into\"]\n        return conn_params\n"
+          }
+        ],
+        "structured_content": null
+      },
+      "error": null,
+      "status": "completed"
+    },
+    {
+      "id": "item_6",
+      "type": "mcp_tool_call",
+      "server": "prism",
+      "tool": "prism_lookup",
+      "arguments": {
+        "name": [
+          "DatabaseWrapper.get_connection_params"
+        ],
+        "file": "django/db/backends/sqlite3/base.py",
+        "fields": [
+          "signature",
+          "body"
+        ]
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "// lookup DatabaseWrapper.get_connection_params\nname: DatabaseWrapper.get_connection_params\nfile: django/db/backends/sqlite3/base.py\nline: 154\nsignature: def get_connection_params(self):\nbody: def get_connection_params(self):\n        settings_dict = self.settings_dict\n        if not settings_dict[\"NAME\"]:\n            raise ImproperlyConfigured(\n                \"settings.DATABASES is improperly configured. \"\n                \"Please supply the NAME value.\"\n            )\n        kwargs = {\n            \"database\": settings_dict[\"NAME\"],\n            \"detect_types\": Database.PARSE_DECLTYPES | Database.PARSE_COLNAMES,\n            **settings_dict[\"OPTIONS\"],\n        }\n        # Always allow the underlying SQLite connection to be shareable\n        # between multiple threads. The safe-guarding will be handled at a\n        # higher level by the `BaseDatabaseWrapper.allow_thread_sharing`\n        # property. This is necessary as the shareability is disabled by\n        # default in sqlite3 and it cannot be changed once a connection is\n        # opened.\n        if \"check_same_thread\" in kwargs and kwargs[\"check_same_thread\"]:\n            warnings.warn(\n                \"The `check_same_thread` option was provided and set to \"\n                \"True. It will be overridden with False. Use the \"\n                \"`DatabaseWrapper.allow_thread_sharing` property instead \"\n                \"for controlling thread shareability.\",\n                RuntimeWarning,\n            )\n        kwargs.update({\"check_same_thread\": False, \"uri\": True})\n        transaction_mode = kwargs.pop(\"transaction_mode\", None)\n        if (\n            transaction_mode is not None\n            and transaction_mode.upper() not in self.transaction_modes\n        ):\n            allowed_transaction_modes = \", \".join(\n                [f\"{mode!r}\" for mode in sorted(self.transaction_modes)]\n            )\n            raise ImproperlyConfigured(\n                f\"settings.DATABASES[{self.alias!r}]['OPTIONS']['transaction_mode'] \"\n                f\"is improperly configured to '{transaction_mode}'. Use one of \"\n                f\"{allowed_transaction_modes}, or None.\"\n            )\n        self.transaction_mode = transaction_mode.upper() if transaction_mode else None\n\n        init_command = kwargs.pop(\"init_command\", \"\")\n        self.init_commands = init_command.split(\";\")\n        return kwargs\n"
+          }
+        ],
+        "structured_content": null
+      },
+      "error": null,
+      "status": "completed"
+    }
+  ],
+  "total_tokens": 53736,
+  "answer": {
+    "sites": [
+      "django/db/backends/base/base.py:get_connection_params",
+      "django/db/backends/mysql/base.py:get_connection_params",
+      "django/db/backends/oracle/base.py:get_connection_params",
+      "django/db/backends/postgresql/base.py:get_connection_params",
+      "django/db/backends/sqlite3/base.py:get_connection_params",
+      "django/db/backends/base/base.py:connect",
+      "django/db/backends/oracle/base.py:pool",
+      "django/db/backends/postgresql/base.py:pool"
+    ],
+    "complete": true,
+    "unresolved": []
+  },
+  "score": {
+    "task_id": "django-connparams",
+    "arm": "codex_prism",
+    "trial": 1,
+    "recall": 1.0,
+    "precision": 1.0,
+    "f1": 1.0,
+    "found": [
+      "django/db/backends/base/base.py:connect",
+      "django/db/backends/base/base.py:get_connection_params",
+      "django/db/backends/mysql/base.py:get_connection_params",
+      "django/db/backends/oracle/base.py:get_connection_params",
+      "django/db/backends/oracle/base.py:pool",
+      "django/db/backends/postgresql/base.py:get_connection_params",
+      "django/db/backends/postgresql/base.py:pool",
+      "django/db/backends/sqlite3/base.py:get_connection_params"
+    ],
+    "missed": [],
+    "extra": [],
+    "weak_matches": [],
+    "claimed_complete": true,
+    "overconfident": false,
+    "surfaced_gap": false,
+    "weak_recall": 1.0
+  },
+  "valid": true
+}
