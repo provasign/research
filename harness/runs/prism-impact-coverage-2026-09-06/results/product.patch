@@ -1,0 +1,364 @@
+diff --git a/internal/cli/commands.go b/internal/cli/commands.go
+index e34bf6c..2f7af22 100644
+--- a/internal/cli/commands.go
++++ b/internal/cli/commands.go
+@@ -496,21 +496,22 @@ start deferred, not absent):
+     ToolSearch("select:mcp__prism__prism_search,mcp__prism__prism_query,mcp__prism__prism_change_impact,mcp__prism__prism_lookup")
+ 
+ Make your first code-discovery call the Prism tool that answers the question:
+-- Known symbol, affected sites or signature change: ` + "`" + `prism_change_impact` + "`" + ` directly.
++- Affected sites or signature change: ` + "`" + `prism_change_impact` + "`" + ` directly.
+ - Known methods, need their behavior: ` + "`" + `prism_lookup(name=["A","B"])` + "`" + ` for whole bodies.
+ - Unknown location: ` + "`" + `prism_search` + "`" + `; need edit-ready context around terms: ` + "`" + `prism_query` + "`" + `.
+ Do not search merely to locate a symbol already named for impact or lookup.
++Read-only inspection needs no impact just because a symbol is named.
+ 
+ Workflow rules:
+ 
+ - Before editing an existing symbol: ` + "`" + `prism_change_impact(query="Type.method")` + "`" + `.
+   **Relay that set as-is**; do not filter it through grep/sed.
+ - Before declaring a multi-site change done: ` + "`" + `prism_verify` + "`" + `.
+-- After impact, use the delivered signatures and call expressions. Follow up
+-  only for needed bodies, omitted evidence, ambiguous receivers, stale/incomplete
+-  scope, or non-code references required by the task. Do not rescan just to
+-  reproduce the site list. Preserve reported sites while resolving uncertainty;
+-  if evidence gaps remain, report them instead of claiming completeness.
++- After impact, reuse signatures and call expressions for site enumeration;
++  do not fetch bodies by default. Follow up for behavior, omitted evidence, ambiguous receivers, stale/incomplete
++  scope, or required non-code references. Do not rescan to reproduce the site list.
++  Preserve reported sites while resolving uncertainty; if gaps remain,
++  report them instead of claiming completeness.
+ - Removing symbols? Before editing, run ` + "`" + `prism_verify(removed_symbols=["A","B"])` + "`" + `.
+   Re-run per edit round; plain ` + "`" + `prism_verify` + "`" + ` still gates the finish. Check
+   non-compiling surfaces too: comments, docs, config, and other languages.
+diff --git a/internal/cli/steeringdelivery_test.go b/internal/cli/steeringdelivery_test.go
+index 3309124..de693c7 100644
+--- a/internal/cli/steeringdelivery_test.go
++++ b/internal/cli/steeringdelivery_test.go
+@@ -9,7 +9,7 @@ func TestSteeringRoutesKnownNamesDirectly(t *testing.T) {
+ 	got := steeringBlock()
+ 	for _, want := range []string{
+ 		"mcp__prism__prism_lookup",
+-		"Known symbol, affected sites or signature change:",
++		"Affected sites or signature change:",
+ 		"Known methods, need their behavior:",
+ 		`prism_lookup(name=["A","B"])`,
+ 		"Unknown location:",
+@@ -22,6 +22,14 @@ func TestSteeringRoutesKnownNamesDirectly(t *testing.T) {
+ 	if strings.Contains(got, "FIRST discovery call a prism one (search/query)") {
+ 		t.Error("known names must not require a preliminary search")
+ 	}
++	if strings.Contains(got, "Known symbol, affected sites") {
++		t.Error("a named symbol alone must not trigger impact")
++	}
++	for _, want := range []string{"Read-only inspection needs no impact", "do not fetch bodies by default", "site enumeration"} {
++		if !strings.Contains(got, want) {
++			t.Errorf("missing task-depth distinction: %s", want)
++		}
++	}
+ 	if len(got) > 3000 {
+ 		t.Errorf("always-loaded steering grew beyond 3000 bytes: %d", len(got))
+ 	}
+diff --git a/internal/mcp/graphcache.go b/internal/mcp/graphcache.go
+index c141529..661ad1f 100644
+--- a/internal/mcp/graphcache.go
++++ b/internal/mcp/graphcache.go
+@@ -183,7 +183,7 @@ func graphPointerResponse(name, hash string, seenCount int, out any) map[string]
+ 				summary[k] = len(tv)
+ 			case string:
+ 				switch k {
+-				case "query", "completeness", "newName", "scope":
++				case "query", "completeness", "coverageNote", "newName", "scope":
+ 					summary[k] = tv
+ 				}
+ 			}
+diff --git a/internal/mcp/graphtext.go b/internal/mcp/graphtext.go
+index 675c7d4..01bf208 100644
+--- a/internal/mcp/graphtext.go
++++ b/internal/mcp/graphtext.go
+@@ -72,7 +72,7 @@ func renderChangeImpactAsText(out map[string]any) (string, bool) {
+ 		"declaringTypesNote": true, "completeness": true,
+ 		"externalSupers": true, "overridesExternal": true, "warning": true,
+ 		"widerAnchor": true, "hasHeuristicRefs": true,
+-		"evidenceNote": true, "staleWarning": true, "scopeNote": true, "ambiguityNote": true,
++		"evidenceNote": true, "coverageNote": true, "staleWarning": true, "scopeNote": true, "ambiguityNote": true,
+ 	}
+ 	for k := range out {
+ 		if !known[k] {
+@@ -84,6 +84,9 @@ func renderChangeImpactAsText(out map[string]any) (string, bool) {
+ 	if c, _ := out["completeness"].(string); c != "" {
+ 		fmt.Fprintf(&b, "completeness: %s\n", c)
+ 	}
++	if note, _ := out["coverageNote"].(string); note != "" {
++		fmt.Fprintf(&b, "// %s\n", note)
++	}
+ 	if hr, _ := out["hasHeuristicRefs"].(bool); hr {
+ 		b.WriteString("// includes name-derived references: completeness describes indexed scope, not receiver certainty. " +
+ 			"Verify ambiguous expressions; per-edge provenance is unavailable here.\n")
+diff --git a/internal/mcp/impactcoverage.go b/internal/mcp/impactcoverage.go
+new file mode 100644
+index 0000000..f371a6b
+--- /dev/null
++++ b/internal/mcp/impactcoverage.go
+@@ -0,0 +1,27 @@
++package mcp
++
++import (
++	"path/filepath"
++	"strings"
++
++	"github.com/provasign/prism/internal/grove"
++)
++
++// Grove's closed hierarchy does not prove Go method-set or interface coverage.
++// Keep its inventory intact, but never promote that engine label to a guarantee.
++func impactCoverage(r *grove.ChangeImpactResult) (string, string) {
++	if r == nil {
++		return "", ""
++	}
++	if r.Completeness != "closed" {
++		return r.Completeness, ""
++	}
++	for _, group := range [][]grove.SymbolRecord{r.Declarations, r.Supers, r.Family, r.DeclaringTypes} {
++		for _, sym := range group {
++			if strings.EqualFold(sym.Language, "go") || strings.EqualFold(filepath.Ext(sym.FilePath), ".go") {
++				return "partial", "Go interface dispatch and embedded method sets are not fully modeled; contracts or callers may be missing. Use targeted text search before claiming completeness."
++			}
++		}
++	}
++	return r.Completeness, ""
++}
+diff --git a/internal/mcp/impactcoverage_test.go b/internal/mcp/impactcoverage_test.go
+new file mode 100644
+index 0000000..9e5a348
+--- /dev/null
++++ b/internal/mcp/impactcoverage_test.go
+@@ -0,0 +1,130 @@
++package mcp
++
++import (
++	"reflect"
++	"strings"
++	"testing"
++
++	"github.com/provasign/prism/internal/grove"
++)
++
++func TestImpactGoEmbeddedInterfaceIsNotClosed(t *testing.T) {
++	h := evidenceHandler(t, map[string]string{
++		"go.mod": "module example.com/coverage\n\ngo 1.26\n",
++		"writer.go": `package coverage
++import "net/http"
++type Writer interface { http.CloseNotifier }
++type writer struct { http.ResponseWriter }
++func (w *writer) CloseNotify() <-chan bool { return w.ResponseWriter.(http.CloseNotifier).CloseNotify() }
++type other struct{}
++func (w *other) CloseNotify() <-chan bool { return nil }
++func Stream(w Writer) { <-w.CloseNotify() }
++`,
++	})
++	raw, err := h.Grove.ChangeImpactScoped(t.Context(), "writer.CloseNotify", "writer.go")
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Logf("engine completeness=%s declarations=%d family=%d callers=%v declaringTypes=%d",
++		raw.Completeness, len(raw.Declarations), len(raw.Family), raw.Callers, len(raw.DeclaringTypes))
++	result, err := h.Invoke("prism_change_impact", map[string]any{"query": "writer.CloseNotify", "file": "writer.go"})
++	if err != nil {
++		t.Fatal(err)
++	}
++	out := result.(map[string]any)
++	if out["completeness"] != "partial" {
++		t.Fatalf("Go interface coverage is not proved closed: %v", out)
++	}
++	if h.hypLedger.closedSmall != 0 {
++		t.Fatal("partial impact must not enter the closed-impact ledger")
++	}
++	if note, _ := out["coverageNote"].(string); !strings.Contains(note, "interface") || !strings.Contains(note, "missing") {
++		t.Fatalf("missing actionable coverage warning: %v", out)
++	}
++	for key, syms := range map[string][]grove.SymbolRecord{
++		"declarations": raw.Declarations, "supers": raw.Supers, "family": raw.Family,
++		"callers": raw.Callers, "declaringTypes": raw.DeclaringTypes,
++	} {
++		entries := anySlice(out[key])
++		if len(entries) != len(syms) {
++			t.Fatalf("%s inventory changed: %d != %d", key, len(entries), len(syms))
++		}
++		for i, sym := range syms {
++			entry := entries[i].(map[string]any)
++			if entry["filePath"] != sym.FilePath || entry["line"] != sym.Span.Start {
++				t.Fatalf("%s identity changed: %v", key, entry)
++			}
++		}
++	}
++	text, ok := renderChangeImpactAsText(out)
++	if !ok || !strings.Contains(text, "completeness: partial") || !strings.Contains(text, out["coverageNote"].(string)) {
++		t.Fatalf("coverage must survive compact rendering: %t %s", ok, text)
++	}
++}
++
++func TestImpactCoveragePreservesTiersAndInput(t *testing.T) {
++	for _, tc := range []struct {
++		name   string
++		result *grove.ChangeImpactResult
++		want   string
++	}{
++		{"nil", nil, ""},
++		{"language", &grove.ChangeImpactResult{Completeness: "closed", Declarations: []grove.SymbolRecord{{Language: "go"}}}, "partial"},
++		{"file", &grove.ChangeImpactResult{Completeness: "closed", Declarations: []grove.SymbolRecord{{FilePath: "a.go"}}}, "partial"},
++		{"interface", &grove.ChangeImpactResult{Completeness: "closed", DeclaringTypes: []grove.SymbolRecord{{FilePath: "a.go"}}}, "partial"},
++		{"super", &grove.ChangeImpactResult{Completeness: "closed", Supers: []grove.SymbolRecord{{Language: "go"}}}, "partial"},
++		{"family", &grove.ChangeImpactResult{Completeness: "closed", Family: []grove.SymbolRecord{{Language: "go"}}}, "partial"},
++		{"java", &grove.ChangeImpactResult{Completeness: "closed", Declarations: []grove.SymbolRecord{{Language: "java", FilePath: "A.java"}}}, "closed"},
++		{"python", &grove.ChangeImpactResult{Completeness: "closed", Declarations: []grove.SymbolRecord{{Language: "python", FilePath: "a.py"}}}, "closed"},
++		{"external", &grove.ChangeImpactResult{Completeness: "project-local", Declarations: []grove.SymbolRecord{{Language: "go"}}}, "project-local"},
++		{"callers", &grove.ChangeImpactResult{Completeness: "callers-only", Declarations: []grove.SymbolRecord{{Language: "go"}}}, "callers-only"},
++		{"unknown", &grove.ChangeImpactResult{Completeness: "future-tier", Declarations: []grove.SymbolRecord{{Language: "go"}}}, "future-tier"},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			var before grove.ChangeImpactResult
++			if tc.result != nil {
++				before = *tc.result
++			}
++			got, note := impactCoverage(tc.result)
++			if got != tc.want || (note != "") != (got == "partial") {
++				t.Fatalf("got (%q, %q), want tier %q", got, note, tc.want)
++			}
++			if tc.result != nil && !reflect.DeepEqual(before, *tc.result) {
++				t.Fatal("coverage classification changed engine evidence")
++			}
++		})
++	}
++}
++
++func TestImpactCoverageSurvivesCachedPointer(t *testing.T) {
++	out := map[string]any{"query": "W.Notify", "completeness": "partial", "coverageNote": "interface callers may be missing"}
++	got := graphPointerResponse("prism_change_impact", "hash", 2, out)
++	if got["completeness"] != "partial" || got["coverageNote"] != out["coverageNote"] {
++		t.Fatalf("cached pointer lost the coverage boundary: %v", got)
++	}
++	if got["summary"].(map[string]any)["coverageNote"] != out["coverageNote"] {
++		t.Fatal("nested pointer summary lost coverage note")
++	}
++}
++
++func TestImpactCoverageNoteRendersWithoutLosingOtherWarnings(t *testing.T) {
++	out := map[string]any{"query": "W.Notify", "completeness": "partial", "totalSites": 1,
++		"coverageNote": "interface callers may be missing", "staleWarning": "stale index",
++		"scopeNote": "outside scope", "ambiguityNote": "ambiguous receiver"}
++	before := make(map[string]any, len(out))
++	for key, value := range out {
++		before[key] = value
++	}
++	text, ok := renderChangeImpactAsText(out)
++	if !ok {
++		t.Fatal("known coverage note must render compactly")
++	}
++	for _, want := range []string{"interface callers may be missing", "stale index", "outside scope", "ambiguous receiver"} {
++		if !strings.Contains(text, want) {
++			t.Errorf("lost %s: %s", want, text)
++		}
++	}
++	if !reflect.DeepEqual(out, before) {
++		t.Fatal("rendering mutated evidence")
++	}
++}
+diff --git a/internal/mcp/tools.go b/internal/mcp/tools.go
+index 72148bf..f7bb17d 100644
+--- a/internal/mcp/tools.go
++++ b/internal/mcp/tools.go
+@@ -849,8 +849,8 @@ func toolDescription(name string) string {
+ 			"contracts (supers), all resolved callers, and declaringTypes. Reach for this before " +
+ 			"a signature change or affected-site enumeration. Includes signatures, test labels, and bounded " +
+ 			"matching call expressions so those facts do not need separate lookups. Read bodies only " +
+-			"for behavior or evidence gaps. completeness:'closed' describes indexed scope, not proof " +
+-			"of heuristic edge resolution; heed warnings. 'project-local' " +
++			"for behavior or evidence gaps, not routinely for site enumeration. 'partial' means coverage gaps; " +
++			"follow coverageNote. 'closed' describes indexed scope, not heuristic receiver certainty. 'project-local' " +
+ 			"+ overridesExternal = the method implements an external contract whose signature " +
+ 			"must not change. Relay the set as-is — re-filtering through grep drops real sites."
+ 	case "prism_missing_implementations":
+@@ -2634,7 +2634,11 @@ func (h *Handler) toolChangeImpact(ctx context.Context, args map[string]any) (an
+ 	if len(r.Callers) > 0 {
+ 		out["evidenceNote"] = "Indexed call expressions below are name-matched within reported callers, not independent receiver-resolution proof. Snippet limits never remove sites. Inspect ambiguous receivers, omitted evidence, or behavior needed by the task."
+ 	}
+-	h.hypLedger.recordClosedImpact(r.Completeness,
++	completeness, coverageNote := impactCoverage(r)
++	if coverageNote != "" {
++		out["coverageNote"] = coverageNote
++	}
++	h.hypLedger.recordClosedImpact(completeness,
+ 		len(r.Declarations)+len(r.Family)+len(r.Callers)+len(r.DeclaringTypes))
+ 	if sn := h.hypLedger.scopeNote(); sn != "" {
+ 		out["scopeNote"] = sn
+@@ -2671,8 +2675,8 @@ func (h *Handler) toolChangeImpact(ctx context.Context, args map[string]any) (an
+ 			"symbols, so the type itself is the change site) — include each as a " +
+ 			"site in your answer"
+ 	}
+-	if r.Completeness != "" {
+-		out["completeness"] = r.Completeness
++	if completeness != "" {
++		out["completeness"] = completeness
+ 	}
+ 	if r.HasHeuristicRefs {
+ 		out["hasHeuristicRefs"] = true
+diff --git a/internal/mcp/wideranchor.go b/internal/mcp/wideranchor.go
+index 1da4f17..c717ad7 100644
+--- a/internal/mcp/wideranchor.go
++++ b/internal/mcp/wideranchor.go
+@@ -71,14 +71,23 @@ func (h *Handler) widerAnchorHint(ctx context.Context, r *grove.ChangeImpactResu
+ 	if best == nil {
+ 		return nil
+ 	}
++	completeness, coverageNote := impactCoverage(best)
++	scope := "CLOSED"
++	if completeness != "closed" {
++		scope = "indexed (partial)"
++	}
++	note := fmt.Sprintf("%s has a larger %s change set (%d sites vs %d for the queried anchor). "+
++		"If the contract being changed is the interface/base declaration rather than this one "+
++		"implementation, query %s instead to inspect its family.",
++		bestQN, scope, obligationSiteCount(best), baseline, bestQN)
++	if coverageNote != "" {
++		note += " " + coverageNote
++	}
+ 	return map[string]any{
+ 		"qualifiedName": bestQN,
+ 		"totalSites":    obligationSiteCount(best) + len(best.Declarations),
+-		"completeness":  best.Completeness,
+-		"note": fmt.Sprintf("%s has a larger CLOSED change set (%d sites vs %d for the queried anchor). "+
+-			"If the contract being changed is the interface/base declaration rather than this one "+
+-			"implementation, query %s instead — its family covers every implementation.",
+-			bestQN, obligationSiteCount(best), baseline, bestQN),
++		"completeness":  completeness,
++		"note":          note,
+ 	}
+ }
+ 
+diff --git a/internal/mcp/wideranchor_test.go b/internal/mcp/wideranchor_test.go
+index c41504d..a0aa66c 100644
+--- a/internal/mcp/wideranchor_test.go
++++ b/internal/mcp/wideranchor_test.go
+@@ -9,6 +9,7 @@ package mcp
+ import (
+ 	"os"
+ 	"path/filepath"
++	"strings"
+ 	"testing"
+ 
+ 	"github.com/provasign/prism/internal/config"
+@@ -86,8 +87,11 @@ func TestChangeImpact_WiderAnchorHintOnDisconnectedAnchor(t *testing.T) {
+ 	if hint == nil {
+ 		t.Fatal("no widerAnchor hint for a 1-caller anchor with a large same-name closed family in the graph")
+ 	}
+-	if hint["completeness"] != "closed" {
+-		t.Errorf("widerAnchor completeness = %v, want closed", hint["completeness"])
++	if hint["completeness"] != "partial" {
++		t.Errorf("widerAnchor completeness = %v, want partial for Go", hint["completeness"])
++	}
++	if note := hint["note"].(string); strings.Contains(note, "CLOSED") || !strings.Contains(note, "callers may be missing") {
++		t.Errorf("wider anchor must not restore the engine's closed claim: %s", note)
+ 	}
+ 	if n, ok := hint["totalSites"].(int); !ok || n <= 2 {
+ 		t.Errorf("widerAnchor totalSites = %v, want the larger Handle family", hint["totalSites"])
