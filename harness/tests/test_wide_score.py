@@ -73,6 +73,26 @@ def test_touching_the_file_elsewhere_is_missed():
     assert s["site_recall"] == 0.0 and s["site_recall_proximity"] == 0.0
 
 
+def test_wrong_place_in_right_file_costs_precision():
+    # Reviewer 2026-09-06: a false edit inside a ground-truth file paid
+    # nothing — only whole extra files counted.
+    agent = _diff("a/x.go", [
+        (10, [("-", "\tOldFn(a)"), ("+", "\tNewFn(a)")]),
+        (40, [("-", "\tkeep()"), ("+", "\tbroken()")]),
+        (80, [("-", "\tOldFn(b)"), ("+", "\tNewFn(b)")]),
+    ])
+    s = W.score_diff(TASK, agent, GOLD)
+    assert s["site_recall"] == 1.0
+    assert s["false_edit_regions"] == 1 and s["false_edit_sites"] == ["a/x.go:40"]
+    assert s["site_precision"] == round(2 / 3, 3)
+    assert s["extra_files_strict"] == 0  # the old metric still says "clean"
+
+
+def test_clean_sweep_has_full_site_precision():
+    s = W.score_diff(TASK, GOLD, GOLD)
+    assert s["site_precision"] == 1.0 and s["false_edit_regions"] == 0
+
+
 def test_u3_context_diff_agrees_with_u0():
     # Same change expressed with context lines: old-side walk must line up.
     u3 = "\n".join([

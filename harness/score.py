@@ -28,7 +28,7 @@ from schema import Answer, Scorecard, Site, Task
 
 # Bump when matching semantics change; ab_gate keys its cell cache on it so
 # cells scored under an older contract are never compared with fresh ones.
-SCORER_VERSION = 2
+SCORER_VERSION = 3  # v3 (2026-09-06): weak (pathless/bare) sites cost precision
 
 
 def _parts(p: str) -> list[str]:
@@ -114,6 +114,7 @@ def score(task: Task, answer: Answer, arm: str, trial: int) -> Scorecard:
     weak: list[Site] = []
     matched_answer: set[Site] = set()
 
+    strong_matched: set[Site] = set()
     for site in gt:
         m, strong = _match(site, answer.sites, matched_answer)
         if m is None:
@@ -121,23 +122,24 @@ def score(task: Task, answer: Answer, arm: str, trial: int) -> Scorecard:
         elif strong:
             found.append(site)
             matched_answer.add(m)
+            strong_matched.add(m)
         else:
             missed.append(site)
             weak.append(site)
             matched_answer.add(m)
 
-    # An agent site is "extra" (false positive) if it matched no ground-truth
-    # site. A right-symbol/wrong-file site is extra too -- it names a place
-    # that must not change. Only pathless right-symbol sites (already `weak`)
-    # and test files are excused.
+    # An agent site is "extra" (false positive) if it is not a STRONG match
+    # for a ground-truth site. A right-symbol/wrong-file site names a place
+    # that must not change; a pathless or bare-basename site is unverified
+    # evidence -- it earns `weak_recall`, never precision (until 2026-09-06
+    # it was excused from `extra`, so an answer made of bare names looked
+    # precise). Only test files are neutral.
     extra: list[Site] = []
     for a in answer.sites:
-        if a in matched_answer:
+        if a in strong_matched:
             continue
         if _is_test_path(a.relpath):
             continue  # test sites are neutral (see _is_test_path)
-        if any(a.symbol == s.symbol and _underspecified(s.relpath, a.relpath) for s in gt):
-            continue  # pathless / bare-basename duplicate of a weak match
         extra.append(a)
 
     recall = len(found) / len(gt) if gt else 0.0

@@ -52,11 +52,14 @@ TASKS = [
 
 HARD_RECALL_DROP = 0.15   # any single task
 MEAN_RECALL_DROP = 0.05   # over the whole bed
-# Billed cost, candidate/baseline, averaged over pairs. Until 2026-09-05 the
-# gate had no cost criterion at all — a candidate costing 2x with flat recall
-# PASSED. 1.25 is the "big break" threshold this bed's ~50%/cell noise can
-# actually detect; ±10% needs the full paired study, same as recall.
-MEAN_COST_RATIO_MAX = 1.25
+# Billed cost, candidate/baseline, as AGGREGATE paired cost (sum over the
+# same pairs), not a mean of per-pair ratios — a mean of ratios lets one
+# cheap-baseline pair dominate. Until 2026-09-05 the gate had no cost
+# criterion at all — a candidate costing 2x with flat recall PASSED. 1.25
+# is the "big break" threshold this bed's ~50%/cell noise can detect; this
+# gate is a smoke test ("not broken"). --require-cheaper turns it into the
+# product criterion: aggregate cost must be below the baseline's.
+COST_RATIO_MAX = 1.25
 
 
 def binary_sha(path: str) -> str:
@@ -122,6 +125,8 @@ def main() -> int:
     ap.add_argument("--model", default="haiku")
     ap.add_argument("--limit", type=int, default=len(TASKS))
     ap.add_argument("--out", default="runs/ab-gate")
+    ap.add_argument("--require-cheaper", action="store_true",
+                    help="FAIL unless the candidate's aggregate billed cost is below the baseline's")
     args = ap.parse_args()
 
     out = Path(args.out)
@@ -132,7 +137,8 @@ def main() -> int:
     b_arm = arm_for(args.baseline, "base")
     c_arm = arm_for(args.candidate, "cand")
 
-    drops, cand_tok, base_tok, ratios = [], 0, 0, []
+    drops, cand_tok, base_tok = [], 0, 0
+    cand_cost = base_cost = 0.0  # summed over pairs where both cells have a cost
     for tp in TASKS[: args.limit]:
         task = Task.load(tp)
         corpus = Path(task.workdir or task.repo)
@@ -176,7 +182,8 @@ def main() -> int:
         if br is not None and cr is not None:
             drops.append(br - cr)
         if bc > 0 and cc > 0:
-            ratios.append(cc / bc)
+            base_cost += bc
+            cand_cost += cc
         cand_tok += c.get("tokens_in", 0) or 0
         base_tok += b.get("tokens_in", 0) or 0
 
@@ -185,17 +192,24 @@ def main() -> int:
         return 2
     mean_drop = sum(drops) / len(drops)
     tok_delta = (cand_tok - base_tok) / max(base_tok, 1) * 100
-    cost_ratio = sum(ratios) / len(ratios) if ratios else None
+    cost_ratio = cand_cost / base_cost if base_cost > 0 else None
     print(f"\npairs={len(drops)} mean recall delta={-mean_drop:+.3f} "
-          f"tokens {tok_delta:+.0f}% billed cost ratio="
-          f"{cost_ratio:.2f}x" if cost_ratio else "n/a")
+          f"tokens {tok_delta:+.0f}% aggregate billed cost "
+          f"${cand_cost:.2f} vs ${base_cost:.2f} = "
+          + (f"{cost_ratio:.2f}x" if cost_ratio else "n/a"))
     if mean_drop > MEAN_RECALL_DROP:
         print(f"FAIL: mean recall drop {mean_drop:.3f} > {MEAN_RECALL_DROP}")
         return 1
-    if cost_ratio is not None and cost_ratio > MEAN_COST_RATIO_MAX:
-        print(f"FAIL: mean billed cost ratio {cost_ratio:.2f} > {MEAN_COST_RATIO_MAX}")
+    if cost_ratio is not None and cost_ratio > COST_RATIO_MAX:
+        print(f"FAIL: aggregate billed cost ratio {cost_ratio:.2f} > {COST_RATIO_MAX}")
         return 1
-    print("PASS (not-broken; subtle effects need a full study)")
+    if args.require_cheaper and (cost_ratio is None or cost_ratio >= 1.0):
+        print(f"FAIL: --require-cheaper and aggregate cost ratio is "
+              f"{cost_ratio:.2f}x (needs < 1.00)" if cost_ratio else
+              "FAIL: --require-cheaper but no paired costs recorded")
+        return 1
+    print("PASS (not-broken; subtle effects need a full study)"
+          + (" — and cheaper in aggregate" if args.require_cheaper else ""))
     return 0
 
 

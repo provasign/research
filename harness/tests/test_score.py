@@ -107,18 +107,21 @@ def test_bare_basename_is_weak_when_ambiguous():
     c = score(DIR_TASK, a, "T", 1)
     assert c.recall == 0.0
     assert c.weak_recall == 0.5  # credits at most one site, as weak evidence
-    assert c.extra == []
+    assert c.extra == ["worker.go:Run"]  # v3: unverified evidence costs precision
+    assert c.precision == 0.0
 
 
 def test_pathless_symbol_is_weak_evidence_only():
-    # No path at all is underspecified, not wrong: reported in weak_recall,
-    # excluded from recall, not penalised as extra.
+    # No path at all is underspecified: reported in weak_recall, excluded
+    # from recall — and (v3) it costs precision like any unverified site,
+    # so an answer made of bare names cannot look precise.
     a = _ans('{"sites":["Hijack","response_writer.go:CloseNotify"],"complete":false}')
     c = score(TASK, a, "T", 1)
     assert c.recall == 0.5
     assert c.weak_recall == 1.0
     assert "response_writer.go:Hijack" in c.weak_matches
-    assert c.extra == []
+    assert c.extra == ["Hijack"]
+    assert c.precision == 0.5
 
 
 def test_test_sites_are_neutral_not_false_positives():

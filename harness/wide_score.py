@@ -210,6 +210,21 @@ def score_diff(task: dict, agent_diff: str, gold: str | None = None,
     files_hit = {s.file for s in sites if rank[levels[str(s)]] >= rank["substituted"]}
     extra = sorted(set(a) - set(gt))
 
+    # Precision at the site level: every contiguous region the agent changed
+    # (merged the same way gold sites are) that lies within TOL of NO gold
+    # site is a false edit — including one inside an otherwise-correct file.
+    # Until 2026-09-06 only whole extra files counted, so an agent that
+    # edited the wrong place in the right file paid nothing.
+    agent_regions = gold_sites(a, sorted(a))
+    by_file: dict[str, list[Site]] = {}
+    for s in sites:
+        by_file.setdefault(s.file, []).append(s)
+    false_regions = [r for r in agent_regions
+                     if not any(g.lo - TOL <= r.hi and r.lo <= g.hi + TOL
+                                for g in by_file.get(r.file, []))]
+    site_precision = (round(subst / (subst + len(false_regions)), 3)
+                      if subst + len(false_regions) else None)
+
     def lines(fd: FileDiff | None) -> list[str]:
         return [t for _, t in fd.minus] + [t for _, t in fd.plus] if fd else []
 
@@ -238,6 +253,9 @@ def score_diff(task: dict, agent_diff: str, gold: str | None = None,
         "files_complete": len(files_hit),
         "files_expected_strict": len({s.file for s in sites}),
         "extra_files_strict": len(extra),
+        "site_precision": site_precision,
+        "false_edit_regions": len(false_regions),
+        "false_edit_sites": sorted(str(r) for r in false_regions)[:40],
         "symbol_recall_strict": round(len(sym_hit) / n_sym, 3) if n_sym else None,
         "symbols_missed_strict": sym_miss,
         "symbols_unscorable": sym_unscorable,
@@ -292,7 +310,8 @@ def main() -> None:
         print(f"{r['task']:20} {r['arm']:10} file={r['legacy_file_recall']} "
               f"site={r['site_recall']} ({r['sites_found']}/{r['sites_expected']}) "
               f"exact={r['site_recall_exact']} removed={r['site_recall_removed']} "
-              f"prox={r['site_recall_proximity']} "
+              f"prox={r['site_recall_proximity']} site_prec={r['site_precision']} "
+              f"false_edits={r['false_edit_regions']} "
               f"sym={r['legacy_symbol_recall']}->{r['symbol_recall_strict']} "
               f"cost=${(r['cost_usd'] or 0):.2f}{flag}")
     print(json.dumps(rows, indent=1), file=open("wide-rescore.json", "w"))
