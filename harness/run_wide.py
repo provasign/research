@@ -194,6 +194,31 @@ def isolated_worktree(task: dict) -> tuple[str, Path]:
     return repo, wt
 
 
+def agent_diff(wt: Path) -> str:
+    """Full diff of the agent's changes — staged and unstaged together —
+    against the worktree's OWN base commit (HEAD; the agent never commits,
+    so HEAD is exactly the state isolated_worktree() created). A bare
+    `git diff` compares the working tree to the INDEX, not to base:
+    `git rm -r <dir>` (or any git add/mv) stages the change, so it vanishes
+    from a bare diff while `rm -rf <dir>` (never staged) still shows as a
+    working-tree-vs-index deletion. Found 2026-09-06: a candidate cell that
+    correctly `git rm -r`'d a whole removed package scored as if every file
+    in it were untouched, while sibling cells using plain `rm` scored the
+    same removal correctly.
+
+    NOT `task["base_commit"]`: isolated_worktree() archives that commit
+    into a brand-new `git init` history with one commit ("base") under an
+    arbitrary hash — the real base_commit SHA does not exist as an object
+    in this repo at all (deliberately: see isolated_worktree's docstring).
+    Diffing against it fails and `sh()` swallows the error, returning an
+    empty diff — the first version of this fix scored 0/31 on a task the
+    agent had actually completed."""
+    # check=True: sh() otherwise swallows a bad-ref error and returns an
+    # empty diff, which the caller cannot tell apart from "no changes" —
+    # exactly the failure mode that produced the wrong base_commit's 0/31.
+    return sh("git", "-C", str(wt), "diff", "HEAD", check=True)
+
+
 def agent_diff_files(wt: Path) -> list[str]:
     """MODIFIED or DELETED files only — never created ones (see scoring
     docstring: ground truth excludes additions, so this side of the ratio
@@ -373,7 +398,7 @@ def run_cell(task: dict, arm: str, model: str, tag: str) -> dict:
         # Full diff, never truncated: the 20k cap (dropped 2026-09-05) cut
         # 10/16 v070sample cells mid-file and made a strict rescore
         # impossible. main() moves it to a .diff sidecar next to the record.
-        diff_text = sh("git", "-C", str(wt), "diff")
+        diff_text = agent_diff(wt)
         rec.update(score(task, wt, diff_text))
         rec["build"] = build_check(task, wt)
         rec["diff"] = diff_text
