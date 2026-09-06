@@ -78,6 +78,38 @@ def test_wrong_file_same_symbol_is_a_false_positive():
     assert c.overconfident  # claimed complete, missed Hijack
 
 
+DIR_TASK = Task(
+    id="t2", repo="/tmp/x", lang="go", pin="abc", pr="#1",
+    task_type="localization", prompt="fix it",
+    ground_truth=[Site("pkg/worker.go", "Run"), Site("cmd/worker.go", "Run")],
+)
+
+
+def test_wrong_directory_same_basename_is_not_a_match():
+    # Reviewer probe 2026-09-05: wrong/worker.go:Run scored 1.0 recall AND
+    # precision against two sites in other directories (basename match).
+    a = _ans('{"sites":["wrong/worker.go:Run"],"complete":true}')
+    c = score(DIR_TASK, a, "T", 1)
+    assert c.recall == 0.0
+    assert c.extra == ["wrong/worker.go:Run"]
+    assert c.overconfident
+
+
+def test_absolute_worktree_prefix_still_agrees():
+    a = _ans('{"sites":["/private/tmp/wt/pkg/worker.go:Run",'
+             '"/private/tmp/wt/cmd/worker.go:Run"],"complete":true}')
+    c = score(DIR_TASK, a, "T", 1)
+    assert c.recall == 1.0 and c.precision == 1.0
+
+
+def test_bare_basename_is_weak_when_ambiguous():
+    a = _ans('{"sites":["worker.go:Run"],"complete":false}')
+    c = score(DIR_TASK, a, "T", 1)
+    assert c.recall == 0.0
+    assert c.weak_recall == 0.5  # credits at most one site, as weak evidence
+    assert c.extra == []
+
+
 def test_pathless_symbol_is_weak_evidence_only():
     # No path at all is underspecified, not wrong: reported in weak_recall,
     # excluded from recall, not penalised as extra.

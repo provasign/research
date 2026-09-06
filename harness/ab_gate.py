@@ -35,6 +35,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ab_agentic_mcp as bed  # noqa: E402
 from schema import Task  # noqa: E402
+from score import SCORER_VERSION  # noqa: E402
 
 # Cheapest-first by measured wall time (2026-08-28 bed run).
 TASKS = [
@@ -88,12 +89,17 @@ def is_degenerate(rec: dict) -> bool:
 
 def run_cell(arm: str, task: Task, corpus: Path, model: str,
              out: Path, binary: str, sha: str) -> dict:
-    f = out / f"{task.id}.{model}.{sha}.json"
+    # Cache key includes the scorer version: a cell scored under an older
+    # matching contract (e.g. basename-only file agreement) is not the same
+    # measurement and must not be compared with a fresh one. Older cells stay
+    # on disk under their old names; they are simply never read here.
+    f = out / f"{task.id}.{model}.{sha}.s{SCORER_VERSION}.json"
     if f.exists():
         cached = json.loads(f.read_text())
-        if not is_degenerate(cached):
+        if (not is_degenerate(cached)
+                and cached.get("scorer_version") == SCORER_VERSION):
             return cached
-        print(f"  ({f.name} was degenerate — re-running, not trusting cache)")
+        print(f"  ({f.name} degenerate or stale scorer — re-running)")
     subprocess.run(["git", "-C", str(corpus), "checkout", "-q", task.pin],
                    capture_output=True)
     subprocess.run([binary, "index", str(corpus)], capture_output=True,
@@ -157,7 +163,7 @@ def main() -> int:
             # same candidate). The retry is FRESH (cache dropped), decided
             # on its own, and exactly one — a reproduced failure fails.
             print(f"{task.id:30} HARD-FAIL candidate ({reason}) — one fresh retry")
-            (out / f"{task.id}.{args.model}.{c_sha}.json").unlink(missing_ok=True)
+            (out / f"{task.id}.{args.model}.{c_sha}.s{SCORER_VERSION}.json").unlink(missing_ok=True)
             c = run_cell(c_arm, task, corpus, args.model, out, args.candidate, c_sha)
             reason = hard_fails(c)
             if reason:

@@ -20,7 +20,7 @@ import time
 from pathlib import Path
 
 from schema import Answer, Task
-from score import score
+from score import SCORER_VERSION, score
 
 HOME = Path.home()
 CFG_DIR = Path("/tmp/ab-agentic-mcp")
@@ -104,6 +104,11 @@ def run_arm(arm: str, task: Task, corpus: Path, model: str) -> dict:
         rec["session_id"] = j.get("session_id")
         answer = Answer.parse(j.get("result", ""))
         _sc = score(task, answer, arm, 1)
+        # The parsed answer itself, so a future scorer change can rescore
+        # this cell offline instead of paying for it again.
+        rec["answer"] = {"sites": [str(s) for s in answer.sites],
+                         "complete": answer.complete, "unresolved": answer.unresolved}
+        rec["scorer_version"] = SCORER_VERSION
         rec["recall"] = round(_sc.recall, 3)
         rec["weak_recall"] = round(_sc.weak_recall, 3)
         rec["precision"] = round(_sc.precision, 3)

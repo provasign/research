@@ -175,18 +175,23 @@ def py_enclosing(body, ln, path):
     stem = segs[-1].removesuffix('.py')
     return segs[-2] if stem == '__init__' and len(segs) > 1 else stem
 
-FILE_HDR = re.compile(r'^\*\*`([^`]+)`\*\*', re.M)
+HDR = re.compile(r'^\*\*(.+?)\*\*', re.M)   # any bold section header
+FILE_HDR = re.compile(r'^`([^`]+)`')        # ...whose title is a `path`
 
 def file_sections(ctx):
     """{path: text} for each **`path`** section of the text renderer's output.
     Before 2026-09-05 a probe line was searched in the WHOLE delivered blob,
     so one line delivered from the wrong file could satisfy any hunk sharing
     it (boilerplate, imports, a copied helper). A hunk is now covered only by
-    its own file's section."""
-    parts = FILE_HDR.split(ctx)
+    its own file's section — and a section ends at the NEXT bold header of
+    any kind (**Family**, **Anchors** ...), not only at the next file header,
+    so an appendix's source never accrues to the file listed before it."""
+    parts = HDR.split(ctx)
     secs = {}
     for i in range(1, len(parts) - 1, 2):
-        secs[parts[i]] = secs.get(parts[i], '') + parts[i + 1]
+        m = FILE_HDR.match(parts[i].strip())
+        if m:
+            secs[m.group(1)] = secs.get(m.group(1), '') + parts[i + 1]
     return secs
 
 def _section_for(secs, f):

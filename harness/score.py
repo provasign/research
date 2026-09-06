@@ -26,11 +26,38 @@ from pathlib import Path
 
 from schema import Answer, Scorecard, Site, Task
 
+# Bump when matching semantics change; ab_gate keys its cell cache on it so
+# cells scored under an older contract are never compared with fresh ones.
+SCORER_VERSION = 2
 
-def _file_agree(a: str, b: str) -> bool:
-    if not a or not b:
+
+def _parts(p: str) -> list[str]:
+    return [x for x in p.strip().replace("\\", "/").split("/") if x not in ("", ".")]
+
+
+def _bare(p: str) -> bool:
+    """A basename with no directory: underspecified, never a strong match."""
+    return len(_parts(p)) == 1
+
+
+def _file_agree(gt: str, ans: str) -> bool:
+    """Path components must agree over the shorter path's whole length.
+
+    `pkg/worker.go` vs `/abs/worktree/pkg/worker.go` agree (agents cite
+    absolute paths); `pkg/worker.go` vs `wrong/worker.go` do NOT — until
+    2026-09-05 a basename match was enough, and a same-named file in another
+    directory scored as the right site. A bare basename answer never agrees
+    strongly (see `_bare`) unless the ground truth itself is bare.
+    """
+    if not gt or not ans:
         return False
-    return Path(a).name == Path(b).name or a.endswith(b) or b.endswith(a)
+    g, a = _parts(gt), _parts(ans)
+    if not g or not a:
+        return False
+    if len(a) == 1 and len(g) > 1:
+        return False
+    n = min(len(g), len(a))
+    return g[-n:] == a[-n:]
 
 
 def _is_test_path(relpath: str) -> bool:
@@ -56,22 +83,28 @@ def _is_test_path(relpath: str) -> bool:
     )
 
 
-def _match(gt: Site, answer_sites: list[Site]) -> tuple[Site | None, bool]:
+def _match(gt: Site, answer_sites: list[Site],
+           used: set[Site] = frozenset()) -> tuple[Site | None, bool]:
     """Return (matched answer site, strong?) for a ground-truth site.
 
     Strong = symbol + file agree. Weak = symbol agrees and the answer gave
-    NO path at all (underspecified, not wrong). A same-named site with a
-    different path is neither -- it is a wrong answer and falls to `extra`.
+    NO path, or only a bare basename that matches (underspecified, not
+    wrong). A same-named site with a conflicting path is neither -- it is a
+    wrong answer and falls to `extra`.
     """
     weak: Site | None = None
     for a in answer_sites:
-        if a.symbol != gt.symbol:
-            continue
+        if a.symbol != gt.symbol or a in used:
+            continue  # one answer site credits at most one ground-truth site
         if _file_agree(gt.relpath, a.relpath):
             return a, True
-        if not a.relpath and weak is None:
+        if weak is None and _underspecified(gt.relpath, a.relpath):
             weak = a
     return (weak, False) if weak else (None, False)
+
+
+def _underspecified(gt: str, ans: str) -> bool:
+    return not ans or (_bare(ans) and Path(gt).name == Path(ans).name)
 
 
 def score(task: Task, answer: Answer, arm: str, trial: int) -> Scorecard:
@@ -82,7 +115,7 @@ def score(task: Task, answer: Answer, arm: str, trial: int) -> Scorecard:
     matched_answer: set[Site] = set()
 
     for site in gt:
-        m, strong = _match(site, answer.sites)
+        m, strong = _match(site, answer.sites, matched_answer)
         if m is None:
             missed.append(site)
         elif strong:
@@ -103,8 +136,8 @@ def score(task: Task, answer: Answer, arm: str, trial: int) -> Scorecard:
             continue
         if _is_test_path(a.relpath):
             continue  # test sites are neutral (see _is_test_path)
-        if not a.relpath and any(a.symbol == s.symbol for s in gt):
-            continue  # pathless duplicate of a weak match
+        if any(a.symbol == s.symbol and _underspecified(s.relpath, a.relpath) for s in gt):
+            continue  # pathless / bare-basename duplicate of a weak match
         extra.append(a)
 
     recall = len(found) / len(gt) if gt else 0.0

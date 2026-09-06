@@ -51,7 +51,10 @@ import wide_score
 # daily), but v0.70.0 is tagged+pushed. Built straight from the pushed tag
 # (clean clone, not this session's working tree) so the arm exercises
 # exactly what was released, not uncommitted state.
-_REAL_PRISM = "/tmp/prism-v0.70.0"
+#
+# Moved out of /tmp 2026-09-05 (macOS purges it; the binary's sha is in each
+# cell's provenance so identity does not depend on the path).
+_REAL_PRISM = str(Path.home() / ".cache/prism-research/bin/prism-v0.70.0")
 arms.CFG_DIR.mkdir(exist_ok=True)
 (arms.CFG_DIR / "prism.json").write_text(json.dumps({"mcpServers": {"prism": {
     "type": "stdio", "command": _REAL_PRISM, "args": ["mcp"]}}}))
