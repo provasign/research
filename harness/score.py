@@ -8,9 +8,17 @@ paper hinges on (design §6, RQ3):
 
 Matching follows grove-eval's matched-universe discipline: a ground-truth
 site matches an agent site when the bare symbol names agree AND the files
-agree (basename is enough -- agents cite paths inconsistently). A symbol-only
-match (no file agreement) still counts for recall but is flagged `weak`, so we
-never silently credit a same-named symbol in the wrong file.
+agree (basename is enough -- agents cite paths inconsistently).
+
+Until 2026-09-05 a symbol-only match (no file agreement) still counted toward
+recall, merely flagged `weak`. That is a false-credit path: a same-named
+method in a deliberately wrong file scored as found. Now:
+
+  * recall counts STRONG matches (symbol + file) only;
+  * an answer site with the right symbol and NO path is `weak` -- reported
+    in `weak_recall`, never in `recall`;
+  * an answer site with the right symbol and the WRONG path is a false
+    positive (`extra`) -- it names a site that must not change.
 """
 from __future__ import annotations
 
@@ -51,7 +59,9 @@ def _is_test_path(relpath: str) -> bool:
 def _match(gt: Site, answer_sites: list[Site]) -> tuple[Site | None, bool]:
     """Return (matched answer site, strong?) for a ground-truth site.
 
-    Prefers a strong match (symbol + file agree); falls back to symbol-only.
+    Strong = symbol + file agree. Weak = symbol agrees and the answer gave
+    NO path at all (underspecified, not wrong). A same-named site with a
+    different path is neither -- it is a wrong answer and falls to `extra`.
     """
     weak: Site | None = None
     for a in answer_sites:
@@ -59,7 +69,8 @@ def _match(gt: Site, answer_sites: list[Site]) -> tuple[Site | None, bool]:
             continue
         if _file_agree(gt.relpath, a.relpath):
             return a, True
-        weak = a
+        if not a.relpath and weak is None:
+            weak = a
     return (weak, False) if weak else (None, False)
 
 
@@ -74,28 +85,30 @@ def score(task: Task, answer: Answer, arm: str, trial: int) -> Scorecard:
         m, strong = _match(site, answer.sites)
         if m is None:
             missed.append(site)
-        else:
+        elif strong:
             found.append(site)
             matched_answer.add(m)
-            if not strong:
-                weak.append(site)
+        else:
+            missed.append(site)
+            weak.append(site)
+            matched_answer.add(m)
 
     # An agent site is "extra" (false positive) if it matched no ground-truth
-    # site. Match each answer site against the ground truth symmetrically.
+    # site. A right-symbol/wrong-file site is extra too -- it names a place
+    # that must not change. Only pathless right-symbol sites (already `weak`)
+    # and test files are excused.
     extra: list[Site] = []
-    gt_symbols = {(s.symbol, Path(s.relpath).name if s.relpath else "") for s in gt}
     for a in answer.sites:
         if a in matched_answer:
             continue
         if _is_test_path(a.relpath):
             continue  # test sites are neutral (see _is_test_path)
-        key = (a.symbol, Path(a.relpath).name if a.relpath else "")
-        sym_only = any(a.symbol == s.symbol for s in gt)
-        if key in gt_symbols or sym_only:
-            continue
+        if not a.relpath and any(a.symbol == s.symbol for s in gt):
+            continue  # pathless duplicate of a weak match
         extra.append(a)
 
     recall = len(found) / len(gt) if gt else 0.0
+    weak_recall = (len(found) + len(weak)) / len(gt) if gt else 0.0
     answered = len(found) + len(extra)
     precision = len(found) / answered if answered else 0.0
     f1 = (
@@ -121,4 +134,5 @@ def score(task: Task, answer: Answer, arm: str, trial: int) -> Scorecard:
         claimed_complete=answer.complete,
         overconfident=overconfident,
         surfaced_gap=surfaced_gap,
+        weak_recall=round(weak_recall, 4),
     )

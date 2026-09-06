@@ -175,18 +175,47 @@ def py_enclosing(body, ln, path):
     stem = segs[-1].removesuffix('.py')
     return segs[-2] if stem == '__init__' and len(segs) > 1 else stem
 
+FILE_HDR = re.compile(r'^\*\*`([^`]+)`\*\*', re.M)
+
+def file_sections(ctx):
+    """{path: text} for each **`path`** section of the text renderer's output.
+    Before 2026-09-05 a probe line was searched in the WHOLE delivered blob,
+    so one line delivered from the wrong file could satisfy any hunk sharing
+    it (boilerplate, imports, a copied helper). A hunk is now covered only by
+    its own file's section."""
+    parts = FILE_HDR.split(ctx)
+    secs = {}
+    for i in range(1, len(parts) - 1, 2):
+        secs[parts[i]] = secs.get(parts[i], '') + parts[i + 1]
+    return secs
+
+def _section_for(secs, f):
+    if f in secs: return secs[f]
+    for k, v in secs.items():
+        if k.endswith('/' + f) or f.endswith('/' + k): return v
+    return ''
+
 def score(repo, sha, hunks, ctx):
-    """(recall, delivered_bytes, need_bytes)"""
-    covered = 0
+    """(recall, delivered_bytes, need_bytes, recall_loose, cut)
+    recall       — hunk region found inside the correct file's section
+    recall_loose — the pre-2026-09-05 anywhere-in-blob number, for comparison
+    cut          — hunks whose file section was delivered but window-elided
+                   around the region (an `omitted` marker within the section)"""
+    covered = loose = cut = 0
     need = 0
     per_file_lines = {}
+    secs = file_sections(ctx)
     for f, ln in hunks:
         body = per_file_lines.setdefault(f, show(repo, sha, f).split('\n'))
         probes = [l.strip() for l in body[max(0, ln - 3):ln + 4] if len(l.strip()) > 20]
-        if any(p in ctx for p in probes): covered += 1
+        sec = _section_for(secs, f)
+        if any(p in sec for p in probes): covered += 1
+        elif sec and 'omitted' in sec: cut += 1
+        if any(p in ctx for p in probes): loose += 1
         for i in range(max(1, ln - 30), min(ln + 35, len(body) + 1)):
             need += len(body[i - 1]) + 1
-    return (covered / max(len(hunks), 1), len(ctx), need)
+    n = max(len(hunks), 1)
+    return (covered / n, len(ctx), need, loose / n, cut)
 
 def fmtrow(x):
     if not x: return '-'
@@ -225,8 +254,9 @@ def main():
                 except Exception as e:
                     row[mode] = {'terms': terms, 'error': str(e)[:80]}
                     continue
-                rec, dl, need = score(repo, t['base_commit'], hunks, ctx)
+                rec, dl, need, loose, cut = score(repo, t['base_commit'], hunks, ctx)
                 row[mode] = {'terms': terms, 'recall': round(rec, 3),
+                             'recall_loose': round(loose, 3), 'windows_cut': cut,
                              'delivered': dl, 'need': need,
                              'oversupply': round(dl / max(need, 1), 1)}
             results.append(row)
@@ -241,6 +271,7 @@ def main():
         rows = [r[mode] for r in results if r.get(mode) and 'recall' in r[mode]]
         if rows:
             agg[mode] = {'mean_recall': round(sum(x['recall'] for x in rows) / len(rows), 3),
+                         'mean_recall_loose': round(sum(x.get('recall_loose', x['recall']) for x in rows) / len(rows), 3),
                          'mean_oversupply': round(sum(x['oversupply'] for x in rows) / len(rows), 1),
                          'n': len(rows)}
     if a.only:

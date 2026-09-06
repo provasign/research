@@ -25,24 +25,55 @@ import validate_wide_bed as V  # era env + repair machinery
 def sh(*a, cwd=None, timeout=600):
     return subprocess.run(a, cwd=cwd, capture_output=True, text=True, timeout=timeout)
 
+def _diff_file(line, cur):
+    """Track the current file across a unified diff (b/ path; a/ for deletions)."""
+    if line.startswith("+++ "):
+        p = line[4:].split("\t")[0]
+        return cur if p == "/dev/null" else p[2:]
+    if line.startswith("--- "):
+        p = line[4:].split("\t")[0]
+        return cur if p == "/dev/null" else p[2:]
+    return cur
+
 def gold_pairs(repo, task):
-    """The sweep's (-before,+after) line pairs: the base->gold delta, which
-    the synthetic base construction guarantees is EXACTLY the substitution
-    (bundled non-sweep changes live in the base already)."""
+    """The sweep's (file, -before, +after) line triples: the base->gold delta,
+    which the synthetic base construction guarantees is EXACTLY the
+    substitution (bundled non-sweep changes live in the base already).
+    File-keyed since 2026-09-05: a substitution counted only where gold made
+    it — the same line text substituted in some other file is not a hit."""
     old, new = task["old"], task["new"]
     diff = sh("git", "-C", str(repo), "diff", "-U0",
               task["base_commit"], task["gold_sha"]).stdout
     pairs = []
     minus = []
+    cur = None
     for line in diff.splitlines():
+        nxt = _diff_file(line, cur)
+        if nxt != cur:
+            cur, minus = nxt, []
+            continue
         if line.startswith("-") and not line.startswith("---"):
             minus.append(line[1:])
         elif line.startswith("+") and not line.startswith("+++"):
             if minus:
                 b = minus.pop(0)
                 if re.sub(rf"\b{re.escape(old)}\b", new, b) == line[1:]:
-                    pairs.append((b.strip(), line[1:].strip()))
+                    pairs.append((cur, b.strip(), line[1:].strip()))
     return pairs
+
+def agent_lines(diff):
+    """{file: (set of +line bodies, list of -line bodies)} from the agent diff."""
+    out, cur = {}, None
+    for line in diff.splitlines():
+        nxt = _diff_file(line, cur)
+        if nxt != cur:
+            cur = nxt; out.setdefault(cur, (set(), [])); continue
+        if cur is None: continue
+        if line.startswith("+") and not line.startswith("+++"):
+            out[cur][0].add(line[1:].strip())
+        elif line.startswith("-") and not line.startswith("---"):
+            out[cur][1].append(line[1:].strip())
+    return out
 
 def score_cell(task, arm):
     rec_p = RUN / f"{task['instance_id']}.{arm}.json"
@@ -80,18 +111,17 @@ def score_cell(task, arm):
         # site coverage vs gold
         pairs = gold_pairs(repo, task)
         agent_diff = sh("git", "-C", str(wt), "diff", task["base_commit"], "--", ".").stdout
-        agent_plus = {l[1:].strip() for l in agent_diff.splitlines()
-                      if l.startswith("+") and not l.startswith("+++")}
-        hit = sum(1 for _, a in pairs if a in agent_plus)
+        by_file = agent_lines(agent_diff)
+        hit = sum(1 for f, _, a in pairs if a in by_file.get(f, (set(), []))[0])
         out["sites_gold"] = len(pairs)
         out["sites_hit"] = hit
-        # false edits: agent changed lines gold did NOT change (rough: agent
-        # minus-lines containing old token that are not gold minus-lines)
-        gold_minus = {b for b, _ in pairs}
-        agent_minus = [l[1:].strip() for l in agent_diff.splitlines()
-                       if l.startswith("-") and not l.startswith("---")]
-        false_edits = sum(1 for l in agent_minus
-                          if re.search(rf"\b{re.escape(task['old'])}\b", l) and l not in gold_minus)
+        # false edits: agent changed lines gold did NOT change in that file
+        # (agent minus-lines containing the old token that are not gold
+        # minus-lines OF THE SAME FILE)
+        gold_minus = {(f, b) for f, b, _ in pairs}
+        false_edits = sum(1 for f, (_, minus) in by_file.items() for l in minus
+                          if re.search(rf"\b{re.escape(task['old'])}\b", l)
+                          and (f, l) not in gold_minus)
         out["false_edits"] = false_edits
         return out
     finally:

@@ -26,6 +26,7 @@ what changed upstream, in the words the commit itself used. Scoring:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -36,6 +37,8 @@ import time
 from pathlib import Path
 
 import ab_endtoend_arms as arms
+import usage_account
+import wide_score
 
 # ab_endtoend_arms.py points the prism MCP config at ~/bin/prism, which was
 # found 2026-08-31 to be a stale v0.55.10 build — missing every fix shipped
@@ -43,7 +46,12 @@ import ab_endtoend_arms as arms
 # "The same steering/preload/schema as if prism was installed" means the
 # actual released binary: /opt/homebrew/bin/prism (brew, kept current all
 # session via `brew upgrade`).
-_REAL_PRISM = "/opt/homebrew/bin/prism"
+#
+# 2026-09-05: brew tap has not refreshed past v0.69.2 yet (self-refreshes
+# daily), but v0.70.0 is tagged+pushed. Built straight from the pushed tag
+# (clean clone, not this session's working tree) so the arm exercises
+# exactly what was released, not uncommitted state.
+_REAL_PRISM = "/tmp/prism-v0.70.0"
 arms.CFG_DIR.mkdir(exist_ok=True)
 (arms.CFG_DIR / "prism.json").write_text(json.dumps({"mcpServers": {"prism": {
     "type": "stdio", "command": _REAL_PRISM, "args": ["mcp"]}}}))
@@ -181,14 +189,18 @@ def agent_diff_files(wt: Path) -> list[str]:
     return files
 
 
-def score(task: dict, wt: Path) -> dict:
+def score(task: dict, wt: Path, diff_text: str) -> dict:
+    """Legacy file-touched metrics (kept for continuity with earlier tags)
+    PLUS the strict site-identity metrics from wide_score — `site_recall`
+    is the headline from 2026-09-05 on. The legacy `file_recall` credits a
+    file the agent touched anywhere; `symbol_recall` credits a name that
+    appears anywhere in the diff text, context lines included."""
     touched = set(agent_diff_files(wt))
     gt = set(task["gt_files"])
     hit = gt & touched
-    diff_text = sh("git", "-C", str(wt), "diff")
     syms = task.get("gt_symbols") or []
     sym_hit = [s for s in syms if s in diff_text]
-    return {
+    out = {
         "file_recall": round(len(hit) / len(gt), 3) if gt else None,
         "files_found": len(hit),
         "files_expected": len(gt),
@@ -197,6 +209,28 @@ def score(task: dict, wt: Path) -> dict:
         "symbol_recall": round(len(sym_hit) / len(syms), 3) if syms else None,
         "symbols_missed": [s for s in syms if s not in sym_hit],
     }
+    out.update(wide_score.score_diff(task, diff_text))
+    return out
+
+
+def _sha(path_or_text) -> str:
+    data = (Path(path_or_text).read_bytes() if isinstance(path_or_text, Path)
+            else path_or_text.encode())
+    return hashlib.sha1(data).hexdigest()[:10]
+
+
+def provenance(task: dict, arm: str, model: str) -> dict:
+    """Everything a later reader needs to know what was measured: binary,
+    steering, corpus commit, CLI version, model — pinned together."""
+    p = {"model": model, "claude_version": usage_account.claude_version(),
+         "corpus_commit": task["base_commit"], "gold_commit": task["gold_commit"]}
+    if arm.startswith("prism"):
+        if not Path(_REAL_PRISM).exists():
+            raise RuntimeError(f"prism binary missing: {_REAL_PRISM}")
+        p["prism_binary"] = _REAL_PRISM
+        p["prism_sha"] = _sha(Path(_REAL_PRISM))
+        p["steering_sha"] = _sha(_real_shipped_steering())
+    return p
 
 
 def build_check(task: dict, wt: Path) -> str:
@@ -207,11 +241,18 @@ def build_check(task: dict, wt: Path) -> str:
     return "skipped"
 
 
-def tool_trace(wt: Path) -> dict:
+def tool_trace(wt: Path, session_id: str | None = None) -> dict:
     """Per-tool call counts for this cell, mined from the CLI's own
     session transcript. Without this the previous run's headline result
     (prism_plus arm, zero prism calls, discovered only by hand-reading a
-    raw transcript) would have shipped unnoticed again."""
+    raw transcript) would have shipped unnoticed again.
+
+    With a session_id (recorded since 2026-09-05) the transcript is found
+    exactly; the mtime-glob below is the fallback for older cells."""
+    if session_id:
+        t = usage_account.transcript_usage(session_id)
+        if "tool_calls" in t:
+            return t["tool_calls"]
     base = wt.name.replace("_", "-")
     candidates = [str(wt), str(wt.resolve()), "/private" + str(wt)]
     home_projects = Path.home() / ".claude" / "projects"
@@ -272,7 +313,8 @@ def run_cell(task: dict, arm: str, model: str, tag: str) -> dict:
 
     repo, wt = isolated_worktree(task)
     rec: dict = {"task": task["instance_id"], "arm": arm, "model": model,
-                 "project": task["project"]}
+                 "project": task["project"], "tag": tag,
+                 "provenance": provenance(task, arm, model)}
     try:
         if arm.startswith("prism"):
             # Explicit path, not the bare "prism" command: PATH resolved
@@ -290,12 +332,29 @@ def run_cell(task: dict, arm: str, model: str, tag: str) -> dict:
             j = json.loads(r.stdout)
             rec["turns"] = j.get("num_turns")
             rec["cost_usd"] = j.get("total_cost_usd")
+            rec["is_error"] = bool(j.get("is_error"))
+            rec["result_tail"] = str(j.get("result") or "")[-300:]
+            rec["usage"] = usage_account.cli_usage(j)
         except Exception:
             rec["agent_error"] = (r.stderr or r.stdout)[-250:]
-        rec["tool_trace"] = tool_trace(wt)
-        rec.update(score(task, wt))
+        if rec.get("is_error") or rec.get("agent_error") or not rec.get("cost_usd"):
+            # v070sample 2026-09-05: 10 cells came back in ~1s with
+            # num_turns=1 cost=0 (a transient API-side error result) and
+            # were cached as recall=0. A cell the agent never ran is not
+            # a measurement — raise so main() prints ERROR and caches
+            # nothing, and the next run retries it.
+            raise RuntimeError("agent did not run: " + (rec.get("agent_error")
+                               or rec.get("result_tail") or "cost=0"))
+        sid = (rec.get("usage") or {}).get("session_id")
+        rec["tool_trace"] = tool_trace(wt, sid)
+        rec["transcript_usage"] = usage_account.transcript_usage(sid)
+        # Full diff, never truncated: the 20k cap (dropped 2026-09-05) cut
+        # 10/16 v070sample cells mid-file and made a strict rescore
+        # impossible. main() moves it to a .diff sidecar next to the record.
+        diff_text = sh("git", "-C", str(wt), "diff")
+        rec.update(score(task, wt, diff_text))
         rec["build"] = build_check(task, wt)
-        rec["diff"] = sh("git", "-C", str(wt), "diff")[:20000]
+        rec["diff"] = diff_text
     finally:
         shutil.rmtree(wt, ignore_errors=True)
     return rec
@@ -333,12 +392,14 @@ def main() -> None:
             except Exception as e:
                 print(f"{task['instance_id']:26} {arm:12} ERROR {str(e)[:150]}")
                 continue
+            out.with_suffix(".diff").write_text(rec.pop("diff"))
             out.write_text(json.dumps(rec, indent=1))
             tt = rec.get("tool_trace") or {}
             prism_calls = sum(v for k, v in tt.items() if "prism" in k.lower())
-            print(f"{rec['task']:26} {arm:12} recall={rec.get('file_recall')} "
-                  f"({rec.get('files_found')}/{rec.get('files_expected')}) "
-                  f"sym={rec.get('symbol_recall')} extra={rec.get('extra_files')} "
+            print(f"{rec['task']:26} {arm:12} site={rec.get('site_recall')} "
+                  f"({rec.get('sites_found')}/{rec.get('sites_expected')}) "
+                  f"file={rec.get('file_recall')} "
+                  f"sym={rec.get('symbol_recall_strict')} extra={rec.get('extra_files')} "
                   f"build={rec.get('build')} turns={rec.get('turns')} "
                   f"cost=${rec.get('cost_usd')} prism_calls={prism_calls}", flush=True)
 

@@ -51,6 +51,11 @@ TASKS = [
 
 HARD_RECALL_DROP = 0.15   # any single task
 MEAN_RECALL_DROP = 0.05   # over the whole bed
+# Billed cost, candidate/baseline, averaged over pairs. Until 2026-09-05 the
+# gate had no cost criterion at all — a candidate costing 2x with flat recall
+# PASSED. 1.25 is the "big break" threshold this bed's ~50%/cell noise can
+# actually detect; ±10% needs the full paired study, same as recall.
+MEAN_COST_RATIO_MAX = 1.25
 
 
 def binary_sha(path: str) -> str:
@@ -121,7 +126,7 @@ def main() -> int:
     b_arm = arm_for(args.baseline, "base")
     c_arm = arm_for(args.candidate, "cand")
 
-    drops, cand_tok, base_tok = [], 0, 0
+    drops, cand_tok, base_tok, ratios = [], 0, 0, []
     for tp in TASKS[: args.limit]:
         task = Task.load(tp)
         corpus = Path(task.workdir or task.repo)
@@ -159,10 +164,13 @@ def main() -> int:
                 print(f"HARD FAIL (reproduced): {reason} on {task.id}")
                 return 1
         br, cr = b.get("recall"), c.get("recall")
-        print(f"{task.id:30} base recall={br} tok={b.get('tokens_in',0)//1000}k | "
-              f"cand recall={cr} tok={c.get('tokens_in',0)//1000}k")
+        bc, cc = b.get("cost_usd") or 0, c.get("cost_usd") or 0
+        print(f"{task.id:30} base recall={br} tok={b.get('tokens_in',0)//1000}k ${bc:.2f} | "
+              f"cand recall={cr} tok={c.get('tokens_in',0)//1000}k ${cc:.2f}")
         if br is not None and cr is not None:
             drops.append(br - cr)
+        if bc > 0 and cc > 0:
+            ratios.append(cc / bc)
         cand_tok += c.get("tokens_in", 0) or 0
         base_tok += b.get("tokens_in", 0) or 0
 
@@ -171,10 +179,15 @@ def main() -> int:
         return 2
     mean_drop = sum(drops) / len(drops)
     tok_delta = (cand_tok - base_tok) / max(base_tok, 1) * 100
+    cost_ratio = sum(ratios) / len(ratios) if ratios else None
     print(f"\npairs={len(drops)} mean recall delta={-mean_drop:+.3f} "
-          f"tokens {tok_delta:+.0f}%")
+          f"tokens {tok_delta:+.0f}% billed cost ratio="
+          f"{cost_ratio:.2f}x" if cost_ratio else "n/a")
     if mean_drop > MEAN_RECALL_DROP:
         print(f"FAIL: mean recall drop {mean_drop:.3f} > {MEAN_RECALL_DROP}")
+        return 1
+    if cost_ratio is not None and cost_ratio > MEAN_COST_RATIO_MAX:
+        print(f"FAIL: mean billed cost ratio {cost_ratio:.2f} > {MEAN_COST_RATIO_MAX}")
         return 1
     print("PASS (not-broken; subtle effects need a full study)")
     return 0

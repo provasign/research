@@ -65,12 +65,28 @@ def test_false_positive_lowers_precision():
     assert c.extra == ["response_writer.go:Flush"]
 
 
-def test_weak_match_wrong_file_flagged():
+def test_wrong_file_same_symbol_is_a_false_positive():
+    # 2026-09-05: a same-named symbol in the WRONG file used to count toward
+    # recall (flagged weak). It is a wrong answer: no recall credit, and it
+    # costs precision like any other extra site.
     a = _ans('{"sites":["other.go:Hijack","response_writer.go:CloseNotify"],'
              '"complete":true}')
     c = score(TASK, a, "T", 1)
-    assert c.recall == 1.0  # symbol-only match still credits recall
+    assert c.recall == 0.5
+    assert c.extra == ["other.go:Hijack"]
+    assert c.weak_matches == []
+    assert c.overconfident  # claimed complete, missed Hijack
+
+
+def test_pathless_symbol_is_weak_evidence_only():
+    # No path at all is underspecified, not wrong: reported in weak_recall,
+    # excluded from recall, not penalised as extra.
+    a = _ans('{"sites":["Hijack","response_writer.go:CloseNotify"],"complete":false}')
+    c = score(TASK, a, "T", 1)
+    assert c.recall == 0.5
+    assert c.weak_recall == 1.0
     assert "response_writer.go:Hijack" in c.weak_matches
+    assert c.extra == []
 
 
 def test_test_sites_are_neutral_not_false_positives():

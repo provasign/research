@@ -93,11 +93,19 @@ def run_arm(arm: str, task: Task, corpus: Path, model: str) -> dict:
         rec["turns"] = j.get("num_turns")
         rec["cost_usd"] = j.get("total_cost_usd")
         u = j.get("usage", {}) or {}
+        # tokens_in kept for older readers; cache CREATION tokens are billed
+        # too and were dropped here until 2026-09-05 — all four categories
+        # are now recorded separately.
         rec["tokens_in"] = u.get("input_tokens", 0) + u.get("cache_read_input_tokens", 0)
         rec["tokens_out"] = u.get("output_tokens", 0)
+        rec["tokens_uncached"] = u.get("input_tokens", 0)
+        rec["tokens_cache_write"] = u.get("cache_creation_input_tokens", 0)
+        rec["tokens_cache_read"] = u.get("cache_read_input_tokens", 0)
+        rec["session_id"] = j.get("session_id")
         answer = Answer.parse(j.get("result", ""))
         _sc = score(task, answer, arm, 1)
         rec["recall"] = round(_sc.recall, 3)
+        rec["weak_recall"] = round(_sc.weak_recall, 3)
         rec["precision"] = round(_sc.precision, 3)
         rec["f1"] = round(_sc.f1, 3)
         rec["n_sites"] = len(answer.sites)

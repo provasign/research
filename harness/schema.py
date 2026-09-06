@@ -127,6 +127,9 @@ class Scorecard:
     claimed_complete: bool
     overconfident: bool  # claimed complete AND recall < 1.0 -- a confident error
     surfaced_gap: bool  # agent reported any unresolved/ambiguous edge
+    # recall if pathless symbol-only matches were credited too. Reported as
+    # weak evidence beside `recall`, never in place of it (2026-09-05).
+    weak_recall: float = 0.0
 
     def to_dict(self) -> dict:
         return asdict(self)
