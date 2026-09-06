@@ -1,0 +1,118 @@
+{
+  "arm": "codex_baseline",
+  "wall_s": 42.121,
+  "exit_code": 0,
+  "timed_out": false,
+  "task": "django-connparams",
+  "scorer_version": 3,
+  "model": "gpt-5.5",
+  "usage_raw": [
+    {
+      "input_tokens": 27503,
+      "cached_input_tokens": 12288,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 795,
+      "reasoning_output_tokens": 275
+    }
+  ],
+  "measurement_complete": true,
+  "input_tokens": 27503,
+  "output_tokens": 795,
+  "cache_read_tokens": 12288,
+  "cost_usd": 0.106069,
+  "cost_basis": "API-equivalent estimate: GPT-5.5 $5/$0.50/$30 per M input/cached/output; not subscription billing",
+  "agent_error": false,
+  "tool_calls": 6,
+  "prism_calls": 0,
+  "calls": [
+    {
+      "id": "item_1",
+      "type": "command_execution",
+      "command": "/bin/zsh -lc \"rg -n \\\"get_connection_params\\\" django --glob '\"'!**/tests/**'\"' --glob '\"'!**/test*.py'\"'\"",
+      "aggregated_output": "",
+      "exit_code": 0,
+      "status": "completed"
+    },
+    {
+      "id": "item_2",
+      "type": "command_execution",
+      "command": "/bin/zsh -lc \"nl -ba django/db/backends/oracle/base.py | sed -n '250,320p'\"",
+      "aggregated_output": "   250\t        )\n   251\t        self.features.can_return_columns_from_insert = use_returning_into\n   252\t        self.features.can_return_rows_from_update = use_returning_into\n   253\t\n   254\t    @property\n   255\t    def is_pool(self):\n   256\t        return self.settings_dict[\"OPTIONS\"].get(\"pool\", False)\n   257\t\n   258\t    @property\n   259\t    def pool(self):\n   260\t        if not self.is_pool:\n   261\t            return None\n   262\t\n   263\t        if self.settings_dict.get(\"CONN_MAX_AGE\", 0) != 0:\n   264\t            raise ImproperlyConfigured(\n   265\t                \"Pooling doesn't support persistent connections.\"\n   266\t            )\n   267\t\n   268\t        pool_key = (self.alias, self.settings_dict[\"USER\"])\n   269\t        if pool_key not in self._connection_pools:\n   270\t            connect_kwargs = self.get_connection_params()\n   271\t            pool_options = connect_kwargs.pop(\"pool\")\n   272\t            if pool_options is not True:\n   273\t                connect_kwargs.update(pool_options)\n   274\t\n   275\t            pool = Database.create_pool(\n   276\t                user=self.settings_dict[\"USER\"],\n   277\t                password=self.settings_dict[\"PASSWORD\"],\n   278\t                dsn=dsn(self.settings_dict),\n   279\t                **connect_kwargs,\n   280\t            )\n   281\t            self._connection_pools.setdefault(pool_key, pool)\n   282\t\n   283\t        return self._connection_pools[pool_key]\n   284\t\n   285\t    def close_pool(self):\n   286\t        if self.pool:\n   287\t            self.pool.close(force=True)\n   288\t            pool_key = (self.alias, self.settings_dict[\"USER\"])\n   289\t            del self._connection_pools[pool_key]\n   290\t\n   291\t    def get_database_version(self):\n   292\t        return self.oracle_version\n   293\t\n   294\t    def get_connection_params(self):\n   295\t        conn_params = self.settings_dict[\"OPTIONS\"].copy()\n   296\t        if \"use_returning_into\" in conn_params:\n   297\t            del conn_params[\"use_returning_into\"]\n   298\t        return conn_params\n   299\t\n   300\t    @async_unsafe\n   301\t    def get_new_connection(self, conn_params):\n   302\t        if self.pool:\n   303\t            return self.pool.acquire()\n   304\t        return Database.connect(\n   305\t            user=self.settings_dict[\"USER\"],\n   306\t            password=self.settings_dict[\"PASSWORD\"],\n   307\t            dsn=dsn(self.settings_dict),\n   308\t            **conn_params,\n   309\t        )\n   310\t\n   311\t    def init_connection_state(self):\n   312\t        super().init_connection_state()\n   313\t        cursor = self.create_cursor()\n   314\t        # Set the territory first. The territory overrides NLS_DATE_FORMAT\n   315\t        # and NLS_TIMESTAMP_FORMAT to the territory default. When all of\n   316\t        # these are set in single statement it isn't clear what is supposed\n   317\t        # to happen.\n   318\t        cursor.execute(\"ALTER SESSION SET NLS_TERRITORY = 'AMERICA'\")\n   319\t        # Set Oracle date to ANSI date format. This only needs to execute\n   320\t        # once when we create a new connection. We also set the Territory\n",
+      "exit_code": 0,
+      "status": "completed"
+    },
+    {
+      "id": "item_3",
+      "type": "command_execution",
+      "command": "/bin/zsh -lc \"nl -ba django/db/backends/sqlite3/base.py | sed -n '130,180p'\"",
+      "aggregated_output": "   130\t    #\n   131\t    # Note: we use str.format() here for readability as '%' is used as a\n   132\t    # wildcard for the LIKE operator.\n   133\t    pattern_esc = r\"REPLACE(REPLACE(REPLACE({}, '\\', '\\\\'), '%%', '\\%%'), '_', '\\_')\"\n   134\t    pattern_ops = {\n   135\t        \"contains\": r\"LIKE '%%' || {} || '%%' ESCAPE '\\'\",\n   136\t        \"icontains\": r\"LIKE '%%' || UPPER({}) || '%%' ESCAPE '\\'\",\n   137\t        \"startswith\": r\"LIKE {} || '%%' ESCAPE '\\'\",\n   138\t        \"istartswith\": r\"LIKE UPPER({}) || '%%' ESCAPE '\\'\",\n   139\t        \"endswith\": r\"LIKE '%%' || {} ESCAPE '\\'\",\n   140\t        \"iendswith\": r\"LIKE '%%' || UPPER({}) ESCAPE '\\'\",\n   141\t    }\n   142\t\n   143\t    transaction_modes = frozenset([\"DEFERRED\", \"EXCLUSIVE\", \"IMMEDIATE\"])\n   144\t\n   145\t    Database = Database\n   146\t    SchemaEditorClass = DatabaseSchemaEditor\n   147\t    # Classes instantiated in __init__().\n   148\t    client_class = DatabaseClient\n   149\t    creation_class = DatabaseCreation\n   150\t    features_class = DatabaseFeatures\n   151\t    introspection_class = DatabaseIntrospection\n   152\t    ops_class = DatabaseOperations\n   153\t\n   154\t    def get_connection_params(self):\n   155\t        settings_dict = self.settings_dict\n   156\t        if not settings_dict[\"NAME\"]:\n   157\t            raise ImproperlyConfigured(\n   158\t                \"settings.DATABASES is improperly configured. \"\n   159\t                \"Please supply the NAME value.\"\n   160\t            )\n   161\t        kwargs = {\n   162\t            \"database\": settings_dict[\"NAME\"],\n   163\t            \"detect_types\": Database.PARSE_DECLTYPES | Database.PARSE_COLNAMES,\n   164\t            **settings_dict[\"OPTIONS\"],\n   165\t        }\n   166\t        # Always allow the underlying SQLite connection to be shareable\n   167\t        # between multiple threads. The safe-guarding will be handled at a\n   168\t        # higher level by the `BaseDatabaseWrapper.allow_thread_sharing`\n   169\t        # property. This is necessary as the shareability is disabled by\n   170\t        # default in sqlite3 and it cannot be changed once a connection is\n   171\t        # opened.\n   172\t        if \"check_same_thread\" in kwargs and kwargs[\"check_same_thread\"]:\n   173\t            warnings.warn(\n   174\t                \"The `check_same_thread` option was provided and set to \"\n   175\t                \"True. It will be overridden with False. Use the \"\n   176\t                \"`DatabaseWrapper.allow_thread_sharing` property instead \"\n   177\t                \"for controlling thread shareability.\",\n   178\t                RuntimeWarning,\n   179\t            )\n   180\t        kwargs.update({\"check_same_thread\": False, \"uri\": True})\n",
+      "exit_code": 0,
+      "status": "completed"
+    },
+    {
+      "id": "item_4",
+      "type": "command_execution",
+      "command": "/bin/zsh -lc \"nl -ba django/db/backends/base/base.py | sed -n '180,270p'\"",
+      "aggregated_output": "   180\t            )\n   181\t        return list(self.queries_log)\n   182\t\n   183\t    def get_database_version(self):\n   184\t        \"\"\"Return a tuple of the database's version.\"\"\"\n   185\t        raise NotImplementedError(\n   186\t            \"subclasses of BaseDatabaseWrapper may require a get_database_version() \"\n   187\t            \"method.\"\n   188\t        )\n   189\t\n   190\t    def check_database_version_supported(self):\n   191\t        \"\"\"\n   192\t        Raise an error if the database version isn't supported by this\n   193\t        version of Django.\n   194\t        \"\"\"\n   195\t        if (\n   196\t            self.features.minimum_database_version is not None\n   197\t            and self.get_database_version() < self.features.minimum_database_version\n   198\t        ):\n   199\t            db_version = \".\".join(map(str, self.get_database_version()))\n   200\t            min_db_version = \".\".join(map(str, self.features.minimum_database_version))\n   201\t            raise NotSupportedError(\n   202\t                f\"{self.display_name} {min_db_version} or later is required \"\n   203\t                f\"(found {db_version}).\"\n   204\t            )\n   205\t\n   206\t    # ##### Backend-specific methods for creating connections and cursors #####\n   207\t\n   208\t    def get_connection_params(self):\n   209\t        \"\"\"Return a dict of parameters suitable for get_new_connection.\"\"\"\n   210\t        raise NotImplementedError(\n   211\t            \"subclasses of BaseDatabaseWrapper may require a get_connection_params() \"\n   212\t            \"method\"\n   213\t        )\n   214\t\n   215\t    def get_new_connection(self, conn_params):\n   216\t        \"\"\"Open a connection to the database.\"\"\"\n   217\t        raise NotImplementedError(\n   218\t            \"subclasses of BaseDatabaseWrapper may require a get_new_connection() \"\n   219\t            \"method\"\n   220\t        )\n   221\t\n   222\t    def init_connection_state(self):\n   223\t        \"\"\"Initialize the database connection settings.\"\"\"\n   224\t        if self.alias not in RAN_DB_VERSION_CHECK:\n   225\t            self.check_database_version_supported()\n   226\t            RAN_DB_VERSION_CHECK.add(self.alias)\n   227\t\n   228\t    def create_cursor(self, name=None):\n   229\t        \"\"\"Create a cursor. Assume that a connection is established.\"\"\"\n   230\t        raise NotImplementedError(\n   231\t            \"subclasses of BaseDatabaseWrapper may require a create_cursor() method\"\n   232\t        )\n   233\t\n   234\t    # ##### Backend-specific methods for creating connections #####\n   235\t\n   236\t    @async_unsafe\n   237\t    def connect(self):\n   238\t        \"\"\"Connect to the database. Assume that the connection is closed.\"\"\"\n   239\t        # Check for invalid configurations.\n   240\t        self.check_settings()\n   241\t        # In case the previous connection was closed while in an atomic block\n   242\t        self.in_atomic_block = False\n   243\t        self.savepoint_ids = []\n   244\t        self.atomic_blocks = []\n   245\t        self.needs_rollback = False\n   246\t        # Reset parameters defining when to close/health-check the connection.\n   247\t        self.health_check_enabled = self.settings_dict[\"CONN_HEALTH_CHECKS\"]\n   248\t        max_age = self.settings_dict[\"CONN_MAX_AGE\"]\n   249\t        self.close_at = None if max_age is None else time.monotonic() + max_age\n   250\t        self.closed_in_transaction = False\n   251\t        self.errors_occurred = False\n   252\t        # New connections are healthy.\n   253\t        self.health_check_done = True\n   254\t        # Establish the connection\n   255\t        conn_params = self.get_connection_params()\n   256\t        self.connection = self.get_new_connection(conn_params)\n   257\t        self.set_autocommit(self.settings_dict[\"AUTOCOMMIT\"])\n   258\t        self.init_connection_state()\n   259\t        connection_created.send(sender=self.__class__, connection=self)\n   260\t\n   261\t        self.run_on_commit = []\n   262\t\n   263\t    def check_settings(self):\n   264\t        if self.settings_dict[\"TIME_ZONE\"] is not None and not settings.USE_TZ:\n   265\t            raise ImproperlyConfigured(\n   266\t                \"Connection '%s' cannot set TIME_ZONE because USE_TZ is False.\"\n   267\t                % self.alias\n   268\t            )\n   269\t\n   270\t    @async_unsafe\n",
+      "exit_code": 0,
+      "status": "completed"
+    },
+    {
+      "id": "item_5",
+      "type": "command_execution",
+      "command": "/bin/zsh -lc \"nl -ba django/db/backends/mysql/base.py | sed -n '190,245p'\"",
+      "aggregated_output": "   190\t        \"endswith\": \"LIKE BINARY CONCAT('%%', {})\",\n   191\t        \"iendswith\": \"LIKE CONCAT('%%', {})\",\n   192\t    }\n   193\t\n   194\t    isolation_levels = {\n   195\t        \"read uncommitted\",\n   196\t        \"read committed\",\n   197\t        \"repeatable read\",\n   198\t        \"serializable\",\n   199\t    }\n   200\t\n   201\t    Database = Database\n   202\t    SchemaEditorClass = DatabaseSchemaEditor\n   203\t    # Classes instantiated in __init__().\n   204\t    client_class = DatabaseClient\n   205\t    creation_class = DatabaseCreation\n   206\t    features_class = DatabaseFeatures\n   207\t    introspection_class = DatabaseIntrospection\n   208\t    ops_class = DatabaseOperations\n   209\t    validation_class = DatabaseValidation\n   210\t\n   211\t    def get_database_version(self):\n   212\t        return self.mysql_version\n   213\t\n   214\t    def get_connection_params(self):\n   215\t        kwargs = {\n   216\t            \"conv\": django_conversions,\n   217\t            \"charset\": \"utf8mb4\",\n   218\t        }\n   219\t        settings_dict = self.settings_dict\n   220\t        if settings_dict[\"USER\"]:\n   221\t            kwargs[\"user\"] = settings_dict[\"USER\"]\n   222\t        if settings_dict[\"NAME\"]:\n   223\t            kwargs[\"database\"] = settings_dict[\"NAME\"]\n   224\t        if settings_dict[\"PASSWORD\"]:\n   225\t            kwargs[\"password\"] = settings_dict[\"PASSWORD\"]\n   226\t        if settings_dict[\"HOST\"].startswith(\"/\"):\n   227\t            kwargs[\"unix_socket\"] = settings_dict[\"HOST\"]\n   228\t        elif settings_dict[\"HOST\"]:\n   229\t            kwargs[\"host\"] = settings_dict[\"HOST\"]\n   230\t        if settings_dict[\"PORT\"]:\n   231\t            kwargs[\"port\"] = int(settings_dict[\"PORT\"])\n   232\t        # We need the number of potentially affected rows after an\n   233\t        # \"UPDATE\", not the number of changed rows.\n   234\t        kwargs[\"client_flag\"] = CLIENT.FOUND_ROWS\n   235\t        # Validate the transaction isolation level, if specified.\n   236\t        options = settings_dict[\"OPTIONS\"].copy()\n   237\t        isolation_level = options.pop(\"isolation_level\", \"read committed\")\n   238\t        if isolation_level:\n   239\t            isolation_level = isolation_level.lower()\n   240\t            if isolation_level not in self.isolation_levels:\n   241\t                raise ImproperlyConfigured(\n   242\t                    \"Invalid transaction isolation level '%s' specified.\\n\"\n   243\t                    \"Use one of %s, or None.\"\n   244\t                    % (\n   245\t                        isolation_level,\n",
+      "exit_code": 0,
+      "status": "completed"
+    },
+    {
+      "id": "item_6",
+      "type": "command_execution",
+      "command": "/bin/zsh -lc \"nl -ba django/db/backends/postgresql/base.py | sed -n '195,270p'\"",
+      "aggregated_output": "   195\t        pool_options = self.settings_dict[\"OPTIONS\"].get(\"pool\")\n   196\t        if self.alias == NO_DB_ALIAS or not pool_options:\n   197\t            return None\n   198\t\n   199\t        if self.alias not in self._connection_pools:\n   200\t            if self.settings_dict.get(\"CONN_MAX_AGE\", 0) != 0:\n   201\t                raise ImproperlyConfigured(\n   202\t                    \"Pooling doesn't support persistent connections.\"\n   203\t                )\n   204\t            # Set the default options.\n   205\t            if pool_options is True:\n   206\t                pool_options = {}\n   207\t\n   208\t            try:\n   209\t                from psycopg_pool import ConnectionPool\n   210\t            except ImportError as err:\n   211\t                raise ImproperlyConfigured(\n   212\t                    \"Error loading psycopg_pool module.\\nDid you install psycopg[pool]?\"\n   213\t                ) from err\n   214\t\n   215\t            connect_kwargs = self.get_connection_params()\n   216\t            # Ensure we run in autocommit, Django properly sets it later on.\n   217\t            connect_kwargs[\"autocommit\"] = True\n   218\t            enable_checks = self.settings_dict[\"CONN_HEALTH_CHECKS\"]\n   219\t            # Copy to avoid mutating the user's settings dict.\n   220\t            pool_options = {**pool_options}\n   221\t            pool_options.setdefault(\n   222\t                \"check\", ConnectionPool.check_connection if enable_checks else None\n   223\t            )\n   224\t            pool = ConnectionPool(\n   225\t                kwargs=connect_kwargs,\n   226\t                open=False,  # Do not open the pool during startup.\n   227\t                configure=self._configure_connection,\n   228\t                **pool_options,\n   229\t            )\n   230\t            # setdefault() ensures that multiple threads don't set this in\n   231\t            # parallel. Since we do not open the pool during it's init above,\n   232\t            # this means that at worst during startup multiple threads generate\n   233\t            # pool objects and the first to set it wins.\n   234\t            self._connection_pools.setdefault(self.alias, pool)\n   235\t\n   236\t        return self._connection_pools[self.alias]\n   237\t\n   238\t    def close_pool(self):\n   239\t        if self.pool:\n   240\t            self.pool.close()\n   241\t            del self._connection_pools[self.alias]\n   242\t\n   243\t    def get_database_version(self):\n   244\t        \"\"\"\n   245\t        Return a tuple of the database's version.\n   246\t        E.g. for pg_version 120004, return (12, 4).\n   247\t        \"\"\"\n   248\t        return divmod(self.pg_version, 10000)\n   249\t\n   250\t    def get_connection_params(self):\n   251\t        settings_dict = self.settings_dict\n   252\t        # None may be used to connect to the default 'postgres' db\n   253\t        if settings_dict[\"NAME\"] == \"\" and not settings_dict[\"OPTIONS\"].get(\"service\"):\n   254\t            raise ImproperlyConfigured(\n   255\t                \"settings.DATABASES is improperly configured. \"\n   256\t                \"Please supply the NAME or OPTIONS['service'] value.\"\n   257\t            )\n   258\t        if len(settings_dict[\"NAME\"] or \"\") > self.ops.max_name_length():\n   259\t            raise ImproperlyConfigured(\n   260\t                \"The database name '%s' (%d characters) is longer than \"\n   261\t                \"PostgreSQL's limit of %d characters. Supply a shorter NAME \"\n   262\t                \"in settings.DATABASES.\"\n   263\t                % (\n   264\t                    settings_dict[\"NAME\"],\n   265\t                    len(settings_dict[\"NAME\"]),\n   266\t                    self.ops.max_name_length(),\n   267\t                )\n   268\t            )\n   269\t        if settings_dict[\"NAME\"]:\n   270\t            conn_params = {\n",
+      "exit_code": 0,
+      "status": "completed"
+    }
+  ],
+  "total_tokens": 28298,
+  "answer": {
+    "sites": [
+      "django/db/backends/base/base.py:get_connection_params",
+      "django/db/backends/base/base.py:connect",
+      "django/db/backends/mysql/base.py:get_connection_params",
+      "django/db/backends/sqlite3/base.py:get_connection_params",
+      "django/db/backends/oracle/base.py:pool",
+      "django/db/backends/oracle/base.py:get_connection_params",
+      "django/db/backends/postgresql/base.py:pool",
+      "django/db/backends/postgresql/base.py:get_connection_params"
+    ],
+    "complete": true,
+    "unresolved": []
+  },
+  "score": {
+    "task_id": "django-connparams",
+    "arm": "codex_baseline",
+    "trial": 1,
+    "recall": 1.0,
+    "precision": 1.0,
+    "f1": 1.0,
+    "found": [
+      "django/db/backends/base/base.py:connect",
+      "django/db/backends/base/base.py:get_connection_params",
+      "django/db/backends/mysql/base.py:get_connection_params",
+      "django/db/backends/oracle/base.py:get_connection_params",
+      "django/db/backends/oracle/base.py:pool",
+      "django/db/backends/postgresql/base.py:get_connection_params",
+      "django/db/backends/postgresql/base.py:pool",
+      "django/db/backends/sqlite3/base.py:get_connection_params"
+    ],
+    "missed": [],
+    "extra": [],
+    "weak_matches": [],
+    "claimed_complete": true,
+    "overconfident": false,
+    "surfaced_gap": false,
+    "weak_recall": 1.0
+  },
+  "valid": true
+}

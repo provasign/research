@@ -1,0 +1,107 @@
+Unfiltered post-change impact reports; ambiguity warnings retained.
+
+$ prism change-impact 'attempt_total' --format text
+// attempt_total — change-impact: 8 site(s)
+completeness: callers-only
+declarations (1):
+  attempt_total  harness/ab_gate.py:136
+callers (7):
+  measurement_total  harness/ab_gate.py:149
+  RunAccounting.capture  harness/ab_gate.py:174
+  RunAccounting.totals  harness/ab_gate.py:188
+  main  harness/ab_gate.py:268  (via hard_fails)
+  GateMeasurementTests.test_attempts_are_immutable_and_unknowns_not_zeroed  harness/tests/test_gate_measurement.py:74
+  GateMeasurementTests.test_run_cell_isolates_corpus_and_invalidates_changed_manifest  harness/tests/test_gate_measurement.py:87  (via commands)
+  GateMeasurementTests.test_measurement_excludes_other_invocations_and_keeps_current_retries  harness/tests/test_gate_measurement.py:164
+
+$ prism change-impact 'record_attempt' --format text
+// record_attempt — change-impact: 5 site(s)
+completeness: callers-only
+declarations (1):
+  record_attempt  harness/ab_gate.py:122
+callers (4):
+  run_cell  harness/ab_gate.py:214
+  GateMeasurementTests.test_attempts_are_immutable_and_unknowns_not_zeroed  harness/tests/test_gate_measurement.py:74
+  GateMeasurementTests.test_invocation_spend_is_fresh_only_and_saved_before_fail_fast  harness/tests/test_gate_measurement.py:181
+  GateMeasurementTests.test_invocation_unknown_attempt_never_becomes_free  harness/tests/test_gate_measurement.py:206
+
+$ prism change-impact 'run_cell' --format text
+// run_cell — change-impact: 18 site(s)
+completeness: callers-only
+declarations (8):
+  run_cell  harness/ab_gate.py:214
+  run_cell  harness/ab_routing.py:92
+  run_cell  harness/bench_matrix.py:84
+  run_cell  harness/ledger_ab.py:173
+  run_cell  harness/mason_arm.py:20
+  run_cell  harness/run_e2e.py:282
+  run_cell  harness/run_wide.py:357
+  run_cell  harness/tickr_ab.py:194
+callers (10):
+  run_cell_measured  harness/ab_deferral.py:58
+  main  harness/ab_gate.py:268  (via hard_fails)
+  main  harness/ab_routing.py:159
+  main  harness/bench_matrix.py:97
+  main  harness/ledger_ab.py:221
+  main  harness/mason_arm.py:74
+  main  harness/run_e2e.py:319
+  main  harness/run_wide.py:417
+  GateMeasurementTests.test_run_cell_isolates_corpus_and_invalidates_changed_manifest  harness/tests/test_gate_measurement.py:87  (via commands)
+  main  harness/tickr_ab.py:247
+ambiguityNote: declarations span 8 files (harness/ab_gate.py, harness/ab_routing.py, harness/bench_matrix.py, harness/ledger_ab.py, harness/mason_arm.py, harness/run_e2e.py, harness/run_wide.py, harness/tickr_ab.py) — if these are DIFFERENT types sharing a name (not overloads of one type), this result merges their closures and the caller/family lists mix both. Re-run with file="<path fragment>" to scope to the one you mean.
+
+$ prism change-impact 'main' --format text
+change-impact: "main" is ambiguous — 3 candidates:
+  GateMeasurementTests.main  (harness/tests/test_gate_measurement.py:31)
+  Oracle.main  (harness/java-oracle/src/main/java/Oracle.java:38)
+  main  (harness/_vb3.py:103 +77 more)
+re-run with one of these
+
+$ prism change-impact 'cell' --format text
+// cell — change-impact: 14 site(s)
+completeness: callers-only
+declarations (2):
+  cell  harness/agg_jackson.py:41
+  cell  harness/tests/test_gate_measurement.py:18
+callers (12):
+  main  harness/agg_jackson.py:67
+  GateMeasurementTests.test_unknown_cost_and_skipped_tasks_cannot_pass  harness/tests/test_gate_measurement.py:41
+  GateMeasurementTests.test_retries_count_first_cost_and_tokens_and_fail_when_still_broken  harness/tests/test_gate_measurement.py:50
+  GateMeasurementTests.test_equal_quality_cheaper_complete_bed_passes  harness/tests/test_gate_measurement.py:60
+  GateMeasurementTests.test_missing_retry_usage_and_baseline_failure_are_harness_errors  harness/tests/test_gate_measurement.py:68
+  GateMeasurementTests.test_attempts_are_immutable_and_unknowns_not_zeroed  harness/tests/test_gate_measurement.py:74
+  GateMeasurementTests.test_run_cell_isolates_corpus_and_invalidates_changed_manifest  harness/tests/test_gate_measurement.py:87  (via invoke)
+  GateMeasurementTests.test_measurement_excludes_other_invocations_and_keeps_current_retries  harness/tests/test_gate_measurement.py:164
+  GateMeasurementTests.test_legacy_or_inconsistent_measurement_identity_is_unknown  harness/tests/test_gate_measurement.py:177
+  GateMeasurementTests.test_invocation_spend_is_fresh_only_and_saved_before_fail_fast  harness/tests/test_gate_measurement.py:181
+  GateMeasurementTests.test_invocation_unknown_attempt_never_becomes_free  harness/tests/test_gate_measurement.py:206
+  GateMeasurementTests.test_old_manifest_spend_does_not_decide_cheaper_gate  harness/tests/test_gate_measurement.py:218
+ambiguityNote: declarations span 2 files (harness/agg_jackson.py, harness/tests/test_gate_measurement.py) — if these are DIFFERENT types sharing a name (not overloads of one type), this result merges their closures and the caller/family lists mix both. Re-run with file="<path fragment>" to scope to the one you mean.
+
+$ prism change-impact 'GateMeasurementTests.main' --format text
+// GateMeasurementTests.main — change-impact: 6 site(s)
+completeness: closed
+declarations (1):
+  GateMeasurementTests.main  harness/tests/test_gate_measurement.py:31
+callers (5):
+  GateMeasurementTests.test_unknown_cost_and_skipped_tasks_cannot_pass  harness/tests/test_gate_measurement.py:41
+  GateMeasurementTests.test_retries_count_first_cost_and_tokens_and_fail_when_still_broken  harness/tests/test_gate_measurement.py:50
+  GateMeasurementTests.test_equal_quality_cheaper_complete_bed_passes  harness/tests/test_gate_measurement.py:60
+  GateMeasurementTests.test_missing_retry_usage_and_baseline_failure_are_harness_errors  harness/tests/test_gate_measurement.py:68
+  GateMeasurementTests.test_old_manifest_spend_does_not_decide_cheaper_gate  harness/tests/test_gate_measurement.py:218
+externalSupers: TestCase
+
+$ prism change-impact 'GateMeasurementTests.test_equal_quality_cheaper_complete_bed_passes' --format text
+// GateMeasurementTests.test_equal_quality_cheaper_complete_bed_passes — change-impact: 1 site(s)
+completeness: closed
+declarations (1):
+  GateMeasurementTests.test_equal_quality_cheaper_complete_bed_passes  harness/tests/test_gate_measurement.py:60
+externalSupers: TestCase
+
+$ prism change-impact 'GateMeasurementTests.test_run_cell_isolates_corpus_and_invalidates_changed_manifest' --format text
+// GateMeasurementTests.test_run_cell_isolates_corpus_and_invalidates_changed_manifest — change-impact: 1 site(s)
+completeness: closed
+declarations (1):
+  GateMeasurementTests.test_run_cell_isolates_corpus_and_invalidates_changed_manifest  harness/tests/test_gate_measurement.py:87
+externalSupers: TestCase
+

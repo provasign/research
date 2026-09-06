@@ -1,0 +1,1422 @@
+diff --git a/harness/ab_agentic_mcp.py b/harness/ab_agentic_mcp.py
+index ac00007..fb77d43 100644
+--- a/harness/ab_agentic_mcp.py
++++ b/harness/ab_agentic_mcp.py
+@@ -16,15 +16,17 @@ from __future__ import annotations
+ import argparse
+ import json
+ import subprocess
++import tempfile
+ import time
+ from pathlib import Path
+ 
+ from schema import Answer, Task
+ from score import SCORER_VERSION, score
++import usage_account
+ 
+ HOME = Path.home()
+-CFG_DIR = Path("/tmp/ab-agentic-mcp")
+-CFG_DIR.mkdir(exist_ok=True)
++# Every process owns its configs; importing a runner cannot retarget another.
++CFG_DIR = Path(tempfile.mkdtemp(prefix="ab-agentic-mcp-"))
+ 
+ # MCP server configs (stdio).
+ # The vendor renamed the binary engine-b -> codegraph (v1.5.0); the old path
+@@ -91,22 +93,30 @@ def run_arm(arm: str, task: Task, corpus: Path, model: str) -> dict:
+     try:
+         j = json.loads(r.stdout)
+         rec["turns"] = j.get("num_turns")
+-        rec["cost_usd"] = j.get("total_cost_usd")
+-        u = j.get("usage", {}) or {}
++        rec["usage"] = usage_account.cli_usage(j)
++        u = rec["usage"]["tokens"]
++        rec["cost_usd"] = rec["usage"]["cost_usd_cli"]
+         # tokens_in kept for older readers; cache CREATION tokens are billed
+         # too and were dropped here until 2026-09-05 — all four categories
+         # are now recorded separately.
+-        rec["tokens_in"] = u.get("input_tokens", 0) + u.get("cache_read_input_tokens", 0)
+-        rec["tokens_out"] = u.get("output_tokens", 0)
+-        rec["tokens_uncached"] = u.get("input_tokens", 0)
+-        rec["tokens_cache_write"] = u.get("cache_creation_input_tokens", 0)
+-        rec["tokens_cache_read"] = u.get("cache_read_input_tokens", 0)
++        rec["tokens_in"] = (u["input_uncached"] + u["cache_read"]
++                            if u["input_uncached"] is not None and u["cache_read"] is not None else None)
++        rec["tokens_out"] = u["output"]
++        rec["tokens_uncached"] = u["input_uncached"]
++        rec["tokens_cache_write"] = u["cache_creation"]
++        rec["tokens_cache_read"] = u["cache_read"]
+         # The normalized total every comparison should use (proposal §4.1).
+-        rec["tokens_request"] = (rec["tokens_uncached"] + rec["tokens_cache_write"]
+-                                 + rec["tokens_cache_read"])
+-        rec["usage_raw"] = u
++        rec["tokens_request"] = rec["usage"]["input_total"]
++        rec["usage_raw"] = rec["usage"]["raw_usage"]
+         rec["pricing_basis"] = "claude-cli total_cost_usd"
+         rec["session_id"] = j.get("session_id")
++        rec["raw_result"] = j
++        rec["exit_code"] = r.returncode
++        if not rec["usage"]["usage_complete"]:
++            rec["measurement_error"] = "missing or invalid final usage"
++            rec["error"] = rec["measurement_error"]
++        elif r.returncode or j.get("is_error"):
++            rec["error"] = f"agent failed: exit={r.returncode}, is_error={j.get('is_error')}"
+         answer = Answer.parse(j.get("result", ""))
+         _sc = score(task, answer, arm, 1)
+         # The parsed answer itself, so a future scorer change can rescore
+diff --git a/harness/ab_gate.py b/harness/ab_gate.py
+index 175dc2b..130563b 100644
+--- a/harness/ab_gate.py
++++ b/harness/ab_gate.py
+@@ -10,13 +10,14 @@ results". This gate is built to fail FAST and cheap:
+   - HARD-FAIL immediately (nonzero exit) when the candidate errors where the
+     baseline succeeded, or its recall drops >0.15 on any task
+   - aggregate FAIL when mean recall drops >0.05 over the bed
+-  - cells are cached per (task, model, binary-sha), so re-runs and repeated
+-    gates against the same baseline cost only the new candidate cells
++  - cache identity includes task, corpus pin, model, CLI, binary, steering,
++    tool config, and harness/scorer source; all attempts are retained
+ 
+-Honest scope: n=9 haiku tasks detects BIG breaks (the realistic failure mode
+-for payload/steering changes), not ±5% quality shifts — the per-cell noise
+-floor is ~50%, subtle effects need ~48 pairs and a real study. A PASS here
+-means "not broken", never "proven better".
++Honest scope: this small, noisy Haiku bed is a regression smoke test.
++Its retry policy is an operational rule, not a statistical significance
++test. A PASS means "not broken by this gate", never "proven better" or
++"cheaper than native tools". Quality still uses the final candidate attempt;
++the preserved attempts and inclusive costs do not remove that selection bias.
+ 
+ Usage:
+   python ab_gate.py --baseline ~/bin/prism --candidate ../prism/bin/prism \
+@@ -26,16 +27,23 @@ Exit 0 = PASS, 1 = FAIL, 2 = harness error.
+ from __future__ import annotations
+ 
+ import argparse
++from dataclasses import asdict
+ import hashlib
+ import json
++import math
++import os
+ import subprocess
+ import sys
++import tempfile
++import time
++import uuid
+ from pathlib import Path
+ 
+ sys.path.insert(0, str(Path(__file__).resolve().parent))
+ import ab_agentic_mcp as bed  # noqa: E402
+ from schema import Task  # noqa: E402
+ from score import SCORER_VERSION  # noqa: E402
++import usage_account  # noqa: E402
+ 
+ # Cheapest-first by measured wall time (2026-08-28 bed run).
+ TASKS = [
+@@ -57,8 +65,8 @@ MEAN_RECALL_DROP = 0.05   # over the whole bed
+ # cheap-baseline pair dominate. Until 2026-09-05 the gate had no cost
+ # criterion at all — a candidate costing 2x with flat recall PASSED. 1.25
+ # is the "big break" threshold this bed's ~50%/cell noise can detect; this
+-# gate is a smoke test ("not broken"). --require-cheaper turns it into the
+-# product criterion: aggregate cost must be below the baseline's.
++# gate is a smoke test ("not broken"). --require-cheaper compares against
++# released Prism, NOT a native-tools baseline or a product superiority test.
+ COST_RATIO_MAX = 1.25
+ 
+ 
+@@ -68,7 +76,7 @@ def binary_sha(path: str) -> str:
+ 
+ def arm_for(binary: str, tag: str) -> str:
+     """Register an ab_agentic_mcp arm bound to a specific prism binary."""
+-    cfg = Path(f"/tmp/ab-agentic-mcp/gate-{tag}.json")
++    cfg = bed.CFG_DIR / f"gate-{tag}.json"
+     cfg.parent.mkdir(exist_ok=True)
+     # No alwaysLoad: the shipped install (prism init) leaves the tools
+     # deferred, so the gate must pay the same ToolSearch discovery turn a
+@@ -93,31 +101,167 @@ def is_degenerate(rec: dict) -> bool:
+             and (rec.get("tokens_in") or 0) == 0 and "error" not in rec)
+ 
+ 
++def cell_manifest(arm: str, task: Task, corpus: Path, model: str, binary: str) -> dict:
++    commit = subprocess.run(["git", "-C", str(corpus), "rev-parse", "--verify", f"{task.pin}^{{commit}}"],
++                            check=True, capture_output=True, text=True).stdout.strip()
++    spec = bed.ARMS[arm]
++    source = Path(__file__).resolve().parent
++    return {
++        "manifest_version": 1, "task": asdict(task), "corpus_commit": commit,
++        "model": model, "cli_version": usage_account.claude_version(),
++        "binary_sha256": hashlib.sha256(Path(binary).read_bytes()).hexdigest(),
++        "scorer_version": SCORER_VERSION, "usage_version": usage_account.USAGE_VERSION,
++        "guidance": spec["guidance"], "contract": bed.CONTRACT,
++        "allowed_tools": spec["allowed"],
++        "mcp": json.loads(Path(spec["mcp"]).read_text()) if spec["mcp"] else None,
++        "source_sha256": {name: hashlib.sha256((source/name).read_bytes()).hexdigest()
++                          for name in ("ab_gate.py", "ab_agentic_mcp.py", "schema.py", "score.py", "usage_account.py")},
++    }
++
++
++def record_attempt(path: Path, rec: dict, previous: list[dict]) -> dict:
++    """Write immutable raw evidence before replacing the canonical pointer."""
++    attempt = path.with_name(f"{path.stem}.{uuid.uuid4().hex}.attempt.json")
++    with attempt.open("x") as f:
++        json.dump(rec, f, indent=2, allow_nan=False)
++    rec["attempts"] = previous + [{"record": attempt.name, **{
++        k: rec.get(k) for k in ("invocation_id", "cost_usd", "tokens_request", "tokens_out", "error", "measurement_error")}}]
++    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
++    with temporary.open("x") as f:
++        json.dump(rec, f, indent=2, allow_nan=False)
++    os.replace(temporary, path)
++    return rec
++
++
++def attempt_total(rec: dict, field: str, invocation_id: str | None = None) -> float | int | None:
++    """Sum stored attempts for this exact manifest across gate invocations."""
++    attempts = rec.get("attempts", [rec])
++    if invocation_id is not None:
++        attempts = [a for a in attempts if a.get("invocation_id") == invocation_id]
++        if not attempts:
++            return 0
++    values = [a.get(field) for a in attempts]
++    if not values or any(type(v) not in (int, float) or not math.isfinite(v) or v < 0 for v in values):
++        return None
++    return sum(values)
++
++
++def measurement_total(rec: dict, field: str) -> float | int | None:
++    """Cost of the selected measurement's invocation, not its manifest history."""
++    invocation_id = rec.get("invocation_id")
++    if not invocation_id:
++        return None
++    attempts = rec.get("attempts", [rec])
++    if not any(a.get("invocation_id") == invocation_id for a in attempts):
++        return None
++    return attempt_total(rec, field, invocation_id)
++
++
++class RunAccounting:
++    """Persist newly incurred spend after each attempt, including fail-fast exits."""
++
++    def __init__(self, out: Path, settings: dict):
++        self.id = uuid.uuid4().hex
++        directory = out / "invocations"
++        directory.mkdir(parents=True, exist_ok=True)
++        self.path = directory / f"{self.id}.json"
++        self.attempts = {}
++        self.cells = {}
++        self.record = {"invocation_id": self.id, "started_at": time.time(),
++                       "settings": settings, "status": "running"}
++        self.save()
++
++    def capture(self, rec: dict):
++        key = f"{rec.get('task')}:{rec.get('arm')}"
++        for attempt in rec.get("attempts", []):
++            if attempt.get("invocation_id") == self.id:
++                self.attempts[attempt["record"]] = attempt
++        self.cells[key] = {
++            "manifest": rec.get("manifest"),
++            "measurement_invocation_id": rec.get("invocation_id"),
++            "reused": rec.get("invocation_id") != self.id,
++            "new_cost_usd": attempt_total(rec, "cost_usd", self.id),
++            "measurement_cost_usd": measurement_total(rec, "cost_usd"),
++        }
++        self.save()
++
++    def totals(self):
++        if not self.attempts:
++            return {"cost_usd": 0, "tokens_request": 0, "tokens_out": 0}
++        return {field: attempt_total({"attempts": list(self.attempts.values())}, field)
++                for field in ("cost_usd", "tokens_request", "tokens_out")}
++
++    def save(self):
++        self.record.update(attempts=list(self.attempts.values()), cells=self.cells,
++                           new_spend=self.totals())
++        temporary = self.path.with_suffix(".tmp")
++        temporary.write_text(json.dumps(self.record, indent=2, allow_nan=False))
++        os.replace(temporary, self.path)
++
++    def finish(self, code: int):
++        self.record.update(status={0: "pass", 1: "fail", 2: "harness_error"}[code],
++                           exit_code=code, finished_at=time.time())
++        self.save()
++        totals = self.totals()
++        cost = totals["cost_usd"]
++        formatted = f"${cost:.4f}" if cost is not None else "unknown"
++        print(f"This invocation: new spend {formatted}; request tokens "
++              f"{totals['tokens_request']}; output tokens {totals['tokens_out']}; "
++              f"new attempts {len(self.attempts)}. Record: {self.path}")
++        return code
++
++
+ def run_cell(arm: str, task: Task, corpus: Path, model: str,
+-             out: Path, binary: str, sha: str) -> dict:
+-    # Cache key includes the scorer version: a cell scored under an older
+-    # matching contract (e.g. basename-only file agreement) is not the same
+-    # measurement and must not be compared with a fresh one. Older cells stay
+-    # on disk under their old names; they are simply never read here.
+-    f = out / f"{task.id}.{model}.{sha}.s{SCORER_VERSION}.json"
++             out: Path, binary: str, sha: str, *, fresh: bool = False,
++             accounting: RunAccounting | None = None) -> dict:
++    invocation_id = accounting.id if accounting else uuid.uuid4().hex
++    manifest = cell_manifest(arm, task, corpus, model, binary)
++    identity = hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest()[:20]
++    f = out / f"{task.id}.{identity}.json"
++    previous = []
+     if f.exists():
+         cached = json.loads(f.read_text())
+-        if (not is_degenerate(cached)
+-                and cached.get("scorer_version") == SCORER_VERSION):
++        previous = cached.get("attempts", [])
++        if (not fresh and not is_degenerate(cached) and not cached.get("measurement_error")
++                and cached.get("manifest") == manifest and cached.get("invocation_id")):
++            if accounting:
++                accounting.capture(cached)
+             return cached
+-        print(f"  ({f.name} degenerate or stale scorer — re-running)")
+-    subprocess.run(["git", "-C", str(corpus), "checkout", "-q", task.pin],
+-                   capture_output=True)
+-    subprocess.run([binary, "index", str(corpus)], capture_output=True,
+-                   timeout=900)
+-    rec = bed.run_arm(arm, task, corpus, model)
+-    rec.update(task=task.id, model=model, binary_sha=sha)
+-    if is_degenerate(rec):
+-        # One transient retry, same shape as the recall-drop retry policy.
+-        print(f"  degenerate cell (turns=1, cost=$0) — one fresh retry")
+-        rec = bed.run_arm(arm, task, corpus, model)
+-        rec.update(task=task.id, model=model, binary_sha=sha)
+-    f.write_text(json.dumps(rec, indent=2))
++    # A fresh snapshot per attempt: never checkout/index the shared corpus,
++    # and never expose the gold commit through its object store.
++    for attempt in range(2):
++        with tempfile.TemporaryDirectory(prefix="prism-gate-") as directory:
++            parent = Path(directory)
++            snapshot = parent / "repo"
++            snapshot.mkdir()
++            archive = parent / "source.tar"
++            subprocess.run(["git", "-C", str(corpus), "archive", "-o", str(archive), manifest["corpus_commit"]],
++                           check=True, capture_output=True)
++            subprocess.run(["tar", "-xf", str(archive), "-C", str(snapshot)], check=True, capture_output=True)
++            subprocess.run(["git", "-C", str(snapshot), "init", "--quiet"], check=True, capture_output=True)
++            subprocess.run(["git", "-C", str(snapshot), "add", "-A"], check=True, capture_output=True)
++            subprocess.run(["git", "-C", str(snapshot), "-c", "user.name=Prism gate", "-c", "user.email=gate@localhost",
++                            "-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "base"],
++                           check=True, capture_output=True)
++            subprocess.run([binary, "index", str(snapshot)], check=True, capture_output=True, timeout=900)
++            failure = None
++            try:
++                rec = bed.run_arm(arm, task, snapshot, model)
++            except (OSError, ValueError, subprocess.SubprocessError) as exc:
++                failure = exc
++                rec = {"error": str(exc), "measurement_error": "agent ended without aggregate usage"}
++            rec.update(task=task.id, arm=arm, model=model, binary_sha=sha, manifest=manifest,
++                       invocation_id=invocation_id,
++                       corpus_snapshot=str(snapshot))
++            record_attempt(f, rec, previous)
++            if accounting:
++                accounting.capture(rec)
++            previous = rec["attempts"]
++            if failure:
++                raise failure
++        if not is_degenerate(rec) or attempt == 1:
++            break
++        print("  degenerate cell (turns=1, cost=$0) - one fresh retry")
+     return rec
+ 
+ 
+@@ -128,12 +272,20 @@ def main() -> int:
+     ap.add_argument("--model", default="haiku")
+     ap.add_argument("--limit", type=int, default=len(TASKS))
+     ap.add_argument("--out", default="runs/ab-gate")
++    ap.add_argument("--fresh", action="store_true", help="Measure both arms anew instead of reusing cached cells")
+     ap.add_argument("--require-cheaper", action="store_true",
+                     help="FAIL unless the candidate's aggregate billed cost is below the baseline's")
+     args = ap.parse_args()
++    if not 1 <= args.limit <= len(TASKS):
++        ap.error(f"--limit must be between 1 and {len(TASKS)}")
+ 
+     out = Path(args.out)
++    print("Accounting: this invocation's new spend includes its retries; cached cells "
++          "are reused at $0 new spend. Efficiency comparisons use each selected "
++          "measurement's invocation, never lifetime manifest totals.")
+     out.mkdir(parents=True, exist_ok=True)
++    accounting = RunAccounting(out, vars(args))
++    finish = accounting.finish
+     b_sha, c_sha = binary_sha(args.baseline), binary_sha(args.candidate)
+     if b_sha == c_sha:
+         print(f"note: baseline == candidate ({b_sha}) — pipeline probe mode")
+@@ -150,13 +302,22 @@ def main() -> int:
+         if not corpus.exists():
+             print(f"SKIP {task.id}: corpus absent")
+             continue
+-        b = run_cell(b_arm, task, corpus, args.model, out, args.baseline, b_sha)
+-        c = run_cell(c_arm, task, corpus, args.model, out, args.candidate, c_sha)
++        try:
++            b = run_cell(b_arm, task, corpus, args.model, out, args.baseline, b_sha,
++                         fresh=args.fresh, accounting=accounting)
++            c = run_cell(c_arm, task, corpus, args.model, out, args.candidate, c_sha,
++                         fresh=args.fresh, accounting=accounting)
++        except (OSError, ValueError, subprocess.SubprocessError) as exc:
++            print(f"HARNESS ERROR: {task.id}: {exc}")
++            return finish(2)
++        if b.get("measurement_error") or c.get("measurement_error") or "error" in b:
++            print(f"HARNESS ERROR: {task.id}: baseline failed or usage is incomplete")
++            return finish(2)
+         if is_degenerate(b) or is_degenerate(c):
+             print(f"HARNESS ERROR: {task.id} still degenerate after retry "
+                   f"(base_turns={b.get('turns')} cand_turns={c.get('turns')}) "
+                   "— infra issue, not a quality signal. Fix infra and re-run.")
+-            return 2
++            return finish(2)
+ 
+         def hard_fails(cand: dict) -> str:
+             if "error" in cand and "error" not in b:
+@@ -168,53 +329,54 @@ def main() -> int:
+ 
+         reason = hard_fails(c)
+         if reason:
+-            # One-retry policy, calibrated to the measured ~50%/cell noise
+-            # floor: a single agent derailment on a noisy cell must not
+-            # veto a change (observed: recall 0.882 -> 0.02 -> 0.843 on the
+-            # same candidate). The retry is FRESH (cache dropped), decided
+-            # on its own, and exactly one — a reproduced failure fails.
++            # One fresh candidate retry is this smoke gate's operational
++            # rule. It is not proof that a surviving failure is noise-free
++            # or that a passing retry establishes non-inferiority.
+             print(f"{task.id:30} HARD-FAIL candidate ({reason}) — one fresh retry")
+-            # Immutable attempts (proposal §8.2): the failed first attempt
+-            # stays on disk as .attempt1.json — its cost and answer are
+-            # evidence, and deleting it was a selection bias in the
+-            # candidate's favour. The retry becomes the canonical cell and
+-            # says what it is a retry of.
+-            canon = out / f"{task.id}.{args.model}.{c_sha}.s{SCORER_VERSION}.json"
+-            first = canon.with_suffix(".attempt1.json")
+-            if canon.exists():
+-                canon.rename(first)
+-            c = run_cell(c_arm, task, corpus, args.model, out, args.candidate, c_sha)
+-            c["retry_of"] = first.name
+-            c["attempt1_cost_usd"] = json.loads(first.read_text()).get("cost_usd") if first.exists() else None
+-            canon.write_text(json.dumps(c, indent=2))
++            try:
++                c = run_cell(c_arm, task, corpus, args.model, out, args.candidate, c_sha,
++                             fresh=True, accounting=accounting)
++            except (OSError, ValueError, subprocess.SubprocessError) as exc:
++                print(f"HARNESS ERROR: retry failed: {exc}")
++                return finish(2)
++            if is_degenerate(c) or c.get("measurement_error"):
++                print("HARNESS ERROR: retry degenerate or usage incomplete")
++                return finish(2)
+             reason = hard_fails(c)
+             if reason:
+                 print(f"HARD FAIL (reproduced): {reason} on {task.id}")
+-                return 1
++                return finish(1)
+         br, cr = b.get("recall"), c.get("recall")
+         bp, cp = b.get("precision"), c.get("precision")
+-        bc, cc = b.get("cost_usd") or 0, c.get("cost_usd") or 0
++        bc, cc = measurement_total(b, "cost_usd"), measurement_total(c, "cost_usd")
+         # Request tokens = every category the model was shown (uncached +
+         # cache write + cache read); the old tokens_in dropped cache writes.
+-        bt, ct = b.get("tokens_request", b.get("tokens_in", 0)), c.get("tokens_request", c.get("tokens_in", 0))
+-        print(f"{task.id:30} base R={br} P={bp} tok={bt//1000}k ${bc:.2f} | "
+-              f"cand R={cr} P={cp} tok={ct//1000}k ${cc:.2f}"
+-              + (f"  (retry of {c['retry_of']}, attempt1 ${c.get('attempt1_cost_usd') or 0:.2f})" if c.get("retry_of") else ""))
++        bt, ct = measurement_total(b, "tokens_request"), measurement_total(c, "tokens_request")
++        if any(v is None for v in (bc, cc, bt, ct)):
++            print(f"HARNESS ERROR: {task.id}: attempt cost/tokens unknown; comparison incomplete")
++            return finish(2)
++        for label, rec, cost, tokens in (("base", b, bc, bt), ("cand", c, cc, ct)):
++            new_cost = attempt_total(rec, "cost_usd", accounting.id)
++            state = "fresh" if rec.get("invocation_id") == accounting.id else "reused"
++            print(f"{task.id:30} {label} R={rec.get('recall')} P={rec.get('precision')} "
++                  f"{state}; new spend ${new_cost:.4f}; "
++                  f"measurement request tokens={tokens}, cost=${cost:.4f} "
++                  f"(measurement run {rec.get('invocation_id')})")
+         if br is not None and cr is not None:
+             drops.append(br - cr)
+         if bp is not None and cp is not None:
+             pdrops.append(bp - cp)
+         if bc > 0 and cc > 0:
+             base_cost += bc
+-            cand_cost += cc + (c.get("attempt1_cost_usd") or 0)  # a retry's first attempt was paid too
++            cand_cost += cc
+         else:
+             unpriced += 1
+         cand_tok += ct or 0
+         base_tok += bt or 0
+ 
+-    if not drops:
+-        print("HARNESS ERROR: no scored pairs")
+-        return 2
++    if len(drops) != planned or len(pdrops) != planned or unpriced:
++        print(f"HARNESS ERROR: incomplete bed ({len(drops)}/{planned} scored, {unpriced} unpriced)")
++        return finish(2)
+     mean_drop = sum(drops) / len(drops)
+     tok_delta = (cand_tok - base_tok) / max(base_tok, 1) * 100
+     cost_ratio = cand_cost / base_cost if base_cost > 0 else None
+@@ -223,23 +385,23 @@ def main() -> int:
+     # fail-fast run that stopped early must never read as a full-bed PASS.
+     print(f"\ncompleted {len(drops)}/{planned} pairs; mean recall delta={-mean_drop:+.3f} "
+           f"mean precision delta={-mean_pdrop:+.3f} request tokens {tok_delta:+.0f}% "
+-          f"aggregate billed cost ${cand_cost:.2f} vs ${base_cost:.2f} = "
++          f"selected measurement cost ${cand_cost:.2f} vs ${base_cost:.2f} = "
+           + (f"{cost_ratio:.2f}x" if cost_ratio else "n/a")
+           + (f" ({unpriced} pair(s) unpriced — cost comparison incomplete)" if unpriced else ""))
+     if mean_drop > MEAN_RECALL_DROP:
+         print(f"FAIL: mean recall drop {mean_drop:.3f} > {MEAN_RECALL_DROP}")
+-        return 1
++        return finish(1)
+     if cost_ratio is not None and cost_ratio > COST_RATIO_MAX:
+         print(f"FAIL: aggregate billed cost ratio {cost_ratio:.2f} > {COST_RATIO_MAX}")
+-        return 1
++        return finish(1)
+     if args.require_cheaper and (cost_ratio is None or cost_ratio >= 1.0):
+         print(f"FAIL: --require-cheaper and aggregate cost ratio is "
+               f"{cost_ratio:.2f}x (needs < 1.00)" if cost_ratio else
+               "FAIL: --require-cheaper but no paired costs recorded")
+-        return 1
++        return finish(1)
+     print("PASS (not-broken; subtle effects need a full study)"
+           + (" — and cheaper in aggregate" if args.require_cheaper else ""))
+-    return 0
++    return finish(0)
+ 
+ 
+ if __name__ == "__main__":
+diff --git a/harness/read_after_locate.py b/harness/read_after_locate.py
+index a4d8b75..0a60bc8 100644
+--- a/harness/read_after_locate.py
++++ b/harness/read_after_locate.py
+@@ -10,10 +10,9 @@ prism results delivered before it and classify:
+               change_impact site windows) covering the read range, and the
+               file was not edited in between — the read fetched what the
+               context already held
+-  located     prism had only named the file (search hit, caller list,
+-              location line) — the read fetched content prism never sent
+-  reread      the file was edited (Edit/Write/Bash) between delivery and
+-              the read — a necessary refresh
++  located     prism named the file, but current full-range source coverage
++              is not established (absent, partial, or invalidated coverage)
++  reread      a successful Edit/Write changed the file after it was located
+   cold        prism had said nothing about the file
+ 
+ The 2026-09-05 version counted any read of a file a prism result had named
+@@ -22,11 +21,17 @@ call, attributed bytes by filename, and missed root-level files. Those
+ counts were indicative only; this one is per assistant TURN, per tool-use
+ id, and separates "named" from "delivered".
+ 
++Shell calls invalidate coverage but do not establish that any file changed.
++Report freshness="unknown" separately; located_then_read retains the location
++signal across all kinds. Do not infer historical changes from current mtimes
++or assume a command can only modify paths literally present in its arguments.
++
+ Usage: python3 read_after_locate.py runs/wide/*.prism_plus.<tag>.json
+ """
+ from __future__ import annotations
+ 
+ import json
++import math
+ import re
+ import sys
+ from pathlib import Path
+@@ -35,13 +40,14 @@ import usage_account
+ 
+ PRISM_LOCATE = ("mcp__prism__prism_search", "mcp__prism__prism_change_impact",
+                 "mcp__prism__prism_verify")
+-PRISM_DELIVER = ("mcp__prism__prism_read", "mcp__prism__prism_lookup", "mcp__prism__prism_query",
++PRISM_DELIVER = ("mcp__prism__prism_search", "mcp__prism__prism_read", "mcp__prism__prism_lookup", "mcp__prism__prism_query",
+                  "mcp__prism__prism_change_impact", "mcp__prism__prism_verify")
+ # A path: optional directories, a basename with an extension. Root-level
+ # files (main.go) match too; the shape must be followed by ':' , a line
+ # number or whitespace so prose words with dots are not paths.
+ _PATH = re.compile(r"(?<![\w/.-])((?:[\w.-]+/)*[\w-]+\.[A-Za-z]{1,5})(?=[:\s`)\]\",]|$)")
+-_WINDOW_LINE = re.compile(r"^\s*(\d+)\t", re.M)  # Read-shaped delivered source
++_WINDOW_LINE = re.compile(r"^\s*(\d+)(?:\t|[:-]\s)", re.M)
++_INLINE_LINE = re.compile(r"^(?://\s*)?([^\s:]+\.[A-Za-z]{1,5}):(\d+)[:-]\s")
+ 
+ 
+ def _text(c: dict) -> str:
+@@ -63,6 +69,11 @@ def _delivered_ranges(text: str) -> dict[str, set[int]]:
+     out: dict[str, set[int]] = {}
+     cur = None
+     for line in text.split("\n"):
++        inline = _INLINE_LINE.match(line)
++        if inline:
++            cur = inline.group(1)
++            out.setdefault(cur, set()).add(int(inline.group(2)))
++            continue
+         m = _WINDOW_LINE.match(line)
+         if m and cur:
+             out.setdefault(cur, set()).add(int(m.group(1)))
+@@ -74,91 +85,133 @@ def _delivered_ranges(text: str) -> dict[str, set[int]]:
+ 
+ 
+ def _fingerprint_match(trace: dict) -> Path | None:
++    matches = []
+     for f in usage_account.PROJECTS.glob("*wide-*/*.jsonl"):
+-        counts: dict = {}
+-        for line in f.open(errors="ignore"):
+-            try:
+-                j = json.loads(line)
+-            except Exception:
+-                continue
+-            if j.get("type") != "assistant":
+-                continue
+-            for c in ((j.get("message") or {}).get("content") or []):
+-                if isinstance(c, dict) and c.get("type") == "tool_use":
+-                    counts[c["name"]] = counts.get(c["name"], 0) + 1
++        counts = usage_account.analyze_transcript(f)["tool_calls"]
+         if counts == trace:
+-            return f
+-    return None
++            matches.append(f)
++    return matches[0] if len(matches) == 1 else None
++
++
++def _same_file(a: str, b: str) -> bool:
++    a, b = a.replace("\\", "/"), b.replace("\\", "/")
++    return a == b or (not b.startswith("/") and a.endswith("/" + b)) or (
++        not a.startswith("/") and b.endswith("/" + a))
+ 
+ 
+ def analyze(transcript: Path) -> dict:
+     turn = 0
++    turns: dict[str, int] = {}
+     uses: dict[str, dict] = {}
+-    named: dict[str, int] = {}                 # file -> last turn prism named it
+-    delivered: dict[str, tuple[int, set[int]]] = {}  # file -> (turn, lines)
+-    edited: dict[str, int] = {}                # file -> last turn it was edited
++    results: set[str] = set()
++    named: dict[str, int] = {}
++    delivered: dict[str, tuple[int, set[int]]] = {}
++    edited: dict[str, int] = {}
++    uncertain: dict[str, int] = {}
+     reads: list[dict] = []
+-    for line in transcript.open(errors="ignore"):
++    for line in usage_account.transcript_lines(transcript):
+         try:
+             j = json.loads(line)
+-        except Exception:
++        except (ValueError, TypeError):
++            continue
++        if not isinstance(j, dict) or j.get("parent_tool_use_id") or j.get("isSidechain"):
+             continue
++        if j.get("subtype") == "compact_boundary" or j.get("type") == "summary":
++            delivered.clear()
+         if j.get("type") == "assistant":
+-            turn += 1  # one assistant message = one turn
+-            for c in ((j.get("message") or {}).get("content") or []):
+-                if not (isinstance(c, dict) and c.get("type") == "tool_use"):
++            message = j.get("message") or {}
++            mid = message.get("id")
++            if mid not in turns or not mid:
++                turn += 1
++                if mid:
++                    turns[mid] = turn
++            current = turns.get(mid, turn)
++            for c in message.get("content") or []:
++                if not (isinstance(c, dict) and c.get("type") == "tool_use" and c.get("id")):
+                     continue
+-                uses[c["id"]] = dict(c, turn=turn)
+-                if c["name"] in ("Edit", "Write"):
+-                    fp = str(c["input"].get("file_path", ""))
+-                    edited[fp] = turn
+-                elif c["name"] == "Bash":
+-                    cmd = str(c["input"].get("command", ""))
+-                    if any(k in cmd for k in ("sed -i", "git rm", "rm ", "mv ", ">")):
+-                        for p in _paths(cmd):
+-                            edited[p] = turn
++                tid = c["id"]
++                if tid in uses:
++                    continue
++                u = uses[tid] = dict(c, turn=current)
++                args = c.get("input") or {}
++                fp = str(args.get("file_path") or args.get("file") or "")
++                if c["name"] in ("Edit", "Write", "Bash"):
++                    affected = set(delivered) | set(named)
++                    u["edit_paths"] = []
++                    for key in affected:
++                        if c["name"] == "Bash" or _same_file(fp, key):
++                            delivered.pop(key, None)
++                            uncertain[key] = current
++                            if c["name"] != "Bash":
++                                u["edit_paths"].append(key)
++                if c["name"] in ("Read", "mcp__prism__prism_read"):
++                    matches = [p for p in set(delivered) | set(named) if _same_file(fp, p)]
++                    rel = fp if fp in matches else matches[0] if len(matches) == 1 else None
++                    off = int(args.get("offset") or 1)
++                    lim = int(args.get("limit") or 0)
++                    prior = named.get(rel, 0)
++                    kind = "cold"
++                    freshness = "unseen"
++                    if rel in delivered:
++                        dt, lines = delivered[rel]
++                        prior = dt
++                        # An unbounded whole-file request cannot be proven covered
++                        # by a partial source window.
++                        covered = lim > 0 and off > 0 and lim <= len(lines) and all(
++                            n in lines for n in range(off, off + lim))
++                        kind = "duplicate" if covered else "located"
++                        freshness = "no_observed_change"
++                    elif rel in named:
++                        kind = "reread" if edited.get(rel, 0) >= prior else "located"
++                        freshness = "changed" if kind == "reread" else (
++                            "unknown" if rel in uncertain else "no_observed_change")
++                    # Freeze classification before this read's result arrives.
++                    u["read"] = {"turn": current, "tool_use_id": tid, "tool": c["name"],
++                                 "file": fp, "kind": kind, "freshness": freshness,
++                                 "located_before_read": rel in named,
++                                 "gap": current - prior if rel else None}
+         elif j.get("type") == "user":
+             for c in ((j.get("message") or {}).get("content") or []):
+                 if not (isinstance(c, dict) and c.get("type") == "tool_result"):
+                     continue
+-                u = uses.get(c.get("tool_use_id"))
+-                if not u:
++                tid = c.get("tool_use_id")
++                u = uses.get(tid)
++                if not u or tid in results:
+                     continue
++                results.add(tid)
+                 text = _text(c)
+-                if u["name"] in PRISM_LOCATE:
++                if "read" in u:
++                    reads.append(dict(u["read"], bytes=len(text.encode("utf-8")), error=bool(c.get("is_error"))))
++                if c.get("is_error"):
++                    continue
++                for p in u.get("edit_paths", []):
++                    edited[p] = u["turn"]
++                if u["name"] in PRISM_LOCATE or u["name"] in PRISM_DELIVER:
+                     for p in _paths(text):
+                         named[p] = u["turn"]
+                 if u["name"] in PRISM_DELIVER:
+                     for p, lines in _delivered_ranges(text).items():
+-                        prev = delivered.get(p, (0, set()))[1]
+-                        delivered[p] = (u["turn"], prev | lines)
+-                if u["name"] in ("Read", "mcp__prism__prism_read"):
+-                    fp = str(u["input"].get("file_path") or u["input"].get("file") or "")
+-                    rel = next((p for p in list(delivered) + list(named) if fp.endswith(p)), None)
+-                    off = int(u["input"].get("offset") or 1)
+-                    lim = int(u["input"].get("limit") or 0)
+-                    want = set(range(off, off + lim)) if lim else None
+-                    kind = "cold"
+-                    if rel and rel in delivered:
+-                        dt, lines = delivered[rel]
+-                        if edited.get(fp, 0) > dt or edited.get(rel, 0) > dt:
+-                            kind = "reread"
+-                        elif want is None or want <= lines:
+-                            kind = "duplicate"
+-                        else:
+-                            kind = "located"  # delivered, but not this range
+-                    elif rel and rel in named:
+-                        kind = "reread" if edited.get(fp, 0) > named[rel] else "located"
+-                    reads.append({"turn": u["turn"], "tool": u["name"], "file": fp,
+-                                  "kind": kind, "bytes": len(text),
+-                                  "gap": (u["turn"] - (delivered.get(rel, (named.get(rel, 0), set()))[0])) if rel else None})
++                        if max(edited.get(p, 0), uncertain.get(p, 0)) >= u["turn"]:
++                            continue
++                        previous = delivered.get(p, (0, set()))[1]
++                        delivered[p] = (u["turn"], previous | lines)
++                        uncertain.pop(p, None)
+     by = {}
++    by_freshness = {}
++    located_then_read = {"reads": 0, "bytes": 0}
+     for r in reads:
+         k = r["kind"]
+         by.setdefault(k, [0, 0])
+         by[k][0] += 1
+         by[k][1] += r["bytes"]
+-    return {"turns": turn, "reads": len(reads), "by_kind": by, "detail": reads}
++        by_freshness.setdefault(r["freshness"], [0, 0])
++        by_freshness[r["freshness"]][0] += 1
++        by_freshness[r["freshness"]][1] += r["bytes"]
++        if r["located_before_read"]:
++            located_then_read["reads"] += 1
++            located_then_read["bytes"] += r["bytes"]
++    return {"analysis_version": 3, "turns": turn, "reads": len(reads), "by_kind": by,
++            "by_freshness": by_freshness, "located_then_read": located_then_read, "detail": reads}
+ 
+ 
+ def main() -> None:
+@@ -171,8 +224,12 @@ def main() -> None:
+             continue
+         a = analyze(tp)
+         parts = "  ".join(f"{k}={n}/{b // 1000}k" for k, (n, b) in sorted(a["by_kind"].items()))
++        parts += (f"  located_then_read={a['located_then_read']['reads']}"
++                  f"  freshness_unknown={a['by_freshness'].get('unknown', [0, 0])[0]}")
++        cost = cell.get("cost_usd")
++        price = f"${cost:.2f}" if type(cost) in (int, float) and math.isfinite(cost) and cost >= 0 else "unknown"
+         print(f"{cell['task']:20} {cell.get('tag', cell['arm']):10} turns={a['turns']:3} reads={a['reads']:3}  {parts}"
+-              f"  cost=${cell.get('cost_usd') or 0:.2f}")
++              f"  cost={price}")
+ 
+ 
+ if __name__ == "__main__":
+diff --git a/harness/tests/test_gate_measurement.py b/harness/tests/test_gate_measurement.py
+new file mode 100644
+index 0000000..cc0b7ae
+--- /dev/null
++++ b/harness/tests/test_gate_measurement.py
+@@ -0,0 +1,231 @@
++import contextlib
++import copy
++import io
++import json
++import subprocess
++import sys
++import tempfile
++import unittest
++from dataclasses import replace
++from pathlib import Path
++from unittest.mock import patch
++
++sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
++import ab_gate as gate
++from schema import Site, Task
++
++
++def cell(**changes):
++    return {"invocation_id": "fixture", "recall": 1.0, "precision": 1.0, "turns": 3,
++            "cost_usd": 1.0, "tokens_request": 60, "tokens_in": 40,
++            "tokens_out": 4, "scorer_version": gate.SCORER_VERSION, **changes}
++
++
++class GateMeasurementTests(unittest.TestCase):
++    def setUp(self):
++        self.tmp = tempfile.TemporaryDirectory()
++        self.addCleanup(self.tmp.cleanup)
++        self.root = Path(self.tmp.name)
++        self.task = Task("test", str(self.root), "go", "HEAD", "local", "impact", "find Foo", [Site("main.go", "Foo")])
++
++    def main(self, rows, tasks=None, loaded=None):
++        args = ["ab_gate.py", "--baseline", "base", "--candidate", "cand", "--out", str(self.root/"out"), "--require-cheaper"]
++        output = io.StringIO()
++        with patch.object(sys, "argv", args), patch.object(gate, "TASKS", tasks or ["one"]), \
++                patch.object(gate.Task, "load", side_effect=loaded or [self.task]), \
++                patch.object(gate, "binary_sha", side_effect=["b", "c"]), \
++                patch.object(gate, "arm_for", side_effect=["base", "cand"]), \
++                patch.object(gate, "run_cell", side_effect=rows) as run, contextlib.redirect_stdout(output):
++            return gate.main(), output.getvalue(), run.call_args_list
++
++    def test_unknown_cost_and_skipped_tasks_cannot_pass(self):
++        rc, text, _ = self.main([cell(), cell(cost_usd=None)])
++        self.assertEqual(rc, 2, text)
++        self.assertNotIn("PASS", text)
++        missing = replace(self.task, repo=str(self.root/"absent"))
++        rc, text, _ = self.main([cell(), cell(cost_usd=.5)], ["one", "two"], [self.task, missing])
++        self.assertEqual(rc, 2, text)
++        self.assertIn("1/2", text)
++
++    def test_retries_count_first_cost_and_tokens_and_fail_when_still_broken(self):
++        retry = cell(cost_usd=.6, attempts=[cell(cost_usd=.6), cell(cost_usd=.6)])
++        rc, text, calls = self.main([cell(), cell(recall=.5), retry])
++        self.assertEqual(rc, 1, text)  # total 1.2, not .6, so not cheaper
++        self.assertTrue(calls[-1].kwargs["fresh"])
++        self.assertIn("request tokens +100%", text)
++        rc, text, _ = self.main([cell(), cell(recall=.5), cell(recall=.5)])
++        self.assertEqual(rc, 1, text)
++        self.assertIn("reproduced", text)
++
++    def test_equal_quality_cheaper_complete_bed_passes(self):
++        rc, text, _ = self.main([cell(), cell(cost_usd=.5)])
++        self.assertEqual(rc, 0, text)
++        self.assertIn("not-broken", text)
++        self.assertIn("this invocation's new spend", text)
++        self.assertIn("reused at $0 new spend", text)
++        self.assertIn("selected measurement cost", text)
++
++    def test_missing_retry_usage_and_baseline_failure_are_harness_errors(self):
++        for rows in ([cell(), cell(recall=.5), cell(measurement_error="unknown")],
++                     [cell(error="provider failure"), cell()]):
++            rc, text, _ = self.main(rows)
++            self.assertEqual(rc, 2, text)
++
++    def test_attempts_are_immutable_and_unknowns_not_zeroed(self):
++        path = self.root/"cell.json"
++        first = gate.record_attempt(path, cell(cost_usd=.4), [])
++        evidence = self.root/first["attempts"][0]["record"]
++        original = evidence.read_bytes()
++        retry = gate.record_attempt(path, cell(cost_usd=.6), first["attempts"])
++        self.assertEqual(evidence.read_bytes(), original)
++        self.assertEqual(len(list(self.root.glob("*.attempt.json"))), 2)
++        self.assertEqual(gate.attempt_total(retry, "cost_usd"), 1)
++        self.assertEqual(gate.attempt_total(retry, "tokens_request"), 120)
++        retry["attempts"][0]["cost_usd"] = None
++        self.assertIsNone(gate.attempt_total(retry, "cost_usd"))
++
++    def test_run_cell_isolates_corpus_and_invalidates_changed_manifest(self):
++        real_run = subprocess.run
++        def git(*args):
++            return real_run(["git", "-C", str(self.root), *args], check=True, capture_output=True, text=True).stdout.strip()
++        git("init", "--quiet")
++        source = self.root/"main.go"
++        source.write_text("package main\nfunc Foo() {}\n")
++        git("add", "main.go")
++        git("-c", "user.name=test", "-c", "user.email=test@localhost", "-c", "core.hooksPath=/dev/null",
++            "-c", "commit.gpgsign=false", "commit", "-qm", "base")
++        original_head = git("rev-parse", "HEAD")
++        source.write_text("uncommitted user change\n")
++        binary = self.root/"binary"
++        binary.write_text("not executed")
++        out = self.root/"out"
++        out.mkdir()
++        snapshots = []
++        def invoke(arm, task, snapshot, model):
++            snapshots.append(snapshot)
++            self.assertNotEqual(snapshot, self.root)
++            self.assertEqual((snapshot/"main.go").read_text(), "package main\nfunc Foo() {}\n")
++            (snapshot/"main.go").write_text("agent change")
++            return cell()
++        def commands(args, **kwargs):
++            if args[0] == str(binary):
++                return subprocess.CompletedProcess(args, 0, "", "")
++            return real_run(args, **kwargs)
++        with patch.object(gate.usage_account, "claude_version", return_value="fixed-test-version"), \
++                patch.object(gate.subprocess, "run", side_effect=commands), \
++                patch.object(gate.bed, "run_arm", side_effect=invoke) as run:
++            first_run = gate.RunAccounting(out, {})
++            one = gate.run_cell("baseline", self.task, self.root, "fixed-model", out, str(binary), "sha", accounting=first_run)
++            second_run = gate.RunAccounting(out, {})
++            cached = gate.run_cell("baseline", self.task, self.root, "fixed-model", out, str(binary), "sha", accounting=second_run)
++            self.assertEqual(run.call_count, 1)
++            self.assertEqual(one, cached)
++            self.assertEqual(first_run.totals()["cost_usd"], 1)
++            self.assertEqual(second_run.totals()["cost_usd"], 0)
++            two = gate.run_cell("baseline", self.task, self.root, "fixed-model", out, str(binary), "sha", fresh=True, accounting=second_run)
++            self.assertEqual(len(two["attempts"]), 2)
++            self.assertEqual(second_run.totals()["cost_usd"], 1)
++            self.assertEqual(gate.measurement_total(two, "cost_usd"), 1)
++            self.assertEqual(gate.attempt_total(two, "cost_usd"), 2)
++            changed = replace(self.task, prompt="find Bar")
++            gate.run_cell("baseline", changed, self.root, "fixed-model", out, str(binary), "sha")
++            self.assertEqual(run.call_count, 3)
++            third_run = gate.RunAccounting(out, {})
++            with patch.object(gate.bed, "run_arm", side_effect=subprocess.TimeoutExpired("claude", 1)):
++                with self.assertRaises(subprocess.TimeoutExpired):
++                    gate.run_cell("baseline", self.task, self.root, "fixed-model", out, str(binary), "sha", fresh=True, accounting=third_run)
++            self.assertIsNone(third_run.totals()["cost_usd"])
++            self.assertEqual(len(third_run.attempts), 1)
++        self.assertEqual(source.read_text(), "uncommitted user change\n")
++        self.assertEqual(git("rev-parse", "HEAD"), original_head)
++        self.assertEqual(len(set(snapshots)), 3)
++        self.assertTrue(all(not p.exists() for p in snapshots))
++
++    def test_run_arm_records_full_usage_and_marks_provider_errors(self):
++        aggregate = {"input_tokens": 10, "cache_creation_input_tokens": 20, "cache_read_input_tokens": 30, "output_tokens": 4}
++        raw = {"usage": aggregate, "total_cost_usd": .1, "num_turns": 3,
++               "result": '{"sites": ["main.go:Foo"], "complete": true}'}
++        for invalid in (False, True):
++            data = copy.deepcopy(raw)
++            if invalid:
++                data["usage"].pop("cache_creation_input_tokens")
++            completed = subprocess.CompletedProcess([], 0, json.dumps(data), "")
++            with patch.object(gate.bed.subprocess, "run", return_value=completed), \
++                    patch.object(gate.usage_account, "claude_version", return_value="test"):
++                rec = gate.bed.run_arm("baseline", self.task, self.root, "test-model")
++            self.assertEqual(rec["recall"], 1)
++            if invalid:
++                self.assertIn("measurement_error", rec)
++                self.assertIsNone(rec["tokens_request"])
++            else:
++                self.assertEqual(rec["tokens_request"], 60)
++                self.assertNotIn("error", rec)
++
++    def test_measurement_excludes_other_invocations_and_keeps_current_retries(self):
++        rec = cell(invocation_id="current", attempts=[
++            cell(invocation_id="old", cost_usd=90, tokens_request=9000),
++            cell(invocation_id="old-unknown", cost_usd=None),
++            cell(invocation_id="current", cost_usd=.3, tokens_request=30),
++            cell(invocation_id="current", cost_usd=.4, tokens_request=40)])
++        self.assertIsNone(gate.attempt_total(rec, "cost_usd"))
++        self.assertAlmostEqual(gate.measurement_total(rec, "cost_usd"), .7)
++        self.assertEqual(gate.measurement_total(rec, "tokens_request"), 70)
++        self.assertEqual(gate.attempt_total(rec, "cost_usd", "next-run"), 0)
++        rec["attempts"][-1]["cost_usd"] = None
++        self.assertIsNone(gate.measurement_total(rec, "cost_usd"))
++
++    def test_legacy_or_inconsistent_measurement_identity_is_unknown(self):
++        self.assertIsNone(gate.measurement_total(cell(invocation_id=None), "cost_usd"))
++        self.assertIsNone(gate.measurement_total(cell(attempts=[cell(invocation_id="different")]), "cost_usd"))
++
++    def test_invocation_spend_is_fresh_only_and_saved_before_fail_fast(self):
++        first = gate.RunAccounting(self.root, {"candidate": "before-code-change"})
++        path = self.root / "cell.json"
++        rec = gate.record_attempt(path, cell(invocation_id=first.id, cost_usd=.4), [])
++        first.capture(rec)
++        first.capture(rec)
++        self.assertEqual(first.totals()["cost_usd"], .4)
++        second = gate.RunAccounting(self.root, {"candidate": "after-code-change"})
++        second.capture(rec)
++        self.assertEqual(second.totals()["cost_usd"], 0)
++        self.assertTrue(next(iter(second.cells.values()))["reused"])
++        self.assertEqual(next(iter(second.cells.values()))["measurement_cost_usd"], .4)
++        retry = gate.record_attempt(path, cell(invocation_id=second.id, cost_usd=.6), rec["attempts"])
++        second.capture(retry)
++        self.assertEqual(second.totals()["cost_usd"], .6)
++        self.assertEqual(gate.measurement_total(retry, "cost_usd"), .6)
++        with contextlib.redirect_stdout(io.StringIO()) as output:
++            self.assertEqual(second.finish(1), 1)
++        self.assertIn("new spend $0.6000", output.getvalue())
++        saved = json.loads(second.path.read_text())
++        self.assertEqual(saved["status"], "fail")
++        self.assertEqual(saved["new_spend"]["cost_usd"], .6)
++        self.assertNotEqual(first.path, second.path)
++        self.assertEqual(json.loads(first.path.read_text())["new_spend"]["cost_usd"], .4)
++
++    def test_invocation_unknown_attempt_never_becomes_free(self):
++        accounting = gate.RunAccounting(self.root, {})
++        rec = gate.record_attempt(self.root / "cell.json",
++                                  cell(invocation_id=accounting.id, cost_usd=None, tokens_request=None), [])
++        accounting.capture(rec)
++        with contextlib.redirect_stdout(io.StringIO()) as output:
++            accounting.finish(2)
++        self.assertIn("new spend unknown", output.getvalue())
++        saved = json.loads(accounting.path.read_text())
++        self.assertIsNone(saved["new_spend"]["cost_usd"])
++        self.assertIsNone(saved["new_spend"]["tokens_request"])
++
++    def test_old_manifest_spend_does_not_decide_cheaper_gate(self):
++        base = cell(invocation_id="base-now", attempts=[
++            cell(invocation_id="base-before", cost_usd=.001),
++            cell(invocation_id="base-now", cost_usd=1)])
++        candidate = cell(invocation_id="candidate-now", attempts=[
++            cell(invocation_id="candidate-before", cost_usd=100),
++            cell(invocation_id="candidate-now", cost_usd=.5)])
++        rc, text, _ = self.main([base, candidate])
++        self.assertEqual(rc, 0, text)
++        self.assertIn("selected measurement cost $0.50 vs $1.00", text)
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/harness/tests/test_read_after_locate.py b/harness/tests/test_read_after_locate.py
+new file mode 100644
+index 0000000..d28da3a
+--- /dev/null
++++ b/harness/tests/test_read_after_locate.py
+@@ -0,0 +1,119 @@
++import json
++import sys
++import tempfile
++import unittest
++from pathlib import Path
++
++sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
++from read_after_locate import analyze
++
++
++def use(mid, tid, name, args):
++    return {"type": "assistant", "message": {"id": mid, "content": [
++        {"type": "tool_use", "id": tid, "name": name, "input": args}]}}
++
++
++def result(tid, text):
++    return {"type": "user", "message": {"content": [
++        {"type": "tool_result", "tool_use_id": tid, "content": text}]}}
++
++
++class ReadAfterLocateTests(unittest.TestCase):
++    def analyze(self, events):
++        with tempfile.TemporaryDirectory() as directory:
++            p = Path(directory)/"trace.jsonl"
++            p.write_text("\n".join(json.dumps(e) for e in events))
++            return analyze(p)
++
++    def test_read_does_not_credit_its_own_result_and_stream_duplicates(self):
++        read = use("m1", "t1", "mcp__prism__prism_read", {"file": "main.go", "offset": 1, "limit": 2})
++        body = result("t1", "// main.go\n1\tone\n2\ttwo\n")
++        got = self.analyze([read, read, body, body,
++            use("m2", "t2", "Read", {"file_path": "/repo/main.go", "offset": 1, "limit": 2}),
++            result("t2", "\u00e9")])
++        self.assertEqual(got["turns"], 2)
++        self.assertEqual(got["reads"], 2)
++        self.assertEqual([r["kind"] for r in got["detail"]], ["cold", "duplicate"])
++        self.assertEqual(got["detail"][1]["bytes"], 2)
++        self.assertEqual(got["detail"][1]["tool_use_id"], "t2")
++
++    def test_partial_window_cannot_prove_whole_file_read_duplicate(self):
++        got = self.analyze([
++            use("m1", "t1", "mcp__prism__prism_lookup", {"name": "Foo"}),
++            result("t1", "// main.go\n4\tfunc Foo() {}\n"),
++            use("m2", "t2", "Read", {"file_path": "/repo/main.go"}),
++            result("t2", "whole file")])
++        self.assertEqual(got["detail"][0]["kind"], "located")
++
++    def test_edit_invalidates_old_lines_before_partial_redelivery(self):
++        got = self.analyze([
++            use("m1", "t1", "mcp__prism__prism_lookup", {"name": "Foo"}),
++            result("t1", "// main.go\n1\tone\n2\ttwo\n"),
++            use("m2", "t2", "Edit", {"file_path": "/repo/main.go"}),
++            result("t2", "edited"),
++            use("m3", "t3", "mcp__prism__prism_lookup", {"name": "Foo"}),
++            result("t3", "// main.go\n2\tchanged\n"),
++            use("m4", "t4", "Read", {"file_path": "/repo/main.go", "offset": 1, "limit": 2}),
++            result("t4", "new file")])
++        self.assertEqual(got["detail"][0]["kind"], "located")
++
++    def test_basename_suffix_is_not_file_identity(self):
++        got = self.analyze([
++            use("m1", "t1", "mcp__prism__prism_search", {"query": "Foo"}),
++            result("t1", "main.go:1: Foo"),
++            use("m2", "t2", "Read", {"file_path": "/repo/domain.go"}),
++            result("t2", "different file")])
++        self.assertEqual(got["detail"][0]["kind"], "cold")
++
++    def test_search_context_is_delivered_source_and_compaction_invalidates_it(self):
++        events = [use("m1", "t1", "mcp__prism__prism_search", {"query": "Foo"}),
++                  result("t1", "// root: /repo\nmain.go:\n  1- before\n  2: Foo\n  3- after\n")]
++        read = [use("m2", "t2", "Read", {"file_path": "/repo/main.go", "offset": 1, "limit": 3}),
++                result("t2", "source")]
++        self.assertEqual(self.analyze(events + read)["detail"][0]["kind"], "duplicate")
++        compact = {"type": "system", "subtype": "compact_boundary"}
++        self.assertEqual(self.analyze(events + [compact] + read)["detail"][0]["kind"], "located")
++
++    def test_shell_uncertainty_does_not_turn_location_into_a_confirmed_edit(self):
++        for command in ("rg Foo main.go", "./rewrite.sh", "python3 -c 'run_hidden_edits()'"):
++            events = [use("m1", "t1", "mcp__prism__prism_search", {"query": "Foo"}),
++                      result("t1", "main.go:1: Foo"),
++                      use("m2", "t2", "Bash", {"command": command}), result("t2", "done"),
++                      use("m3", "t3", "Read", {"file_path": "/repo/main.go", "offset": 1, "limit": 1}),
++                      result("t3", "source")]
++            got = self.analyze(events)
++            read = got["detail"][0]
++            self.assertEqual(read["kind"], "located")
++            self.assertEqual(read["freshness"], "unknown")
++            self.assertEqual(got["located_then_read"], {"reads": 1, "bytes": 6})
++            self.assertNotIn("duplicate", got["by_kind"])
++            self.assertNotIn("reread", got["by_kind"])
++
++    def test_successful_edit_is_reread_but_failed_edit_is_only_uncertain(self):
++        for failed in (False, True):
++            edited = result("t2", "edit result")
++            edited["message"]["content"][0]["is_error"] = failed
++            got = self.analyze([
++                use("m1", "t1", "mcp__prism__prism_lookup", {"name": "Foo"}),
++                result("t1", "// main.go\n1\tFoo\n"),
++                use("m2", "t2", "Edit", {"file_path": "/repo/main.go"}), edited,
++                use("m3", "t3", "Read", {"file_path": "/repo/main.go", "offset": 1, "limit": 1}),
++                result("t3", "source")])
++            self.assertEqual(got["detail"][0]["kind"], "located" if failed else "reread")
++            self.assertEqual(got["detail"][0]["freshness"], "unknown" if failed else "changed")
++
++    def test_fresh_source_after_shell_restores_range_coverage(self):
++        got = self.analyze([
++            use("m1", "t1", "mcp__prism__prism_search", {"query": "Foo"}),
++            result("t1", "main.go:1: Foo"),
++            use("m2", "t2", "Bash", {"command": "./rewrite.sh"}), result("t2", "done"),
++            use("m3", "t3", "mcp__prism__prism_lookup", {"name": "Foo"}),
++            result("t3", "// main.go\n1\tnew Foo\n"),
++            use("m4", "t4", "Read", {"file_path": "/repo/main.go", "offset": 1, "limit": 1}),
++            result("t4", "source")])
++        self.assertEqual(got["detail"][0]["kind"], "duplicate")
++        self.assertEqual(got["detail"][0]["freshness"], "no_observed_change")
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/harness/tests/test_usage_account.py b/harness/tests/test_usage_account.py
+new file mode 100644
+index 0000000..d80448d
+--- /dev/null
++++ b/harness/tests/test_usage_account.py
+@@ -0,0 +1,92 @@
++import json
++import sys
++import tempfile
++import unittest
++from pathlib import Path
++from unittest.mock import patch
++
++sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
++import usage_account as usage
++
++
++class UsageTests(unittest.TestCase):
++    def test_cache_creation_is_included_and_unknown_is_not_zero(self):
++        with patch.object(usage, "claude_version", return_value="test"):
++            record = usage.cli_usage({"usage": {
++                "input_tokens": 10, "cache_creation_input_tokens": 20,
++                "cache_read_input_tokens": 30, "output_tokens": 4,
++            }, "total_cost_usd": .12})
++            self.assertEqual(record["input_total"], 60)
++            self.assertTrue(record["usage_complete"])
++            self.assertFalse(usage.cli_usage({"usage": [1], "total_cost_usd": 1})["usage_complete"])
++            for value in (None, float("nan"), -1, True):
++                invalid = usage.cli_usage({"total_cost_usd": value})
++                self.assertFalse(invalid["usage_complete"])
++                self.assertIsNone(invalid["input_total"])
++                self.assertIsNone(invalid["cost_usd_cli"])
++
++    def test_streaming_duplicates_use_latest_usage_and_distinct_tool_ids(self):
++        first = {"type": "assistant", "message": {"id": "m1", "usage": {
++            "input_tokens": 10, "cache_creation_input_tokens": 20,
++            "cache_read_input_tokens": 30, "output_tokens": 1,
++        }, "content": [{"type": "tool_use", "id": "t1", "name": "Read"}]}}
++        last = json.loads(json.dumps(first))
++        last["message"]["usage"]["output_tokens"] = 8
++        result = {"type": "user", "message": {"content": [{
++            "type": "tool_result", "tool_use_id": "t1", "content": "\u00e9",
++        }]}}
++        with tempfile.TemporaryDirectory() as directory:
++            p = Path(directory)/"session.jsonl"
++            events = [first, last, result, result,
++                      {"type": "result", "usage": {"output_tokens": 12}}]
++            p.write_text("\n".join(json.dumps(e) for e in events))
++            got = usage.analyze_transcript(p)
++        self.assertEqual(got["messages"], 1)
++        self.assertEqual(got["duplicate_lines"], 1)
++        self.assertEqual(got["tokens"], {"input_uncached": 10, "cache_creation": 20, "cache_read": 30, "output": 12})
++        self.assertEqual(got["tool_calls"], {"Read": 1})
++        self.assertEqual(got["tool_result_bytes"], {"Read": 2})
++        self.assertTrue(got["usage_complete"])
++        self.assertTrue(got["diagnostics_complete"])
++        self.assertEqual(got["aggregate_status"], "present")
++
++    def test_session_transcript_without_stdout_result_has_valid_diagnostics(self):
++        with tempfile.TemporaryDirectory() as directory:
++            p = Path(directory)/"session.jsonl"
++            p.write_text(json.dumps({"type": "assistant", "message": {
++                "id": "m1", "usage": {"input_tokens": 2, "cache_creation_input_tokens": 0,
++                                       "cache_read_input_tokens": 100, "output_tokens": 1}}}))
++            got = usage.analyze_transcript(p)
++        self.assertTrue(got["diagnostics_complete"])
++        self.assertIsNone(got["usage_complete"])
++        self.assertEqual(got["aggregate_status"], "not_present_in_transcript")
++        self.assertIsNone(got["tokens"]["output"])
++        self.assertEqual(got["step_output_observed"], 1)
++        self.assertEqual(got["warnings"], [])
++        self.assertIn("no final aggregate in transcript", got["notes"][0])
++
++    def test_explicit_zero_cache_counters_are_valid_but_missing_is_unknown(self):
++        raw = {"input_tokens": 10, "output_tokens": 4,
++               "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}
++        with patch.object(usage, "claude_version", return_value="test"):
++            record = usage.cli_usage({"usage": raw, "total_cost_usd": .01})
++            self.assertTrue(record["usage_complete"])
++            self.assertEqual(record["input_total"], 10)
++            del raw["cache_creation_input_tokens"]
++            record = usage.cli_usage({"usage": raw, "total_cost_usd": .01})
++            self.assertFalse(record["usage_complete"])
++            self.assertIsNone(record["tokens"]["cache_creation"])
++
++    def test_missing_message_ids_cannot_be_treated_as_complete_usage(self):
++        with tempfile.TemporaryDirectory() as directory:
++            p = Path(directory)/"session.jsonl"
++            p.write_text(json.dumps({"type": "assistant", "message": {"usage": {"input_tokens": 5}}}))
++            got = usage.analyze_transcript(p)
++        self.assertFalse(got["usage_complete"])
++        self.assertFalse(got["diagnostics_complete"])
++        self.assertIn("assistant message missing identity", got["warnings"])
++        self.assertIsNone(got["tokens"]["output"])
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/harness/usage_account.py b/harness/usage_account.py
+index 8d90958..b33a0b4 100644
+--- a/harness/usage_account.py
++++ b/harness/usage_account.py
+@@ -22,11 +22,45 @@ from __future__ import annotations
+ 
+ import functools
+ import json
++import math
+ import subprocess
+ from pathlib import Path
+ 
+ PROJECTS = Path.home() / ".claude" / "projects"
+ 
++USAGE_VERSION = 3
++TOKEN_FIELDS = {
++    "input_uncached": "input_tokens",
++    "cache_creation": "cache_creation_input_tokens",
++    "cache_read": "cache_read_input_tokens",
++    "output": "output_tokens",
++}
++
++
++def normalized_tokens(usage: dict) -> dict:
++    """Missing/invalid counters remain unknown, never free tokens."""
++    usage = usage if isinstance(usage, dict) else {}
++    result = {}
++    for name, source in TOKEN_FIELDS.items():
++        value = usage.get(source)
++        result[name] = value if type(value) is int and value >= 0 else None
++    return result
++
++
++def input_total(tokens: dict) -> int | None:
++    values = [tokens.get(k) for k in ("input_uncached", "cache_creation", "cache_read")]
++    return sum(values) if all(type(v) is int and v >= 0 for v in values) else None
++
++
++def content_bytes(body) -> int:
++    text = body if isinstance(body, str) else json.dumps(body, ensure_ascii=False, separators=(",", ":"))
++    return len(text.encode("utf-8"))
++
++
++def transcript_lines(path: Path):
++    with path.open(errors="replace") as stream:
++        yield from stream
++
+ 
+ @functools.lru_cache(maxsize=1)
+ def claude_version() -> str:
+@@ -39,16 +73,18 @@ def claude_version() -> str:
+ 
+ def cli_usage(j: dict) -> dict:
+     u = j.get("usage") or {}
++    tokens = normalized_tokens(u)
++    cost = j.get("total_cost_usd")
++    valid_cost = type(cost) in (int, float) and math.isfinite(cost) and cost >= 0
+     return {
++        "usage_version": USAGE_VERSION,
+         "session_id": j.get("session_id"),
+-        "tokens": {
+-            "input_uncached": u.get("input_tokens", 0),
+-            "cache_creation": u.get("cache_creation_input_tokens", 0),
+-            "cache_read": u.get("cache_read_input_tokens", 0),
+-            "output": u.get("output_tokens", 0),
+-        },
++        "tokens": tokens,
++        "input_total": input_total(tokens),
++        "usage_complete": all(v is not None for v in tokens.values()) and valid_cost,
++        "raw_usage": u,
+         "model_usage": j.get("modelUsage"),
+-        "cost_usd_cli": j.get("total_cost_usd"),
++        "cost_usd_cli": cost if valid_cost else None,
+         "pricing_source": f"claude-cli total_cost_usd ({claude_version()})",
+     }
+ 
+@@ -69,52 +105,114 @@ def transcript_usage(session_id: str | None) -> dict:
+     p = transcript_path(session_id)
+     if p is None:
+         return {"_unavailable": "no transcript for session"}
+-    seen: set[str] = set()
++    return analyze_transcript(p)
++
++
++def analyze_transcript(p: Path) -> dict:
++    """Count main-loop messages and tool IDs once; retain final streamed usage."""
++    messages: dict[str, dict] = {}
+     lines = dup = 0
+-    tok = {"input_uncached": 0, "cache_creation": 0, "cache_read": 0, "output": 0}
+     requests: set[str] = set()
+     calls: dict[str, int] = {}
+     result_bytes: dict[str, int] = {}
+     pending: dict[str, str] = {}  # tool_use_id -> tool name
+-    for line in p.open(errors="ignore"):
++    results: dict[str, int] = {}
++    warnings: set[str] = set()
++    final_usage = None
++    for line in transcript_lines(p):
+         try:
+             j = json.loads(line)
+-        except Exception:
++        except (ValueError, TypeError):
++            warnings.add("malformed transcript event")
++            continue
++        if not isinstance(j, dict):
++            warnings.add("non-object transcript event")
++            continue
++        if j.get("parent_tool_use_id") or j.get("isSidechain"):
+             continue
+         t = j.get("type")
++        if t == "result" and isinstance(j.get("usage"), dict):
++            final_usage = normalized_tokens(j["usage"])
+         if t == "assistant":
+             lines += 1
+             m = j.get("message") or {}
++            if not isinstance(m, dict):
++                warnings.add("invalid assistant message")
++                continue
+             for c in m.get("content") or []:
+                 if isinstance(c, dict) and c.get("type") == "tool_use":
+-                    calls[c["name"]] = calls.get(c["name"], 0) + 1
+-                    pending[c.get("id", "")] = c["name"]
++                    tid, name = c.get("id"), c.get("name")
++                    if not tid or not name:
++                        warnings.add("tool use missing identity")
++                        continue
++                    if tid not in pending:
++                        calls[name] = calls.get(name, 0) + 1
++                        pending[tid] = name
+             mid = m.get("id")
+-            if mid in seen:
+-                dup += 1
++            if not mid:
++                warnings.add("assistant message missing identity")
+                 continue
+-            seen.add(mid)
++            if mid in messages:
++                dup += 1
+             if j.get("requestId"):
+                 requests.add(j["requestId"])
+             u = m.get("usage") or {}
+-            tok["input_uncached"] += u.get("input_tokens", 0)
+-            tok["cache_creation"] += u.get("cache_creation_input_tokens", 0)
+-            tok["cache_read"] += u.get("cache_read_input_tokens", 0)
+-            tok["output"] += u.get("output_tokens", 0)
++            if not isinstance(u, dict):
++                warnings.add("invalid assistant usage")
++                u = {}
++            previous = messages.setdefault(mid, {})
++            # Streaming fragments may carry only some counters.
++            previous.update({k: v for k, v in u.items() if k in TOKEN_FIELDS.values()})
+         elif t == "user":
+-            for c in ((j.get("message") or {}).get("content") or []):
++            m = j.get("message") or {}
++            if not isinstance(m, dict):
++                warnings.add("invalid user message")
++                continue
++            for c in (m.get("content") or []):
+                 if isinstance(c, dict) and c.get("type") == "tool_result":
+-                    name = pending.get(c.get("tool_use_id", ""), "?")
+-                    body = c.get("content")
+-                    n = len(body) if isinstance(body, str) else len(json.dumps(body or ""))
+-                    result_bytes[name] = result_bytes.get(name, 0) + n
+-    ctx = tok["input_uncached"] + tok["cache_creation"] + tok["cache_read"]
++                    tid = c.get("tool_use_id")
++                    if not tid:
++                        warnings.add("tool result missing identity")
++                        continue
++                    results[tid] = content_bytes(c.get("content"))
++    for tid, size in results.items():
++        name = pending.get(tid, "?")
++        result_bytes[name] = result_bytes.get(name, 0) + size
++    normalized = [normalized_tokens(u) for u in messages.values()]
++    tok = {}
++    for key in TOKEN_FIELDS:
++        values = [u[key] for u in normalized]
++        tok[key] = sum(values) if values and all(v is not None for v in values) else None
++    # Transcript step output may be a streaming placeholder, so never use it
++    # as the authoritative output total without a final aggregate.
++    observed_output = tok["output"]
++    tok["output"] = final_usage.get("output") if final_usage is not None else None
++    diagnostics_complete = not warnings and input_total(tok) is not None
++    if not diagnostics_complete:
++        warnings.add("transcript diagnostics incomplete")
++    # Session JSONL normally lacks the CLI stdout result. This is an expected
++    # source boundary, not a failed cell or a missing transcript input counter.
++    aggregate_status = "not_present_in_transcript" if final_usage is None else (
++        "present" if tok["output"] is not None else "invalid")
++    usage_complete = (all(v is not None for v in tok.values()) and diagnostics_complete
++                      if final_usage is not None else None)
++    notes = ["no final aggregate in transcript; use the saved CLI result for total usage"] if final_usage is None else []
++    if aggregate_status == "invalid":
++        warnings.add("invalid final aggregate in transcript")
++    ctx = input_total(tok)
+     return {
++        "usage_version": USAGE_VERSION,
+         "transcript": str(p),
+-        "messages": len(seen),
++        "messages": len(messages),
+         "duplicate_lines": dup,
+         "requests": len(requests),
+         "tokens": tok,
++        "step_output_observed": observed_output,
++        "usage_complete": usage_complete,
++        "diagnostics_complete": diagnostics_complete,
++        "aggregate_status": aggregate_status,
++        "notes": notes,
++        "warnings": sorted(warnings),
+         "cache_hit_rate": round(tok["cache_read"] / ctx, 3) if ctx else None,
+         "tool_calls": calls,
+         "tool_result_bytes": result_bytes,

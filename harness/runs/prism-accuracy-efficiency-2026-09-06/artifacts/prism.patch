@@ -1,0 +1,636 @@
+diff --git a/internal/cli/commands.go b/internal/cli/commands.go
+index 674d3db..f1db9c5 100644
+--- a/internal/cli/commands.go
++++ b/internal/cli/commands.go
+@@ -1720,6 +1720,7 @@ func cmdSearch(args []string) int {
+ 	exhaustive := false
+ 	rollupOnly := false
+ 	contextLines := 0
++	contextSet := false
+ 	var bare []string
+ 	for i := 0; i < len(args); i++ {
+ 		a := args[i]
+@@ -1769,12 +1770,17 @@ func cmdSearch(args []string) int {
+ 		case "--rollup-only":
+ 			rollupOnly = true
+ 		case "--context", "-C":
+-			if i+1 < len(args) {
+-				if n, err := strconv.Atoi(args[i+1]); err == nil && n > 0 {
+-					contextLines = n
+-				}
+-				i++
++			if i+1 >= len(args) {
++				fmt.Fprintln(os.Stderr, "search: --context requires a non-negative integer")
++				return 2
++			}
++			n, err := strconv.Atoi(args[i+1])
++			if err != nil || n < 0 {
++				fmt.Fprintln(os.Stderr, "search: --context requires a non-negative integer")
++				return 2
+ 			}
++			contextLines, contextSet = n, true
++			i++
+ 		case "--limit":
+ 			if i+1 < len(args) {
+ 				if n, err := strconv.Atoi(args[i+1]); err == nil && n > 0 {
+@@ -1845,7 +1851,7 @@ func cmdSearch(args []string) int {
+ 	if rollupOnly {
+ 		callArgs["rollup_only"] = true
+ 	}
+-	if contextLines > 0 {
++	if contextSet {
+ 		callArgs["context"] = contextLines
+ 	}
+ 	out, err := invokeWithPersistentLedger(dir, "prism_search", callArgs)
+@@ -1853,6 +1859,12 @@ func cmdSearch(args []string) int {
+ 		fmt.Fprintln(os.Stderr, "search:", err)
+ 		return 1
+ 	}
++	if format == formatText {
++		if text, ok := mcp.RenderSearchText(out); ok {
++			fmt.Print(text)
++			return 0
++		}
++	}
+ 	printOutput(out, format)
+ 	return 0
+ }
+@@ -2766,6 +2778,11 @@ func printOutput(v any, format outputFormat) {
+ // printTextOutput renders a Prism response as plain text for agent consumption.
+ // Handles prism_query, prism_read, prism_search, and prism_lookup responses.
+ func printTextOutput(m map[string]any) {
++	if root, _ := m["root"].(string); root != "" {
++		if _, search := m["results"]; search || m["textHits"] != nil || m["symbols"] != nil || m["files"] != nil {
++			fmt.Printf("// root: %s\n", root)
++		}
++	}
+ 	// Multi-term prism_search: one group per term, each rendered by the
+ 	// single-term path below so the two forms read identically.
+ 	if groups, ok := m["results"]; ok {
+diff --git a/internal/cli/searchdelivery_test.go b/internal/cli/searchdelivery_test.go
+new file mode 100644
+index 0000000..b2faa32
+--- /dev/null
++++ b/internal/cli/searchdelivery_test.go
+@@ -0,0 +1,78 @@
++package cli
++
++import (
++	"os"
++	"path/filepath"
++	"strings"
++	"testing"
++
++	"github.com/provasign/prism/internal/mcp"
++)
++
++func TestSearchCLIExplicitZeroContextAndMergedDefault(t *testing.T) {
++	dir := t.TempDir()
++	dir, err := filepath.EvalSymlinks(dir)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if err := os.WriteFile(filepath.Join(dir, "sample.txt"), []byte("before\nMATCH one\nMATCH two\nafter\n"), 0o600); err != nil {
++		t.Fatal(err)
++	}
++	run := func(extra ...string) string {
++		t.Helper()
++		args := append([]string{"MATCH", "--dir", dir, "--scope", "text", "--format", "text"}, extra...)
++		return captureStdout(func() {
++			if rc := cmdSearch(args); rc != 0 {
++				t.Fatalf("search exited %d", rc)
++			}
++		})
++	}
++	plain := run("--context", "0")
++	if strings.Contains(plain, "before") || strings.Contains(plain, "after") {
++		t.Fatalf("explicit context=0 was ignored: %s", plain)
++	}
++	contextual := run()
++	for _, text := range []string{"before", "after", "MATCH one", "MATCH two", "// root: " + dir} {
++		if strings.Count(contextual, text) != 1 {
++			t.Fatalf("expected exactly one %q in merged context: %s", text, contextual)
++		}
++	}
++}
++
++func TestSearchCLIInvalidContextFails(t *testing.T) {
++	for _, args := range [][]string{
++		{"MATCH", "--context"}, {"MATCH", "--context", "-1"}, {"MATCH", "--context", "wrong"},
++	} {
++		if got := cmdSearch(args); got != 2 {
++			t.Fatalf("%v: expected usage error, got %d", args, got)
++		}
++	}
++}
++
++func TestSearchCLIContextPayloadPreservesEvidenceWithFewerBytes(t *testing.T) {
++	out := map[string]any{
++		"root": "/repo", "textBackend": "rg",
++		"textHits": []any{map[string]any{
++			"file": "src/repeated/long/package/name/search/fixture.go",
++			"hits": []any{
++				map[string]any{"line": 2, "text": "MATCH one", "before": []string{"before"}, "after": []string{"MATCH two", "after"}},
++				map[string]any{"line": 3, "text": "MATCH two", "before": []string{"before", "MATCH one"}, "after": []string{"after"}},
++			},
++		}},
++	}
++	legacy := captureStdout(func() { printOutput(out, formatText) })
++	merged, ok := mcp.RenderSearchText(out)
++	if !ok {
++		t.Fatal("could not render fixture")
++	}
++	for _, evidence := range []string{"before", "MATCH one", "MATCH two", "after", "fixture.go", "// root: /repo"} {
++		if !strings.Contains(legacy, evidence) || strings.Count(merged, evidence) != 1 {
++			t.Fatalf("evidence lost/duplicated: %q in %s", evidence, merged)
++		}
++	}
++	if len(merged)*2 >= len(legacy) {
++		t.Fatalf("expected >50%% fixture payload reduction: %d -> %d", len(legacy), len(merged))
++	}
++	t.Logf("same source evidence: legacy CLI %d bytes, merged CLI %d bytes (%.1f%% fewer); not a model-token/cost measurement",
++		len(legacy), len(merged), 100*(1-float64(len(merged))/float64(len(legacy))))
++}
+diff --git a/internal/mcp/oncenotes.go b/internal/mcp/oncenotes.go
+index 9984b75..728b6ed 100644
+--- a/internal/mcp/oncenotes.go
++++ b/internal/mcp/oncenotes.go
+@@ -63,6 +63,16 @@ func (o *onceNotes) apply(text string) string {
+ 	lines := strings.Split(text, "\n")
+ 	out := lines[:0]
+ 	for _, l := range lines {
++		// Current validity/scope facts must survive repeats and compaction.
++		lower := strings.ToLower(l)
++		if strings.HasPrefix(l, "//") && (strings.HasPrefix(l, "// root:") ||
++			strings.Contains(lower, "in the requested scope") ||
++			strings.Contains(lower, "incomplete") || strings.Contains(lower, "not searched") ||
++			strings.Contains(lower, "a sample") || strings.Contains(lower, "exhaustive symbol search") ||
++			strings.Contains(lower, "rejected paths")) {
++			out = append(out, l)
++			continue
++		}
+ 		if !strings.HasPrefix(l, "//") {
+ 			out = append(out, l)
+ 			continue
+diff --git a/internal/mcp/searchaccuracy_test.go b/internal/mcp/searchaccuracy_test.go
+new file mode 100644
+index 0000000..8788e74
+--- /dev/null
++++ b/internal/mcp/searchaccuracy_test.go
+@@ -0,0 +1,137 @@
++package mcp
++
++import (
++	"context"
++	"fmt"
++	"strings"
++	"testing"
++
++	"github.com/provasign/prism/internal/grove"
++)
++
++func TestSearchRootAndBothPassesRemainVisible(t *testing.T) {
++	h := symbolCapFixture(t, 40)
++	out, err := h.Invoke("prism_search", map[string]any{"query": "FooThing", "limit": 1})
++	if err != nil {
++		t.Fatal(err)
++	}
++	m := out.(map[string]any)
++	if m["root"] != h.Root || m["symbolsTruncated"] != true || m["truncated"] != true {
++		t.Fatalf("root and both truncation flags must survive: %v", m)
++	}
++	txt, ok := renderSearchAsText(m)
++	if !ok {
++		t.Fatal("search fell back to JSON")
++	}
++	for i := 0; i < 3; i++ {
++		got := h.once.apply(txt)
++		for _, want := range []string{"// root: " + h.Root, "a SAMPLE", "Text matches are a SAMPLE"} {
++			if !strings.Contains(got, want) {
++				t.Fatalf("repeat %d lost %q: %s", i, want, got)
++			}
++		}
++	}
++}
++
++func TestSearchBatchedEmptyResultsNameTheirRoot(t *testing.T) {
++	h := symbolCapFixture(t, 1)
++	out, err := h.Invoke("prism_search", map[string]any{
++		"query": []string{"definitelyMissingA", "definitelyMissingB"}, "scope": "text"})
++	if err != nil {
++		t.Fatal(err)
++	}
++	txt, ok := renderSearchAsText(out.(map[string]any))
++	if !ok || strings.Count(txt, "// root: "+h.Root) != 1 {
++		t.Fatalf("batch must state one actual root: %s", txt)
++	}
++}
++
++func TestSearchRejectedScopeNeverClaimsAbsence(t *testing.T) {
++	h := symbolCapFixture(t, 1)
++	out, err := h.Invoke("prism_search", map[string]any{
++		"query": "FooThing", "scope": "both", "path": "../elsewhere"})
++	if err != nil {
++		t.Fatal(err)
++	}
++	m := out.(map[string]any)
++	txt, ok := renderSearchAsText(m)
++	if !ok || !searchResultPartial(m) || len(anySlice(m["rejectedPaths"])) == 0 {
++		t.Fatalf("rejected scope was not retained: %v", m)
++	}
++	if strings.Contains(txt, "exact strings absent") || strings.Contains(txt, "full index checked") {
++		t.Fatalf("invalid scope claimed absence: %s", txt)
++	}
++}
++
++func TestSearchLargeLimitClampsAndInvalidScopeErrors(t *testing.T) {
++	h := symbolCapFixture(t, 40)
++	out, err := h.Invoke("prism_search", map[string]any{
++		"query": "FooThing", "scope": "symbols", "limit": int(^uint(0) >> 1)})
++	if err != nil {
++		t.Fatal(err)
++	}
++	m := out.(map[string]any)
++	if len(anySlice(m["symbols"])) != 40 || !strings.Contains(fmt.Sprint(m["note"]), "clamped") {
++		t.Fatalf("large positive limit must clamp without overflowing: %v", m)
++	}
++	if _, err := h.Invoke("prism_search", map[string]any{"query": "FooThing", "scope": "typo"}); err == nil {
++		t.Fatal("invalid scope was silently accepted")
++	}
++}
++
++func TestScopedSymbolScanHonorsHardBoundAndUnknownCount(t *testing.T) {
++	var requests []int
++	fetch := func(_ context.Context, _ string, n int) ([]grove.SymbolRecord, error) {
++		requests = append(requests, n)
++		result := make([]grove.SymbolRecord, n)
++		for i := range result {
++			result[i].FilePath = "outside/file.go"
++		}
++		return result, nil
++	}
++	syms, exhausted, err := scopedSymbolSearch(context.Background(), fetch, "Foo",
++		searchScope{paths: []string{"inside"}}, 2, 5)
++	if err != nil || exhausted || len(syms) != 0 {
++		t.Fatalf("expected incomplete zero-match prefix, got %v %v %v", syms, exhausted, err)
++	}
++	if fmt.Sprint(requests) != "[3 5]" {
++		t.Fatalf("fetch exceeded hard bound or stopped prematurely: %v", requests)
++	}
++	warning := symbolSearchWarning(len(syms), 2, true, exhausted, false)
++	if !strings.Contains(warning, "returned 0") || !strings.Contains(warning, "unknown") || strings.Contains(warning, "MORE than") {
++		t.Fatalf("scan cap invented a result count: %s", warning)
++	}
++}
++
++func TestScopedSymbolScanChecksCancellation(t *testing.T) {
++	ctx, cancel := context.WithCancel(context.Background())
++	cancel()
++	_, _, err := scopedSymbolSearch(ctx, func(context.Context, string, int) ([]grove.SymbolRecord, error) {
++		t.Fatal("canceled request reached backend")
++		return nil, nil
++	}, "Foo", searchScope{}, 2, 5)
++	if err != context.Canceled {
++		t.Fatalf("want cancellation, got %v", err)
++	}
++}
++
++func TestSearchOmittedTermsAreNotDeclaredAbsent(t *testing.T) {
++	h := symbolCapFixture(t, 1)
++	queries := make([]string, searchTermCap+1)
++	for i := range queries {
++		queries[i] = fmt.Sprintf("notPresent%d", i)
++	}
++	queries[searchTermCap] = "FooThing"
++	out, err := h.Invoke("prism_search", map[string]any{"query": queries, "scope": "text"})
++	if err != nil {
++		t.Fatal(err)
++	}
++	m := out.(map[string]any)
++	txt, ok := renderSearchAsText(m)
++	if !ok || !searchResultPartial(m) || !strings.Contains(txt, "NOT searched: [FooThing]") {
++		t.Fatalf("omitted matching term was not identified: %s", txt)
++	}
++	if strings.Contains(fmt.Sprint(m["note"]), "not timed out") {
++		t.Fatalf("incomplete batch claimed an exhaustive negative: %s", txt)
++	}
++}
+diff --git a/internal/mcp/searchlimits.go b/internal/mcp/searchlimits.go
+new file mode 100644
+index 0000000..ddd6735
+--- /dev/null
++++ b/internal/mcp/searchlimits.go
+@@ -0,0 +1,68 @@
++package mcp
++
++import (
++	"context"
++	"fmt"
++
++	"github.com/provasign/prism/internal/grove"
++)
++
++// Fetch prefixes until the scoped result is known or the work bound is reached.
++// A work bound says nothing about how many additional in-scope matches exist.
++func scopedSymbolSearch(ctx context.Context, search func(context.Context, string, int) ([]grove.SymbolRecord, error),
++	query string, sc searchScope, cap, hardMax int) ([]grove.SymbolRecord, bool, error) {
++	fetch := minInt(cap+1, hardMax)
++	for {
++		if err := ctx.Err(); err != nil {
++			return nil, false, err
++		}
++		raw, err := search(ctx, query, fetch)
++		if err != nil {
++			return nil, false, err
++		}
++		exhausted := len(raw) < fetch
++		syms := filterSymbolsByScope(filterGeneratedPrismContext(raw), sc)
++		if len(syms) > cap || exhausted || fetch == hardMax {
++			return syms, exhausted, nil
++		}
++		if fetch > hardMax/4 {
++			fetch = hardMax
++		} else {
++			fetch *= 4
++		}
++	}
++}
++
++func symbolSearchWarning(returned, cap int, exhaustive, sourceExhausted, moreKnown bool) string {
++	if !moreKnown && !sourceExhausted {
++		return fmt.Sprintf("INCOMPLETE symbol scan: returned %d in-scope matches; the source scan limit was reached. "+
++			"The remaining count is unknown. Narrow with path=/glob= or a longer name.", returned)
++	}
++	if exhaustive {
++		return exhaustiveCapWarning(cap)
++	}
++	return fmt.Sprintf("showing %d symbol matches - a SAMPLE, more exist. "+
++		"Use exhaustive=true for completeness, or narrow with path=/glob=.", returned)
++}
++
++func searchResultPartial(m map[string]any) bool {
++	if len(anySlice(m["omittedTerms"])) > 0 {
++		return true
++	}
++	for _, key := range []string{"truncated", "symbolsTruncated", "timedOut"} {
++		if value, _ := m[key].(bool); value {
++			return true
++		}
++	}
++	if len(anySlice(m["rejectedPaths"])) > 0 || len(anySlice(m["failedTerms"])) > 0 {
++		return true
++	}
++	if results, ok := m["results"].([]map[string]any); ok {
++		for _, result := range results {
++			if searchResultPartial(result) {
++				return true
++			}
++		}
++	}
++	return false
++}
+diff --git a/internal/mcp/searchtext.go b/internal/mcp/searchtext.go
+index c35276c..85e4edc 100644
+--- a/internal/mcp/searchtext.go
++++ b/internal/mcp/searchtext.go
+@@ -6,6 +6,16 @@ import (
+ 	"strings"
+ )
+ 
++// RenderSearchText shares MCP's lossless, merged search rendering with the CLI.
++// Unknown shapes return false so callers can retain the complete JSON result.
++func RenderSearchText(out any) (string, bool) {
++	m, ok := out.(map[string]any)
++	if !ok {
++		return "", false
++	}
++	return renderSearchAsText(m)
++}
++
+ // renderSearchAsText renders a prism_search TEXT result as plain grep-style
+ // "path:line: text" lines instead of JSON.
+ //
+@@ -31,6 +41,8 @@ func renderSearchAsText(out map[string]any) (string, bool) {
+ 		"failedTerms": true, "note": true, "query": true,
+ 		"symbols": true, "hitRollup": true, "didYouMean": true,
+ 		"symbolsTruncated": true,
++		"root":             true,
++		"omittedTerms":     true,
+ 	}
+ 	for k := range out {
+ 		if !known[k] {
+@@ -39,6 +51,9 @@ func renderSearchAsText(out map[string]any) (string, bool) {
+ 	}
+ 
+ 	var b strings.Builder
++	if root, _ := out["root"].(string); root != "" {
++		fmt.Fprintf(&b, "// root: %s\n", root)
++	}
+ 	if raw, ok := out["results"]; ok {
+ 		groups, ok := raw.([]map[string]any)
+ 		if !ok {
+@@ -114,6 +129,9 @@ func renderSearchAsText(out map[string]any) (string, bool) {
+ 	for _, f := range anySlice(out["failedTerms"]) {
+ 		fmt.Fprintf(&b, "// failed: %v\n", f)
+ 	}
++	if omitted := anySlice(out["omittedTerms"]); len(omitted) > 0 {
++		fmt.Fprintf(&b, "// NOT searched: %v\n", omitted)
++	}
+ 	return b.String(), true
+ }
+ 
+@@ -249,7 +267,11 @@ func renderOneSearchText(b *strings.Builder, m map[string]any, seen map[string]b
+ 		// matching is an in-memory index lookup, not a scan with a timeout
+ 		// risk, so the reassurance is simpler: the whole index was checked,
+ 		// not a partial/truncated pass.
+-		b.WriteString("// no symbol matches (full index checked, not a partial pass)\n")
++		if searchResultPartial(m) {
++			b.WriteString("// no symbol matches in the inspected portion; results are INCOMPLETE\n")
++		} else {
++			b.WriteString("// no symbol matches (full index checked, not a partial pass)\n")
++		}
+ 	}
+ 	switch {
+ 	case hasKey(m, "symbols") && !hasKey(m, "files") && !hasKey(m, "textHits"):
+@@ -273,8 +295,8 @@ func renderOneSearchText(b *strings.Builder, m map[string]any, seen map[string]b
+ 			// the deadline fired before the scan finished); surface it so
+ 			// the null carries the same evidence a truncated hit list
+ 			// already does.
+-			if timedOut, _ := m["timedOut"].(bool); timedOut {
+-				b.WriteString("// no matches — search timed out before finishing; results may be incomplete\n")
++			if searchResultPartial(m) {
++				b.WriteString("// no matches in the inspected scope; results are INCOMPLETE\n")
+ 			} else {
+ 				b.WriteString("// no matches — search completed (not truncated, not timed out)\n")
+ 			}
+diff --git a/internal/mcp/tools.go b/internal/mcp/tools.go
+index 8ce93fb..01d4fcb 100644
+--- a/internal/mcp/tools.go
++++ b/internal/mcp/tools.go
+@@ -501,7 +501,7 @@ func toolSchema(name string) map[string]any {
+ 					"type":        "boolean",
+ 					"description": "On a truncated search return only hitRollup (grouped counts), no sample lines.",
+ 				},
+-				"limit": map[string]any{"type": "integer", "description": "Max results (default 25)."},
++				"limit": map[string]any{"type": "integer", "description": "Max results (default 25, maximum 2000; non-positive uses default)."},
+ 				"context": map[string]any{
+ 					"type":        "integer",
+ 					"description": "Lines around each match (grep -C N, max 15) — instead of a follow-up read. Whole function? prism_lookup.",
+@@ -1306,19 +1306,28 @@ func (h *Handler) toolSearch(ctx context.Context, args map[string]any) (any, err
+ 		return nil, errors.New("query is required (a name, a name fragment, or an array of them)")
+ 	}
+ 	var termNote string
++	var omittedTerms []string
+ 	if len(queries) > searchTermCap {
+ 		// Never drop silently. A filter that quietly narrows the request is
+ 		// the failure mode SWE-Explore measures as the expensive one: missing
+ 		// evidence costs far more than noise.
+ 		termNote = fmt.Sprintf("only the first %d of %d terms were searched; re-run with the rest",
+ 			searchTermCap, len(queries))
++		omittedTerms = queries[searchTermCap:]
+ 		queries = queries[:searchTermCap]
+ 	}
+ 	limit := intArg(args, "limit", defaultSearchLimit)
+ 	if limit <= 0 {
+ 		limit = defaultSearchLimit
+ 	}
++	if limit > exhaustiveSymbolCap {
++		termNote = appendNote(termNote, fmt.Sprintf("limit clamped to %d (asked for %d)", exhaustiveSymbolCap, limit))
++		limit = exhaustiveSymbolCap
++	}
+ 	scope := stringArg(args, "scope", "both")
++	if scope != "text" && scope != "symbols" && scope != "both" {
++		return nil, fmt.Errorf("invalid scope %q; use text, symbols, or both", scope)
++	}
+ 	regex := boolArg(args, "regex")
+ 	reqContext := intArg(args, "context", -1)
+ 	if reqContext < 0 {
+@@ -1371,7 +1380,10 @@ func (h *Handler) toolSearch(ctx context.Context, args map[string]any) (any, err
+ 			}(i, q)
+ 		}
+ 		wg.Wait()
+-		out := map[string]any{}
++		out := map[string]any{"root": h.Root}
++		if len(omittedTerms) > 0 {
++			out["omittedTerms"] = omittedTerms
++		}
+ 		results := make([]map[string]any, 0, len(queries))
+ 		var failed []string
+ 		for i := range queries {
+@@ -1396,7 +1408,7 @@ func (h *Handler) toolSearch(ctx context.Context, args map[string]any) (any, err
+ 				break
+ 			}
+ 		}
+-		if allEmpty {
++		if allEmpty && !searchResultPartial(out) {
+ 			h.attachEmptySearchGuidance(ctx, out, queries)
+ 		}
+ 		return out, nil
+@@ -1406,10 +1418,11 @@ func (h *Handler) toolSearch(ctx context.Context, args map[string]any) (any, err
+ 	if err != nil {
+ 		return nil, err
+ 	}
++	out["root"] = h.Root
+ 	if termNote != "" {
+ 		out["note"] = termNote
+ 	}
+-	if searchResultEmpty(out) {
++	if searchResultEmpty(out) && !searchResultPartial(out) {
+ 		h.attachEmptySearchGuidance(ctx, out, queries)
+ 	}
+ 	return out, nil
+@@ -1449,8 +1462,8 @@ func (h *Handler) attachEmptySearchGuidance(ctx context.Context, out map[string]
+ 	// per-term "no matches — search completed" line is suppressed by the
+ 	// renderer when this note is present (they said the same thing twice,
+ 	// ~350 chars, on every empty search).
+-	guidance := "no matches — search completed, not truncated, not timed out: these exact strings " +
+-		"don't exist, NOT that the tool is done. Retry broader/shorter (drop punctuation and " +
++	guidance := "no matches — search completed, not truncated, not timed out in the requested scope; " +
++		"NOT that the tool is done. Excluded files and unindexed symbols are not covered. Retry broader/shorter (drop punctuation and " +
+ 		"qualifiers: \"e.Query(\" -> \"Query\") or reuse a term that matched earlier."
+ 	if dym := h.nearMissSymbols(ctx, terms); len(dym) > 0 {
+ 		out["didYouMean"] = dym
+@@ -1657,6 +1670,7 @@ func (h *Handler) searchOne(ctx context.Context, q, scope string, limit int, reg
+ 		// limit=-1 reached the slice below as syms[:-1] (review, 2026-09-06).
+ 		limit = defaultSearchLimit
+ 	}
++	limit = minInt(limit, exhaustiveSymbolCap)
+ 	symCap := limit
+ 	if sc.exhaustive {
+ 		// Bounded, not unbounded: past exhaustiveSymbolCap the response
+@@ -1678,20 +1692,12 @@ func (h *Handler) searchOne(ctx context.Context, q, scope string, limit int, reg
+ 	// marker). Fetch in growing batches until the filtered result exceeds
+ 	// the cap or the source itself is exhausted (it returned fewer than
+ 	// asked); only then is "not truncated" a fact.
+-	var syms []grove.SymbolRecord
+-	sourceExhausted := false
+-	for fetch := symCap + 1; ; fetch *= 4 {
+-		raw, err := h.Grove.SearchSymbols(ctx, q, fetch)
+-		if err != nil {
+-			return nil, err
+-		}
+-		sourceExhausted = len(raw) < fetch
+-		syms = filterSymbolsByScope(filterGeneratedPrismContext(raw), sc)
+-		if len(syms) > symCap || sourceExhausted || fetch >= symbolFetchHardMax {
+-			break
+-		}
++	syms, sourceExhausted, err := scopedSymbolSearch(ctx, h.Grove.SearchSymbols, q, sc, symCap, symbolFetchHardMax)
++	if err != nil {
++		return nil, err
+ 	}
+-	symbolsTruncated := len(syms) > symCap || !sourceExhausted
++	moreKnown := len(syms) > symCap
++	symbolsTruncated := moreKnown || !sourceExhausted
+ 	if len(syms) > symCap {
+ 		syms = syms[:symCap]
+ 	}
+@@ -1736,14 +1742,7 @@ func (h *Handler) searchOne(ctx context.Context, q, scope string, limit int, reg
+ 	out := map[string]any{"symbols": annotated}
+ 	if symbolsTruncated {
+ 		out["symbolsTruncated"] = true
+-		if sc.exhaustive {
+-			out["warning"] = exhaustiveCapWarning(symCap)
+-		} else {
+-			out["warning"] = fmt.Sprintf(
+-				"showing %d symbol matches — a SAMPLE, more exist. For a completeness question "+
+-					"(every implementation, every override) use exhaustive=true; otherwise narrow "+
+-					"with path=/glob= or raise limit=.", limit)
+-		}
++		out["warning"] = symbolSearchWarning(len(annotated), symCap, sc.exhaustive, sourceExhausted, moreKnown)
+ 	}
+ 	// Merged full-text search: the same query as a literal, so a string
+ 	// that names no symbol (an error message, a config key) still lands.
+@@ -1752,14 +1751,31 @@ func (h *Handler) searchOne(ctx context.Context, q, scope string, limit int, reg
+ 		// The merged pass previously ran at MaxHits 50 — double the symbol
+ 		// limit the caller asked for, on the default scope of the highest-
+ 		// call-count tool. The caller's limit bounds both passes now.
+-		if r := textsearch.Search(ctx, h.Root, q, textsearch.Options{
++		r := textsearch.Search(ctx, h.Root, q, textsearch.Options{
+ 			MaxHits: limit, Timeout: textSearchTimeout, Regex: regex,
+ 			Paths: sc.paths, Glob: sc.glob, FilesOnly: sc.filesOnly,
+ 			Exhaustive: sc.exhaustive, Context: sc.context,
+-		}); len(r.Hits) > 0 {
++		})
++		if len(r.Hits) > 0 {
+ 			out["textHits"] = h.renderTextMatches(r.Hits, sc.exhaustive)
+ 			out["textBackend"] = r.Backend
+ 		}
++		if r.Truncated {
++			out["truncated"] = true
++			out["totalHits"] = r.TotalHits
++			out["filesMatched"] = r.FilesMatched
++			out["warning"] = appendNote(stringArg(out, "warning", ""), fmt.Sprintf(
++				"Text matches are a SAMPLE: showing %d of at least %d. Use exhaustive=true or narrow path=/glob=.",
++				len(r.Hits), r.TotalHits))
++		}
++		if r.TimedOut {
++			out["timedOut"] = true
++			out["warning"] = appendNote(stringArg(out, "warning", ""), "INCOMPLETE text scan: deadline reached; absence is not established.")
++		}
++		if len(r.RejectedPaths) > 0 {
++			out["rejectedPaths"] = r.RejectedPaths
++			out["warning"] = appendNote(stringArg(out, "warning", ""), fmt.Sprintf("Paths outside the root were NOT searched: %v", r.RejectedPaths))
++		}
+ 	}
+ 	// Same structural hint as scope=text: the symbol list above says the
+ 	// name exists, but not that changing it fans out — and the fan-out is

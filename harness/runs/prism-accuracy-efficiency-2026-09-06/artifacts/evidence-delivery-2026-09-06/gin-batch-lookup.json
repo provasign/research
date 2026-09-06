@@ -1,0 +1,8 @@
+{
+  "content": [
+    {
+      "text": "// lookup responseWriter.Hijack\n// method responseWriter.Hijack  response_writer.go:111-121\nfunc (w *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {\n\t// Allow hijacking before any data is written (size == -1) or after headers are written (size == 0),\n\t// but not after body data is written (size > 0). For compatibility with websocket libraries (e.g., github.com/coder/websocket)\n\tif w.size > 0 {\n\t\treturn nil, nil, errHijackAlreadyWritten\n\t}\n\tif w.size < 0 {\n\t\tw.size = 0\n\t}\n\treturn w.ResponseWriter.(http.Hijacker).Hijack()\n}\n// lookup responseWriter.CloseNotify\n// method responseWriter.CloseNotify  response_writer.go:124-126\nfunc (w *responseWriter) CloseNotify() <-chan bool {\n\treturn w.ResponseWriter.(http.CloseNotifier).CloseNotify()\n}\n// lookup responseWriter.Flush\n// method responseWriter.Flush  response_writer.go:129-134\nfunc (w *responseWriter) Flush() {\n\tw.WriteHeaderNow()\n\tif f, ok := w.ResponseWriter.(http.Flusher); ok {\n\t\tf.Flush()\n\t}\n}\n",
+      "type": "text"
+    }
+  ]
+}
