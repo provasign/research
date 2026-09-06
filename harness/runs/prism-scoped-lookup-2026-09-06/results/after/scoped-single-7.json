@@ -1,0 +1,8 @@
+{
+  "content": [
+    {
+      "text": "// lookup DatabaseWrapper.pool (file=\"django/db/backends/oracle/base.py\")\nname: DatabaseWrapper.pool\nfile: django/db/backends/oracle/base.py\nline: 259\nsignature: def pool(self):\nbody: def pool(self):\n        if not self.is_pool:\n            return None\n\n        if self.settings_dict.get(\"CONN_MAX_AGE\", 0) != 0:\n            raise ImproperlyConfigured(\n                \"Pooling doesn't support persistent connections.\"\n            )\n\n        pool_key = (self.alias, self.settings_dict[\"USER\"])\n        if pool_key not in self._connection_pools:\n            connect_kwargs = self.get_connection_params()\n            pool_options = connect_kwargs.pop(\"pool\")\n            if pool_options is not True:\n                connect_kwargs.update(pool_options)\n\n            pool = Database.create_pool(\n                user=self.settings_dict[\"USER\"],\n                password=self.settings_dict[\"PASSWORD\"],\n                dsn=dsn(self.settings_dict),\n                **connect_kwargs,\n            )\n            self._connection_pools.setdefault(pool_key, pool)\n\n        return self._connection_pools[pool_key]\n",
+      "type": "text"
+    }
+  ]
+}

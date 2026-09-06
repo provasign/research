@@ -1,0 +1,602 @@
+diff --git a/internal/mcp/graphtext.go b/internal/mcp/graphtext.go
+index f9c3934..675c7d4 100644
+--- a/internal/mcp/graphtext.go
++++ b/internal/mcp/graphtext.go
+@@ -243,7 +243,11 @@ func renderLookupAsText(out map[string]any) (string, bool) {
+ 		}
+ 	}
+ 	if m, ok := out["matched"].(bool); ok && !m {
+-		b.WriteString("// NO EXACT MATCH — closest shown above; candidates:\n")
++		if content, _ := out["content"].(string); content != "" {
++			b.WriteString("// NO EXACT MATCH — closest shown above; candidates:\n")
++		} else {
++			b.WriteString("// NO EXACT MATCH\n")
++		}
+ 	} else if amb, _ := out["ambiguous"].(bool); amb {
+ 		b.WriteString("// AMBIGUOUS — same score for:\n")
+ 	}
+diff --git a/internal/mcp/lookupbatch.go b/internal/mcp/lookupbatch.go
+index 0d2f94b..9ac250b 100644
+--- a/internal/mcp/lookupbatch.go
++++ b/internal/mcp/lookupbatch.go
+@@ -5,6 +5,8 @@ import (
+ 	"encoding/json"
+ 	"errors"
+ 	"fmt"
++	"os"
++	"path/filepath"
+ 	"strings"
+ )
+ 
+@@ -38,18 +40,72 @@ func lookupBatchNames(raw any) ([]string, bool, error) {
+ 	return names, true, nil
+ }
+ 
+-func (h *Handler) toolLookupBatch(ctx context.Context, args map[string]any, names []string) (any, error) {
+-	results := make([]map[string]any, 0, len(names))
++type lookupRequest struct {
++	name string
++	file string
++}
++
++func lookupBatchRequests(raw any) ([]lookupRequest, bool, error) {
++	files := map[int]string{}
++	if values, ok := raw.([]any); ok {
++		names := append([]any(nil), values...)
++		for i, value := range values {
++			if item, ok := value.(map[string]any); ok {
++				name, nameOK := item["name"].(string)
++				file, fileOK := item["file"].(string)
++				if len(item) != 2 || !nameOK || !fileOK || strings.TrimSpace(name) == "" || strings.TrimSpace(file) == "" {
++					return nil, true, fmt.Errorf("name[%d] must contain only nonempty string name and file; no lookups were run", i)
++				}
++				names[i], files[i] = name, file
++			}
++		}
++		raw = names
++	}
++	names, batch, err := lookupBatchNames(raw)
++	if err != nil || !batch {
++		return nil, batch, err
++	}
++	requests := make([]lookupRequest, len(names))
++	for i, name := range names {
++		requests[i] = lookupRequest{name: name, file: files[i]}
++	}
++	return requests, true, nil
++}
++
++func (h *Handler) lookupFileScope(file string) (string, error) {
++	if filepath.IsAbs(file) {
++		return "", errors.New("scoped lookup file must be repo-relative")
++	}
++	abs, rel, err := safePathWithinRoot(h.Root, file)
++	if err != nil {
++		return "", err
++	}
++	info, err := os.Stat(abs)
++	if err != nil {
++		return "", fmt.Errorf("scoped lookup file %q: %w", file, err)
++	}
++	if !info.Mode().IsRegular() {
++		return "", fmt.Errorf("scoped lookup file %q is not a regular file", file)
++	}
++	return rel, nil
++}
++
++func (h *Handler) toolLookupBatch(ctx context.Context, args map[string]any, requests []lookupRequest) (any, error) {
++	results := make([]map[string]any, 0, len(requests))
+ 	var omitted []string
++	var omittedItems []map[string]any
+ 	used := 0
+-	for _, name := range names {
++	for _, request := range requests {
+ 		one := make(map[string]any, len(args))
+ 		for key, value := range args {
+ 			one[key] = value
+ 		}
+-		one["name"] = name
+-		result, err := h.toolLookup(ctx, one)
+-		entry := map[string]any{"name": name}
++		one["name"] = request.name
++		result, err := h.lookupSymbol(ctx, one, request.file)
++		entry := map[string]any{"name": request.name}
++		if request.file != "" {
++			entry["file"] = request.file
++		}
+ 		if err != nil {
+ 			entry["error"] = err.Error()
+ 		} else {
+@@ -60,7 +116,11 @@ func (h *Handler) toolLookupBatch(ctx context.Context, args map[string]any, name
+ 			return nil, fmt.Errorf("lookup batch encoding: %w", err)
+ 		}
+ 		if used+len(encoded) > lookupBatchMaxBytes {
+-			omitted = append(omitted, name)
++			if request.file == "" {
++				omitted = append(omitted, request.name)
++			} else {
++				omittedItems = append(omittedItems, map[string]any{"name": request.name, "file": request.file})
++			}
+ 			continue
+ 		}
+ 		used += len(encoded)
+@@ -69,7 +129,12 @@ func (h *Handler) toolLookupBatch(ctx context.Context, args map[string]any, name
+ 	out := map[string]any{"results": results}
+ 	if len(omitted) > 0 {
+ 		out["omitted"] = omitted
+-		out["note"] = "Batch body budget reached; omitted results were NOT delivered. Request those names individually or use fields=[\"signature\"]."
++	}
++	if len(omittedItems) > 0 {
++		out["omittedItems"] = omittedItems
++	}
++	if len(omitted)+len(omittedItems) > 0 {
++		out["note"] = "Batch body budget reached; omitted results were NOT delivered. Retry in smaller batches with the same file scopes or use fields=[\"signature\"]."
+ 	}
+ 	return out, nil
+ }
+@@ -81,21 +146,31 @@ func renderLookupBatchAsText(out map[string]any) (string, bool) {
+ 		return "", false
+ 	}
+ 	for key := range out {
+-		if key != "results" && key != "omitted" && key != "note" {
++		if key != "results" && key != "omitted" && key != "omittedItems" && key != "note" {
+ 			return "", false
+ 		}
+ 	}
+ 	var b strings.Builder
+ 	for _, raw := range anySlice(out["results"]) {
+ 		entry, ok := raw.(map[string]any)
+-		if !ok || len(entry) != 2 {
++		if !ok {
+ 			return "", false
+ 		}
+-		name, ok := entry["name"].(string)
+-		if !ok {
++		label, ok := lookupRequestLabel(entry)
++		if !ok || (len(entry) != 2 && len(entry) != 3) {
+ 			return "", false
+ 		}
+-		fmt.Fprintf(&b, "// lookup %s\n", name)
++		for key := range entry {
++			if key != "name" && key != "file" && key != "error" && key != "result" {
++				return "", false
++			}
++		}
++		_, hasError := entry["error"]
++		_, hasResult := entry["result"]
++		if hasError == hasResult {
++			return "", false
++		}
++		fmt.Fprintf(&b, "// lookup %s\n", label)
+ 		if failure, ok := entry["error"].(string); ok {
+ 			fmt.Fprintf(&b, "// ERROR: %s\n", failure)
+ 			continue
+@@ -118,8 +193,41 @@ func renderLookupBatchAsText(out map[string]any) (string, bool) {
+ 		}
+ 		fmt.Fprintf(&b, "// NOT DELIVERED: %v\n", omitted)
+ 	}
++	if raw, exists := out["omittedItems"]; exists {
++		switch raw.(type) {
++		case []any, []map[string]any:
++		default:
++			return "", false
++		}
++		for _, value := range anySlice(raw) {
++			item, ok := value.(map[string]any)
++			if !ok || len(item) != 2 || item["file"] == nil {
++				return "", false
++			}
++			label, ok := lookupRequestLabel(item)
++			if !ok {
++				return "", false
++			}
++			fmt.Fprintf(&b, "// NOT DELIVERED: %s\n", label)
++		}
++	}
+ 	if note, _ := out["note"].(string); note != "" {
+ 		fmt.Fprintf(&b, "// %s\n", note)
+ 	}
+ 	return b.String(), true
+ }
++
++func lookupRequestLabel(entry map[string]any) (string, bool) {
++	name, ok := entry["name"].(string)
++	if !ok {
++		return "", false
++	}
++	if raw, exists := entry["file"]; exists {
++		file, ok := raw.(string)
++		if !ok || file == "" {
++			return "", false
++		}
++		return fmt.Sprintf("%s (file=%q)", name, file), true
++	}
++	return name, true
++}
+diff --git a/internal/mcp/lookupscoped_test.go b/internal/mcp/lookupscoped_test.go
+new file mode 100644
+index 0000000..cfeadaf
+--- /dev/null
++++ b/internal/mcp/lookupscoped_test.go
+@@ -0,0 +1,251 @@
++package mcp
++
++import (
++	"context"
++	"encoding/json"
++	"fmt"
++	"os"
++	"path/filepath"
++	"strings"
++	"testing"
++)
++
++func scopedLookup(name, file string) map[string]any {
++	return map[string]any{"name": name, "file": file}
++}
++
++func lookupEntries(t *testing.T, h *Handler, args map[string]any) ([]map[string]any, map[string]any) {
++	t.Helper()
++	value, err := h.Invoke("prism_lookup", args)
++	if err != nil {
++		t.Fatal(err)
++	}
++	out := value.(map[string]any)
++	return out["results"].([]map[string]any), out
++}
++
++func TestLookupScopedBatchMatchesScalarBodiesAndProjection(t *testing.T) {
++	h := evidenceHandler(t, map[string]string{
++		"a/store.go": "package a\ntype Store struct{}\nfunc (s *Store) Get() int { return 11 }\n",
++		"b/store.go": "package b\ntype Store struct{}\nfunc (s *Store) Get() int { return 22 }\n",
++	})
++	for _, fields := range []any{nil, []any{"signature", "body"}} {
++		args := map[string]any{"name": []any{scopedLookup("Store.Get", "a/store.go"), scopedLookup("Store.Get", "b/store.go")}}
++		if fields != nil {
++			args["fields"] = fields
++		}
++		entries, out := lookupEntries(t, h, args)
++		if len(entries) != 2 {
++			t.Fatal(entries)
++		}
++		for i, file := range []string{"a/store.go", "b/store.go"} {
++			scalarArgs := map[string]any{"name": "Store.Get", "file": file}
++			if fields != nil {
++				scalarArgs["fields"] = fields
++			}
++			scalar, err := h.Invoke("prism_lookup", scalarArgs)
++			if err != nil {
++				t.Fatal(err)
++			}
++			got, _ := json.Marshal(entries[i]["result"])
++			want, _ := json.Marshal(scalar)
++			if string(got) != string(want) || entries[i]["file"] != file {
++				t.Fatalf("%s: batch=%s scalar=%s entry=%v", file, got, want, entries[i])
++			}
++		}
++		text, ok := renderLookupAsText(out)
++		if !ok || strings.Count(text, "return 11") != 1 || strings.Count(text, "return 22") != 1 {
++			t.Fatalf("lost/duplicated bodies: %t %s", ok, text)
++		}
++	}
++}
++
++func TestLookupScopedBatchDoesNotWidenScopeOrGuessAnotherReceiver(t *testing.T) {
++	h := evidenceHandler(t, map[string]string{
++		"a.go": "package p\ntype Store struct{}\nfunc (s *Store) Get() int { return 11 }\n",
++		"b.go": "package p\ntype Other struct{}\nfunc (s *Other) Get() int { return 22 }\n",
++	})
++	entries, out := lookupEntries(t, h, map[string]any{"name": []any{
++		scopedLookup("Store.Get", "b.go"), scopedLookup("Absent", "a.go"),
++		scopedLookup("Store.Get", "missing.go"), scopedLookup("Store.Get", "."),
++		scopedLookup("Store.Get", "../a.go"), scopedLookup("Store.Get", filepath.Join(h.Root, "a.go")),
++		scopedLookup("Store.Get", "./sub/../a.go"),
++	}})
++	for _, entry := range entries[:2] {
++		result := entry["result"].(map[string]any)
++		if result["matched"] != false || result["symbol"] != nil || result["content"] != nil {
++			t.Fatalf("wrong scoped symbol delivered: %v", entry)
++		}
++	}
++	for _, entry := range entries[2:6] {
++		if entry["error"] == nil || entry["result"] != nil {
++			t.Fatalf("invalid scope was accepted: %v", entry)
++		}
++	}
++	if entries[6]["error"] != nil || entries[6]["result"] == nil {
++		t.Fatalf("canonical relative path failed: %v", entries[6])
++	}
++	text, ok := renderLookupAsText(out)
++	if !ok || strings.Contains(text, "return 22") || strings.Count(text, "return 11") != 1 || !strings.Contains(text, "scope was not widened") {
++		t.Fatalf("unsafe scoped rendering: %t %s", ok, text)
++	}
++}
++
++func TestLookupScopedBatchPreservesAmbiguity(t *testing.T) {
++	h := evidenceHandler(t, map[string]string{"store.go": "package p\ntype A struct{}\ntype B struct{}\nfunc (a *A) Get() int { return 1 }\nfunc (b *B) Get() int { return 2 }\n"})
++	entries, out := lookupEntries(t, h, map[string]any{"name": []any{scopedLookup("Get", "store.go")}})
++	result := entries[0]["result"].(map[string]any)
++	if result["ambiguous"] != true || len(anySlice(result["candidates"])) != 2 {
++		t.Fatalf("lost ambiguity: %v", result)
++	}
++	text, ok := renderLookupAsText(out)
++	if !ok || !strings.Contains(text, "AMBIGUOUS") || !strings.Contains(text, "A.Get") || !strings.Contains(text, "B.Get") {
++		t.Fatalf("lost rendered ambiguity: %t %s", ok, text)
++	}
++}
++
++func TestLookupScopedBatchBypassesGlobalNameCap(t *testing.T) {
++	files := map[string]string{}
++	for i := 0; i < 40; i++ {
++		files[fmt.Sprintf("p%02d/store.go", i)] = fmt.Sprintf("package p\ntype Store struct{}\nfunc (s *Store) Get() int { return %d }\n", i)
++	}
++	h := evidenceHandler(t, files)
++	entries, _ := lookupEntries(t, h, map[string]any{"name": []any{scopedLookup("Store.Get", "p39/store.go")}})
++	encoded, _ := json.Marshal(entries)
++	if !strings.Contains(string(encoded), "return 39") || strings.Contains(string(encoded), "ambiguous") {
++		t.Fatalf("exact file was lost behind name cap: %s", encoded)
++	}
++}
++
++func TestLookupScopedBatchRejectsMalformedItemsBeforeQuerying(t *testing.T) {
++	h := &Handler{}
++	for _, item := range []any{
++		map[string]any{"name": "Get"}, map[string]any{"file": "a.go"},
++		scopedLookup("", "a.go"), scopedLookup("Get", " "),
++		map[string]any{"name": 42, "file": "a.go"}, map[string]any{"name": "Get", "file": false},
++		map[string]any{"name": "Get", "file": "a.go", "fields": []any{"body"}},
++	} {
++		_, err := h.toolLookup(context.Background(), map[string]any{"name": []any{"Valid", item}})
++		if err == nil || !strings.Contains(err.Error(), "no lookups were run") {
++			t.Fatalf("invalid item was not rejected before Grove: %v, %v", item, err)
++		}
++	}
++}
++
++func TestLookupScopedBatchKeepsLegacyHintsAndInputUnchanged(t *testing.T) {
++	h := evidenceHandler(t, map[string]string{"store.go": "package p\nfunc Get() int { return 7 }\n"})
++	args := map[string]any{"name": []any{"Get", scopedLookup("Get", "store.go")}, "file": "bad-legacy-hint"}
++	before, _ := json.Marshal(args)
++	entries, _ := lookupEntries(t, h, args)
++	if len(entries) != 2 || entries[0]["error"] != nil || entries[1]["error"] != nil {
++		t.Fatal(entries)
++	}
++	after, _ := json.Marshal(args)
++	if string(before) != string(after) {
++		t.Fatal("mutated caller arguments")
++	}
++	scalar, err := h.Invoke("prism_lookup", map[string]any{"name": "Get", "file": "bad-legacy-hint"})
++	if err != nil {
++		t.Fatal(err)
++	}
++	want, _ := json.Marshal(scalar)
++	got, _ := json.Marshal(entries[0]["result"])
++	if string(got) != string(want) {
++		t.Fatal("legacy soft-hint behavior changed")
++	}
++}
++
++func TestLookupScopedBatchRejectsExternalSymlink(t *testing.T) {
++	h := evidenceHandler(t, map[string]string{"store.go": "package p\nfunc Get() {}\n"})
++	external := filepath.Join(t.TempDir(), "outside.go")
++	if err := os.WriteFile(external, []byte("package p\nfunc Get() {}\n"), 0o644); err != nil {
++		t.Fatal(err)
++	}
++	if err := os.Symlink(external, filepath.Join(h.Root, "link.go")); err != nil {
++		t.Fatal(err)
++	}
++	entries, _ := lookupEntries(t, h, map[string]any{"name": []any{scopedLookup("Get", "link.go")}})
++	if err, _ := entries[0]["error"].(string); !strings.Contains(err, "outside workspace root") {
++		t.Fatal(entries)
++	}
++}
++
++func TestLookupScopedBatchOmissionsRetainFileIdentity(t *testing.T) {
++	body := "package p\nfunc Large() string { return `" + strings.Repeat("x", lookupBatchMaxBytes) + "` }\n"
++	h := evidenceHandler(t, map[string]string{"a.go": body, "b.go": body, "small.go": "package p\nfunc Small() int { return 7 }\n"})
++	entries, out := lookupEntries(t, h, map[string]any{"name": []any{
++		scopedLookup("Large", "a.go"), scopedLookup("Large", "b.go"), "Small",
++	}})
++	omitted := out["omittedItems"].([]map[string]any)
++	if len(entries) != 1 || len(omitted) != 2 || omitted[0]["file"] != "a.go" || omitted[1]["file"] != "b.go" {
++		t.Fatal(out)
++	}
++	text, ok := renderLookupAsText(out)
++	if !ok || strings.Count(text, "NOT DELIVERED:") != 2 || !strings.Contains(text, "a.go") || !strings.Contains(text, "b.go") || !strings.Contains(text, "return 7") {
++		t.Fatalf("lost scoped omissions: %t %s", ok, text)
++	}
++}
++
++func TestLookupScopedBatchSchemaAdvertisesExactItems(t *testing.T) {
++	schema := toolSchema("prism_lookup")
++	props := schema["properties"].(map[string]any)
++	name := props["name"].(map[string]any)
++	forms := name["oneOf"].([]map[string]any)
++	if forms[0]["type"] != "string" || forms[1]["minItems"] != 1 || forms[1]["maxItems"] != 10 {
++		t.Fatal(forms)
++	}
++	items := forms[1]["items"].(map[string]any)["oneOf"].([]map[string]any)
++	object := items[1]
++	if items[0]["type"] != "string" || object["type"] != "object" || object["additionalProperties"] != false {
++		t.Fatal(items)
++	}
++	required := object["required"].([]string)
++	if len(required) != 2 || required[0] != "name" || required[1] != "file" {
++		t.Fatal(required)
++	}
++	for _, key := range required {
++		property := object["properties"].(map[string]any)[key].(map[string]any)
++		if property["type"] != "string" || property["minLength"] != 1 {
++			t.Fatal(property)
++		}
++	}
++	if !strings.Contains(toolDescription("prism_lookup"), "exact per-item file scope") ||
++		!strings.Contains(props["file"].(map[string]any)["description"].(string), "soft") {
++		t.Fatal("lookup schema must distinguish exact items from legacy hints")
++	}
++	var raw any
++	if err := json.Unmarshal([]byte(`[{"name":"Get","file":"a.go"},"Other"]`), &raw); err != nil {
++		t.Fatal(err)
++	}
++	requests, batch, err := lookupBatchRequests(raw)
++	if err != nil || !batch || len(requests) != 2 || requests[0].file != "a.go" || requests[1].file != "" {
++		t.Fatalf("JSON shape does not reach scoped parser: %v %v", requests, err)
++	}
++	tooMany := make([]any, 11)
++	for i := range tooMany {
++		tooMany[i] = scopedLookup("Get", "a.go")
++	}
++	if _, _, err := lookupBatchRequests(tooMany); err == nil {
++		t.Fatal("scoped batches must retain the ten-item limit")
++	}
++}
++
++func TestLookupScopedBatchRenderingFailsClosedOnUnknownMetadata(t *testing.T) {
++	for _, out := range []map[string]any{
++		{"results": []map[string]any{{"name": "Get", "file": "a.go", "result": map[string]any{}, "unknown": true}}},
++		{"results": []map[string]any{{"name": "Get", "error": "failed", "result": map[string]any{}}}},
++		{"results": []map[string]any{{"name": "Get", "file": 42, "error": "failed"}}},
++		{"results": []map[string]any{}, "omittedItems": "Get in a.go"},
++		{"results": []map[string]any{}, "omittedItems": []map[string]any{{"name": "Get", "unknown": "a.go"}}},
++		{"results": []map[string]any{}, "omittedItems": []map[string]any{{"name": "Get", "file": "a.go", "unknown": true}}},
++	} {
++		if text, ok := renderLookupAsText(out); ok {
++			t.Fatalf("unknown evidence was discarded: %v -> %s", out, text)
++		}
++	}
++	out := map[string]any{"results": []map[string]any{{"name": "Get", "file": "a.go", "error": "index unavailable"}}}
++	text, ok := renderLookupAsText(out)
++	if !ok || !strings.Contains(text, `file="a.go"`) || !strings.Contains(text, "ERROR: index unavailable") {
++		t.Fatalf("lost scoped error: %t %s", ok, text)
++	}
++}
+diff --git a/internal/mcp/tools.go b/internal/mcp/tools.go
+index a098649..72148bf 100644
+--- a/internal/mcp/tools.go
++++ b/internal/mcp/tools.go
+@@ -520,9 +520,18 @@ func toolSchema(name string) map[string]any {
+ 				"name": map[string]any{
+ 					"oneOf": []map[string]any{
+ 						{"type": "string"},
+-						{"type": "array", "items": map[string]any{"type": "string"}, "minItems": 1, "maxItems": 10},
++						{"type": "array", "minItems": 1, "maxItems": 10, "items": map[string]any{
++							"oneOf": []map[string]any{
++								{"type": "string"},
++								{"type": "object", "required": []string{"name", "file"}, "additionalProperties": false,
++									"properties": map[string]any{
++										"name": map[string]any{"type": "string", "minLength": 1},
++										"file": map[string]any{"type": "string", "minLength": 1, "description": "Exact repo-relative file scope; never widened on a miss."},
++									}},
++							},
++						}},
+ 					},
+-					"description": "One qualified symbol name, or up to 10 names to read together. file and fields apply to every name; oversized batch results are listed as omitted, never silently cut.",
++					"description": "One name, or 1-10 strings/{name,file} items. Objects use exact file scope; outer file hints apply only to strings. fields applies to all; oversized results are explicitly omitted with their scopes.",
+ 				},
+ 				"fields": map[string]any{
+ 					"type":        "array",
+@@ -531,7 +540,7 @@ func toolSchema(name string) map[string]any {
+ 				},
+ 				"file": map[string]any{
+ 					"type":        "string",
+-					"description": "Disambiguate a shared name: file path or substring.",
++					"description": "Legacy soft path/substring hint for string names; ignored if no candidate matches. Use {name,file} batch items for exact scope.",
+ 				},
+ 			},
+ 		}
+@@ -780,7 +789,7 @@ func toolDescription(name string) string {
+ 			"heed partial-result warnings."
+ 	case "prism_lookup":
+ 		return "Read whole symbol bodies by qualified name. Batch related methods in name=[...] " +
+-			"(up to 10) instead of separate lookups; file disambiguates the batch. For a small local bug, " +
++			"(up to 10); use name=[{\"name\":\"Type.method\",\"file\":\"path/to/file\"}] for exact per-item file scope. For a small local bug, " +
+ 			"read the relevant methods together; impact is for affected-site questions. " +
+ 			"fields=[...] narrows to signature/doc/body/...; omit for whole bodies."
+ 	case "prism_resolve":
+@@ -2122,15 +2131,26 @@ func (h *Handler) nodeFile(ctx context.Context, path string, syms []grove.Symbol
+ }
+ 
+ func (h *Handler) toolLookup(ctx context.Context, args map[string]any) (any, error) {
+-	if names, batch, err := lookupBatchNames(args["name"]); err != nil {
++	if requests, batch, err := lookupBatchRequests(args["name"]); err != nil {
+ 		return nil, err
+ 	} else if batch {
+-		return h.toolLookupBatch(ctx, args, names)
++		return h.toolLookupBatch(ctx, args, requests)
+ 	}
++	return h.lookupSymbol(ctx, args, "")
++}
++
++func (h *Handler) lookupSymbol(ctx context.Context, args map[string]any, fileScope string) (any, error) {
+ 	name := stringArg(args, "name", stringArg(args, "qualifiedName", ""))
+ 	if name == "" {
+ 		return nil, errors.New("name is required")
+ 	}
++	if fileScope != "" {
++		var err error
++		fileScope, err = h.lookupFileScope(fileScope)
++		if err != nil {
++			return nil, err
++		}
++	}
+ 	// Optional column projection: return only the requested fields (signature,
+ 	// doc, body, kind, parent, modifiers) instead of the full source body.
+ 	var fields []string
+@@ -2175,7 +2195,14 @@ func (h *Handler) toolLookup(ctx context.Context, args map[string]any) (any, err
+ 		}
+ 	}
+ 
+-	syms, err := h.Grove.SearchSymbols(ctx, searchName, 25)
++	var syms []grove.SymbolRecord
++	var err error
++	if fileScope != "" {
++		// Exact file reads must not inherit the global name search's 25-hit cap.
++		syms, err = h.Grove.FileSymbols(ctx, fileScope)
++	} else {
++		syms, err = h.Grove.SearchSymbols(ctx, searchName, 25)
++	}
+ 	if err != nil {
+ 		return nil, err
+ 	}
+@@ -2184,7 +2211,7 @@ func (h *Handler) toolLookup(ctx context.Context, args map[string]any) (any, err
+ 	// present, search Grove for that qualified form too (its searchRank matches
+ 	// qualified_name exactly) and prepend it so the precise method is in the
+ 	// candidate pool before ranking.
+-	if typeQualified != "" {
++	if fileScope == "" && typeQualified != "" {
+ 		if extra, qerr := h.Grove.SearchSymbols(ctx, typeQualified, 25); qerr == nil {
+ 			syms = append(extra, syms...)
+ 		}
+@@ -2194,7 +2221,7 @@ func (h *Handler) toolLookup(ctx context.Context, args map[string]any) (any, err
+ 	// File disambiguator: restrict to candidates whose path contains the hint, so
+ 	// a name shared across packages resolves to the one the agent means. Ignored
+ 	// if it would empty the set (a stale/typo'd hint shouldn't lose the symbol).
+-	if fileHint != "" {
++	if fileScope == "" && fileHint != "" {
+ 		var kept []grove.SymbolRecord
+ 		for _, s := range syms {
+ 			if strings.Contains(strings.ToLower(s.FilePath), fileHint) {
+@@ -2224,6 +2251,10 @@ func (h *Handler) toolLookup(ctx context.Context, args map[string]any) (any, err
+ 	// real-vs-test-double then break ties, so a name still lands on the
+ 	// production symbol rather than a mock that shares it.
+ 	score := func(s grove.SymbolRecord) int {
++		if fileScope != "" && typeQualified != "" && s.QualifiedName != typeQualified &&
++			s.QualifiedName != name && !(s.QualifiedName == searchName && pkgMatches(s)) {
++			return -1
++		}
+ 		sc := 0
+ 		switch {
+ 		case typeQualified != "" && s.QualifiedName == typeQualified:
+@@ -2283,6 +2314,12 @@ func (h *Handler) toolLookup(ctx context.Context, args map[string]any) (any, err
+ 		}
+ 		return out, nil
+ 	}
++	if fileScope != "" {
++		return map[string]any{
++			"symbol": nil, "name": name, "matched": false,
++			"note": fmt.Sprintf("no exact symbol named %q indexed in file %q; scope was not widened. Check the name/path and index freshness", name, fileScope),
++		}, nil
++	}
+ 	if len(syms) > 0 {
+ 		// No exact match — returning the closest hit silently would hand the
+ 		// agent the wrong symbol body. Flag it and list the alternatives.

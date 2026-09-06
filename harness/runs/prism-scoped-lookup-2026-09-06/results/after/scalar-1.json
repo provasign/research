@@ -1,0 +1,8 @@
+{
+  "content": [
+    {
+      "text": "name: BaseDatabaseWrapper.connect\nfile: django/db/backends/base/base.py\nline: 237\nsignature: def connect(self):\nbody: def connect(self):\n        \"\"\"Connect to the database. Assume that the connection is closed.\"\"\"\n        # Check for invalid configurations.\n        self.check_settings()\n        # In case the previous connection was closed while in an atomic block\n        self.in_atomic_block = False\n        self.savepoint_ids = []\n        self.atomic_blocks = []\n        self.needs_rollback = False\n        # Reset parameters defining when to close/health-check the connection.\n        self.health_check_enabled = self.settings_dict[\"CONN_HEALTH_CHECKS\"]\n        max_age = self.settings_dict[\"CONN_MAX_AGE\"]\n        self.close_at = None if max_age is None else time.monotonic() + max_age\n        self.closed_in_transaction = False\n        self.errors_occurred = False\n        # New connections are healthy.\n        self.health_check_done = True\n        # Establish the connection\n        conn_params = self.get_connection_params()\n        self.connection = self.get_new_connection(conn_params)\n        self.set_autocommit(self.settings_dict[\"AUTOCOMMIT\"])\n        self.init_connection_state()\n        connection_created.send(sender=self.__class__, connection=self)\n\n        self.run_on_commit = []\n",
+      "type": "text"
+    }
+  ]
+}
