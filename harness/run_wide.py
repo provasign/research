@@ -55,9 +55,27 @@ import wide_score
 # Moved out of /tmp 2026-09-05 (macOS purges it; the binary's sha is in each
 # cell's provenance so identity does not depend on the path).
 _REAL_PRISM = str(Path.home() / ".cache/prism-research/bin/prism-v0.70.0")
-arms.CFG_DIR.mkdir(exist_ok=True)
-(arms.CFG_DIR / "prism.json").write_text(json.dumps({"mcpServers": {"prism": {
-    "type": "stdio", "command": _REAL_PRISM, "args": ["mcp"]}}}))
+
+
+def _use_prism(binary: str) -> None:
+    """Point the prism_plus arm at one specific binary (--prism). The cell's
+    provenance records its sha, so a candidate run and the shipped-tag run
+    are told apart by the record, not by the tag string alone.
+
+    The config file is named by the binary's sha, NOT the shared
+    /tmp/ab-endtoend/prism.json: every runner on this machine used to write
+    that one path at import time, so two concurrent runs silently pointed
+    each other's later cells at the wrong binary (2026-09-05: a v0.70.0
+    probe and another session's v0.71 bed overlapped for ~15 minutes)."""
+    global _REAL_PRISM
+    _REAL_PRISM = str(Path(binary).expanduser().resolve())
+    arms.CFG_DIR.mkdir(exist_ok=True)
+    sha = hashlib.sha1(Path(_REAL_PRISM).read_bytes()).hexdigest()[:10]
+    cfg = arms.CFG_DIR / f"prism-{sha}.json"
+    cfg.write_text(json.dumps({"mcpServers": {"prism": {
+        "type": "stdio", "command": _REAL_PRISM, "args": ["mcp"]}}}))
+    if "prism_plus" in arms.ARMS:
+        arms.ARMS["prism_plus"]["mcp"] = str(cfg)
 
 OUT = Path("runs/wide")
 OUT.mkdir(parents=True, exist_ok=True)
@@ -119,12 +137,13 @@ arms.ARMS["prism_plus"] = {
         "(grep/find/ls remain available for anything below does not cover).\n\n"
         + _real_shipped_steering()),
     "allowed": _strip_network(arms.ARMS["baseline"]["allowed"]) + ["mcp__prism"],
-    "mcp": arms.ARMS["prism_native"]["mcp"],
+    "mcp": None,  # set by _use_prism
 }
 arms.ARMS["baseline"] = {
     **arms.ARMS["baseline"],
     "allowed": _strip_network(arms.ARMS["baseline"]["allowed"]),
 }
+_use_prism(_REAL_PRISM)
 
 
 def sh(*a, cwd=None, check=False) -> str:
@@ -371,7 +390,10 @@ def main() -> None:
     ap.add_argument("--tag", default="w2")
     ap.add_argument("--only", default="")
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--prism", default=_REAL_PRISM,
+                    help="prism binary for the prism_plus arm (sha recorded in provenance)")
     args = ap.parse_args()
+    _use_prism(args.prism)
 
     files = sorted(Path(args.tasks).glob("*.json"))
     if args.only:
