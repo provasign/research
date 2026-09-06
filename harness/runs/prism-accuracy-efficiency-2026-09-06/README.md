@@ -11,7 +11,7 @@ The product keeps reports only. No benchmark was rerun for this relocation.
   comparison and its updated implementation report and validation index.
 - Harness baseline for this archive: research `552aa94`.
 - Product-only equivalents: `e245668` and `7169b4a`, based on Prism `a1c7aa6`.
-- `archive-manifest.json` records SHA-256 for all 620 copied files. All 594
+- `archive-manifest.json` records SHA-256 for all 638 copied files. All 594
   checks in the six original checksum inventories remain valid.
 
 `artifacts/` preserves the original `docs/accuracy-efficiency-candidate/` tree,
@@ -19,6 +19,12 @@ byte-for-byte, excluding Python caches. `source-reports/` holds the original
 top-level proposal and implementation report before their links were relocated.
 Old commit names, absolute paths, and "uncommitted" statements are historical
 provenance, not the current status of the cleaned product branch.
+
+The original proposal also cited 18 local-only records already in research:
+16 wide-bed records and two Grafana gate records. Their unchanged copies are
+under `artifacts/legacy-references/`, with their source paths in the manifest.
+They are historical proposal inputs, not additional new model executions.
+The other 620 files came from Prism; no unrelated research run was staged.
 
 ## Reports
 
