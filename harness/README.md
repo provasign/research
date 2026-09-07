@@ -18,7 +18,8 @@ the full reproduction pipeline; this file is the operational reference.
 | `score.py` | Mode-A scorer: recall/precision/F1, calibration, weak-match audit |
 | `rescore_java.py` | **Mandatory for Java**: normalizes `file:line` answers to enclosing methods before aggregation |
 | `rescore.py` / `reparse_all.py` | Re-score / re-parse existing runs after scorer changes |
-| `engine_ceiling.py` | Scores the raw `change-impact` engine output against the oracle — no LLM |
+| `impact_oracle.py` | Pinned, isolated one-call `change-impact` gate using the official scorer and payload/completeness thresholds — no LLM |
+| `engine_ceiling.py` | Backward-compatible alias for `impact_oracle.py` |
 | `agg_jackson.py` | Aggregates recall + cost per task × model × arm (auto-discovers model dirs) |
 | `mode_b_analysis.py` | Derived compile-failure metric (paper §5.5) |
 | `extract_task.py` | Derives a task from a merged PR (Go tasks, Experiment 1) |

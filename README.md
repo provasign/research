@@ -143,9 +143,10 @@ cd harness
 # scorer unit tests — no agent, no network
 python3 tests/test_score.py
 
-# engine ceiling: score the raw change-impact op against the oracle, no LLM.
-# Run this FIRST — G* arms can only be interpreted against it.
-python3 engine_ceiling.py tasks/jackson-serialize.json
+# engine ceiling: score one raw change-impact call against the oracle, no LLM.
+# It uses an isolated archive of each pinned corpus commit and exits nonzero
+# on recall, precision, completeness, or payload regression. Run this FIRST.
+python3 impact_oracle.py tasks/jackson-serialize.json
 
 # run arms (commercial tiers; claude CLI must be authenticated)
 python3 run.py --task tasks/jackson-serialize.json \
