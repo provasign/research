@@ -1,0 +1,110 @@
+{
+  "duration_api_ms": 89242,
+  "stop_reason": "end_turn",
+  "session_id": "daa9f669-5b38-4d02-87b0-cc6c93bfeeaa",
+  "total_cost_usd": 0.25524319999999995,
+  "usage": {
+    "input_tokens": 28,
+    "cache_creation_input_tokens": 28259,
+    "cache_read_input_tokens": 314601,
+    "output_tokens": 7522,
+    "output_tokens_details": {
+      "thinking_tokens": 3644
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 28259,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 613,
+        "cache_read_input_tokens": 32129,
+        "cache_creation_input_tokens": 1584,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 1584
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3936,
+      "outputTokens": 15,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004011000000000001,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 28,
+      "outputTokens": 7522,
+      "cacheReadInputTokens": 314601,
+      "cacheCreationInputTokens": 28259,
+      "webSearchRequests": 0,
+      "costUSD": 0.25123219999999996,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 3644,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 14,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "These 22 failures pre-exist on baseline (unrelated to my change). My fix doesn't introduce regressions \u2014 `test_testing.py` still fully passes (29/29), and the same 22 pre-existing failures occur with or without my change.\n\n## Summary\n\nThe `CliRunner` isolation replaced `sys.stdout`/`sys.stderr` with `io.BytesIO`-backed streams that had no OS-level file descriptor. When code under test passed one of these streams to `subprocess.run(..., stdout=sys.stderr)`, Python fell back to `stdout.fileno()`, which raised `io.UnsupportedOperation` since in-memory `BytesIO` has no real fd.\n\n**Fix** (`src/click/testing.py`): Changed `BytesIOCopy` (the buffer backing the isolated stdout/stderr streams) from an in-memory `io.BytesIO` subclass to a wrapper around a real `tempfile.TemporaryFile()`, delegating unknown attributes (including `fileno()`) to that real file via `__getattr__`, while still overriding `write()`/`flush()` to mirror data into the combined output buffer and `getvalue()` to read back captured content. Since `_NamedTextIOWrapper` (an `io.TextIOWrapper`) delegates `fileno()` to its underlying buffer, this now returns a genuine OS file descriptor, so `subprocess.run` (and any other fd-based consumer) works without crashing.\n\nVerified with the issue's reproduction case \u2014 no more `UnsupportedOperation`, and `result.stderr` correctly captures the subprocess's output. All 29 tests in `tests/test_testing.py` pass; the 22 unrelated failures elsewhere in the suite are pre-existing on the baseline commit (confirmed via `git stash`), not caused by this change.",
+  "ttft_ms": 5511,
+  "type": "result",
+  "duration_ms": 98178,
+  "uuid": "7760f2f8-153b-4edb-b254-ebf764909438",
+  "ttft_stream_ms": 4349,
+  "time_to_request_ms": 36,
+  "first_content_frame_ms": 4954,
+  "queued_turn_count": 0
+}

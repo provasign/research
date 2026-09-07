@@ -1,0 +1,91 @@
+{
+  "session_id": "293c985a-ed84-46bb-a59b-cc8f40deffc4",
+  "init": {
+    "type": "system",
+    "subtype": "init",
+    "cwd": "/private/tmp/prism-daytoday-code-20260907/work/pallets__werkzeug__pr3081.sonnet_prism",
+    "session_id": "293c985a-ed84-46bb-a59b-cc8f40deffc4",
+    "tools": [
+      "Bash",
+      "Edit",
+      "Glob",
+      "Grep",
+      "Read",
+      "Write",
+      "mcp__prism__prism_change_impact",
+      "mcp__prism__prism_lookup",
+      "mcp__prism__prism_query",
+      "mcp__prism__prism_read",
+      "mcp__prism__prism_search",
+      "mcp__prism__prism_verify"
+    ],
+    "mcp_servers": [
+      {
+        "name": "prism",
+        "status": "connected"
+      }
+    ],
+    "model": "claude-sonnet-5",
+    "permissionMode": "bypassPermissions",
+    "slash_commands": [],
+    "apiKeySource": "none",
+    "claude_code_version": "2.1.263",
+    "output_style": "default",
+    "agents": [
+      "claude",
+      "Explore",
+      "general-purpose",
+      "Plan",
+      "statusline-setup"
+    ],
+    "skills": [],
+    "plugins": [],
+    "capabilities": [
+      "interrupt_receipt_v1",
+      "interrupt_cancel_queued_v1",
+      "msg_lifecycle_v1"
+    ],
+    "analytics_disabled": false,
+    "product_feedback_disabled": false,
+    "uuid": "65fae954-0a09-49e7-b8f0-223059968206",
+    "messaging_socket_path": "/tmp/cc-socks/38360.sock",
+    "fast_mode_state": "off",
+    "fast_mode_disabled_reason": "sdk_opt_in_required"
+  },
+  "measurement_complete": false,
+  "agent_error": true,
+  "cost_usd": null,
+  "tool_errors": [],
+  "prism_result_bytes": 0,
+  "prism_calls": [],
+  "native_commands": [
+    "python3 -c \"\nimport sys\nsys.path.insert(0, 'src')\nfrom werkzeug.sansio.multipart import MultipartDecoder, Data, Field, File, NeedData, Epilogue, Preamble\n\nboundary = b'boundary123'\nheader = b'--' + boundary + b'\\r\\nContent-Disposition: form-data; name=\\\"f\\\"; filename=\\\"f\\\"\\r\\n\\r\\n'\nzeros = b'\\x00' * 100\ntail = b'\\r\\n--' + boundary + b'--\\r\\n'\n\nfull = header + zeros + tail\n# split so that chunk1 ends right after the CR of the CRLF before boundary\nsplit_point = len(header) + len(zeros) + 1  # includes the \\r\nchunk1 = full[:split_point]\nchunk2 = full[split_point:]\nprint('chunk1 tail:', chunk1[-5:])\nprint('chunk2 head:', chunk2[:5])\n\nparser = MultipartDecoder(boundary)\nout = bytearray()\nfor data in [chunk1, chunk2, None]:\n    parser.receive_data(data)\n    event = parser.next_event()\n    while not isinstance(event, (Epilogue, NeedData)):\n        if isinstance(event, Data):\n            out.extend(event.data)\n        event = parser.next_event()\n\nprint(len(out), out[-10:])\nprint('expected', len(zeros))\n\"\n",
+    "python3 -c \"\nimport sys, io\nsys.path.insert(0, 'src')\nfrom werkzeug.formparser import MultiPartParser\n\nboundary = b'boundary123'\nheader = b'--' + boundary + b'\\r\\nContent-Disposition: form-data; name=\\\"f\\\"; filename=\\\"f\\\"\\r\\n\\r\\n'\nbuffer_size = 65536\nzeros_len = buffer_size - len(header) - 1\nzeros = b'\\x00' * zeros_len\ntail = b'\\r\\n--' + boundary + b'--\\r\\n'\nfull = header + zeros + tail\nprint('total len', len(full), 'first chunk would be', buffer_size)\nprint(full[buffer_size-1:buffer_size+3])\n\nparser = MultiPartParser(buffer_size=buffer_size)\ncontent_type = b'multipart/form-data; boundary=' + boundary\nfields, files = parser.parse(io.BytesIO(full), boundary, len(full))\nfor name, fs in files.items(True) if hasattr(files,'items') else []:\n    pass\nimport werkzeug.datastructures as ds\nfor k in files:\n    fs = files[k]\n    data = fs.stream.read()\n    print('got len', len(data), 'expected', zeros_len)\n    print(data[-10:])\n\"\n",
+    "python3 -c \"\nimport sys, re\nsys.path.insert(0,'src')\nfrom werkzeug.sansio.multipart import LINE_BREAK\nboundary=b'boundary123'\nboundary_re = re.compile(rb'%s--%s(--[^\\S\\n\\r]*%s?|[^\\S\\n\\r]*%s)' % (LINE_BREAK, re.escape(boundary), LINE_BREAK, LINE_BREAK), re.MULTILINE)\ndata = b'\\r\\n--boundary123--\\r\\n'\nm = boundary_re.search(data)\nprint(m, m.start(), m.end())\n\"\n",
+    "grep -n \"buffer_size\" src/werkzeug/formparser.py | head -20"
+  ],
+  "duplicate_prism_calls": 0,
+  "violations": [],
+  "cell_id": "pallets__werkzeug__pr3081.sonnet_prism",
+  "task": "pallets__werkzeug__pr3081",
+  "arm": "sonnet_prism",
+  "invocation_id": "5b25911e-ac26-450e-bd4b-e5ce809e348d",
+  "started_at": 1788813174.550346,
+  "wall_s": 120.596,
+  "exit_code": 143,
+  "timed_out": true,
+  "changed_files": [
+    ".grove/grove.db",
+    ".grove/grove.db-shm",
+    ".grove/grove.db-wal"
+  ],
+  "diff_lines": 0,
+  "has_diff": false,
+  "audited_valid": false,
+  "score_wall_s": 0.0,
+  "score": {
+    "resolved": false,
+    "empty_diff": true
+  },
+  "resolved": false
+}

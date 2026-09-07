@@ -1,0 +1,9 @@
+These 22 failures pre-exist on baseline (unrelated to my change). My fix doesn't introduce regressions — `test_testing.py` still fully passes (29/29), and the same 22 pre-existing failures occur with or without my change.
+
+## Summary
+
+The `CliRunner` isolation replaced `sys.stdout`/`sys.stderr` with `io.BytesIO`-backed streams that had no OS-level file descriptor. When code under test passed one of these streams to `subprocess.run(..., stdout=sys.stderr)`, Python fell back to `stdout.fileno()`, which raised `io.UnsupportedOperation` since in-memory `BytesIO` has no real fd.
+
+**Fix** (`src/click/testing.py`): Changed `BytesIOCopy` (the buffer backing the isolated stdout/stderr streams) from an in-memory `io.BytesIO` subclass to a wrapper around a real `tempfile.TemporaryFile()`, delegating unknown attributes (including `fileno()`) to that real file via `__getattr__`, while still overriding `write()`/`flush()` to mirror data into the combined output buffer and `getvalue()` to read back captured content. Since `_NamedTextIOWrapper` (an `io.TextIOWrapper`) delegates `fileno()` to its underlying buffer, this now returns a genuine OS file descriptor, so `subprocess.run` (and any other fd-based consumer) works without crashing.
+
+Verified with the issue's reproduction case — no more `UnsupportedOperation`, and `result.stderr` correctly captures the subprocess's output. All 29 tests in `tests/test_testing.py` pass; the 22 unrelated failures elsewhere in the suite are pre-existing on the baseline commit (confirmed via `git stash`), not caused by this change.

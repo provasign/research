@@ -1,0 +1,47 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..bb5f824 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -70,20 +70,41 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+ class BytesIOCopy(io.BytesIO):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
++    Backed by a real, OS-level temporary file rather than an in-memory
++    buffer so that it exposes a valid ``fileno()``. This allows code under
++    test to pass ``sys.stdout``/``sys.stderr`` to APIs like
++    :func:`subprocess.run` without raising ``io.UnsupportedOperation``.
++
+     .. versionadded:: 8.2
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._file = tempfile.TemporaryFile()
+ 
+     def flush(self) -> None:
+         super().flush()
++        self._file.flush()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+-        return super().write(b)
++        return self._file.write(b)
++
++    def fileno(self) -> int:
++        return self._file.fileno()
++
++    def getvalue(self) -> bytes:
++        pos = self._file.tell()
++        self._file.seek(0)
++        data = self._file.read()
++        self._file.seek(pos)
++        return data
++
++    def close(self) -> None:
++        super().close()
++        self._file.close()
+ 
+ 
+ class StreamMixer:

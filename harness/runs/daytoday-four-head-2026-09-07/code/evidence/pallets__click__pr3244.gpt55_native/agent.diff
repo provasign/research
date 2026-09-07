@@ -1,0 +1,59 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..9032ccf 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -8,6 +8,7 @@ import pdb
+ import shlex
+ import sys
+ import tempfile
++import threading
+ import typing as t
+ from types import TracebackType
+ 
+@@ -76,11 +77,46 @@ class BytesIOCopy(io.BytesIO):
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._read_fd: int | None = None
++        self._write_fd: int | None = None
++        self._reader: threading.Thread | None = None
+ 
+     def flush(self) -> None:
+         super().flush()
+         self.copy_to.flush()
+ 
++    def fileno(self) -> int:
++        if self._write_fd is None:
++            self._read_fd, self._write_fd = os.pipe()
++            self._reader = threading.Thread(target=self._read_from_fd, daemon=True)
++            self._reader.start()
++
++        return self._write_fd
++
++    def _read_from_fd(self) -> None:
++        if self._read_fd is None:
++            return
++
++        with os.fdopen(self._read_fd, "rb", closefd=True) as f:
++            while True:
++                chunk = f.read(8192)
++
++                if not chunk:
++                    break
++
++                self.write(chunk)
++
++    def getvalue(self) -> bytes:
++        if self._write_fd is not None:
++            os.close(self._write_fd)
++            self._write_fd = None
++
++        if self._reader is not None:
++            self._reader.join()
++            self._reader = None
++
++        return super().getvalue()
++
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+         return super().write(b)

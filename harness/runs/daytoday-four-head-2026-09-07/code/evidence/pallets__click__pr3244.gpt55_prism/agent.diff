@@ -1,0 +1,40 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..82a4526 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -76,11 +76,35 @@ class BytesIOCopy(io.BytesIO):
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._file: t.BinaryIO | None = None
++        self._file_read_pos = 0
+ 
+     def flush(self) -> None:
+         super().flush()
+         self.copy_to.flush()
+ 
++        if self._file is not None:
++            self._file.flush()
++
++    def fileno(self) -> int:
++        if self._file is None:
++            self._file = tempfile.TemporaryFile()
++
++        return self._file.fileno()
++
++    def getvalue(self) -> bytes:
++        if self._file is not None:
++            self._file.flush()
++            self._file.seek(self._file_read_pos)
++            data = self._file.read()
++            self._file_read_pos = self._file.tell()
++
++            if data:
++                self.copy_to.write(data)
++                super().write(data)
++
++        return super().getvalue()
++
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+         return super().write(b)

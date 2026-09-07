@@ -1,0 +1,130 @@
+{
+  "session_id": "01a07d92-3808-7361-b5e3-ab51eff15266",
+  "model_observed": "gpt-5.5",
+  "usage_raw": [
+    {
+      "input_tokens": 53073,
+      "cached_input_tokens": 42496,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 1097,
+      "reasoning_output_tokens": 581
+    }
+  ],
+  "turns": 1,
+  "measurement_complete": true,
+  "agent_error": false,
+  "cost_usd": null,
+  "cost_basis": "Not estimated in-run",
+  "input_tokens": 53073,
+  "cache_read_tokens": 42496,
+  "output_tokens": 1097,
+  "total_tokens": 54170,
+  "tool_errors": [],
+  "prism_result_bytes": 0,
+  "calls": [
+    {
+      "id": "item_1",
+      "type": "command_execution",
+      "command": "/bin/zsh -lc 'rg \"Hijack|CloseNotify|Flush\" -n .'",
+      "aggregated_output": "./response_writer.go:20:var errHijackAlreadyWritten = errors.New(\"gin: response body already written\")\n./response_writer.go:25:\thttp.Hijacker\n./response_writer.go:26:\thttp.Flusher\n./response_writer.go:110:// Hijack implements the http.Hijacker interface.\n./response_writer.go:111:func (w *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {\n./response_writer.go:115:\t\treturn nil, nil, errHijackAlreadyWritten\n./response_writer.go:120:\treturn w.ResponseWriter.(http.Hijacker).Hijack()\n./response_writer.go:123:// CloseNotify implements the http.CloseNotifier interface.\n./response_writer.go:124:func (w *responseWriter) CloseNotify() <-chan bool {\n./response_writer.go:125:\treturn w.ResponseWriter.(http.CloseNotifier).CloseNotify()\n./response_writer.go:128:// Flush implements the http.Flusher interface.\n./response_writer.go:129:func (w *responseWriter) Flush() {\n./response_writer.go:131:\tif f, ok := w.ResponseWriter.(http.Flusher); ok {\n./response_writer.go:132:\t\tf.Flush()\n./CHANGELOG.md:23:- chore(response): prevent Flush() panic when the underlying ResponseWriter does not implement `http.Flusher` ([#4479](https://github.com/gin-gonic/gin/pull/4479))\n./CHANGELOG.md:611:- [FIX] `Flush()` now doesn't overwrite `responseWriter` status code, see [#1460](https://github.com/gin-gonic/gin/pull/1460)\n./CHANGELOG.md:728:- [FIX] Hijacking http\n./response_writer_test.go:19:// func (w *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {\n./response_writer_test.go:20:// func (w *responseWriter) CloseNotify() <-chan bool {\n./response_writer_test.go:21:// func (w *responseWriter) Flush() {\n./response_writer_test.go:27:\t_ http.Hijacker       = ResponseWriter(&responseWriter{})\n./response_writer_test.go:28:\t_ http.Flusher        = ResponseWriter(&responseWriter{})\n./response_writer_test.go:110:func TestResponseWriterHijack(t *testing.T) {\n./response_writer_test.go:117:\t\t_, _, err := w.Hijack()\n./response_writer_test.go:123:\t\tw.CloseNotify()\n./response_writer_test.go:126:\tw.Flush()\n./response_writer_test.go:129:type mockHijacker struct {\n./response_writer_test.go:134:// Hijack implements the http.Hijacker interface. It just records that it was called.\n./response_writer_test.go:135:func (m *mockHijacker) Hijack() (net.Conn, *bufio.ReadWriter, error) {\n./response_writer_test.go:140:func TestResponseWriterHijackAfterWrite(t *testing.T) {\n./response_writer_test.go:144:\t\texpectWrittenBeforeHijack bool\n./response_writer_test.go:145:\t\texpectHijackSuccess       bool\n./response_writer_test.go:146:\t\texpectWrittenAfterHijack  bool\n./response_writer_test.go:152:\t\t\texpectWrittenBeforeHijack: false,\n./response_writer_test.go:153:\t\t\texpectHijackSuccess:       true,\n./response_writer_test.go:154:\t\t\texpectWrittenAfterHijack:  true, // Hijack itself marks the writer as written\n./response_writer_test.go:163:\t\t\texpectWrittenBeforeHijack: true,\n./response_writer_test.go:164:\t\t\texpectHijackSuccess:       false,\n./response_writer_test.go:165:\t\t\texpectWrittenAfterHijack:  true,\n./response_writer_test.go:166:\t\t\texpectError:               errHijackAlreadyWritten,\n./response_writer_test.go:172:\t\t\thijacker := &mockHijacker{ResponseRecorder: httptest.NewRecorder()}\n./response_writer_test.go:184:\t\t\tassert.Equal(t, tc.expectWrittenBeforeHijack, w.Written(), \"unexpected w.Written() state before hijack\")\n./response_writer_test.go:187:\t\t\t_, _, hijackErr := w.Hijack()\n./response_writer_test.go:190:\t\t\trequire.ErrorIs(t, hijackErr, tc.expectError, \"unexpected error from Hijack()\")\n./response_writer_test.go:191:\t\t\tassert.Equal(t, tc.expectHijackSuccess, hijacker.hijacked, \"unexpected hijacker.hijacked state\")\n./response_writer_test.go:192:\t\t\tassert.Equal(t, tc.expectWrittenAfterHijack, w.Written(), \"unexpected w.Written() state after hijack\")\n./response_writer_test.go:198:func TestResponseWriterHijackAfterWriteHeaderNow(t *testing.T) {\n./response_writer_test.go:202:\t\texpectWrittenBeforeHijack bool\n./response_writer_test.go:203:\t\texpectHijackSuccess       bool\n./response_writer_test.go:204:\t\texpectWrittenAfterHijack  bool\n./response_writer_test.go:213:\t\t\texpectWrittenBeforeHijack: true,\n./response_writer_test.go:214:\t\t\texpectHijackSuccess:       true, // NEW BEHAVIOR: allow hijack after just header write\n./response_writer_test.go:215:\t\t\texpectWrittenAfterHijack:  true,\n./response_writer_test.go:225:\t\t\texpectWrittenBeforeHijack: true,\n./response_writer_test.go:226:\t\t\texpectHijackSuccess:       false,\n./response_writer_test.go:227:\t\t\texpectWrittenAfterHijack:  true,\n./response_writer_test.go:228:\t\t\texpectError:               errHijackAlreadyWritten,\n./response_writer_test.go:233:\t\t\thijacker := &mockHijacker{ResponseRecorder: httptest.NewRecorder()}\n./response_writer_test.go:240:\t\t\tassert.Equal(t, tc.expectWrittenBeforeHijack, w.Written(), \"unexpected w.Written() state before hijack\")\n./response_writer_test.go:242:\t\t\t_, _, hijackErr := w.Hijack()\n./response_writer_test.go:247:\t\t\t\trequire.ErrorIs(t, hijackErr, tc.expectError, \"unexpected error from Hijack()\")\n./response_writer_test.go:249:\t\t\tassert.Equal(t, tc.expectHijackSuccess, hijacker.hijacked, \"unexpected hijacker.hijacked state\")\n./response_writer_test.go:250:\t\t\tassert.Equal(t, tc.expectWrittenAfterHijack, w.Written(), \"unexpected w.Written() state after hijack\")\n./response_writer_test.go:255:func TestResponseWriterFlush(t *testing.T) {\n./response_writer_test.go:261:\t\twriter.Flush()\n./context.go:1357:\tclientGone := w.CloseNotify()\n./context.go:1364:\t\t\tw.Flush()\n./context_test.go:3089:func (r *TestResponseRecorder) CloseNotify() <-chan bool {\n",
+      "exit_code": 0,
+      "status": "completed"
+    },
+    {
+      "id": "item_2",
+      "type": "command_execution",
+      "command": "/bin/zsh -lc \"sed -n '1,180p' response_writer.go\"",
+      "aggregated_output": "// Copyright 2014 Manu Martinez-Almeida. All rights reserved.\n// Use of this source code is governed by a MIT style\n// license that can be found in the LICENSE file.\n\npackage gin\n\nimport (\n\t\"bufio\"\n\t\"errors\"\n\t\"io\"\n\t\"net\"\n\t\"net/http\"\n)\n\nconst (\n\tnoWritten     = -1\n\tdefaultStatus = http.StatusOK\n)\n\nvar errHijackAlreadyWritten = errors.New(\"gin: response body already written\")\n\n// ResponseWriter ...\ntype ResponseWriter interface {\n\thttp.ResponseWriter\n\thttp.Hijacker\n\thttp.Flusher\n\thttp.CloseNotifier\n\n\t// Status returns the HTTP response status code of the current request.\n\tStatus() int\n\n\t// Size returns the number of bytes already written into the response http body.\n\t// See Written()\n\tSize() int\n\n\t// WriteString writes the string into the response body.\n\tWriteString(string) (int, error)\n\n\t// Written returns true if the response body was already written.\n\tWritten() bool\n\n\t// WriteHeaderNow forces to write the http header (status code + headers).\n\tWriteHeaderNow()\n\n\t// Pusher get the http.Pusher for server push\n\tPusher() http.Pusher\n}\n\ntype responseWriter struct {\n\thttp.ResponseWriter\n\tsize   int\n\tstatus int\n}\n\nvar _ ResponseWriter = (*responseWriter)(nil)\n\nfunc (w *responseWriter) Unwrap() http.ResponseWriter {\n\treturn w.ResponseWriter\n}\n\nfunc (w *responseWriter) reset(writer http.ResponseWriter) {\n\tw.ResponseWriter = writer\n\tw.size = noWritten\n\tw.status = defaultStatus\n}\n\nfunc (w *responseWriter) WriteHeader(code int) {\n\tif code > 0 && w.status != code {\n\t\tif w.Written() {\n\t\t\tdebugPrint(\"[WARNING] Headers were already written. Wanted to override status code %d with %d\", w.status, code)\n\t\t\treturn\n\t\t}\n\t\tw.status = code\n\t}\n}\n\nfunc (w *responseWriter) WriteHeaderNow() {\n\tif !w.Written() {\n\t\tw.size = 0\n\t\tw.ResponseWriter.WriteHeader(w.status)\n\t}\n}\n\nfunc (w *responseWriter) Write(data []byte) (n int, err error) {\n\tw.WriteHeaderNow()\n\tn, err = w.ResponseWriter.Write(data)\n\tw.size += n\n\treturn\n}\n\nfunc (w *responseWriter) WriteString(s string) (n int, err error) {\n\tw.WriteHeaderNow()\n\tn, err = io.WriteString(w.ResponseWriter, s)\n\tw.size += n\n\treturn\n}\n\nfunc (w *responseWriter) Status() int {\n\treturn w.status\n}\n\nfunc (w *responseWriter) Size() int {\n\treturn w.size\n}\n\nfunc (w *responseWriter) Written() bool {\n\treturn w.size != noWritten\n}\n\n// Hijack implements the http.Hijacker interface.\nfunc (w *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {\n\t// Allow hijacking before any data is written (size == -1) or after headers are written (size == 0),\n\t// but not after body data is written (size > 0). For compatibility with websocket libraries (e.g., github.com/coder/websocket)\n\tif w.size > 0 {\n\t\treturn nil, nil, errHijackAlreadyWritten\n\t}\n\tif w.size < 0 {\n\t\tw.size = 0\n\t}\n\treturn w.ResponseWriter.(http.Hijacker).Hijack()\n}\n\n// CloseNotify implements the http.CloseNotifier interface.\nfunc (w *responseWriter) CloseNotify() <-chan bool {\n\treturn w.ResponseWriter.(http.CloseNotifier).CloseNotify()\n}\n\n// Flush implements the http.Flusher interface.\nfunc (w *responseWriter) Flush() {\n\tw.WriteHeaderNow()\n\tif f, ok := w.ResponseWriter.(http.Flusher); ok {\n\t\tf.Flush()\n\t}\n}\n\nfunc (w *responseWriter) Pusher() (pusher http.Pusher) {\n\tif pusher, ok := w.ResponseWriter.(http.Pusher); ok {\n\t\treturn pusher\n\t}\n\treturn nil\n}\n",
+      "exit_code": 0,
+      "status": "completed"
+    },
+    {
+      "id": "item_3",
+      "type": "command_execution",
+      "command": "/bin/zsh -lc \"sed -n '1330,1385p' context.go\"",
+      "aggregated_output": "func escapeQuotes(s string) string {\n\treturn quoteEscaper.Replace(s)\n}\n\n// FileAttachment writes the specified file into the body stream in an efficient way\n// On the client side, the file will typically be downloaded with the given filename\nfunc (c *Context) FileAttachment(filepath, filename string) {\n\tif isASCII(filename) {\n\t\tc.Writer.Header().Set(\"Content-Disposition\", `attachment; filename=\"`+escapeQuotes(filename)+`\"`)\n\t} else {\n\t\tc.Writer.Header().Set(\"Content-Disposition\", `attachment; filename*=UTF-8''`+url.QueryEscape(filename))\n\t}\n\thttp.ServeFile(c.Writer, c.Request, filepath)\n}\n\n// SSEvent writes a Server-Sent Event into the body stream.\nfunc (c *Context) SSEvent(name string, message any) {\n\tc.Render(-1, sse.Event{\n\t\tEvent: name,\n\t\tData:  message,\n\t})\n}\n\n// Stream sends a streaming response and returns a boolean\n// indicates \"Is client disconnected in middle of stream\"\nfunc (c *Context) Stream(step func(w io.Writer) bool) bool {\n\tw := c.Writer\n\tclientGone := w.CloseNotify()\n\tfor {\n\t\tselect {\n\t\tcase <-clientGone:\n\t\t\treturn true\n\t\tdefault:\n\t\t\tkeepOpen := step(w)\n\t\t\tw.Flush()\n\t\t\tif !keepOpen {\n\t\t\t\treturn false\n\t\t\t}\n\t\t}\n\t}\n}\n\n/************************************/\n/******** CONTENT NEGOTIATION *******/\n/************************************/\n\n// Negotiate contains all negotiations data.\ntype Negotiate struct {\n\tOffered      []string\n\tHTMLName     string\n\tHTMLData     any\n\tJSONData     any\n\tXMLData      any\n\tYAMLData     any\n\tData         any\n\tTOMLData     any\n",
+      "exit_code": 0,
+      "status": "completed"
+    },
+    {
+      "id": "item_4",
+      "type": "command_execution",
+      "command": "/bin/zsh -lc \"rg \\\"type ResponseWriter|interface.*ResponseWriter|CloseNotify\\\\(|Hijack\\\\(\\\" -n --glob '*.go'\"",
+      "aggregated_output": "response_writer.go:23:type ResponseWriter interface {\nresponse_writer.go:111:func (w *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {\nresponse_writer.go:120:\treturn w.ResponseWriter.(http.Hijacker).Hijack()\nresponse_writer.go:124:func (w *responseWriter) CloseNotify() <-chan bool {\nresponse_writer.go:125:\treturn w.ResponseWriter.(http.CloseNotifier).CloseNotify()\ncontext.go:1357:\tclientGone := w.CloseNotify()\nresponse_writer_test.go:19:// func (w *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {\nresponse_writer_test.go:20:// func (w *responseWriter) CloseNotify() <-chan bool {\nresponse_writer_test.go:110:func TestResponseWriterHijack(t *testing.T) {\nresponse_writer_test.go:117:\t\t_, _, err := w.Hijack()\nresponse_writer_test.go:123:\t\tw.CloseNotify()\nresponse_writer_test.go:135:func (m *mockHijacker) Hijack() (net.Conn, *bufio.ReadWriter, error) {\nresponse_writer_test.go:187:\t\t\t_, _, hijackErr := w.Hijack()\nresponse_writer_test.go:190:\t\t\trequire.ErrorIs(t, hijackErr, tc.expectError, \"unexpected error from Hijack()\")\nresponse_writer_test.go:242:\t\t\t_, _, hijackErr := w.Hijack()\nresponse_writer_test.go:247:\t\t\t\trequire.ErrorIs(t, hijackErr, tc.expectError, \"unexpected error from Hijack()\")\ncontext_test.go:3089:func (r *TestResponseRecorder) CloseNotify() <-chan bool {\n",
+      "exit_code": 0,
+      "status": "completed"
+    },
+    {
+      "id": "item_5",
+      "type": "command_execution",
+      "command": "/bin/zsh -lc \"sed -n '90,135p' response_writer_test.go\"",
+      "aggregated_output": "\ttestWriter := httptest.NewRecorder()\n\twriter := &responseWriter{}\n\twriter.reset(testWriter)\n\tw := ResponseWriter(writer)\n\n\tn, err := w.Write([]byte(\"hola\"))\n\tassert.Equal(t, 4, n)\n\tassert.Equal(t, 4, w.Size())\n\tassert.Equal(t, http.StatusOK, w.Status())\n\tassert.Equal(t, http.StatusOK, testWriter.Code)\n\tassert.Equal(t, \"hola\", testWriter.Body.String())\n\trequire.NoError(t, err)\n\n\tn, err = w.Write([]byte(\" adios\"))\n\tassert.Equal(t, 6, n)\n\tassert.Equal(t, 10, w.Size())\n\tassert.Equal(t, \"hola adios\", testWriter.Body.String())\n\trequire.NoError(t, err)\n}\n\nfunc TestResponseWriterHijack(t *testing.T) {\n\ttestWriter := httptest.NewRecorder()\n\twriter := &responseWriter{}\n\twriter.reset(testWriter)\n\tw := ResponseWriter(writer)\n\n\tassert.Panics(t, func() {\n\t\t_, _, err := w.Hijack()\n\t\trequire.NoError(t, err)\n\t})\n\tassert.True(t, w.Written())\n\n\tassert.Panics(t, func() {\n\t\tw.CloseNotify()\n\t})\n\n\tw.Flush()\n}\n\ntype mockHijacker struct {\n\t*httptest.ResponseRecorder\n\thijacked bool\n}\n\n// Hijack implements the http.Hijacker interface. It just records that it was called.\nfunc (m *mockHijacker) Hijack() (net.Conn, *bufio.ReadWriter, error) {\n",
+      "exit_code": 0,
+      "status": "completed"
+    },
+    {
+      "id": "item_6",
+      "type": "command_execution",
+      "command": "/bin/zsh -lc \"rg \\\"ResponseWriter\\\\)|responseWriter|CloseNotifier|Hijacker|Flusher\\\" -n --glob '*.go'\"",
+      "aggregated_output": "test_helpers.go:17:func CreateTestContext(w http.ResponseWriter) (c *Context, r *Engine) {\nresponse_writer.go:25:\thttp.Hijacker\nresponse_writer.go:26:\thttp.Flusher\nresponse_writer.go:27:\thttp.CloseNotifier\nresponse_writer.go:49:type responseWriter struct {\nresponse_writer.go:55:var _ ResponseWriter = (*responseWriter)(nil)\nresponse_writer.go:57:func (w *responseWriter) Unwrap() http.ResponseWriter {\nresponse_writer.go:61:func (w *responseWriter) reset(writer http.ResponseWriter) {\nresponse_writer.go:67:func (w *responseWriter) WriteHeader(code int) {\nresponse_writer.go:77:func (w *responseWriter) WriteHeaderNow() {\nresponse_writer.go:84:func (w *responseWriter) Write(data []byte) (n int, err error) {\nresponse_writer.go:91:func (w *responseWriter) WriteString(s string) (n int, err error) {\nresponse_writer.go:98:func (w *responseWriter) Status() int {\nresponse_writer.go:102:func (w *responseWriter) Size() int {\nresponse_writer.go:106:func (w *responseWriter) Written() bool {\nresponse_writer.go:110:// Hijack implements the http.Hijacker interface.\nresponse_writer.go:111:func (w *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {\nresponse_writer.go:120:\treturn w.ResponseWriter.(http.Hijacker).Hijack()\nresponse_writer.go:123:// CloseNotify implements the http.CloseNotifier interface.\nresponse_writer.go:124:func (w *responseWriter) CloseNotify() <-chan bool {\nresponse_writer.go:125:\treturn w.ResponseWriter.(http.CloseNotifier).CloseNotify()\nresponse_writer.go:128:// Flush implements the http.Flusher interface.\nresponse_writer.go:129:func (w *responseWriter) Flush() {\nresponse_writer.go:131:\tif f, ok := w.ResponseWriter.(http.Flusher); ok {\nresponse_writer.go:136:func (w *responseWriter) Pusher() (pusher http.Pusher) {\ncontext.go:62:\twritermem responseWriter\nresponse_writer_test.go:19:// func (w *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {\nresponse_writer_test.go:20:// func (w *responseWriter) CloseNotify() <-chan bool {\nresponse_writer_test.go:21:// func (w *responseWriter) Flush() {\nresponse_writer_test.go:24:\t_ ResponseWriter      = &responseWriter{}\nresponse_writer_test.go:25:\t_ http.ResponseWriter = &responseWriter{}\nresponse_writer_test.go:26:\t_ http.ResponseWriter = ResponseWriter(&responseWriter{})\nresponse_writer_test.go:27:\t_ http.Hijacker       = ResponseWriter(&responseWriter{})\nresponse_writer_test.go:28:\t_ http.Flusher        = ResponseWriter(&responseWriter{})\nresponse_writer_test.go:29:\t_ http.CloseNotifier  = ResponseWriter(&responseWriter{})\nresponse_writer_test.go:38:\twriter := &responseWriter{ResponseWriter: testWriter}\nresponse_writer_test.go:44:\twriter := &responseWriter{}\nresponse_writer_test.go:50:\tassert.Equal(t, testWriter, writer.ResponseWriter)\nresponse_writer_test.go:58:\twriter := &responseWriter{}\nresponse_writer_test.go:73:\twriter := &responseWriter{}\nresponse_writer_test.go:91:\twriter := &responseWriter{}\nresponse_writer_test.go:112:\twriter := &responseWriter{}\nresponse_writer_test.go:129:type mockHijacker struct {\nresponse_writer_test.go:134:// Hijack implements the http.Hijacker interface. It just records that it was called.\nresponse_writer_test.go:135:func (m *mockHijacker) Hijack() (net.Conn, *bufio.ReadWriter, error) {\nresponse_writer_test.go:143:\t\taction                    func(w ResponseWriter) error // Action to perform before hijacking\nresponse_writer_test.go:151:\t\t\taction:                    func(w ResponseWriter) error { return nil },\nresponse_writer_test.go:159:\t\t\taction: func(w ResponseWriter) error {\nresponse_writer_test.go:172:\t\t\thijacker := &mockHijacker{ResponseRecorder: httptest.NewRecorder()}\nresponse_writer_test.go:173:\t\t\twriter := &responseWriter{}\nresponse_writer_test.go:201:\t\taction                    func(w ResponseWriter) error\nresponse_writer_test.go:209:\t\t\taction: func(w ResponseWriter) error {\nresponse_writer_test.go:220:\t\t\taction: func(w ResponseWriter) error {\nresponse_writer_test.go:233:\t\t\thijacker := &mockHijacker{ResponseRecorder: httptest.NewRecorder()}\nresponse_writer_test.go:234:\t\t\twriter := &responseWriter{}\nresponse_writer_test.go:257:\t\twriter := &responseWriter{}\nresponse_writer_test.go:273:\twriter := &responseWriter{}\nresponse_writer_test.go:294:func (m *mockPusherResponseWriter) Push(target string, opts *http.PushOptions) error {\nresponse_writer_test.go:305:\tw := &responseWriter{ResponseWriter: rw}\nresponse_writer_test.go:313:\tw := &responseWriter{ResponseWriter: rw}\ncontext_test.go:284:\tc.Writer = &responseWriter{ResponseWriter: httptest.NewRecorder()}\ncontext_test.go:298:\tassert.Equal(t, c.Writer.(*responseWriter), &c.writermem)\ncontext_test.go:680:\tassert.Nil(t, cp.writermem.ResponseWriter)\ncontext_test.go:681:\tassert.Equal(t, &cp.writermem, cp.Writer.(*responseWriter))\ncontext_test.go:1044:func (*TestRender) Render(http.ResponseWriter) error {\ncontext_test.go:1048:func (*TestRender) WriteContentType(http.ResponseWriter) {}\nrender/protobuf.go:21:func (r ProtoBuf) Render(w http.ResponseWriter) error {\nrender/protobuf.go:34:func (r ProtoBuf) WriteContentType(w http.ResponseWriter) {\nrender/xml.go:20:func (r XML) Render(w http.ResponseWriter) error {\nrender/xml.go:26:func (r XML) WriteContentType(w http.ResponseWriter) {\nrender/html.go:89:func (r HTML) Render(w http.ResponseWriter) error {\nrender/html.go:99:func (r HTML) WriteContentType(w http.ResponseWriter) {\nrender/text.go:23:func (r String) Render(w http.ResponseWriter) error {\nrender/text.go:28:func (r String) WriteContentType(w http.ResponseWriter) {\nrender/pdf.go:17:func (r PDF) Render(w http.ResponseWriter) error {\nrender/pdf.go:24:func (r PDF) WriteContentType(w http.ResponseWriter) {\nrender/bson.go:21:func (r BSON) Render(w http.ResponseWriter) error {\nrender/bson.go:32:func (r BSON) WriteContentType(w http.ResponseWriter) {\nrender/redirect.go:20:func (r Redirect) Render(w http.ResponseWriter) error {\nrender/redirect.go:29:func (r Redirect) WriteContentType(http.ResponseWriter) {}\nrender/render.go:12:\tRender(http.ResponseWriter) error\nrender/render.go:14:\tWriteContentType(w http.ResponseWriter)\nrender/json.go:57:func (r JSON) Render(w http.ResponseWriter) error {\nrender/json.go:62:func (r JSON) WriteContentType(w http.ResponseWriter) {\nrender/json.go:78:func (r IndentedJSON) Render(w http.ResponseWriter) error {\nrender/json.go:89:func (r IndentedJSON) WriteContentType(w http.ResponseWriter) {\nrender/json.go:94:func (r SecureJSON) Render(w http.ResponseWriter) error {\nrender/json.go:112:func (r SecureJSON) WriteContentType(w http.ResponseWriter) {\nrender/json.go:117:func (r JsonpJSON) Render(w http.ResponseWriter) (err error) {\nrender/json.go:150:func (r JsonpJSON) WriteContentType(w http.ResponseWriter) {\nrender/json.go:155:func (r AsciiJSON) Render(w http.ResponseWriter) error {\nrender/json.go:179:func (r AsciiJSON) WriteContentType(w http.ResponseWriter) {\nrender/json.go:184:func (r PureJSON) Render(w http.ResponseWriter) error {\nrender/json.go:192:func (r PureJSON) WriteContentType(w http.ResponseWriter) {\nrender/reader.go:22:func (r Reader) Render(w http.ResponseWriter) (err error) {\nrender/reader.go:36:func (r Reader) WriteContentType(w http.ResponseWriter) {\nrender/reader.go:41:func (r Reader) writeHeaders(w http.ResponseWriter) {\nrender/toml.go:21:func (r TOML) Render(w http.ResponseWriter) error {\nrender/toml.go:34:func (r TOML) WriteContentType(w http.ResponseWriter) {\nrender/msgpack.go:29:func (r MsgPack) WriteContentType(w http.ResponseWriter) {\nrender/msgpack.go:34:func (r MsgPack) Render(w http.ResponseWriter) error {\nrender/yaml.go:21:func (r YAML) Render(w http.ResponseWriter) error {\nrender/yaml.go:34:func (r YAML) WriteContentType(w http.ResponseWriter) {\nrender/data.go:19:func (r Data) Render(w http.ResponseWriter) (err error) {\nrender/data.go:29:func (r Data) WriteContentType(w http.ResponseWriter) {\n",
+      "exit_code": 0,
+      "status": "completed"
+    }
+  ],
+  "tool_calls": 6,
+  "prism_calls": [],
+  "duplicate_prism_calls": 0,
+  "native_commands": [
+    "/bin/zsh -lc 'rg \"Hijack|CloseNotify|Flush\" -n .'",
+    "/bin/zsh -lc \"sed -n '1,180p' response_writer.go\"",
+    "/bin/zsh -lc \"sed -n '1330,1385p' context.go\"",
+    "/bin/zsh -lc \"rg \\\"type ResponseWriter|interface.*ResponseWriter|CloseNotify\\\\(|Hijack\\\\(\\\" -n --glob '*.go'\"",
+    "/bin/zsh -lc \"sed -n '90,135p' response_writer_test.go\"",
+    "/bin/zsh -lc \"rg \\\"ResponseWriter\\\\)|responseWriter|CloseNotifier|Hijacker|Flusher\\\" -n --glob '*.go'\""
+  ],
+  "violations": [],
+  "answer_before_normalization": [
+    "response_writer.go:Hijack",
+    "response_writer.go:CloseNotify"
+  ],
+  "answer": {
+    "sites": [
+      "response_writer.go:Hijack",
+      "response_writer.go:CloseNotify"
+    ],
+    "complete": true,
+    "unresolved": []
+  },
+  "cell_id": "gin-4645.r1.gpt55_native",
+  "task": "gin-4645",
+  "arm": "gpt55_native",
+  "trial": 1,
+  "invocation_id": "cd8134d9-3ffa-41ea-8322-85eac2cde7e6",
+  "started_at": 1788813129.677794,
+  "wall_s": 36.916,
+  "exit_code": 0,
+  "timed_out": false,
+  "scorer_version": 4,
+  "source_changed": [],
+  "unexpected_files": [],
+  "score": {
+    "task_id": "gin-4645",
+    "arm": "gpt55_native",
+    "trial": 1,
+    "recall": 1.0,
+    "precision": 1.0,
+    "f1": 1.0,
+    "found": [
+      "response_writer.go:CloseNotify",
+      "response_writer.go:Hijack"
+    ],
+    "missed": [],
+    "extra": [],
+    "weak_matches": [],
+    "claimed_complete": true,
+    "overconfident": false,
+    "surfaced_gap": false,
+    "weak_recall": 1.0
+  },
+  "audited_valid": true
+}
