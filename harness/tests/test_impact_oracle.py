@@ -51,11 +51,15 @@ def test_change_impact_deduplicates_and_preserves_fidelity(monkeypatch):
             {"filePath": "pkg/handler.go", "name": "Run"},
         ],
         "callers": [{"filePath": "pkg/caller.go", "name": "Call"}],
+        "supers": [{"filePath": "pkg/base.go", "name": "Run"}],
+        "declaringTypes": [{"filePath": "pkg/api.ts", "name": "Handler"}],
     }
     encoded = json.dumps(payload)
     monkeypatch.setattr(oracle, "run_capped", lambda *a, **k: (0, encoded, ""))
     result = oracle.change_impact("prism", "/tmp", "Run")
-    assert result["sites"] == [Site("pkg/handler.go", "Run"), Site("pkg/caller.go", "Call")]
+    assert result["sites"] == [Site("pkg/handler.go", "Run"), Site("pkg/caller.go", "Call"),
+                               Site("pkg/base.go", "Run")]
+    assert result["declaring_type_sites"] == ["pkg/api.ts:Handler"]
     assert result["response_bytes"] == len(encoded.encode())
     assert result["has_heuristic_refs"] is True
     assert result["overrides_external"] is True
@@ -64,7 +68,8 @@ def test_change_impact_deduplicates_and_preserves_fidelity(monkeypatch):
         "declarations": 0,
         "family": 2,
         "callers": 1,
-        "declaringTypes": 0,
+        "supers": 1,
+        "declaringTypes": 1,
     }
 
 

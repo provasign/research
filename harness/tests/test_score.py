@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from schema import Answer, Site, Task  # noqa: E402
-from score import score  # noqa: E402
+from score import _is_test_path, score  # noqa: E402
 
 TASK = Task(
     id="t",
@@ -132,6 +132,23 @@ def test_test_sites_are_neutral_not_false_positives():
     assert c.recall == 1.0
     assert c.precision == 1.0  # test site excluded from precision, not penalized
     assert c.extra == []
+
+
+def test_maven_java_test_paths_are_neutral():
+    assert _is_test_path("src/test/java/com/example/TestSerializer.java")
+    assert _is_test_path(r"src\test\java\com\example\SerializerTest.java")
+
+
+def test_duplicate_answer_sites_have_set_semantics():
+    a = _ans('{"sites":["response_writer.go:Hijack",'
+             '"response_writer.go:Hijack",'
+             '"response_writer.go:CloseNotify",'
+             '"response_writer.go:Flush",'
+             '"response_writer.go:Flush"],"complete":true}')
+    c = score(TASK, a, "T", 1)
+    assert c.recall == 1.0
+    assert c.precision == round(2 / 3, 4)
+    assert c.extra == ["response_writer.go:Flush"]
 
 
 def test_no_json_yields_zero():

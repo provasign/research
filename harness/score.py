@@ -28,7 +28,7 @@ from schema import Answer, Scorecard, Site, Task
 
 # Bump when matching semantics change; ab_gate keys its cell cache on it so
 # cells scored under an older contract are never compared with fresh ones.
-SCORER_VERSION = 3  # v3 (2026-09-06): weak (pathless/bare) sites cost precision
+SCORER_VERSION = 4  # v4 (2026-09-07): set semantics + Maven test paths
 
 
 def _parts(p: str) -> list[str]:
@@ -69,15 +69,16 @@ def _is_test_path(relpath: str) -> bool:
     positive). We therefore exclude test-file answer sites from precision
     rather than count them as errors -- and ground truth holds prod sites only.
     """
-    name = Path(relpath).name
+    normalized = relpath.replace("\\", "/")
+    name = Path(normalized).name
     return (
-        relpath.endswith("_test.go")  # Go test files (NOT test_helpers.go)
+        normalized.endswith("_test.go")  # Go test files (NOT test_helpers.go)
         or (name.startswith("test_") and name.endswith(".py"))
         or name.endswith("_test.py")
         or ".test." in name
         or ".spec." in name
-        or "/tests/" in relpath
-        or relpath.startswith("tests/")  # root-level tests/ dir (Django, etc.)
+        or "/test/" in f"/{normalized}"
+        or "/tests/" in f"/{normalized}"
         or name.endswith("Test.java")
         or name.endswith("Tests.java")
     )
@@ -108,7 +109,10 @@ def _underspecified(gt: str, ans: str) -> bool:
 
 
 def score(task: Task, answer: Answer, arm: str, trial: int) -> Scorecard:
-    gt = task.ground_truth
+    # These are mathematical sets. Agent JSON occasionally repeats a site;
+    # duplicates must not create extra false positives or extra recall credit.
+    gt = list(dict.fromkeys(task.ground_truth))
+    answer_sites = list(dict.fromkeys(answer.sites))
     found: list[Site] = []
     missed: list[Site] = []
     weak: list[Site] = []
@@ -116,7 +120,7 @@ def score(task: Task, answer: Answer, arm: str, trial: int) -> Scorecard:
 
     strong_matched: set[Site] = set()
     for site in gt:
-        m, strong = _match(site, answer.sites, matched_answer)
+        m, strong = _match(site, answer_sites, matched_answer)
         if m is None:
             missed.append(site)
         elif strong:
@@ -135,7 +139,7 @@ def score(task: Task, answer: Answer, arm: str, trial: int) -> Scorecard:
     # it was excused from `extra`, so an answer made of bare names looked
     # precise). Only test files are neutral.
     extra: list[Site] = []
-    for a in answer.sites:
+    for a in answer_sites:
         if a in strong_matched:
             continue
         if _is_test_path(a.relpath):

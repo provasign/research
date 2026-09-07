@@ -70,8 +70,10 @@ ARMS = {
     "prism": {
         "guidance": "TOOLS: the Prism MCP server. `prism_change_impact` returns the "
                     "COMPLETE change-set for a signature change in one call: declaration, "
-                    "override/implementation family, and every resolved caller. Union its "
-                    "groups (declarations+family+callers+declaringTypes) into your sites.",
+                    "override/implementation family, and every resolved caller. Report the "
+                    "method sites in declarations+family+callers+supers. declaringTypes are "
+                    "container context and must not be emitted as separate type-name sites "
+                    "under the FunctionOrMethodName answer contract.",
         "allowed": ["Read", "mcp__prism"],
         "mcp": str(CFG_DIR / "prism.json"),
     },

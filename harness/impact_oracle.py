@@ -154,15 +154,19 @@ def change_impact(prism: str, cwd: str | Path, query: str) -> dict:
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"change-impact returned non-JSON: {out[:300]}") from exc
     if data.get("error") and not any(
-        data.get(group) for group in ("declarations", "family", "callers", "declaringTypes")
+        data.get(group) for group in
+        ("declarations", "family", "callers", "supers", "declaringTypes")
     ):
         raise RuntimeError(f"change-impact error: {str(data['error'])[:500]}")
 
     sites: list[Site] = []
     seen: set[Site] = set()
     group_counts: dict[str, int] = {}
-    for group in ("declarations", "family", "callers", "declaringTypes"):
+    scored_groups = ("declarations", "family", "callers", "supers")
+    for group in (*scored_groups, "declaringTypes"):
         group_counts[group] = len(data.get(group) or [])
+        if group not in scored_groups:
+            continue
         for symbol in data.get(group) or []:
             site = Site(
                 relpath=symbol.get("filePath") or symbol.get("file") or "",
@@ -171,9 +175,18 @@ def change_impact(prism: str, cwd: str | Path, query: str) -> dict:
             if site.relpath and site.symbol and site not in seen:
                 seen.add(site)
                 sites.append(site)
+    declaring_type_sites = []
+    for symbol in data.get("declaringTypes") or []:
+        site = Site(
+            relpath=symbol.get("filePath") or symbol.get("file") or "",
+            symbol=symbol.get("name") or "",
+        )
+        if site.relpath and site.symbol:
+            declaring_type_sites.append(str(site))
 
     return {
         "sites": sites,
+        "declaring_type_sites": declaring_type_sites,
         "response_bytes": response_bytes,
         "completeness": data.get("completeness", ""),
         "has_heuristic_refs": bool(data.get("hasHeuristicRefs")),

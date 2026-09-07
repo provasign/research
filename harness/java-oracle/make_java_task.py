@@ -92,7 +92,7 @@ def main() -> None:
         "pr": f"oracle-spoon:{args.target}",
         "task_type": "impact",
         "prompt": (f"The {args.display} method signature is changing. List every "
-                   f"site in this repository that must change as a result "
+                   f"site in the production source tree that must change as a result "
                    f"(the declaration, every override/implementation, and every "
                    f"call site)."),
         "ground_truth": gt,

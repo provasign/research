@@ -105,11 +105,13 @@ precision (e.g. 'JsonSerializer.serialize(T, JsonGenerator, SerializerProvider)'
    - declarations:   the method itself (must change)
    - family:         every override/implementation in the subtype closure (must change)
    - callers:        every resolved call site (must change)
-   - declaringTypes: interface/type declaration blocks whose member signatures \
-must change (must change — report each as "<file>:<TypeName>")
+   - declaringTypes: interface/type declaration blocks that contain affected \
+members (context only; do not report type names as function/method sites)
    - supers:         same-member declarations on other contracts (must change too)
-4. Union declarations + family + callers + declaringTypes (+ supers if they are \
-separate methods) and output those as your sites list.
+4. Union declarations + family + callers + supers and output those method sites. \
+Do not emit declaringTypes separately: the shared answer contract accepts only \
+functions/methods, and the affected member declaration is already represented \
+in declarations/family/supers.
 
 Do NOT manually hunt for overrides or search for callers — the graph computed \
 the full traversal for you. If you need to confirm the exact type name before \
