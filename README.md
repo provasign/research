@@ -1,228 +1,92 @@
-# When Does a Code Graph Help a Coding Agent?
+# Provasign Research
 
-Companion repository for the paper:
+Reproducible evaluations of code-graph assistance for coding agents: pinned tasks, independent oracles, deterministic scorers, raw run records, and full transcripts.
 
-> **When Does a Code Graph Help a Coding Agent? Blast Radius, Model Capability,
-> and Tool Altitude in Change-Impact Tasks** — Tapabrata "Topo" Pal, 2026.
-> LaTeX source: [`paper/paper.tex`](paper/paper.tex).
+The central question is concrete: when an agent must identify every site affected by a code change, how do native search/read tools compare with a typed code graph exposed through task-shaped operations?
 
-This repo contains everything needed to reproduce the study: the evaluation
-harness, the task definitions with type-resolved ground truth, the independent
-oracles for all four languages, the deterministic scorers, and the complete
-scored run logs (every arm × tier × trial cited in the paper).
+## Current evidence
 
-## The study in one paragraph
+The latest paired nine-task Sonnet sample covers Go, Java, TypeScript, and Python. Prism reached 0.998 mean recall and 0.955 mean precision at $1.28 total estimated cost. Native tools reached 0.683 recall and 0.770 precision at $3.23. Each cell in this sample is one fresh run, so it is evidence for the current release gate rather than a variance estimate.
 
-We compare three ways of giving an LLM coding agent context for change-impact
-tasks ("list every site that must change if this method's signature changes"):
-plain text search (**T**), code-graph *primitives* the agent orchestrates
-(**G**), and the same graph exposed at *task altitude* — a single deterministic
-`change_impact(method)` operation (**G\***). Across four languages (Go, Java,
-TypeScript, Python), three commercial model tiers plus a local 30B model, and
-tasks spanning 1–310 change-sites, the answer depends on two conditions: the
-graph ties text on small greppable tasks; as primitives it helps most where models
-are weakest but leaves much of the benefit unrealized (orchestration is itself
-a frontier skill); at task altitude completeness becomes **tier-invariant** —
-every tier, including the free local model, lands on the engine's ceiling.
+See [RESULTS.md](RESULTS.md) for the full table, repeated-trial evidence, scoring corrections, and limitations.
 
-## The tool under test: what Prism is
-
-Prism (with its embedded Grove engine) is a **type-resolved code graph
-exposed to coding agents at task altitude**: whole questions — "every site
-this signature change breaks", "every type that fails to implement X",
-"the change-set split covered/untested" — answered in one deterministic
-call, instead of primitives the agent must orchestrate. The design
-principles the study tests, in order: **correctness and completeness
-first** (a faster incomplete answer is a faster broken build), **task
-altitude** (orchestrating traversals is itself a frontier-model skill),
-**determinism** (the engine solves the traversal; the agent relays it —
-testable without an LLM), and the consequence the paper measures, **tier
-invariance** (the same completeness from a free local 30B to a frontier
-model). Positioning, use cases, and where Prism is deliberately the wrong
-tool: [github.com/provasign/prism](https://github.com/provasign/prism).
-
-## Headline numbers
-
-All consolidated in [`RESULTS.md`](RESULTS.md): the with/without-Prism agent
-grid (recall 0.997 tier-invariant with Prism vs 0.76–0.95 without; 28×
-cheaper at the bottom tier), the ongoing cross-tool benchmarking program
-(first entry Engine B: 0.99 vs 0.52 engine completeness, and the agent A/B
-where the gap survives with 17× cost separation at equal correctness), the
-local-model result (recall 1.00 at $0), and the experiments whose numbers we
-measured and refuse to cite (SWE-bench contamination, PR-replay validity).
-
-## Repository map
+## What is in this repository
 
 | Path | Contents |
 |---|---|
-| `paper/paper.tex` | The paper (builds with `tectonic paper.tex`) |
-| [`RESULTS.md`](RESULTS.md) | **Every headline number in one place** — with/without Prism, vs Engine B, agent A/Bs, and what we refuse to cite |
-| `harness/` | Arms runner, scorers, aggregators — see [`harness/README.md`](harness/README.md) |
-| `harness/tasks/*.json` | Task definitions incl. oracle-derived ground truth (self-contained; oracles are only needed to *regenerate* GT) |
-| `harness/runs/` | **All scored run logs** — `runs/<task>/<model>/<Arm>.t<n>.json` + full agent transcripts |
-| [`harness/AB-ENGINE-COMPARISON.md`](harness/AB-ENGINE-COMPARISON.md) | Cross-tool benchmarking (ongoing; first entry: Engine B) — engine completeness, efficiency next to recall, agent A/B, repro |
-| [`harness/AB-LOCAL-CLIS.md`](harness/AB-LOCAL-CLIS.md) | Local-model agentic coding across CLIs (OpenCode, Continue.dev, mason) |
-| `harness/java-oracle/` | Spoon type-resolution oracle (Java GT) |
-| `harness/ts-oracle/` | ts-morph oracle (TypeScript GT) |
-| `harness/py-oracle/` | Jedi oracle (Python GT) |
-| `THESIS.md` | The falsifiable sub-claims and their verdicts |
-| `LOCAL-MODEL-SETUP.md` | Ollama setup for the local-30B tier |
+| [RESULTS.md](RESULTS.md) | Current product-facing results and validity limits |
+| [THESIS.md](THESIS.md) | Research claims and falsifiable predictions |
+| `harness/tasks/*.json` | Task definitions and committed ground truth |
+| [harness/README.md](harness/README.md) | Runner, scorer, and oracle documentation |
+| `harness/runs/` | Scored run records, protocols, artifacts, and transcripts |
+| `harness/impact_oracle.py` | Deterministic engine scoring against a task oracle |
+| [paper/paper.tex](paper/paper.tex) | Paper source |
+| [LOCAL-MODEL-SETUP.md](LOCAL-MODEL-SETUP.md) | Local model setup |
 
-## The arms
+Language-specific oracle implementations live under `harness/java-oracle`, `harness/ts-oracle`, and `harness/py-oracle`. Task JSON is self-contained for ordinary scoring; regenerate it only when auditing or changing the ground truth.
 
-Arm enforcement is structural, not prompted: `claude --allowedTools` with a
-recorded per-run `tool_trace`; violating runs are flagged and excluded.
+## Evaluation layers
 
-- **T** — text only: `rg`/`grep`/`find`/`read`.
-- **G** — graph primitives (`prism` symbol lookup, references, typed edges)
-  plus `rg` for anchor discovery.
-- **G\*** — one task-level call: `prism change-impact 'Type.method(Params)'`.
-  No text-search tool in the allowlist — the paper's relay-discipline result
-  (§ Guava) is *why*.
-- **V** — text-primary with graph verification (Experiment 1 only).
+The repository separates three claims that are easy to blur:
 
-## Run-log layout
+1. **Engine ceiling:** one deterministic graph call is scored directly against the oracle, without an LLM.
+2. **Agent accuracy:** an isolated agent session must choose tools and return the required sites.
+3. **Agent efficiency:** request tokens, turns, elapsed time, and estimated cost are compared alongside recall and precision.
 
-```
-harness/runs/<task-id>/<model>/<Arm>.t<trial>.json          scored result
-harness/runs/<task-id>/<model>/<Arm>.t<trial>.transcript.txt agent transcript
-```
+An efficient incomplete answer is a failed result. Cost comparisons are interpreted only with their accuracy scores.
 
-Models: `haiku`, `sonnet`, `opus`, `qwen3-coder-30b-gstar` (local tier), plus
-exploratory `gpt-5.5` runs (via `run_codex.py`) not cited in the paper. Scores
-(recall/precision/F1, calibration, turns, tokens, $) are embedded in each JSON;
-all Java numbers in the paper are **post `rescore_java.py` normalization**
-(line→enclosing-method), which is mandatory before aggregation.
+## Reproduce a task
 
-**Included but excluded from the paper** (kept for transparency):
-`commons-collections-mapiterator-next` failed an outcome-blind audit (the
-target overrides `java.util.Iterator.next`, making the refactor ill-posed) —
-its numbers must not be cited. The early `commons-*` (commons-lang) tasks used
-bare-name ground truth, later shown invalid; they were replaced by the Spoon
-type-resolution oracle.
-
-## Reproducing the study
-
-### 1. Prerequisites
-
-| Component | Version used | Source |
-|---|---|---|
-| Grove (graph engine, `change-impact` op) | v0.14.1 | https://github.com/provasign/grove/releases/tag/v0.14.1 |
-| Prism (agent-facing CLI/MCP) | v0.16.1 | https://github.com/provasign/prism/releases/tag/v0.16.1 |
-| astkit (parser layer; grove dependency) | v0.4.17 | https://github.com/provasign/astkit/releases/tag/v0.4.17 |
-| `claude` CLI | any recent | agent runner for the commercial tiers |
-| Python 3.11+ | — | harness/scorers (stdlib only) |
-| JDK 17+ + Maven | JDK 26 | Java oracle only (`java-oracle/README.md`) |
-| Node 18+ | — | TypeScript oracle only |
-| `jedi` (pip) | — | Python oracle only |
-| Ollama + `qwen3-coder:30b` | — | local tier only (`LOCAL-MODEL-SETUP.md`) |
-
-### 2. Corpora
-
-Clone each subject at the pinned commit (the authoritative pin for every task
-is the `pin` field of its `harness/tasks/<id>.json`):
-
-| Corpus | Upstream | Pin (main tasks) |
-|---|---|---|
-| jackson-databind | https://github.com/FasterXML/jackson-databind | `0b422144` (2.18.8) |
-| Guava | https://github.com/google/guava | `f06690fa` |
-| Grafana | https://github.com/grafana/grafana | `b6fdc12f` |
-| gin | https://github.com/gin-gonic/gin | per-task |
-| TypeORM | https://github.com/typeorm/typeorm | `3d55188c` |
-| Django | https://github.com/django/django | `318a316a` |
-| commons-collections | https://github.com/apache/commons-collections | `4db43277` |
-
-Task JSONs carry absolute `workdir`/`repo` paths from the original machine —
-repoint them at your clones (or pass `--workdir` to `run.py`).
-
-### 3. Pipeline
+Prerequisites are Python 3.11+, the relevant pinned subject repository, and the tool or model runner used by the selected arm.
 
 ```sh
 cd harness
 
-# scorer unit tests — no agent, no network
-python3 tests/test_score.py
+# Deterministic scorer tests
+python3 -m unittest discover -s tests
 
-# engine ceiling: score one raw change-impact call against the oracle, no LLM.
-# It uses an isolated archive of each pinned corpus commit and exits nonzero
-# on recall, precision, completeness, or payload regression. Run this FIRST.
-python3 impact_oracle.py tasks/jackson-serialize.json
+# Score the current Prism engine directly, without an agent
+python3 impact_oracle.py tasks/grafana-querydata-impact.json
 
-# run arms (commercial tiers; claude CLI must be authenticated)
-python3 run.py --task tasks/jackson-serialize.json \
-    --arms T Gstar --trials 3 --model haiku
-
-# local tier (Ollama)
-python3 run_local_gstar.py --task tasks/django-quotename.json
-
-# Java ONLY — mandatory before any aggregation:
-# normalizes file:line answers to enclosing methods (a name-based scorer
-# silently zeroes correct graph-arm answers; see paper §"A scoring pitfall")
-python3 rescore_java.py
-
-# aggregate recall + cost per task × model × arm
-python3 agg_jackson.py
+# Run fresh agent trials
+python3 run.py \
+  --task tasks/jackson-serialize.json \
+  --arms T Gstar \
+  --trials 3 \
+  --model sonnet
 ```
 
-Everything downstream of the agent (scoring, normalization, aggregation) is
-deterministic — the paper's tables are reproducible from `harness/runs/`
-**without any LLM**.
+Task files contain the authoritative upstream commit. Local absolute paths from the original machine must be repointed to your own isolated checkout. Java results require the normalization step described in [harness/README.md](harness/README.md) before aggregation.
 
-## Negative results & validity findings (read these too)
+## Validity rules
 
-Transparency is the point of this repo. Alongside the positive results, we
-publish the experiments that did NOT produce citable numbers — with the raw
-data and the reason each one fails validity:
+- Use isolated repository snapshots and distinct agent sessions for every cell.
+- Record invocation and session identifiers so transcript reuse can be audited.
+- Run repeated trials before treating an agent-level delta as stable.
+- Keep deterministic engine measurements separate from agent measurements.
+- Audit the oracle when precision remains unexpectedly low across unrelated engine changes.
+- Preserve failed and invalid experiments with an explanation; do not cite their toplines.
 
-- **SWE-bench Verified A/B** ([`harness/SWEBENCH-AB-RESULTS.md`](harness/SWEBENCH-AB-RESULTS.md),
-  runs in `harness/runs/swebench-20/`): a 20-task prism-vs-baseline run where
-  the baseline resolved 75% — above state-of-the-art agentic systems, from a
-  single-pass agent that can't even run the project's tests. The cause is
-  **training-data contamination, and we measured it**: 9/20 tasks in each arm
-  reproduce the merged human fix with 100% exact added-line overlap
-  (`harness/contamination_check.py`). On memorized tasks tooling cannot help
-  or hurt, so we do not cite these numbers for or against anything — they
-  measure memorization, not context tooling.
-- **PR-replay mining (Netty)** ([`harness/PR-REPLAY-FINDINGS.md`](harness/PR-REPLAY-FINDINGS.md),
-  runs in `harness/runs/pr-replay-netty-*.jsonl`): an attempt to mine clean
-  change-impact tasks from real merged PRs, fully automatically. Loose
-  classification pollutes the ground truth (the top-scoring "task" was an
-  aggregate merge PR); strict gates collapse the yield to zero in our sample.
-  Clean breaking refactors are rare in real history, and identifying them
-  outcome-blind is a research problem in its own right. No recall number from
-  this pilot is citable, and the doc explains the path that would be
-  (compiler-as-oracle on verified refactors, or a live pipeline).
-- **One paper task excluded after audit** (`commons-collections-mapiterator-next`):
-  the refactor target overrides `java.util.Iterator.next`, making the task
-  ill-posed; disclosed in the paper's threats section rather than dropped
-  silently. The early bare-name Java ground truth was likewise replaced by
-  the Spoon type-resolution oracle when it was shown invalid.
+Prompt caching may reuse identical static prefixes at the provider. It does not share prior answers or agent conversation state. The freshness audit in `harness/runs/impact-oracle-reliability-2026-09-07/` records six distinct sessions, snapshots, and transcript directories.
 
-The same discipline runs through the positive results: the paper's honesty
-note discloses that the study began as a *negative* result on Go, and the
-engine-defect findings (five latent Java resolution bugs, one Go schema gap)
-exist because a deterministic op is testable in a way an agent loop is not.
+## Historical studies
+
+The repository retains dated studies and raw artifacts for auditability. Several are historical and should not be mixed with the current release gate:
+
+- [BENCH-MATRIX.md](harness/BENCH-MATRIX.md) — multi-tier change-impact study
+- [AB-ENGINE-COMPARISON.md](harness/AB-ENGINE-COMPARISON.md) — cross-engine comparisons
+- [AB-LOCAL-CLIS.md](harness/AB-LOCAL-CLIS.md) — local model and CLI experiments
+- [SWEBENCH-AB-RESULTS.md](harness/SWEBENCH-AB-RESULTS.md) — excluded because contamination made the topline non-citable
+- [PR-REPLAY-FINDINGS.md](harness/PR-REPLAY-FINDINGS.md) — negative result on mining clean tasks from merged PRs
+
+Read the protocol and date beside any historical result before comparing it with current numbers.
 
 ## Related repositories
 
-The tools under test (all open source; Apache-2.0 / MIT):
-
-- **Grove** — persistent code graph; hosts the `change_impact` engine operation: https://github.com/provasign/grove
-- **Prism** — agent context delivery (CLI + MCP), exposes `prism_change_impact`: https://github.com/provasign/prism
-- **astkit** — multi-language Tree-sitter parsing layer: https://github.com/provasign/astkit
-
-## Citation
-
-```bibtex
-@misc{pal2026engine-b,
-  title  = {When Does a Code Graph Help a Coding Agent? Blast Radius, Model
-            Capability, and Tool Altitude in Change-Impact Tasks},
-  author = {Pal, Tapabrata},
-  year   = {2026},
-  note   = {Preprint. Artifacts: https://github.com/provasign/research}
-}
-```
+- [Prism](https://github.com/provasign/prism) — agent-facing change intelligence
+- [Grove](https://github.com/provasign/grove) — local semantic graph engine
+- [Shale](https://github.com/provasign/shale) — local agent-session evidence for pull requests
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
