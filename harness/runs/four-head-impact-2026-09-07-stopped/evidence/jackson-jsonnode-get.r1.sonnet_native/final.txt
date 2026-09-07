@@ -1,0 +1,25 @@
+```json
+{
+  "sites": [
+    "src/main/java/com/fasterxml/jackson/databind/JsonNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/JsonNode.java:has",
+    "src/main/java/com/fasterxml/jackson/databind/JsonNode.java:hasNonNull",
+    "src/main/java/com/fasterxml/jackson/databind/node/ContainerNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ObjectNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ValueNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ArrayNode.java:get",
+    "src/main/java/com/fasterxml/jackson/databind/node/ArrayNode.java:_at"
+  ],
+  "complete": true,
+  "unresolved": []
+}
+```
+
+Notes on the analysis:
+- **Declaration**: `JsonNode.get(int index)` (abstract, `JsonNode.java:191`).
+- **Redundant abstract redeclaration**: `ContainerNode<T>.get(int index)` (`ContainerNode.java:53`) — also needs updating since it re-declares the abstract method.
+- **Overrides/implementations**: `ObjectNode.get(int)` (always returns null), `ValueNode.get(int)` (final, always returns null — covers all leaf types: `NullNode`, `BinaryNode`, `TextNode`, `NumericNode`, `BooleanNode`, `POJONode`, `MissingNode`, none of which declare their own override), and `ArrayNode.get(int)` (actual indexed lookup into `_children`).
+- **Call sites**: `JsonNode.has(int)` and `JsonNode.hasNonNull(int)` both call `get(index)`; `ArrayNode._at(JsonPointer)` calls `get(ptr.getMatchingIndex())`.
+- Ruled out as unrelated: `List<JsonNode>.get(int)` calls on `_children` inside `ArrayNode`/`ObjectNode` (that's `java.util.List.get`, not `JsonNode.get`), and `TokenBuffer.Segment.get(int)` (unrelated class/signature, returns `Object`).
+
+This is a single-module repository (`jackson-databind`), so the exhaustive text search across all production `.java` files covers the entire codebase.
