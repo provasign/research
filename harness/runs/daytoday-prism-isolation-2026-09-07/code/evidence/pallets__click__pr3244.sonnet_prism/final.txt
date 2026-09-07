@@ -1,0 +1,12 @@
+All existing relevant tests pass (53 passed), and the reproduction from the issue now works without raising `UnsupportedOperation`.
+
+## Summary
+
+**Root cause:** `CliRunner.isolation()` replaces `sys.stdout`/`sys.stderr` with `_NamedTextIOWrapper` instances backed by in-memory `io.BytesIO` buffers. These buffers have no real file descriptor, so calling `.fileno()` on them (as `subprocess.run(..., stdout=sys.stderr)` does internally) raised `io.UnsupportedOperation`, even though the same code works fine outside of `CliRunner` where `sys.stderr` is a real stream with an fd.
+
+**Fix** (`src/click/testing.py`):
+- Added a `_try_fileno()` helper that safely gets a stream's file descriptor, returning `-1` if unavailable.
+- Extended `_NamedTextIOWrapper` to accept an `original_fd` and override `fileno()`: if a real fd was captured from the stream that existed before isolation began, return it; otherwise fall back to the default (which still raises `UnsupportedOperation` when there's truly no underlying fd, e.g., in tests fully detached from a terminal).
+- In `isolation()`, pass `_try_fileno(old_stdout)` / `_try_fileno(old_stderr)` when constructing the replacement `sys.stdout`/`sys.stderr` wrappers.
+
+This lets code like `subprocess.run(stdout=sys.stderr)` keep working under `CliRunner` when a real underlying fd exists (the common case), while still degrading gracefully (raising the original exception) when no real fd is available.

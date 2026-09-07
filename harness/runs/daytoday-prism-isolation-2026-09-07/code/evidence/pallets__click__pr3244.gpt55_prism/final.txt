@@ -1,0 +1,5 @@
+Implemented the source fix in [src/click/testing.py](/private/tmp/prism-daytoday-forced-code-20260907/work/pallets__click__pr3244.gpt55_prism/src/click/testing.py:128). `_NamedTextIOWrapper.fileno()` now falls back to the real stdio file descriptors when the isolated in-memory stream has no descriptor, so `subprocess.run(..., stdout=sys.stderr)` no longer raises `io.UnsupportedOperation`.
+
+Verification:
+- `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=src python3 -m pytest tests/test_testing.py::test_isolation_stderr_errors tests/test_testing.py::test_isolation_flushes_unflushed_stderr` passed.
+- Inline reproduction with `CliRunner().invoke(..., catch_exceptions=False)` exited `0` and did not raise.

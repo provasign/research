@@ -1,0 +1,26 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..9f5dbc9 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -125,6 +125,21 @@ class _NamedTextIOWrapper(io.TextIOWrapper):
+     def mode(self) -> str:
+         return self._mode
+ 
++    def fileno(self) -> int:
++        try:
++            return super().fileno()
++        except io.UnsupportedOperation:
++            if self._name == "<stdout>":
++                return sys.__stdout__.fileno()
++
++            if self._name == "<stderr>":
++                return sys.__stderr__.fileno()
++
++            if self._name == "<stdin>":
++                return sys.__stdin__.fileno()
++
++            raise
++
+ 
+ def make_input_stream(
+     input: str | bytes | t.IO[t.Any] | None, charset: str

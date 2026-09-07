@@ -1,0 +1,58 @@
+{
+  "session_id": "01a07da6-1775-7842-979e-c28f53784e43",
+  "model_observed": "gpt-5.5",
+  "usage_raw": [
+    {
+      "input_tokens": 93453,
+      "cached_input_tokens": 66048,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 2228,
+      "reasoning_output_tokens": 704
+    }
+  ],
+  "turns": 1,
+  "measurement_complete": true,
+  "agent_error": false,
+  "cost_usd": null,
+  "cost_basis": "Not estimated in-run",
+  "input_tokens": 93453,
+  "cache_read_tokens": 66048,
+  "output_tokens": 2228,
+  "total_tokens": 95681,
+  "tool_errors": [],
+  "prism_result_bytes": 16521,
+  "prism_calls": [
+    "prism_query"
+  ],
+  "native_commands": [
+    "/bin/zsh -lc 'git diff -- src/werkzeug/sansio/multipart.py'",
+    "/bin/zsh -lc 'pytest tests/sansio/test_multipart.py -q'",
+    "/bin/zsh -lc \"python - <<'PY'\nfrom werkzeug.sansio.multipart import MultipartDecoder, Data, File, Epilogue, NeedData\n\nboundary = b'063afc4cbe46a740590988143971e2bd'\npayload = b'\\\\x00' * 65431\nbody = (\n    b'--' + boundary + b'\\\\r\\\\n'\n    b'Content-Disposition: form-data; name=\\\"file\\\"; filename=\\\"x\\\"\\\\r\\\\n'\n    b'Content-Type: application/octet-stream\\\\r\\\\n\\\\r\\\\n'\n    + payload + b'\\\\r\\\\n--' + boundary + b'--\\\\r\\\\n'\n)\n# Force a chunk split between the CR and LF immediately before final boundary.\nsplit = body.index(b'\\\\r\\\\n--' + boundary + b'--') + 1\nassert body[split - 1:split + 1] == b'\\\\r\\\\n'\n\ndecoder = MultipartDecoder(boundary)\nreceived = bytearray()\nfor chunk in (body[:split], body[split:]):\n    decoder.receive_data(chunk)\n    while True:\n        event = decoder.next_event()\n        if isinstance(event, NeedData):\n            break\n        if isinstance(event, Data):\n            received.extend(event.data)\n\ndecoder.receive_data(None)\nwhile True:\n    event = decoder.next_event()\n    if isinstance(event, Epilogue):\n        break\n    if isinstance(event, Data):\n        received.extend(event.data)\n\nprint(len(received), received.endswith(b'\\\\r'), received == payload)\nPY\"",
+    "/bin/zsh -lc \"python3 - <<'PY'\nfrom werkzeug.sansio.multipart import MultipartDecoder, Data, Epilogue, NeedData\n\nboundary = b'063afc4cbe46a740590988143971e2bd'\npayload = b'\\\\x00' * 65431\nbody = (\n    b'--' + boundary + b'\\\\r\\\\n'\n    b'Content-Disposition: form-data; name=\\\"file\\\"; filename=\\\"x\\\"\\\\r\\\\n'\n    b'Content-Type: application/octet-stream\\\\r\\\\n\\\\r\\\\n'\n    + payload + b'\\\\r\\\\n--' + boundary + b'--\\\\r\\\\n'\n)\nsplit = body.index(b'\\\\r\\\\n--' + boundary + b'--') + 1\nassert body[split - 1:split + 1] == b'\\\\r\\\\n'\n\ndecoder = MultipartDecoder(boundary)\nreceived = bytearray()\nfor chunk in (body[:split], body[split:]):\n    decoder.receive_data(chunk)\n    while True:\n        event = decoder.next_event()\n        if isinstance(event, NeedData):\n            break\n        if isinstance(event, Data):\n            received.extend(event.data)\n\ndecoder.receive_data(None)\nwhile True:\n    event = decoder.next_event()\n    if isinstance(event, Epilogue):\n        break\n    if isinstance(event, Data):\n        received.extend(event.data)\n\nprint(len(received), received.endswith(b'\\\\r'), received == payload)\nPY\"",
+    "/bin/zsh -lc 'git status --short'"
+  ],
+  "duplicate_prism_calls": 0,
+  "violations": [],
+  "cell_id": "pallets__werkzeug__pr3081.gpt55_prism",
+  "task": "pallets__werkzeug__pr3081",
+  "arm": "gpt55_prism",
+  "invocation_id": "2665d91d-8bf5-4dfe-a862-98ea74df1ca8",
+  "started_at": 1788814432.056982,
+  "wall_s": 60.252,
+  "exit_code": 0,
+  "timed_out": false,
+  "changed_files": [
+    ".grove/grove.db",
+    ".grove/grove.db-shm",
+    ".grove/grove.db-wal"
+  ],
+  "diff_lines": 0,
+  "has_diff": false,
+  "audited_valid": true,
+  "score_wall_s": 0.0,
+  "score": {
+    "resolved": false,
+    "empty_diff": true
+  },
+  "resolved": false
+}
