@@ -72,6 +72,20 @@ USAGE_RE = re.compile(r"usage:\s*(\d+)\s*in\s*/\s*(\d+)\s*out")
 TOOL_LINE_RE = re.compile(r"^  [·$✎]", re.M)
 
 
+def source_bytes(patch: str) -> int:
+    """Bytes of a diff that touch SOURCE files. Both sides of size_ratio must
+    use the same source-only view as `coverage`, or a doc-heavy gold silently
+    deflates every agent's ratio (measured: dynaconf-1225's gold is 11% docs,
+    babel-1164's is 0% — comparing against raw totals makes the two tasks'
+    ratios mean different things)."""
+    total = 0
+    for chunk in re.split(r"(?m)^(?=diff --git )", patch or ""):
+        m = re.match(r"diff --git a/(\S+)", chunk)
+        if m and not NON_SOURCE_RE.search(m.group(1)):
+            total += len(chunk)
+    return total
+
+
 def classify(task: dict, agent_patch: str, log: str = "") -> dict:
     gold = task.get("patch", "")
     gold_src = patch_files(gold)
@@ -81,7 +95,9 @@ def classify(task: dict, agent_patch: str, log: str = "") -> dict:
     # Size ratio against gold is a crude proxy for substance, but it
     # separates a token edit from a real attempt, which is the distinction
     # that matters at this solve rate.
-    size_ratio = (len(agent_patch or "") / len(gold)) if gold else 0.0
+    gold_bytes = source_bytes(gold)
+    agent_bytes = source_bytes(agent_patch)
+    size_ratio = (agent_bytes / gold_bytes) if gold_bytes else 0.0
 
     flags = {k: bool(r.search(log)) for k, r in LOG_SIGNALS.items()} if log else {}
 
@@ -105,8 +121,8 @@ def classify(task: dict, agent_patch: str, log: str = "") -> dict:
         "files_hit": sorted(hit),
         "coverage": round(coverage, 3),
         "size_ratio": round(size_ratio, 4),
-        "gold_bytes": len(gold),
-        "agent_bytes": len(agent_patch or ""),
+        "gold_bytes": gold_bytes,
+        "agent_bytes": agent_bytes,
         "flags": flags,
         "tool_calls": len(TOOL_LINE_RE.findall(log or "")),
         "tokens_in": int(m.group(1)) if m else None,
