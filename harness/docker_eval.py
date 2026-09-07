@@ -17,11 +17,21 @@ import json
 import re
 import subprocess
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 CLONE_ROOT = Path.home() / "gvg-corpus" / "e2e-2026"
 IMAGE = "python:3.12"
 RESULT_RE = re.compile(r"^(\S+::\S+)\s+(PASSED|FAILED|ERROR)", re.M)
+COLLECTION_ERROR_RE = re.compile(
+    r"(?:ERROR collecting|collected \d+ items? / \d+ errors?)", re.M
+)
+
+
+@dataclass(frozen=True)
+class PytestRun:
+    outcomes: dict[str, str]
+    collection_failed: bool = False
 
 
 def _sh(*a, cwd=None, timeout=600, check=True):
@@ -35,6 +45,19 @@ def _repo_dir(task) -> Path:
     return CLONE_ROOT / task["repo"].replace("/", "__")
 
 
+def _require_docker() -> None:
+    """Fail loudly when the local Docker daemon is unavailable."""
+    result = subprocess.run(
+        ["docker", "info", "--format", "{{.ServerVersion}}"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()
+        raise RuntimeError(f"Docker is unavailable: {detail}")
+
+
 # Per-repo test dependencies the plain `pip install -e . pytest` container
 # lacks. pydantic: its conftest registers/uses markers and helpers from these
 # plugins — without them collection dies with INTERNALERROR ('thread_unsafe'
@@ -46,8 +69,9 @@ EXTRA_PIP = {
 
 
 def _pytest_in_docker(worktree: Path, modules: list[str], repo: str = "",
-                      test_cmds: list[str] | None = None) -> dict[str, str]:
-    """Run the given test modules in a container; return {nodeid: outcome}."""
+                      test_cmds: list[str] | None = None) -> PytestRun:
+    """Run test modules and distinguish outcomes from collection failure."""
+    _require_docker()
     # Install the project (editable) + pytest; project test-extras if declared.
     # pytest-timeout guards against a single hanging test (e.g. pager/stress
     # tests) blocking the whole module run.
@@ -81,7 +105,8 @@ def _pytest_in_docker(worktree: Path, modules: list[str], repo: str = "",
            "[ -f \"$f\" ] && pip install -q -r \"$f\" >/dev/null 2>&1; done; "
            f"pip install -q pytest pytest-timeout {extra} 2>&1 | tail -2; "
            "python -m pytest " + " ".join(modules) +
-           " -v --tb=no -p no:cacheprovider -o addopts='' --timeout=90")
+           " -v --tb=no -p no:cacheprovider -o addopts='' --timeout=90"
+           " --continue-on-collection-errors")
     # Prefer the environment the PROJECT declares. The bed carries test_cmds
     # (e.g. ["pytest -rA", "uv run pytest -rA"]) from mining, and a repo that
     # ships uv.lock needs `uv sync` to get its optional deps: a2a-python
@@ -95,21 +120,25 @@ def _pytest_in_docker(worktree: Path, modules: list[str], repo: str = "",
                   "uv sync --all-extras --frozen 2>&1 | tail -2 || uv sync --all-extras 2>&1 | tail -2; "
                   "uv pip install -q pytest pytest-timeout 2>&1 | tail -1; "
                   "uv run python -m pytest " + " ".join(modules) +
-                  " -v --tb=no -p no:cacheprovider -o addopts='' --timeout=90")
+                  " -v --tb=no -p no:cacheprovider -o addopts='' --timeout=90"
+                  " --continue-on-collection-errors")
         out = _sh("docker", "run", "--rm", "-v", f"{worktree}:/w", "-w", "/w",
                   IMAGE, "bash", "-lc", uv_cmd, timeout=1800, check=False)
         res = {m.group(1): m.group(2) for m in RESULT_RE.finditer(out)}
         if res:
-            return res
+            return PytestRun(res, bool(COLLECTION_ERROR_RE.search(out)))
         print("  [docker_eval] uv path collected nothing; falling back to pip")
 
     out = _sh("docker", "run", "--rm", "-v", f"{worktree}:/w", "-w", "/w",
               IMAGE, "bash", "-lc", cmd, timeout=1200, check=False)
     res = {m.group(1): m.group(2) for m in RESULT_RE.finditer(out)}
     if not res:  # nothing collected -- surface why instead of a silent 0/0
-        print("  [docker_eval] no tests collected; container tail:\n" +
-              "\n".join("    " + l for l in out.splitlines()[-12:]))
-    return res
+        tail = "\n".join(out.splitlines()[-12:])
+        if not COLLECTION_ERROR_RE.search(out):
+            raise RuntimeError("pytest produced no test outcomes:\n" + tail)
+        print("  [docker_eval] collection failed; container tail:\n" +
+              "\n".join("    " + line for line in tail.splitlines()))
+    return PytestRun(res, bool(COLLECTION_ERROR_RE.search(out)))
 
 
 def _worktree(task, patches: list[str]):
@@ -136,25 +165,24 @@ def validate(task: dict) -> dict:
     mods = task["test_modules"]
     repo, wt = _worktree(task, [task["test_patch"]])
     try:
-        before = _pytest_in_docker(wt, mods, task["repo"], task.get("test_cmds"))
+        before_run = _pytest_in_docker(wt, mods, task["repo"], task.get("test_cmds"))
     finally:
         _cleanup(repo, wt)
     repo, wt = _worktree(task, [task["test_patch"], task["patch"]])
     try:
-        after = _pytest_in_docker(wt, mods, task["repo"], task.get("test_cmds"))
+        after_run = _pytest_in_docker(wt, mods, task["repo"], task.get("test_cmds"))
     finally:
         _cleanup(repo, wt)
-    # A collection ERROR on the base side (0 nodeids collected) usually means
-    # the new tests import code that does not exist pre-fix — ImportError IS
-    # a failure. Without this, click#3637 read as "0/58 collected" and was
-    # rejected although every one of its 58 tests is genuinely fail->pass.
-    if not before and after:
-        f2p = sorted(n for n, o in after.items() if o == "PASSED")
-        return {"fail_to_pass": f2p, "pass_to_pass": [],
-                "valid": bool(f2p), "n_before": 0, "n_after": len(after),
-                "note": "base-side collection error treated as fail (new-code import)"}
+    before, after = before_run.outcomes, after_run.outcomes
+    if after_run.collection_failed:
+        return {"fail_to_pass": [], "pass_to_pass": [], "valid": False,
+                "n_before": len(before), "n_after": len(after),
+                "reason": "gold-side collection error"}
     f2p = sorted(n for n, o in after.items()
-                 if o == "PASSED" and before.get(n) in ("FAILED", "ERROR"))
+                 if o == "PASSED" and (
+                     before.get(n) in ("FAILED", "ERROR")
+                     or (before_run.collection_failed and n not in before)
+                 ))
     p2p = sorted(n for n, o in after.items()
                  if o == "PASSED" and before.get(n) == "PASSED")
     return {"fail_to_pass": f2p, "pass_to_pass": p2p,
@@ -166,13 +194,15 @@ def score(task: dict, agent_patch: str) -> dict:
     mods = task["test_modules"]
     repo, wt = _worktree(task, [task["test_patch"], agent_patch])
     try:
-        res = _pytest_in_docker(wt, mods, task.get("repo", ""), task.get("test_cmds"))
+        run = _pytest_in_docker(wt, mods, task.get("repo", ""), task.get("test_cmds"))
     finally:
         _cleanup(repo, wt)
+    res = run.outcomes
     f2p_ok = all(res.get(n) == "PASSED" for n in task["fail_to_pass"])
     p2p_ok = all(res.get(n) == "PASSED" for n in task.get("pass_to_pass", []))
-    return {"resolved": bool(f2p_ok and p2p_ok), "f2p_ok": f2p_ok,
-            "p2p_ok": p2p_ok, "n_run": len(res)}
+    return {"resolved": bool(f2p_ok and p2p_ok and not run.collection_failed),
+            "f2p_ok": f2p_ok, "p2p_ok": p2p_ok, "n_run": len(res),
+            "collection_failed": run.collection_failed}
 
 
 if __name__ == "__main__":

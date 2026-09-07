@@ -71,14 +71,16 @@ def validate(task: dict) -> dict:
         return {"valid": False, "reason": f"gold touches only {len(gold_files)} source files"}
     repo, wt = docker_eval._worktree(task, [task["test_patch"], task["patch"]])
     try:
-        res = docker_eval._pytest_in_docker(wt, mods, task["repo"])
+        run = docker_eval._pytest_in_docker(wt, mods, task["repo"])
     finally:
         docker_eval._cleanup(repo, wt)
+    res = run.outcomes
     passed = sum(1 for o in res.values() if o == "PASSED")
     failed = [n for n, o in res.items() if o != "PASSED"]
     return {
-        "valid": bool(res) and not failed,
-        "reason": "" if (res and not failed) else f"gold-side failures: {failed[:5] or 'nothing collected'}",
+        "valid": bool(res) and not failed and not run.collection_failed,
+        "reason": "" if (res and not failed and not run.collection_failed)
+        else f"gold-side failures: {failed[:5] or 'collection failed'}",
         "test_modules": mods, "n_green": passed,
         "gold_files": gold_files,
     }
@@ -89,10 +91,11 @@ def score(task: dict, agent_diff: str) -> dict:
     mods = task["test_modules"]
     repo, wt = docker_eval._worktree(task, [task["test_patch"], agent_diff])
     try:
-        res = docker_eval._pytest_in_docker(wt, mods, task["repo"])
+        run = docker_eval._pytest_in_docker(wt, mods, task["repo"])
     finally:
         docker_eval._cleanup(repo, wt)
-    green = bool(res) and all(o == "PASSED" for o in res.values())
+    res = run.outcomes
+    green = bool(res) and all(o == "PASSED" for o in res.values()) and not run.collection_failed
 
     touched = {line[6:] for line in agent_diff.splitlines()
                if line.startswith("+++ b/")}
