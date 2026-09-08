@@ -1,0 +1,10 @@
+The change is complete and minimal:
+
+1. **`BytesIOCopy.fileno()`** — added, lazily backing the in-memory buffer with a real `tempfile.TemporaryFile()` only when `fileno()` is actually requested (e.g. by `subprocess.run(stdout=sys.stderr)`), copying already-buffered content into it. Streams that never need a real fd stay pure in-memory `io.BytesIO`, preserving existing behavior/tests.
+2. **`BytesIOCopy.write()`/`flush()`** — also write/flush to the lazily-created backing file when present.
+3. **`BytesIOCopy.close()`** — added, to close the backing file (avoiding fd leaks) while still calling `super().close()`.
+4. **`CliRunner.isolation()`** — closes `stream_mixer.stdout`/`stderr` in the `finally` block after the captured bytes have been read, so any lazily-created temp file gets closed at the end of the isolation scope.
+
+Verified:
+- The original SSCCE (`subprocess.run(["echo", "foo"], stdout=sys.stderr)` inside a `CliRunner.invoke`) now passes instead of raising `io.UnsupportedOperation: fileno`.
+- Full test suite: `1419 passed, 24 skipped, 1 xfailed` (was previously failing with 3 failures from `tests/test_stream_lifecycle.py` under a naive "always use a real file" approach, now clean with the lazy approach, which also respects that suite's history around `_NamedTextIOWrapper`/`StreamMixer` not eagerly closing owned buffers).

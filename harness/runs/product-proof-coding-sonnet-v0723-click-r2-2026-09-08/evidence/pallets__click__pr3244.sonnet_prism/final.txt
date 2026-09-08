@@ -1,0 +1,12 @@
+## Summary
+
+**Root cause:** `CliRunner.isolation()` backs `sys.stdout`/`sys.stderr` with `io.BytesIO` objects (via `BytesIOCopy`/`StreamMixer`), which have no real OS file descriptor. Code under test that passes these streams to APIs needing a real fd — e.g. `subprocess.run(..., stdout=sys.stderr)` — crashed with `io.UnsupportedOperation: fileno`.
+
+**Fix** (`src/click/testing.py`, `BytesIOCopy`): lazily back the stream with a real `tempfile.TemporaryFile()` the first time `fileno()` is actually called, keeping it in sync with the in-memory buffer for reads (`getvalue()`) and writes. Streams that never need a real fd (the common case, including all existing unit tests that construct `BytesIOCopy`/`StreamMixer` directly) stay pure `io.BytesIO` with no OS resource created, so no behavior or resource-leak change there. Also added a `close()` override to release the real file if one was created, and close the mixer's streams at the end of `isolation()`.
+
+**Verification:**
+- Reproduced the original crash, confirmed the fix resolves it: `subprocess.run(["echo", "foo"], stdout=sys.stderr)` inside a `CliRunner.invoke()`-run command now succeeds (`result.stderr == 'foo\n'`, exit code 0, no exception).
+- Full test suite: `python -m pytest tests/` → 1419 passed, 24 skipped, 1 xfailed — no regressions.
+- `prism_verify` reports the diff's blast radius is fully covered.
+
+Note: `result.output` (the merged stdout+stderr stream) won't include bytes a subprocess writes directly to the fd, since that bypasses Click's Python-level tee to the mixed buffer — `result.stdout`/`result.stderr` do capture it correctly, and the crash is what's fixed.
