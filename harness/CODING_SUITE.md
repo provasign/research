@@ -42,6 +42,13 @@ The pilot is the predetermined Click local bug and urllib3 cross-file fix (eight
 cells). Run the full 32-cell set only after the pilot passes validation,
 measurement, transcript, and scoring audits.
 
+The 2026-09-07 pilot completed, but did not pass the treatment audit. Claude
+reported Prism connected but made no Prism calls. Both GPT-5.5 Prism transcripts
+reported that deferred Prism tools were not exposed. The full run is paused
+until Codex tool exposure is fixed, independently smoke-tested, and the whole
+eight-cell pilot is repeated. See
+`runs/coding-suite-pilot-2026-09-07/README.md`.
+
 ```sh
 python3 -B harness/coding_suite.py --run-dir /absolute/output --phase pilot --preflight-only
 python3 -B harness/coding_suite.py --run-dir /absolute/output --phase pilot

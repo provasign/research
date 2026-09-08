@@ -1,0 +1,9 @@
+All 1419 repo tests pass, plus the original SSCCE reproduction now passes.
+
+## Summary
+
+The `CliRunner`'s `StreamMixer` captured `stdout`/`stderr` using plain `io.BytesIO` buffers, which have no real OS file descriptor. When code under test called `subprocess.run(..., stdout=sys.stderr)`, `subprocess` tried `stdout.fileno()` and raised `io.UnsupportedOperation`.
+
+**Fix** (`src/click/testing.py`): Rewrote `BytesIOCopy` to back its buffer with a real `tempfile.TemporaryFile()` instead of `io.BytesIO`, so `fileno()` works and can be handed to subprocess/OS-level APIs, while still mirroring every `write()` into the combined `copy_to` output stream. Added the small set of file-like methods (`read`, `seek`, `tell`, `truncate`, `readable`/`writable`/`seekable`, `isatty`, `closed`, `close`) needed for compatibility with `io.TextIOWrapper` and existing tests, plus a `__del__` that closes the underlying temp file to avoid descriptor/ResourceWarning leaks. Also close the mixer's stdout/stderr temp files in `isolation()`'s `finally` block after their values have been captured.
+
+Verified with `python -m pytest tests/` (1419 passed, 24 skipped, 1 xfailed) and the issue's reproduction script, which now passes.

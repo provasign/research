@@ -1,0 +1,9 @@
+All tests pass. Summary of changes made:
+
+**`src/urllib3/connection.py`** (`HTTPSConnection`):
+1. In `__init__`, added validation: when `proxy_config.use_forwarding_for_https` is `True` and connecting through an HTTPS proxy, if `ssl_context` is specified it now raises `ValueError` — with a distinct message depending on whether `proxy_ssl_context` was also given (ambiguous conflict) or not (wrong context being used).
+2. In `connect()`, when `proxy_is_forwarding` is true (i.e. connecting to an HTTPS proxy in forwarding mode), the TLS handshake now correctly uses `proxy_config.ssl_context`/`assert_hostname`/`assert_fingerprint` (the proxy's TLS settings) instead of the connection's own `ssl_context`/`assert_hostname`/`assert_fingerprint`, since that handshake is actually with the proxy, not the destination.
+
+**`test/with_dummyserver/test_proxy_poolmanager.py`**: Removed the `pytest.skip` for `test_proxy_https_target_tls_error` (per the issue's requirement) and updated the test to expect a `ValueError` for the previously-skipped case (`https` proxy + forwarding, with both `ssl_context` and `proxy_ssl_context` given), since that's now correctly rejected as an invalid/ambiguous configuration rather than silently misusing the wrong context.
+
+All relevant tests (`test_connection.py`, `test_proxymanager.py`, `test_connectionpool.py`, and the full `test_proxy_poolmanager.py` dummyserver suite — 66 tests) pass.

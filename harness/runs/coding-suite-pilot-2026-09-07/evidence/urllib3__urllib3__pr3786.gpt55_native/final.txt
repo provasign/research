@@ -1,0 +1,10 @@
+Implemented the source-only fix.
+
+Changed:
+- [src/urllib3/poolmanager.py](/Users/tapabratapal/Projects/provasign/research/harness/runs/coding-suite-pilot-2026-09-07/work/urllib3__urllib3__pr3786.gpt55_native/src/urllib3/poolmanager.py): rejects `ssl_context` when using HTTPS proxy forwarding, instructing callers to use `proxy_ssl_context`.
+- [src/urllib3/connection.py](/Users/tapabratapal/Projects/provasign/research/harness/runs/coding-suite-pilot-2026-09-07/work/urllib3__urllib3__pr3786.gpt55_native/src/urllib3/connection.py): HTTPS forwarding through HTTPS proxies now TLS-wraps the proxy connection via `proxy_ssl_context`/proxy verification settings, instead of using the origin `ssl_context`.
+
+Verification:
+- `python -m py_compile src/urllib3/connection.py src/urllib3/poolmanager.py` passed.
+- `python -m pytest test/test_proxymanager.py::TestProxyManager::test_proxy_tunnel -q` passed.
+- Broader proxy dummyserver tests could not run in this sandbox because socket binding is denied (`PermissionError: [Errno 1] Operation not permitted`).

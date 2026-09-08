@@ -1,0 +1,56 @@
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 84e1dab..8fe8be4 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -657,6 +657,18 @@ class HTTPSConnection(HTTPConnection):
+             proxy_config=proxy_config,
+         )
+ 
++        if (
++            proxy_config is not None
++            and proxy_config.use_forwarding_for_https
++            and ssl_context is not None
++        ):
++            raise ValueError(
++                "'ssl_context' isn't used when 'use_forwarding_for_https' is "
++                "enabled since the TLS connection is made directly to the "
++                "HTTPS proxy, not to the origin. Use 'proxy_ssl_context' "
++                "instead to configure TLS for the proxy connection."
++            )
++
+         self.key_file = key_file
+         self.cert_file = cert_file
+         self.key_password = key_password
+@@ -793,6 +805,18 @@ class HTTPSConnection(HTTPConnection):
+             # Remove trailing '.' from fqdn hostnames to allow certificate validation
+             server_hostname_rm_dot = server_hostname.rstrip(".")
+ 
++            # If we're forwarding through an HTTPS proxy (rather than tunneling)
++            # this connection's socket is actually connecting to the proxy, not
++            # the origin, so we must use the proxy's TLS configuration.
++            if self.proxy_is_forwarding and self.proxy_config is not None:
++                ssl_context = self.proxy_config.ssl_context
++                assert_hostname = self.proxy_config.assert_hostname
++                assert_fingerprint = self.proxy_config.assert_fingerprint
++            else:
++                ssl_context = self.ssl_context
++                assert_hostname = self.assert_hostname
++                assert_fingerprint = self.assert_fingerprint
++
+             sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+                 sock=sock,
+                 cert_reqs=self.cert_reqs,
+@@ -806,10 +830,10 @@ class HTTPSConnection(HTTPConnection):
+                 key_file=self.key_file,
+                 key_password=self.key_password,
+                 server_hostname=server_hostname_rm_dot,
+-                ssl_context=self.ssl_context,
++                ssl_context=ssl_context,
+                 tls_in_tls=tls_in_tls,
+-                assert_hostname=self.assert_hostname,
+-                assert_fingerprint=self.assert_fingerprint,
++                assert_hostname=assert_hostname,
++                assert_fingerprint=assert_fingerprint,
+             )
+             self.sock = sock_and_verified.socket
+ 

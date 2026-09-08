@@ -47,5 +47,17 @@ class GptCostTests(unittest.TestCase):
         self.assertIsNone(rec["cost_usd"])
 
 
+class SourcePathTests(unittest.TestCase):
+    def test_accepts_python_implementation_files(self) -> None:
+        self.assertTrue(coding_suite.is_source_path("src/example/core.py"))
+        self.assertTrue(coding_suite.is_source_path("rich/segment.py"))
+
+    def test_rejects_tests_docs_and_generated_databases(self) -> None:
+        self.assertFalse(coding_suite.is_source_path("tests/test_core.py"))
+        self.assertFalse(coding_suite.is_source_path("test/example_test.py"))
+        self.assertFalse(coding_suite.is_source_path("docs/design.rst"))
+        self.assertFalse(coding_suite.is_source_path(".grove/grove.db"))
+
+
 if __name__ == "__main__":
     unittest.main()

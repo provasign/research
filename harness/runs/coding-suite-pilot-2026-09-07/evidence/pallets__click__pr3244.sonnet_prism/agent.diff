@@ -1,0 +1,70 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..4c8c0ed 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -70,12 +70,26 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+ class BytesIOCopy(io.BytesIO):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
++    A real, on-disk file is lazily created the first time ``fileno()`` is
++    accessed, so that code under test can pass ``sys.stdout``/``sys.stderr``
++    to APIs (such as :func:`subprocess.run`) that require a file-like
++    object with a valid file descriptor.
++
+     .. versionadded:: 8.2
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._fileno_file: t.IO[bytes] | None = None
++
++    def fileno(self) -> int:
++        if self._fileno_file is None:
++            self._fileno_file = tempfile.TemporaryFile()
++            self._fileno_file.write(self.getvalue())
++            self._fileno_file.flush()
++
++        return self._fileno_file.fileno()
+ 
+     def flush(self) -> None:
+         super().flush()
+@@ -83,8 +97,18 @@ class BytesIOCopy(io.BytesIO):
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
++
++        if self._fileno_file is not None:
++            self._fileno_file.write(b)
++
+         return super().write(b)
+ 
++    def close(self) -> None:
++        if self._fileno_file is not None:
++            self._fileno_file.close()
++
++        super().close()
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.
+@@ -96,8 +120,8 @@ class StreamMixer:
+ 
+     def __init__(self) -> None:
+         self.output: io.BytesIO = io.BytesIO()
+-        self.stdout: io.BytesIO = BytesIOCopy(copy_to=self.output)
+-        self.stderr: io.BytesIO = BytesIOCopy(copy_to=self.output)
++        self.stdout: BytesIOCopy = BytesIOCopy(copy_to=self.output)
++        self.stderr: BytesIOCopy = BytesIOCopy(copy_to=self.output)
+ 
+ 
+ class _NamedTextIOWrapper(io.TextIOWrapper):
+@@ -471,6 +495,8 @@ class CliRunner:
+             _compat.should_strip_ansi = old__compat_should_strip_ansi
+             formatting.FORCED_WIDTH = old_forced_width
+             pdb.Pdb.__init__ = old_pdb_init  # type: ignore[method-assign]
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
+ 
+     def invoke(
+         self,

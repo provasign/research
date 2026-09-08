@@ -249,40 +249,14 @@ def prepare_cell(root: Path, task: dict, arm: str, template: Path, baseline: str
             "env_dir": env_dir, "invocation_id": str(uuid.uuid4())}
 
 
-def is_source_path(path: str) -> bool:
-    """Keep Python implementation files while rejecting tests and run artifacts."""
-    value = Path(path)
-    parts = set(value.parts)
-    return (
-        value.suffix in {".py", ".pyi"}
-        and not parts.intersection({"test", "tests", ".grove", ".prism", ".shale"})
-        and not value.name.startswith("test_")
-        and not value.name.endswith("_test.py")
-    )
-
-
-def source_diff(cell: dict) -> tuple[str, list[str], list[str]]:
-    work = cell["work"]
-    command(["git", "add", "-A"], work, check=False)
-    all_changed = command(
-        ["git", "diff", "--cached", "--name-only", cell["baseline"]], work, check=False
-    ).decode().splitlines()
-    setup_files = set(cell["setup_files"])
-    candidate_files = [path for path in all_changed if path not in setup_files]
-    source_files = [path for path in candidate_files if is_source_path(path)]
-    non_source_files = [path for path in candidate_files if path not in source_files]
-    if not source_files:
-        return "", [], non_source_files
-    diff = command(
-        ["git", "diff", "--cached", "--binary", cell["baseline"], "--", *source_files],
-        work, check=False,
-    ).decode(errors="replace")
-    return diff, source_files, non_source_files
-
-
 def diff_for(cell: dict) -> str:
-    """Return the source-only patch for compatibility with archived runners."""
-    return source_diff(cell)[0]
+    work, task = cell["work"], cell["task"]
+    command(["git", "add", "-A"], work, check=False)
+    excludes = [f":(exclude){p}" for p in task.get("test_modules", [])]
+    excludes += [":(exclude).grove", ":(exclude).prism", ":(exclude).shale"]
+    excludes += [f":(exclude){path}" for path in cell["setup_files"]]
+    return command(["git", "diff", "--cached", "--binary", cell["baseline"], "--", ".", *excludes],
+                   work, check=False).decode(errors="replace")
 
 
 def audit(rec: dict, calls: list[dict], arm: str) -> None:
@@ -304,7 +278,7 @@ def audit(rec: dict, calls: list[dict], arm: str) -> None:
     violations = []
     if arm.endswith("native") and (prism_calls or any(ro.invokes_prism(x) for x in native_commands)):
         violations.append("native arm used Prism")
-    rec.update(prism_calls=prism_calls, native_commands=native_commands, tool_calls=len(calls),
+    rec.update(prism_calls=prism_calls, native_commands=native_commands,
                duplicate_prism_calls=len(signatures) - len(set(signatures)), violations=violations)
 
 
@@ -358,13 +332,15 @@ def run_cell(cell: dict) -> dict:
         add_gpt55_cost(rec)
     (out / "final.txt").write_text(final)
     audit(rec, calls, arm)
-    diff, changed_files, non_source_changes = source_diff(cell)
+    diff = diff_for(cell)
     (out / "agent.diff").write_text(diff)
+    changed_files = command(["git", "diff", "--cached", "--name-only", cell["baseline"]], work,
+                            check=False).decode().splitlines()
+    changed_files = [path for path in changed_files if path not in cell["setup_files"]]
     rec.update(cell_id=cell["key"], task=cell["task"]["instance_id"], arm=arm,
                invocation_id=cell["invocation_id"], started_at=started,
                wall_s=round(time.monotonic() - t0, 3), exit_code=proc.returncode,
                timed_out=timed_out, changed_files=changed_files,
-               non_source_changes=non_source_changes,
                diff_lines=diff.count("\n"), has_diff=bool(diff.strip()),
                audited_valid=bool(proc.returncode == 0 and not timed_out and
                                   rec.get("measurement_complete") and not rec.get("agent_error") and

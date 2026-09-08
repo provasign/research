@@ -1,0 +1,11 @@
+Good — it's gitignored (a build artifact), so it won't affect the patch/diff. The fix is complete and minimal.
+
+## Summary
+
+Fixed the bug in `src/urllib3/connection.py` where `HTTPSConnection` used `self.ssl_context` (meant for the origin) to establish TLS with an HTTPS proxy in forwarding mode (`ProxyConfig.use_forwarding_for_https = True`).
+
+Changes:
+1. **`HTTPSConnection.__init__`**: Raises `ValueError` if `ssl_context` is passed while `proxy_config.use_forwarding_for_https` is `True`, telling the caller to use `proxy_ssl_context` instead (matches the 2.x behavior required by the issue).
+2. **`HTTPSConnection.connect`**: When `self.proxy_is_forwarding` is true, the TLS handshake now uses `proxy_config.ssl_context`/`assert_hostname`/`assert_fingerprint` (i.e., the proxy's TLS settings) instead of the origin's, since in forwarding mode the socket connects directly to the proxy.
+
+Verified with the full non-network test suite (`test/` excluding `with_dummyserver`, 1460 passed) and `test/test_proxymanager.py`/`test/test_connection.py` (287 passed), plus a manual sanity check confirming the new `ValueError` triggers correctly and normal forwarding without `ssl_context` still works. Left `test_proxy_https_target_tls_error`'s existing skip untouched per instructions not to modify tests.

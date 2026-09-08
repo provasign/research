@@ -1,0 +1,106 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..9b09030 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -67,23 +67,76 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+         stream._paused = False
+ 
+ 
+-class BytesIOCopy(io.BytesIO):
+-    """Patch ``io.BytesIO`` to let the written stream be copied to another.
++class BytesIOCopy:
++    """A binary stream backed by a real (file descriptor-based) temporary
++    file, so that code under test can pass it to APIs (such as
++    :class:`subprocess.Popen`) that require a real ``fileno()``, while also
++    copying the written data to another stream.
+ 
+     .. versionadded:: 8.2
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+-        super().__init__()
++        self._file = tempfile.TemporaryFile()
+         self.copy_to = copy_to
+ 
++    def fileno(self) -> int:
++        return self._file.fileno()
++
+     def flush(self) -> None:
+-        super().flush()
++        self._file.flush()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+-        return super().write(b)
++        return self._file.write(b)
++
++    def read(self, *args: t.Any, **kwargs: t.Any) -> bytes:
++        return self._file.read(*args, **kwargs)
++
++    def seek(self, *args: t.Any, **kwargs: t.Any) -> int:
++        return self._file.seek(*args, **kwargs)
++
++    def tell(self) -> int:
++        return self._file.tell()
++
++    def truncate(self, *args: t.Any, **kwargs: t.Any) -> int:
++        return self._file.truncate(*args, **kwargs)
++
++    def readable(self) -> bool:
++        return True
++
++    def writable(self) -> bool:
++        return True
++
++    def seekable(self) -> bool:
++        return True
++
++    def isatty(self) -> bool:
++        return False
++
++    @property
++    def closed(self) -> bool:
++        return self._file.closed
++
++    def close(self) -> None:
++        self._file.close()
++
++    def __del__(self) -> None:
++        # Make sure the real temporary file's descriptor is released even
++        # if ``close()`` was never called explicitly, to avoid leaking file
++        # descriptors and to silence ``ResourceWarning``.
++        try:
++            self._file.close()
++        except Exception:
++            pass
++
++    def getvalue(self) -> bytes:
++        pos = self._file.tell()
++        self._file.seek(0)
++        data = self._file.read()
++        self._file.seek(pos)
++        return data
+ 
+ 
+ class StreamMixer:
+@@ -96,8 +149,8 @@ class StreamMixer:
+ 
+     def __init__(self) -> None:
+         self.output: io.BytesIO = io.BytesIO()
+-        self.stdout: io.BytesIO = BytesIOCopy(copy_to=self.output)
+-        self.stderr: io.BytesIO = BytesIOCopy(copy_to=self.output)
++        self.stdout: BytesIOCopy = BytesIOCopy(copy_to=self.output)
++        self.stderr: BytesIOCopy = BytesIOCopy(copy_to=self.output)
+ 
+ 
+ class _NamedTextIOWrapper(io.TextIOWrapper):
+@@ -467,6 +520,8 @@ class CliRunner:
+             termui.visible_prompt_func = old_visible_prompt_func
+             termui.hidden_prompt_func = old_hidden_prompt_func
+             termui._getchar = old__getchar_func
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
+             utils.should_strip_ansi = old_should_strip_ansi  # type: ignore
+             _compat.should_strip_ansi = old__compat_should_strip_ansi
+             formatting.FORCED_WIDTH = old_forced_width

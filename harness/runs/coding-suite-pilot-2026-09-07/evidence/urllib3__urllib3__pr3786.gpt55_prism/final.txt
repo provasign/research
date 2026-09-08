@@ -1,0 +1,13 @@
+Implemented the source fix in:
+
+- [src/urllib3/connection.py](/Users/tapabratapal/Projects/provasign/research/harness/runs/coding-suite-pilot-2026-09-07/work/urllib3__urllib3__pr3786.gpt55_prism/src/urllib3/connection.py)
+- [src/urllib3/poolmanager.py](/Users/tapabratapal/Projects/provasign/research/harness/runs/coding-suite-pilot-2026-09-07/work/urllib3__urllib3__pr3786.gpt55_prism/src/urllib3/poolmanager.py)
+
+What changed:
+- HTTPS proxy forwarding now wraps the proxy socket through `_connect_tls_proxy()`, so it uses `proxy_ssl_context` instead of the origin `ssl_context`.
+- `ProxyManager(..., use_forwarding_for_https=True, ssl_context=...)` now raises `ValueError` for HTTPS proxies, instructing callers to use `proxy_ssl_context`.
+- When a `proxy_ssl_context` is supplied, proxy TLS verification now derives `cert_reqs` from that context.
+
+Verification:
+- `python -m py_compile src/urllib3/connection.py src/urllib3/poolmanager.py` passed.
+- Narrow `pytest` could not start because this checkout is missing `src/urllib3/_version.py`, causing pytest config import to fail before collection.

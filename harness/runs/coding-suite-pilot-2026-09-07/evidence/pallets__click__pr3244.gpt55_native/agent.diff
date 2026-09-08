@@ -1,0 +1,46 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..9ffdf91 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -76,12 +76,41 @@ class BytesIOCopy(io.BytesIO):
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._stream: t.BinaryIO | None = None
++        self._stream_position = 0
++
++    def _sync_from_stream(self) -> None:
++        if self._stream is None:
++            return
++
++        self._stream.flush()
++        new_position = self._stream.tell()
++        self._stream.seek(self._stream_position)
++        new_bytes = self._stream.read()
++        self._stream.seek(new_position)
++        self._stream_position = new_position
++
++        if new_bytes:
++            self.copy_to.write(new_bytes)
++            super().write(new_bytes)
++
++    def fileno(self) -> int:
++        if self._stream is None:
++            self._stream = tempfile.TemporaryFile()
++
++        return self._stream.fileno()
+ 
+     def flush(self) -> None:
+         super().flush()
++        self._sync_from_stream()
+         self.copy_to.flush()
+ 
++    def getvalue(self) -> bytes:
++        self._sync_from_stream()
++        return super().getvalue()
++
+     def write(self, b: ReadableBuffer) -> int:
++        self._sync_from_stream()
+         self.copy_to.write(b)
+         return super().write(b)
+ 
