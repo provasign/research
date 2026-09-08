@@ -1,0 +1,24 @@
+diff --git a/src/click/shell_completion.py b/src/click/shell_completion.py
+index 7235f10..4d6d2c5 100644
+--- a/src/click/shell_completion.py
++++ b/src/click/shell_completion.py
+@@ -137,12 +137,18 @@ _SOURCE_ZSH = """\
+     local -a completions
+     local -a completions_with_descriptions
+     local -a response
++    local type key descr
++    local i
+     (( ! $+commands[%(prog_name)s] )) && return 1
+ 
+     response=("${(@f)$(env COMP_WORDS="${words[*]}" COMP_CWORD=$((CURRENT-1)) \
+ %(complete_var)s=zsh_complete %(prog_name)s)}")
+ 
+-    for type key descr in ${response}; do
++    for (( i = 1; i <= $#response; i += 3 )); do
++        type="${response[i]}"
++        key="${response[i+1]}"
++        descr="${response[i+2]}"
++
+         if [[ "$type" == "plain" ]]; then
+             if [[ "$descr" == "_" ]]; then
+                 completions+=("$key")

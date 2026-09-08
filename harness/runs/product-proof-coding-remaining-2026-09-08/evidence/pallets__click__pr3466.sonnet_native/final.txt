@@ -1,0 +1,7 @@
+## Summary
+
+**Root cause:** `click.shell_completion.shell_complete()` emitted the shell completion source script via `click.echo()`, which writes through the platform's text-mode stdout stream. On Windows (including MSYS2/git-bash Python venvs), text-mode streams translate outgoing `"\n"` to `os.linesep` (`"\r\n"`). The multi-line zsh script therefore got corrupted with stray carriage returns, which MSYS2's zsh doesn't tolerate — producing `zsh: parse error near 'elif'` even though the script itself is syntactically valid.
+
+**Fix:** In `src/click/shell_completion.py`, when emitting the `source` instruction, write directly to the underlying binary stdout stream (`get_binary_stdout()`) instead of going through the text-mode `echo()`, ensuring only literal `"\n"` bytes are written regardless of platform.
+
+**Verification:** Ran `python -m pytest tests/test_shell_completion.py -q` (53 passed) and manually confirmed the generated zsh source script now contains no `\r` bytes and is unchanged in content.

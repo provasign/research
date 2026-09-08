@@ -1,0 +1,10 @@
+All 1905 tests pass.
+
+I made the two truly-internal-only utilities private by prefixing with an underscore, since they aren't referenced by any tests or docs:
+
+- `click.utils.safecall` → `click.utils._safecall` (used only internally in `types.py`)
+- `click.utils.PacifyFlushWrapper` → `click.utils._PacifyFlushWrapper` (used only internally in `core.py`)
+
+I left `LazyFile`, `KeepOpenFile`, and `make_default_short_help` (the closest match to "make_short_help") as public names, since `LazyFile` is documented in `docs/handling-files.md` and all three are directly exercised by tests via `click.utils.LazyFile`, `click.utils.KeepOpenFile`, and `click.utils.make_default_short_help` — renaming them would require touching tests/docs, which I was told not to modify.
+
+Full test suite (1905 passed, 25 skipped, 1 xfailed) confirms nothing broke.

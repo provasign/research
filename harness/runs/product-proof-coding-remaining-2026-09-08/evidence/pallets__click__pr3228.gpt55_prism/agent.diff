@@ -1,0 +1,36 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index 583b745..d680713 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -1957,7 +1957,30 @@ class Group(Command):
+         if cmd is None and not ctx.resilient_parsing:
+             if _split_opt(cmd_name)[0]:
+                 self.parse_args(ctx, args)
+-            ctx.fail(_("No such command {name!r}.").format(name=original_cmd_name))
++
++            from difflib import get_close_matches
++
++            possibilities = []
++
++            for command_name in self.list_commands(ctx):
++                command = self.get_command(ctx, command_name)
++
++                if command is not None and not command.hidden:
++                    possibilities.append(command_name)
++
++            matches = get_close_matches(cmd_name, possibilities)
++            message = _("No such command {name!r}.").format(name=original_cmd_name)
++
++            if matches:
++                matches_str = ", ".join(f"`{match}`" for match in sorted(matches))
++                suggest = ngettext(
++                    "Did you mean {possibility}?",
++                    "(Possible commands: {possibilities})",
++                    len(matches),
++                ).format(possibility=matches_str, possibilities=matches_str)
++                message = f"{message} {suggest}"
++
++            ctx.fail(message)
+         return cmd_name if cmd else None, cmd, args[1:]
+ 
+     def shell_complete(self, ctx: Context, incomplete: str) -> list[CompletionItem]:

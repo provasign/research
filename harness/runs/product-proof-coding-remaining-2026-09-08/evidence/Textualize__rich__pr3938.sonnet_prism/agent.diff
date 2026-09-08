@@ -1,0 +1,60 @@
+diff --git a/rich/console.py b/rich/console.py
+index 994adfc..160070d 100644
+--- a/rich/console.py
++++ b/rich/console.py
+@@ -1742,7 +1742,11 @@ class Console:
+                 ):
+                     buffer_extend(line)
+             else:
+-                self._buffer.extend(new_segments)
++                buffer_extend = self._buffer.extend
++                for line in Segment.split_and_crop_lines(
++                    new_segments, None, pad=False
++                ):
++                    buffer_extend(line)
+ 
+     def print_json(
+         self,
+diff --git a/rich/segment.py b/rich/segment.py
+index edcb52d..410b113 100644
+--- a/rich/segment.py
++++ b/rich/segment.py
+@@ -279,7 +279,7 @@ class Segment(NamedTuple):
+     def split_and_crop_lines(
+         cls,
+         segments: Iterable["Segment"],
+-        length: int,
++        length: Optional[int],
+         style: Optional[Style] = None,
+         pad: bool = True,
+         include_new_lines: bool = True,
+@@ -289,7 +289,8 @@ class Segment(NamedTuple):
+         Args:
+             segments (Iterable[Segment]): An iterable of segments, probably
+                 generated from console.render.
+-            length (int): Desired line length.
++            length (Optional[int]): Desired line length, or ``None`` to leave lines unmodified
++                (other than replacing the newline with an unstyled one).
+             style (Style, optional): Style to use for any padding.
+             pad (bool): Enable padding of lines that are less than `length`.
+ 
+@@ -299,7 +300,18 @@ class Segment(NamedTuple):
+         line: List[Segment] = []
+         append = line.append
+ 
+-        adjust_line_length = cls.adjust_line_length
++        if length is None:
++
++            def adjust_line_length(
++                line: List["Segment"],
++                length: Optional[int],
++                style: Optional[Style] = None,
++                pad: bool = True,
++            ) -> List["Segment"]:
++                return line[:]
++
++        else:
++            adjust_line_length = cls.adjust_line_length
+         new_line_segment = cls("\n")
+ 
+         for segment in segments:

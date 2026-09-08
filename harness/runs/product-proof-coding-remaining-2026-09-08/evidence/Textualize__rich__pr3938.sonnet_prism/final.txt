@@ -1,0 +1,7 @@
+Fixed the bug where background/foreground color carries over to the next line when `soft_wrap=True`.
+
+**Root cause:** In `Console.print`, when a `style=` argument is passed, `Segment.apply_style` applies that style to *every* segment — including the trailing, deliberately-unstyled `"\n"` segment that `Text.render` appends for the line ending. When `soft_wrap`/`crop=False`, this styled newline segment was written straight to the buffer as-is, so the ANSI reset code ended up *after* the `\n` character instead of before it — causing the terminal to carry the background color into the next (often newly-scrolled) line. When `crop=True` (the default), `Segment.split_and_crop_lines` already discarded any style on the newline by replacing it with a plain `"\n"` segment, so that path was unaffected.
+
+**Fix:** Extended `Segment.split_and_crop_lines`/`adjust_line_length` to accept `length=None`, meaning "don't crop or pad, just normalize line breaks," and used it in `Console.print`'s non-crop (soft-wrap) branch so styled newline segments there get the same unstyled-newline treatment as the cropped path — placing the reset before the newline in all cases.
+
+Verified with a direct repro (styled text now emits `\x1b[0m` immediately after the text and before `\n`), and ran the full test suite: `test_console.py` and `test_segment.py` pass fully (158 passed), and the 7 pre-existing failures in `test_syntax.py`/`test_card.py` were confirmed present on the unmodified baseline too (unrelated Pygments/env version differences), so nothing regressed.

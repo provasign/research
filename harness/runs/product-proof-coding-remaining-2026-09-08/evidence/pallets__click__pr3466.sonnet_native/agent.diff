@@ -1,0 +1,29 @@
+diff --git a/src/click/shell_completion.py b/src/click/shell_completion.py
+index 7235f10..7f675e5 100644
+--- a/src/click/shell_completion.py
++++ b/src/click/shell_completion.py
+@@ -6,6 +6,7 @@ import re
+ import typing as t
+ from gettext import gettext as _
+ 
++from ._compat import get_binary_stdout
+ from .core import Argument
+ from .core import Command
+ from .core import Context
+@@ -44,7 +45,15 @@ def shell_complete(
+     comp = comp_cls(cli, ctx_args, prog_name, complete_var)
+ 
+     if instruction == "source":
+-        echo(comp.source())
++        # Write directly to the binary stream to avoid the platform's
++        # text-mode newline translation (e.g. "\n" -> "\r\n" on
++        # Windows), which corrupts the multi-line shell script and
++        # breaks shells like zsh (msys2/git-bash) that don't tolerate
++        # stray carriage returns.
++        stdout = get_binary_stdout()
++        stdout.write(comp.source().encode())
++        stdout.write(b"\n")
++        stdout.flush()
+         return 0
+ 
+     if instruction == "complete":

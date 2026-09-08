@@ -1,0 +1,9 @@
+## Summary
+
+Added a `subdomain_matching` parameter to `Map` (in `src/werkzeug/routing/map.py`), alongside the existing `host_matching` parameter:
+
+- New `__init__` parameter `subdomain_matching: bool = True` (default `True` preserves existing werkzeug behavior), stored as `self.subdomain_matching`.
+- `bind_to_environ` now only infers the subdomain from the difference between the WSGI host and `server_name` when `subdomain_matching` is enabled (`if subdomain is None and not self.host_matching and self.subdomain_matching:`). When disabled, `bind_to_environ` leaves `subdomain` as `None` instead of computing it, so consumers like Flask can set `subdomain_matching=False` to avoid the previous restrictive behavior when no subdomain-based routing rules exist.
+- Updated the class docstring to document the new parameter.
+
+Ran `python -m pytest tests/test_routing.py -q` — all 117 tests pass. A full `tests/` run also passes except for one pre-existing, unrelated failure (`test_serving.py::test_server[unix socket]`, an `AF_UNIX` path-length issue tied to this machine's temp directory, unrelated to this change).

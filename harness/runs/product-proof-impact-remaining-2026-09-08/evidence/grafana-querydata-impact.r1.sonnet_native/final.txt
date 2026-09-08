@@ -1,0 +1,89 @@
+I now have all the evidence needed to produce the final answer.
+
+```json
+{
+  "sites": [
+    "pkg/tsdb/mssql/sqleng/sql_engine.go:QueryData",
+    "pkg/tsdb/mssql/mssql.go:QueryData",
+    "pkg/tsdb/graphite/graphite.go:QueryData",
+    "pkg/tsdb/graphite/standalone/datasource.go:QueryData",
+    "pkg/tsdb/prometheus/prometheus.go:QueryData",
+    "pkg/tsdb/grafana-postgresql-datasource/sqleng/sql_engine.go:QueryData",
+    "pkg/tsdb/grafana-postgresql-datasource/postgres_service.go:QueryData",
+    "pkg/tsdb/opentsdb/opentsdb.go:QueryData",
+    "pkg/tsdb/opentsdb/standalone/datasource.go:QueryData",
+    "pkg/tsdb/mysql/mysql_service.go:QueryData",
+    "pkg/tsdb/mysql/sqleng/sql_engine.go:QueryData",
+    "pkg/tsdb/grafanads/grafana.go:QueryData",
+    "pkg/tsdb/tempo/tempo.go:QueryData",
+    "pkg/tsdb/tempo/standalone/datasource.go:QueryData",
+    "pkg/tsdb/zipkin/zipkin.go:QueryData",
+    "pkg/tsdb/zipkin/standalone/datasource.go:QueryData",
+    "pkg/tsdb/grafana-testdata-datasource/sims/engine.go:QueryData",
+    "pkg/tsdb/grafana-testdata-datasource/testdata.go:QueryData",
+    "pkg/tsdb/grafana-testdata-datasource/standalone/datasource.go:QueryData",
+    "pkg/tsdb/influxdb/influxdb.go:QueryData",
+    "pkg/tsdb/cloud-monitoring/cloudmonitoring.go:QueryData",
+    "pkg/tsdb/cloud-monitoring/standalone/datasource.go:QueryData",
+    "pkg/tsdb/grafana-pyroscope-datasource/standalone/datasource.go:QueryData",
+    "pkg/tsdb/grafana-pyroscope-datasource/instance.go:QueryData",
+    "pkg/tsdb/grafana-pyroscope-datasource/service.go:QueryData",
+    "pkg/tsdb/jaeger/jaeger.go:QueryData",
+    "pkg/tsdb/jaeger/standalone/datasource.go:QueryData",
+    "pkg/tsdb/loki/loki.go:QueryData",
+    "pkg/tsdb/loki/standalone/datasource.go:QueryData",
+    "pkg/tsdb/loki/healthcheck.go:healthcheck",
+    "pkg/tsdb/azuremonitor/azuremonitor.go:QueryData",
+    "pkg/tsdb/azuremonitor/standalone/datasource.go:QueryData",
+    "pkg/tsdb/parca/plugin.go:QueryData",
+    "pkg/tsdb/parca/standalone/datasource.go:QueryData",
+    "pkg/tsdb/parca/service.go:QueryData",
+    "pkg/tsdb/cloudwatch/cloudwatch.go:QueryData",
+    "pkg/tsdb/cloudwatch/service.go:QueryData",
+    "pkg/services/pluginsintegration/clientmiddleware/cookies_middleware.go:QueryData",
+    "pkg/services/pluginsintegration/clientmiddleware/user_header_middleware.go:QueryData",
+    "pkg/services/pluginsintegration/clientmiddleware/tracing_middleware.go:QueryData",
+    "pkg/services/pluginsintegration/clientmiddleware/metrics_middleware.go:QueryData",
+    "pkg/services/pluginsintegration/clientmiddleware/grafana_request_id_header_middleware.go:QueryData",
+    "pkg/services/pluginsintegration/clientmiddleware/usealertingheaders_middleware.go:QueryData",
+    "pkg/services/pluginsintegration/clientmiddleware/tracing_header_middleware.go:QueryData",
+    "pkg/services/pluginsintegration/clientmiddleware/caching_middleware.go:QueryData",
+    "pkg/services/pluginsintegration/clientmiddleware/contextual_logger_middleware.go:QueryData",
+    "pkg/services/pluginsintegration/clientmiddleware/logger_middleware.go:QueryData",
+    "pkg/services/pluginsintegration/clientmiddleware/httpclient_middleware.go:QueryData",
+    "pkg/services/pluginsintegration/clientmiddleware/forward_id_middleware.go:QueryData",
+    "pkg/services/pluginsintegration/clientmiddleware/oauthtoken_middleware.go:QueryData",
+    "pkg/services/pluginsintegration/clientmiddleware/clear_auth_headers_middleware.go:QueryData",
+    "pkg/plugins/manager/client/client.go:QueryData",
+    "pkg/plugins/plugins.go:QueryData",
+    "pkg/plugins/backendplugin/coreplugin/core_plugin.go:QueryData",
+    "pkg/plugins/backendplugin/grpcplugin/grpc_plugin.go:QueryData",
+    "pkg/plugins/backendplugin/grpcplugin/client_v2.go:QueryData",
+    "pkg/registry/apis/query/client/plugin.go:QueryData",
+    "pkg/registry/apis/query/query.go:handlePreparedQuery",
+    "pkg/registry/apis/datasource/querier.go:Query",
+    "pkg/registry/apis/datasource/sub_query.go:Connect",
+    "pkg/aggregator/apiserver/plugin/query.go:QueryDataHandler",
+    "pkg/services/query/query.go:QueryData",
+    "pkg/services/query/query.go:QueryDataNew",
+    "pkg/services/query/query.go:handleQuerySingleDatasource",
+    "pkg/services/query/query.go:executeConcurrentQueries",
+    "pkg/api/ds_query.go:QueryMetricsV2",
+    "pkg/services/publicdashboards/service/query.go:GetQueryDataResponse",
+    "pkg/expr/nodes.go:executeDSNodesGrouped",
+    "pkg/expr/nodes.go:Execute"
+  ],
+  "complete": false,
+  "unresolved": [
+    "pkg/plugins/backendplugin/grpcplugin/client_proto.go:QueryData — wraps pluginv2.QueryDataRequest/Response (external grpc proto types from grafana-plugin-sdk-go genproto); whether it needs a change depends on whether the new field is also propagated across the gRPC plugin protocol (proto message defined outside this repo), which cannot be confirmed from local evidence alone",
+    "Field-level plumbing inside each per-datasource QueryData implementation (e.g. where DataSourceInstanceSettings/PluginContext/DataQuery values are read) was not individually enumerated per query type/scenario handler inside each datasource package; only the top-level QueryData method per package was captured",
+    "External module github.com/grafana/grafana-plugin-sdk-go (vendored dependency, not part of this repository) defines backend.QueryDataHandler/backend.QueryDataRequest itself and backend.ToProto()/FromProto() converters; changes there are out of scope per instructions but are a dependency of several listed sites"
+  ]
+}
+```
+
+A few notes on scope/confidence:
+
+- I treated **`backend.QueryDataHandler`** (`QueryData(ctx, *backend.QueryDataRequest) (*backend.QueryDataResponse, error)`) from `grafana-plugin-sdk-go` as "the datasource QueryData handler." I enumerated every local implementation of that exact signature (datasource plugins, their `standalone/` wrappers, the client middleware chain, plugin-manager/grpc client layers) and every call site that invokes `.QueryData(...)` with a `backend.QueryDataRequest`/`data.QueryDataRequest`, including the higher-level wrappers (`pkg/services/query`, `pkg/expr`, `pkg/api/ds_query.go`, `pkg/services/publicdashboards`, `pkg/registry/apis/query`, `pkg/registry/apis/datasource`, `pkg/aggregator`).
+- I excluded test files, `_test.go` mocks/fakes (e.g. `pluginfakes`, `FakeQueryService`, `aggregator/.../fakes/client.go`), and non-function sites (interface/struct field declarations like `register.go:128`).
+- `complete` is `false` because the gRPC proto boundary (`client_proto.go`) depends on an external, non-repo-local `.proto` definition, so I can't be certain whether it needs edits without evidence outside this repository; I flagged it under `unresolved` rather than guessing.

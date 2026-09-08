@@ -1,0 +1,12 @@
+## Summary
+
+**Root cause:** `shell_complete()` in `src/click/shell_completion.py` used `click.echo(comp.source())` to print the generated completion script. On Windows, Python's text-mode `stdout` translates every `\n` to `\r\n` on write. When the script is `eval`'d by a POSIX-style shell such as msys2's zsh (as in `eval "$(_TUPLE_PARAM_COMPLETE=zsh_source tuple-param)")`, the stray `\r` characters corrupt the shell's parsing of `if`/`elif`/`fi` blocks, producing `parse error near 'elif'`. I reproduced this exactly by converting the generated zsh script's line endings to CRLF and running `zsh -n` on it.
+
+**Fix:** Write the generated script directly to the underlying binary stdout stream (via the existing `get_binary_stdout()` helper in `click._compat`) instead of through the text-mode `echo()`, so line endings are never translated regardless of platform.
+
+**Verification:**
+- `python -m pytest tests/test_shell_completion.py -q` → 53 passed
+- Confirmed the generated script's bytes are unaffected and pass `zsh -n` syntax check
+- Confirmed `CliRunner`-based output capture (used by tests) still works correctly
+
+No tests, docs, or config were modified — only `src/click/shell_completion.py`.

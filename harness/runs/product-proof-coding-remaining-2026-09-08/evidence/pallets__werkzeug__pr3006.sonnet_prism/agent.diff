@@ -1,0 +1,45 @@
+diff --git a/src/werkzeug/routing/map.py b/src/werkzeug/routing/map.py
+index f757d59..4aa4ee7 100644
+--- a/src/werkzeug/routing/map.py
++++ b/src/werkzeug/routing/map.py
+@@ -66,6 +66,15 @@ class Map:
+                           feature and disables the subdomain one.  If
+                           enabled the `host` parameter to rules is used
+                           instead of the `subdomain` one.
++    :param subdomain_matching: if set to `True` (the default), a
++        ``subdomain`` will be calculated from the ``server_name``
++        and the current host when binding to a WSGI environ via
++        :meth:`bind_to_environ` if one isn't explicitly given.  If
++        disabled, the subdomain is never inferred this way, which is
++        useful when there is no subdomain-based routing.
++
++    .. versionchanged:: 3.1
++        The ``subdomain_matching`` parameter was added.
+ 
+     .. versionchanged:: 3.0
+         The ``charset`` and ``encoding_errors`` parameters were removed.
+@@ -102,6 +111,7 @@ class Map:
+         sort_parameters: bool = False,
+         sort_key: t.Callable[[t.Any], t.Any] | None = None,
+         host_matching: bool = False,
++        subdomain_matching: bool = True,
+     ) -> None:
+         self._matcher = StateMachineMatcher(merge_slashes)
+         self._rules_by_endpoint: dict[t.Any, list[Rule]] = {}
+@@ -112,6 +122,7 @@ class Map:
+         self.strict_slashes = strict_slashes
+         self.redirect_defaults = redirect_defaults
+         self.host_matching = host_matching
++        self.subdomain_matching = subdomain_matching
+ 
+         self.converters = self.default_converters.copy()
+         if converters:
+@@ -318,7 +329,7 @@ class Map:
+             elif scheme in {"https", "wss"} and server_name.endswith(":443"):
+                 server_name = server_name[:-4]
+ 
+-        if subdomain is None and not self.host_matching:
++        if subdomain is None and not self.host_matching and self.subdomain_matching:
+             cur_server_name = wsgi_server_name.split(".")
+             real_server_name = server_name.split(".")
+             offset = -len(real_server_name)

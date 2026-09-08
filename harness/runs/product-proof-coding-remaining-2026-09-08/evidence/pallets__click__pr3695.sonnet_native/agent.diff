@@ -1,0 +1,71 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index b08f043..0f4f33c 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -45,7 +45,7 @@ from .utils import _expand_args
+ from .utils import echo
+ from .utils import make_default_short_help
+ from .utils import make_str
+-from .utils import PacifyFlushWrapper
++from .utils import _PacifyFlushWrapper
+ 
+ if t.TYPE_CHECKING:
+     from typing_extensions import Self
+@@ -1563,8 +1563,8 @@ class Command:
+                 sys.exit(e.exit_code)
+             except OSError as e:
+                 if e.errno == errno.EPIPE:
+-                    sys.stdout = t.cast(t.TextIO, PacifyFlushWrapper(sys.stdout))
+-                    sys.stderr = t.cast(t.TextIO, PacifyFlushWrapper(sys.stderr))
++                    sys.stdout = t.cast(t.TextIO, _PacifyFlushWrapper(sys.stdout))
++                    sys.stderr = t.cast(t.TextIO, _PacifyFlushWrapper(sys.stderr))
+                     sys.exit(1)
+                 else:
+                     raise
+diff --git a/src/click/types.py b/src/click/types.py
+index a27983b..4b4eac2 100644
+--- a/src/click/types.py
++++ b/src/click/types.py
+@@ -17,7 +17,7 @@ from ._compat import open_stream
+ from .exceptions import BadParameter
+ from .utils import format_filename
+ from .utils import LazyFile
+-from .utils import safecall
++from .utils import _safecall
+ 
+ if t.TYPE_CHECKING:
+     import typing_extensions as te
+@@ -956,9 +956,9 @@ class File(ParamType[t.IO[t.Any]]):
+             # type is used with prompts.
+             if ctx is not None:
+                 if should_close:
+-                    ctx.call_on_close(safecall(f.close))
++                    ctx.call_on_close(_safecall(f.close))
+                 else:
+-                    ctx.call_on_close(safecall(f.flush))
++                    ctx.call_on_close(_safecall(f.flush))
+ 
+             return f
+         except OSError as e:
+diff --git a/src/click/utils.py b/src/click/utils.py
+index 4d4d52a..89f17d7 100644
+--- a/src/click/utils.py
++++ b/src/click/utils.py
+@@ -33,7 +33,7 @@ def _posixify(name: str) -> str:
+     return "-".join(name.split()).lower()
+ 
+ 
+-def safecall(func: t.Callable[P, R]) -> t.Callable[P, R | None]:
++def _safecall(func: t.Callable[P, R]) -> t.Callable[P, R | None]:
+     """Wraps a function so that it swallows exceptions."""
+ 
+     def wrapper(*args: P.args, **kwargs: P.kwargs) -> R | None:
+@@ -512,7 +512,7 @@ def get_app_dir(app_name: str, roaming: bool = True, force_posix: bool = False)
+     )
+ 
+ 
+-class PacifyFlushWrapper:
++class _PacifyFlushWrapper:
+     """This wrapper is used to catch and suppress BrokenPipeErrors resulting
+     from ``.flush()`` being called on broken pipe during the shutdown/final-GC
+     of the Python interpreter. Notably ``.flush()`` is always called on

@@ -1,0 +1,63 @@
+Work only in the repository in your current directory. Do not use the network,
+git history, benchmark files, saved answers, memory, skills, or delegated agents. Fix the SOURCE
+code so the issue below is resolved. Do not modify tests, docs, changelogs, or configuration.
+Make the smallest robust change. Investigate, edit, and run a narrow relevant test if time permits;
+do not commit. Dependencies are preinstalled; use `python -m pytest` for narrow tests. You have a
+strict five-minute work budget. A patch present at timeout will still be scored.
+
+ISSUE:
+Provide suggestions for misspelled subcommands
+
+Example app:
+
+```python
+import click
+
+@click.group()
+def cli():
+    pass
+
+@cli.command()
+@click.option("--name", default="World", help="Name of the person to greet.")
+def hello(name):
+    click.echo(f"Hello, {name}!")
+
+@cli.command()
+def goodbye():
+    click.echo("Goodbye!")
+
+if __name__ == "__main__":
+    cli()
+```
+
+Providing suggestions works well for options:
+
+```bash
+$ python clickfoo.py hello --namee
+Usage: clickfoo.py hello [OPTIONS]
+Try 'clickfoo.py hello --help' for help.
+
+Error: No such option: --namee Did you mean --name?
+```
+
+But not for subcommands:
+
+```bash
+$ python clickfoo.py hellow
+Usage: clickfoo.py [OPTIONS] COMMAND [ARGS]...
+Try 'clickfoo.py --help' for help.
+
+Error: No such command 'hellow'.
+```
+
+Desired output:
+
+```bash
+$ python clickfoo.py hellow
+Usage: clickfoo.py [OPTIONS] COMMAND [ARGS]...
+Try 'clickfoo.py --help' for help.
+
+Error: No such command 'hellow'. Did you mean `hello`?
+```
+
+Is this something that can be done with click?

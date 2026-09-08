@@ -1,0 +1,29 @@
+diff --git a/src/click/shell_completion.py b/src/click/shell_completion.py
+index 7235f10..c873a3a 100644
+--- a/src/click/shell_completion.py
++++ b/src/click/shell_completion.py
+@@ -13,6 +13,7 @@ from .core import Group
+ from .core import Option
+ from .core import Parameter
+ from .core import ParameterSource
++from ._compat import get_binary_stdout
+ from .utils import echo
+ 
+ 
+@@ -44,7 +45,15 @@ def shell_complete(
+     comp = comp_cls(cli, ctx_args, prog_name, complete_var)
+ 
+     if instruction == "source":
+-        echo(comp.source())
++        # Write directly to the underlying binary stream instead of
++        # using a text-mode stream. The generated script is meant to
++        # be evaluated by a POSIX-style shell (bash, zsh, fish), and
++        # a text-mode stdout on Windows would translate "\n" to
++        # "\r\n", which breaks the shell's parsing of the script (for
++        # example, producing "parse error near `elif'" in zsh).
++        stdout = get_binary_stdout()
++        stdout.write(comp.source().encode())
++        stdout.flush()
+         return 0
+ 
+     if instruction == "complete":

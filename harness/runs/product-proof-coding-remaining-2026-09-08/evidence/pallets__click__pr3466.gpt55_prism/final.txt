@@ -1,0 +1,10 @@
+Implemented the fix in [src/click/shell_completion.py](/Users/tapabratapal/Projects/provasign/research/harness/runs/product-proof-coding-remaining-2026-09-08/work/pallets__click__pr3466.gpt55_prism/src/click/shell_completion.py:44). `zsh_source` is now emitted as bytes, which avoids Windows/MSYS text-mode newline conversion to CRLF. That prevents zsh from seeing `\r` tokens and failing with `parse error near 'elif'`.
+
+Prism impact for `ZshComplete` reported:
+`declarations`: `ZshComplete src/click/shell_completion.py:367`
+`callers`: `ShellComplete.complete src/click/shell_completion.py:295`
+
+Verification:
+`python -m pytest tests/test_shell_completion.py -q` passed: 53 tests.
+`zsh -n` on generated zsh source passed.
+`HOME=/tmp prism verify --format text` passed: complete, no missed sites.

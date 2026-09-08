@@ -1,0 +1,110 @@
+{
+  "duration_api_ms": 174679,
+  "stop_reason": "end_turn",
+  "session_id": "480edae9-59f3-4fab-a534-c4cdcddf9cb8",
+  "total_cost_usd": 0.45738900000000005,
+  "usage": {
+    "input_tokens": 66,
+    "cache_creation_input_tokens": 37654,
+    "cache_read_input_tokens": 879240,
+    "output_tokens": 12797,
+    "output_tokens_details": {
+      "thinking_tokens": 6354
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 37654,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 552,
+        "cache_read_input_tokens": 46172,
+        "cache_creation_input_tokens": 327,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 327
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 2748,
+      "outputTokens": 15,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.002823,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 66,
+      "outputTokens": 12797,
+      "cacheReadInputTokens": 879240,
+      "cacheCreationInputTokens": 37654,
+      "webSearchRequests": 0,
+      "costUSD": 0.454566,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 6354,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 33,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "Fixed the bug where background/foreground color carries over to the next line when `soft_wrap=True`.\n\n**Root cause:** In `Console.print`, when a `style=` argument is passed, `Segment.apply_style` applies that style to *every* segment \u2014 including the trailing, deliberately-unstyled `\"\\n\"` segment that `Text.render` appends for the line ending. When `soft_wrap`/`crop=False`, this styled newline segment was written straight to the buffer as-is, so the ANSI reset code ended up *after* the `\\n` character instead of before it \u2014 causing the terminal to carry the background color into the next (often newly-scrolled) line. When `crop=True` (the default), `Segment.split_and_crop_lines` already discarded any style on the newline by replacing it with a plain `\"\\n\"` segment, so that path was unaffected.\n\n**Fix:** Extended `Segment.split_and_crop_lines`/`adjust_line_length` to accept `length=None`, meaning \"don't crop or pad, just normalize line breaks,\" and used it in `Console.print`'s non-crop (soft-wrap) branch so styled newline segments there get the same unstyled-newline treatment as the cropped path \u2014 placing the reset before the newline in all cases.\n\nVerified with a direct repro (styled text now emits `\\x1b[0m` immediately after the text and before `\\n`), and ran the full test suite: `test_console.py` and `test_segment.py` pass fully (158 passed), and the 7 pre-existing failures in `test_syntax.py`/`test_card.py` were confirmed present on the unmodified baseline too (unrelated Pygments/env version differences), so nothing regressed.",
+  "ttft_ms": 2619,
+  "type": "result",
+  "duration_ms": 179824,
+  "uuid": "8664b8bf-cb5b-4ca6-8755-f024bebfeba8",
+  "ttft_stream_ms": 1415,
+  "time_to_request_ms": 20,
+  "first_content_frame_ms": 2104,
+  "queued_turn_count": 0
+}

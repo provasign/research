@@ -1,0 +1,11 @@
+All routing/map tests pass.
+
+## Summary
+
+Added a `subdomain_matching` parameter to `werkzeug.routing.Map` (`src/werkzeug/routing/map.py`), mirroring how Flask exposed it previously:
+
+- New `__init__` parameter `subdomain_matching: bool = True`, stored as `self.subdomain_matching`. Default `True` preserves the historical Werkzeug behavior (subdomain is derived from `server_name`/host).
+- `bind_to_environ` now only attempts to calculate/validate the subdomain (and can emit the "doesn't match configured server name" warning / `<invalid>` subdomain) when `self.subdomain_matching` is `True` (and host matching isn't enabled). When `subdomain_matching=False`, `subdomain` stays `None` (falling back to `default_subdomain` via `bind`), so routing isn't restricted to a particular subdomain just because `server_name` was passed.
+- Updated the class docstring to document the new parameter.
+
+This lets Flask (or any user) pass `subdomain_matching=False` to `Map` to avoid the previously-forced subdomain restriction, without changing default behavior for existing code. Verified with `python -m pytest tests/test_routing.py` (117 passed) and the broader routing/map-related subset (118 passed).
