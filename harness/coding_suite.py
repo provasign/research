@@ -436,9 +436,14 @@ def score_cell(root: Path, row: dict, task: dict) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser(); ap.add_argument("--run-dir", required=True)
-    ap.add_argument("--phase", choices=("pilot", "full"), default="pilot")
+    ap.add_argument("--phase", choices=("pilot", "remaining", "full"), default="pilot")
     ap.add_argument("--preflight-only", action="store_true"); args = ap.parse_args()
-    task_ids = PILOT_TASKS if args.phase == "pilot" else list(TASK_SPECS)
+    if args.phase == "pilot":
+        task_ids = PILOT_TASKS
+    elif args.phase == "remaining":
+        task_ids = [task_id for task_id in TASK_SPECS if task_id not in PILOT_TASKS]
+    else:
+        task_ids = list(TASK_SPECS)
     root = Path(args.run_dir).resolve()
     if root.exists(): raise SystemExit(f"run dir exists: {root}")
     root.mkdir(parents=True); binary = root / "prism-v0.72.0"; shutil.copy2(PRISM_SOURCE, binary)

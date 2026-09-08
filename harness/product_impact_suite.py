@@ -193,11 +193,16 @@ def summarize_codex(events: list[dict], out: Path) -> tuple[dict, str, list[dict
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--run-dir", required=True)
-    parser.add_argument("--phase", choices=("pilot", "full"), default="pilot")
+    parser.add_argument("--phase", choices=("pilot", "remaining", "full"), default="pilot")
     parser.add_argument("--trials", type=int, default=1)
     parser.add_argument("--preflight-only", action="store_true")
     args = parser.parse_args()
-    task_ids = PILOT_TASKS if args.phase == "pilot" else TASK_IDS
+    if args.phase == "pilot":
+        task_ids = PILOT_TASKS
+    elif args.phase == "remaining":
+        task_ids = [task_id for task_id in TASK_IDS if task_id not in PILOT_TASKS]
+    else:
+        task_ids = TASK_IDS
     root = Path(args.run_dir).resolve()
     if root.exists():
         raise SystemExit(f"run dir already exists: {root}")
