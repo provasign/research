@@ -1,0 +1,91 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..103f250 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -67,23 +67,72 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+         stream._paused = False
+ 
+ 
+-class BytesIOCopy(io.BytesIO):
+-    """Patch ``io.BytesIO`` to let the written stream be copied to another.
++class BytesIOCopy:
++    """A binary stream backed by a real (OS-level) temporary file so that it
++    has a usable ``fileno()``, while also copying everything written to it
++    into another stream.
++
++    Using a real file instead of :class:`io.BytesIO` means the stream can be
++    passed as ``stdout``/``stderr`` to :func:`subprocess.run` (or similar
++    APIs that need a real file descriptor) without raising
++    ``io.UnsupportedOperation``. Because the backing store is an actual file,
++    data written directly to the file descriptor (for example by a
++    subprocess) is also visible through :meth:`getvalue`.
+ 
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.3.3
++        Backed by a real temporary file instead of :class:`io.BytesIO` so
++        that :meth:`fileno` works, fixing crashes when passing captured
++        streams to :func:`subprocess.run`.
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+-        super().__init__()
+         self.copy_to = copy_to
++        self._file: t.IO[bytes] = tempfile.TemporaryFile()
+ 
+     def flush(self) -> None:
+-        super().flush()
++        self._file.flush()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+-        return super().write(b)
++        return self._file.write(b)
++
++    def getvalue(self) -> bytes:
++        pos = self._file.tell()
++        self._file.seek(0)
++        data = self._file.read()
++        self._file.seek(pos)
++        return data
++
++    def fileno(self) -> int:
++        return self._file.fileno()
++
++    def close(self) -> None:
++        self._file.close()
++
++    @property
++    def closed(self) -> bool:
++        return self._file.closed
++
++    def isatty(self) -> bool:
++        return False
++
++    def readable(self) -> bool:
++        return False
++
++    def writable(self) -> bool:
++        return True
++
++    def seekable(self) -> bool:
++        return True
++
++    def tell(self) -> int:
++        return self._file.tell()
++
++    def seek(self, offset: int, whence: int = 0) -> int:
++        return self._file.seek(offset, whence)
+ 
+ 
+ class StreamMixer:
+@@ -471,6 +520,8 @@ class CliRunner:
+             _compat.should_strip_ansi = old__compat_should_strip_ansi
+             formatting.FORCED_WIDTH = old_forced_width
+             pdb.Pdb.__init__ = old_pdb_init  # type: ignore[method-assign]
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
+ 
+     def invoke(
+         self,

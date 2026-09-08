@@ -1,0 +1,7 @@
+All 1419 tests pass (plus the SSCCE reproduction test), with no failures or resource warnings.
+
+## Summary
+
+The issue was that `CliRunner.isolation()` replaced `sys.stdout`/`sys.stderr` with `io.TextIOWrapper` objects backed by `io.BytesIO` buffers (via `BytesIOCopy`). `io.BytesIO` has no real OS file descriptor, so `subprocess.run(..., stdout=sys.stderr)` failed with `io.UnsupportedOperation` when trying to call `.fileno()`.
+
+**Fix** (in `src/click/testing.py`): Changed `BytesIOCopy` to be backed by a real OS-level file (`tempfile.TemporaryFile()`) instead of `io.BytesIO`, while preserving its existing `write()`/`flush()`/`getvalue()` interface and copy-to-another-stream behavior. This gives it a valid `fileno()`, so a subprocess can write directly into the same underlying file, and that output is correctly captured (since the real file is the shared source of truth for both Python-level writes and subprocess writes). Added a `__del__` to close the temp file when garbage collected, avoiding `ResourceWarning: unclosed file`, and explicit closes in `CliRunner.isolation()`'s `finally` block for deterministic cleanup after `getvalue()` is read.
