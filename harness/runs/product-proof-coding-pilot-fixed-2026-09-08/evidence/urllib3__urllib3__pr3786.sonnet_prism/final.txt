@@ -1,0 +1,7 @@
+All tests pass. Summary of the fix in `src/urllib3/connection.py`:
+
+1. **Validation in `HTTPSConnection.__init__`**: When connecting through an HTTPS proxy with `use_forwarding_for_https=True` and an `ssl_context` is specified, a `ValueError` is now raised — either because `proxy_ssl_context` conflicts with it, or instructing the caller to use `proxy_ssl_context` instead (matching the 2.x requirement in the issue).
+
+2. **`connect()` now uses `proxy_ssl_context` for the proxy socket in forwarding mode**: Previously, when forwarding through an HTTPS proxy (no CONNECT tunnel), the code wrapped the socket that connects directly to the proxy using `self.ssl_context`/`self.assert_hostname`/`self.assert_fingerprint` (meant for the origin server). Now it correctly uses the `ProxyConfig`'s `ssl_context`/`assert_hostname`/`assert_fingerprint` (i.e., `proxy_ssl_context`) whenever `proxy_is_forwarding` is true and the proxy scheme is `https`, consistent with how the existing tunnel path (`_connect_tls_proxy`) already used the proxy's own SSL context.
+
+I did not touch the skipped test (`test_proxy_https_target_tls_error`) since instructions explicitly say not to modify tests, though the fix's new `ValueError` will now fire for that parametrized case (both `ssl_context` and `proxy_ssl_context` supplied with forwarding enabled) rather than reaching a live connection — the test remains skipped so it's unaffected. All existing narrow tests (`test_connection.py`, `test_poolmanager.py`, `test_proxymanager.py`, `test_proxy_poolmanager.py`) pass.

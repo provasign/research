@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -57,6 +58,59 @@ class SourcePathTests(unittest.TestCase):
         self.assertFalse(coding_suite.is_source_path("test/example_test.py"))
         self.assertFalse(coding_suite.is_source_path("docs/design.rst"))
         self.assertFalse(coding_suite.is_source_path(".grove/grove.db"))
+
+    def test_template_content_includes_generated_source_but_not_indexes(self) -> None:
+        with tempfile.TemporaryDirectory() as value:
+            root = Path(value)
+            (root / "src").mkdir()
+            (root / "src/generated.py").write_text("VERSION = '1'\n")
+            (root / ".grove").mkdir()
+            (root / ".grove/index.db").write_text("ignored")
+
+            content = coding_suite.template_content(root)
+
+        self.assertIn("src/generated.py", content)
+        self.assertNotIn(".grove/index.db", content)
+
+
+class AgentPathTests(unittest.TestCase):
+    def test_prism_arm_exposes_pinned_cli(self) -> None:
+        cell = {
+            "env_dir": Path("/run/environments/task"),
+            "prism_cli_dir": Path("/run/bin"),
+        }
+
+        parts = coding_suite.agent_path(cell, "/tools/rg").split(":")
+
+        self.assertIn("/run/bin", parts)
+        self.assertIn("/tools", parts)
+
+    def test_native_arm_does_not_expose_prism_cli(self) -> None:
+        cell = {"env_dir": Path("/run/environments/task"), "prism_cli_dir": None}
+
+        parts = coding_suite.agent_path(cell, "/tools/rg").split(":")
+
+        self.assertNotIn("/run/bin", parts)
+
+
+class AuditTests(unittest.TestCase):
+    def test_codex_cli_fallback_counts_as_prism_adoption(self) -> None:
+        rec = {}
+        calls = [{"type": "command_execution", "command": "prism query 'find target'"}]
+
+        coding_suite.audit(rec, calls, "gpt55_prism")
+
+        self.assertEqual(rec["prism_actions"], 1)
+        self.assertEqual(rec["prism_cli_commands"], ["prism query 'find target'"])
+        self.assertEqual(rec["violations"], [])
+
+    def test_native_cli_prism_is_a_protocol_violation(self) -> None:
+        rec = {}
+        calls = [{"type": "command_execution", "command": "prism search target"}]
+
+        coding_suite.audit(rec, calls, "gpt55_native")
+
+        self.assertEqual(rec["violations"], ["native arm used Prism"])
 
 
 if __name__ == "__main__":

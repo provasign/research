@@ -1,0 +1,57 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..fbedcf8 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -76,8 +76,41 @@ class BytesIOCopy(io.BytesIO):
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        # Backing real file, created lazily the first time something (such
++        # as ``subprocess.run``) needs an actual file descriptor. Plain
++        # ``io.BytesIO`` objects have no OS-level file descriptor, so
++        # ``fileno()`` normally raises ``io.UnsupportedOperation``.
++        self._tmpfile: t.IO[bytes] | None = None
++
++    def _sync_from_tmpfile(self) -> None:
++        # Pull in any bytes written directly to the backing file's
++        # descriptor (e.g. by a subprocess), which bypass ``write()``.
++        if self._tmpfile is None:
++            return
++
++        self._tmpfile.flush()
++        pos = self._tmpfile.tell()
++        self._tmpfile.seek(0)
++        data = self._tmpfile.read()
++        self._tmpfile.seek(pos)
++
++        current = super().getvalue()
++
++        if len(data) > len(current):
++            new_bytes = data[len(current) :]
++            self.copy_to.write(new_bytes)
++            super().write(new_bytes)
++
++    def fileno(self) -> int:
++        if self._tmpfile is None:
++            self._tmpfile = tempfile.TemporaryFile()
++            self._tmpfile.write(super().getvalue())
++            self._tmpfile.flush()
++
++        return self._tmpfile.fileno()
+ 
+     def flush(self) -> None:
++        self._sync_from_tmpfile()
+         super().flush()
+         self.copy_to.flush()
+ 
+@@ -85,6 +118,10 @@ class BytesIOCopy(io.BytesIO):
+         self.copy_to.write(b)
+         return super().write(b)
+ 
++    def getvalue(self) -> bytes:
++        self._sync_from_tmpfile()
++        return super().getvalue()
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.

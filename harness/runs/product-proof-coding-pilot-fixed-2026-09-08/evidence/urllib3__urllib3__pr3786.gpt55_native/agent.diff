@@ -1,0 +1,155 @@
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 84e1dab..01b6522 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -657,6 +657,16 @@ class HTTPSConnection(HTTPConnection):
+             proxy_config=proxy_config,
+         )
+ 
++        if (
++            proxy_config
++            and proxy_config.use_forwarding_for_https
++            and ssl_context is not None
++        ):
++            raise ValueError(
++                "When forwarding HTTPS requests through HTTPS proxies, "
++                "use proxy_ssl_context instead of ssl_context."
++            )
++
+         self.key_file = key_file
+         self.cert_file = cert_file
+         self.key_password = key_password
+@@ -777,41 +787,52 @@ class HTTPSConnection(HTTPConnection):
+                 # Override the host with the one we're requesting data from.
+                 server_hostname = typing.cast(str, self._tunnel_host)
+ 
+-            if self.server_hostname is not None:
+-                server_hostname = self.server_hostname
+-
+-            is_time_off = datetime.date.today() < RECENT_DATE
+-            if is_time_off:
+-                warnings.warn(
+-                    (
+-                        f"System time is way off (before {RECENT_DATE}). This will probably "
+-                        "lead to SSL verification errors"
+-                    ),
+-                    SystemTimeWarning,
++            if (
++                self.proxy_is_forwarding
++                and self.proxy is not None
++                and self.proxy.scheme == "https"
++            ):
++                self.sock = sock = self._connect_tls_proxy(self.host, sock)
++                sock_and_verified = _WrappedAndVerifiedSocket(
++                    socket=sock,
++                    is_verified=False,
+                 )
+-
+-            # Remove trailing '.' from fqdn hostnames to allow certificate validation
+-            server_hostname_rm_dot = server_hostname.rstrip(".")
+-
+-            sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+-                sock=sock,
+-                cert_reqs=self.cert_reqs,
+-                ssl_version=self.ssl_version,
+-                ssl_minimum_version=self.ssl_minimum_version,
+-                ssl_maximum_version=self.ssl_maximum_version,
+-                ca_certs=self.ca_certs,
+-                ca_cert_dir=self.ca_cert_dir,
+-                ca_cert_data=self.ca_cert_data,
+-                cert_file=self.cert_file,
+-                key_file=self.key_file,
+-                key_password=self.key_password,
+-                server_hostname=server_hostname_rm_dot,
+-                ssl_context=self.ssl_context,
+-                tls_in_tls=tls_in_tls,
+-                assert_hostname=self.assert_hostname,
+-                assert_fingerprint=self.assert_fingerprint,
+-            )
+-            self.sock = sock_and_verified.socket
++            else:
++                if self.server_hostname is not None:
++                    server_hostname = self.server_hostname
++
++                is_time_off = datetime.date.today() < RECENT_DATE
++                if is_time_off:
++                    warnings.warn(
++                        (
++                            f"System time is way off (before {RECENT_DATE}). This will probably "
++                            "lead to SSL verification errors"
++                        ),
++                        SystemTimeWarning,
++                    )
++
++                # Remove trailing '.' from fqdn hostnames to allow certificate validation
++                server_hostname_rm_dot = server_hostname.rstrip(".")
++
++                sock_and_verified = _ssl_wrap_socket_and_match_hostname(
++                    sock=sock,
++                    cert_reqs=self.cert_reqs,
++                    ssl_version=self.ssl_version,
++                    ssl_minimum_version=self.ssl_minimum_version,
++                    ssl_maximum_version=self.ssl_maximum_version,
++                    ca_certs=self.ca_certs,
++                    ca_cert_dir=self.ca_cert_dir,
++                    ca_cert_data=self.ca_cert_data,
++                    cert_file=self.cert_file,
++                    key_file=self.key_file,
++                    key_password=self.key_password,
++                    server_hostname=server_hostname_rm_dot,
++                    ssl_context=self.ssl_context,
++                    tls_in_tls=tls_in_tls,
++                    assert_hostname=self.assert_hostname,
++                    assert_fingerprint=self.assert_fingerprint,
++                )
++                self.sock = sock_and_verified.socket
+ 
+         # If an error occurs during connection/handshake we may need to release
+         # our lock so another connection can probe the origin.
+@@ -862,18 +883,18 @@ class HTTPSConnection(HTTPConnection):
+         """
+         Establish a TLS connection to the proxy using the provided SSL context.
+         """
+-        # `_connect_tls_proxy` is called when self._tunnel_host is truthy.
+         proxy_config = typing.cast(ProxyConfig, self.proxy_config)
+         ssl_context = proxy_config.ssl_context
++        cert_reqs = ssl_context.verify_mode if ssl_context is not None else None
+         sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+             sock,
+-            cert_reqs=self.cert_reqs,
+-            ssl_version=self.ssl_version,
+-            ssl_minimum_version=self.ssl_minimum_version,
+-            ssl_maximum_version=self.ssl_maximum_version,
+-            ca_certs=self.ca_certs,
+-            ca_cert_dir=self.ca_cert_dir,
+-            ca_cert_data=self.ca_cert_data,
++            cert_reqs=cert_reqs,
++            ssl_version=None,
++            ssl_minimum_version=None,
++            ssl_maximum_version=None,
++            ca_certs=None,
++            ca_cert_dir=None,
++            ca_cert_data=None,
+             server_hostname=hostname,
+             ssl_context=ssl_context,
+             assert_hostname=proxy_config.assert_hostname,
+diff --git a/src/urllib3/poolmanager.py b/src/urllib3/poolmanager.py
+index 3914dec..60bcea2 100644
+--- a/src/urllib3/poolmanager.py
++++ b/src/urllib3/poolmanager.py
+@@ -585,6 +585,15 @@ class ProxyManager(PoolManager):
+             port = port_by_scheme.get(proxy.scheme, 80)
+             proxy = proxy._replace(port=port)
+ 
++        if (
++            use_forwarding_for_https
++            and connection_pool_kw.get("ssl_context") is not None
++        ):
++            raise ValueError(
++                "When forwarding HTTPS requests through HTTPS proxies, "
++                "use proxy_ssl_context instead of ssl_context."
++            )
++
+         self.proxy = proxy
+         self.proxy_headers = proxy_headers or {}
+         self.proxy_ssl_context = proxy_ssl_context

@@ -1,0 +1,7 @@
+## Summary
+
+The issue: `CliRunner`'s captured `sys.stdout`/`sys.stderr` streams are backed by `io.BytesIO`, which has no real OS-level file descriptor. Code under test that passes `sys.stdout`/`sys.stderr` to `subprocess.run(..., stdout=...)` fails with `io.UnsupportedOperation: fileno`, even though the same code works fine outside of `CliRunner`.
+
+Fix (`src/click/testing.py`, `BytesIOCopy`): added lazy `fileno()` support by backing the stream with a real `tempfile.TemporaryFile()` on first access. Since a subprocess writes directly to that file descriptor (bypassing Python's `write()`), I added a `_sync_from_tmpfile()` helper invoked from `flush()`/`getvalue()` that pulls any newly-written bytes from the backing file into the in-memory buffer and forwards them to the mixed `output` stream, so `Result.stdout`/`stderr`/`output` still capture subprocess output correctly.
+
+Verified with the reporter's exact `sscce.py`/`test_sscce.py` (now passes and correctly captures `"foo"`), the full existing `tests/test_testing.py` suite (29 passed), and the full project test suite (1419 passed, 24 skipped, 1 xfailed — unchanged skip/xfail counts).

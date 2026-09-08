@@ -1,0 +1,110 @@
+{
+  "duration_api_ms": 101393,
+  "stop_reason": "end_turn",
+  "session_id": "00bff8bc-990f-49d9-b7df-3aaf9626bc8c",
+  "total_cost_usd": 0.28119940000000004,
+  "usage": {
+    "input_tokens": 38,
+    "cache_creation_input_tokens": 23689,
+    "cache_read_input_tokens": 407472,
+    "output_tokens": 10082,
+    "output_tokens_details": {
+      "thinking_tokens": 4553
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 23689,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 468,
+        "cache_read_input_tokens": 32351,
+        "cache_creation_input_tokens": 183,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 183
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 20,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004053,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 38,
+      "outputTokens": 10082,
+      "cacheReadInputTokens": 407472,
+      "cacheCreationInputTokens": 23689,
+      "webSearchRequests": 0,
+      "costUSD": 0.2771464,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 4553,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 19,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "## Summary\n\nThe issue: `CliRunner`'s captured `sys.stdout`/`sys.stderr` streams are backed by `io.BytesIO`, which has no real OS-level file descriptor. Code under test that passes `sys.stdout`/`sys.stderr` to `subprocess.run(..., stdout=...)` fails with `io.UnsupportedOperation: fileno`, even though the same code works fine outside of `CliRunner`.\n\nFix (`src/click/testing.py`, `BytesIOCopy`): added lazy `fileno()` support by backing the stream with a real `tempfile.TemporaryFile()` on first access. Since a subprocess writes directly to that file descriptor (bypassing Python's `write()`), I added a `_sync_from_tmpfile()` helper invoked from `flush()`/`getvalue()` that pulls any newly-written bytes from the backing file into the in-memory buffer and forwards them to the mixed `output` stream, so `Result.stdout`/`stderr`/`output` still capture subprocess output correctly.\n\nVerified with the reporter's exact `sscce.py`/`test_sscce.py` (now passes and correctly captures `\"foo\"`), the full existing `tests/test_testing.py` suite (29 passed), and the full project test suite (1419 passed, 24 skipped, 1 xfailed \u2014 unchanged skip/xfail counts).",
+  "ttft_ms": 1316,
+  "type": "result",
+  "duration_ms": 224449,
+  "uuid": "eb35a301-8287-43e7-9562-073c8bdba20e",
+  "ttft_stream_ms": 817,
+  "time_to_request_ms": 29,
+  "first_content_frame_ms": 1166,
+  "queued_turn_count": 0
+}

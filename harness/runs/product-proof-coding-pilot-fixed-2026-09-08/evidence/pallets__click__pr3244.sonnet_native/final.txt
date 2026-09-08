@@ -1,0 +1,9 @@
+Full test suite passes (1419 passed, 24 skipped, 1 xfailed — no failures/regressions).
+
+## Summary
+
+The bug: `CliRunner.isolation()` backs `sys.stdout`/`sys.stderr` with plain `io.BytesIO` objects (via `BytesIOCopy`), which have no real OS file descriptor. When user code passes `sys.stdout`/`sys.stderr` to `subprocess.run(..., stdout=...)`, `subprocess.Popen` calls `.fileno()` on it, which `io.BytesIO` doesn't support, raising `io.UnsupportedOperation`.
+
+Fix (`src/click/testing.py`, `BytesIOCopy`): back each captured stream with a real on-disk `tempfile.TemporaryFile()` in addition to the in-memory `io.BytesIO`. `fileno()` now returns the real file descriptor so subprocesses can write to it directly. Since a subprocess writes straight to the OS fd (bypassing Python's `write()`), `flush()` now syncs any new bytes appended to the backing file into both the in-memory buffer and the `copy_to` mix stream, so captured output/mixing continues to work correctly. Direct Python-level writes still go through `write()` as before, keeping both stores in sync without duplication.
+
+This is a minimal, targeted change — no tests, docs, or config were modified. The reproduction from the issue now passes, and the full existing test suite (1419 tests) still passes with no regressions.

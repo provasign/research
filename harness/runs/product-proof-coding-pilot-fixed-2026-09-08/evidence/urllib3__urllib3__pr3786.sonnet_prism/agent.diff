@@ -1,0 +1,71 @@
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 84e1dab..2dafa96 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -671,6 +671,26 @@ class HTTPSConnection(HTTPConnection):
+         self.ca_cert_dir = ca_cert_dir and os.path.expanduser(ca_cert_dir)
+         self.ca_cert_data = ca_cert_data
+ 
++        if (
++            self.proxy
++            and self.proxy.scheme == "https"
++            and self.proxy_config
++            and self.proxy_config.use_forwarding_for_https
++            and self.ssl_context is not None
++        ):
++            if self.proxy_config.ssl_context is not None:
++                raise ValueError(
++                    "Cannot specify both 'ssl_context' and 'proxy_ssl_context' "
++                    "when 'use_forwarding_for_https' is enabled. Only "
++                    "'proxy_ssl_context' should be used to configure the "
++                    "connection to the proxy in this mode."
++                )
++            raise ValueError(
++                "'ssl_context' should not be used to configure the connection "
++                "to an HTTPS proxy when 'use_forwarding_for_https' is enabled. "
++                "Use 'proxy_ssl_context' instead."
++            )
++
+         # cert_reqs depends on ssl_context so calculate last.
+         if cert_reqs is None:
+             if self.ssl_context is not None:
+@@ -793,6 +813,25 @@ class HTTPSConnection(HTTPConnection):
+             # Remove trailing '.' from fqdn hostnames to allow certificate validation
+             server_hostname_rm_dot = server_hostname.rstrip(".")
+ 
++            # If we're forwarding through an HTTPS proxy (as opposed to tunneling
++            # through it) then this socket is actually being connected directly to
++            # the proxy, not the origin. The proxy's own SSL context (and related
++            # verification settings) should be used, not the ones meant for the
++            # origin server.
++            if (
++                self.proxy_is_forwarding
++                and self.proxy is not None
++                and self.proxy.scheme == "https"
++            ):
++                proxy_config = typing.cast(ProxyConfig, self.proxy_config)
++                wrap_ssl_context = proxy_config.ssl_context
++                wrap_assert_hostname = proxy_config.assert_hostname
++                wrap_assert_fingerprint = proxy_config.assert_fingerprint
++            else:
++                wrap_ssl_context = self.ssl_context
++                wrap_assert_hostname = self.assert_hostname
++                wrap_assert_fingerprint = self.assert_fingerprint
++
+             sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+                 sock=sock,
+                 cert_reqs=self.cert_reqs,
+@@ -806,10 +845,10 @@ class HTTPSConnection(HTTPConnection):
+                 key_file=self.key_file,
+                 key_password=self.key_password,
+                 server_hostname=server_hostname_rm_dot,
+-                ssl_context=self.ssl_context,
++                ssl_context=wrap_ssl_context,
+                 tls_in_tls=tls_in_tls,
+-                assert_hostname=self.assert_hostname,
+-                assert_fingerprint=self.assert_fingerprint,
++                assert_hostname=wrap_assert_hostname,
++                assert_fingerprint=wrap_assert_fingerprint,
+             )
+             self.sock = sock_and_verified.socket
+ 

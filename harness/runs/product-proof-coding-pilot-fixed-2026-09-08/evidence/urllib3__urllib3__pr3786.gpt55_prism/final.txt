@@ -1,0 +1,12 @@
+Implemented the source fix in [connection.py](/Users/tapabratapal/Projects/provasign/research/harness/runs/product-proof-coding-pilot-fixed-2026-09-08/work/urllib3__urllib3__pr3786.gpt55_prism/src/urllib3/connection.py:796) and [poolmanager.py](/Users/tapabratapal/Projects/provasign/research/harness/runs/product-proof-coding-pilot-fixed-2026-09-08/work/urllib3__urllib3__pr3786.gpt55_prism/src/urllib3/poolmanager.py:588).
+
+What changed:
+- HTTPS forwarding proxy handshakes now use `proxy_ssl_context` and proxy verification settings, not the origin `ssl_context`.
+- Proxy TLS wraps use the proxy context’s `verify_mode` when `proxy_ssl_context` is provided.
+- `ProxyManager(..., use_forwarding_for_https=True, ssl_context=...)` now raises `ValueError`, with a separate error when both `ssl_context` and `proxy_ssl_context` are provided.
+
+Verification:
+- `python -m pytest test/test_proxymanager.py -k 'not proxy_connect_retry'` passed: `7 passed`.
+- `python -m py_compile src/urllib3/connection.py src/urllib3/poolmanager.py` passed.
+- Full relevant dummyserver/socket tests could not run here because the sandbox blocks socket binding.
+- `prism verify` was attempted but blocked by sandbox permissions on Prism’s cache lock under `~/Library/Caches/prism`.

@@ -1,0 +1,10 @@
+Implemented the source fix.
+
+Changed [connection.py](/Users/tapabratapal/Projects/provasign/research/harness/runs/product-proof-coding-pilot-fixed-2026-09-08/work/urllib3__urllib3__pr3786.gpt55_native/src/urllib3/connection.py:660) so forwarding HTTPS proxy mode rejects `ssl_context`, and forwarding HTTPS proxy connections now TLS-wrap with proxy TLS settings via `_connect_tls_proxy` instead of origin TLS settings.
+
+Changed [poolmanager.py](/Users/tapabratapal/Projects/provasign/research/harness/runs/product-proof-coding-pilot-fixed-2026-09-08/work/urllib3__urllib3__pr3786.gpt55_native/src/urllib3/poolmanager.py:588) so `ProxyManager(..., use_forwarding_for_https=True, ssl_context=...)` raises `ValueError` instructing callers to use `proxy_ssl_context`.
+
+Verification:
+- `python -m py_compile src/urllib3/connection.py src/urllib3/poolmanager.py`
+- `python -m pytest test/test_proxymanager.py -q -k 'not proxy_connect_retry'` passed: `7 passed, 1 deselected`
+- Full `test/test_proxymanager.py` hit sandbox socket bind denial in `test_proxy_connect_retry`, unrelated to this patch.
