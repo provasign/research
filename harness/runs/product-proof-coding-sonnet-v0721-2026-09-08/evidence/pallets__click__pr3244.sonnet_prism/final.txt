@@ -1,0 +1,9 @@
+## Summary
+
+Fixed `src/click/testing.py`: `CliRunner`'s `BytesIOCopy` (the buffer backing `sys.stdout`/`sys.stderr` under isolation) was a plain `io.BytesIO`, which raises `io.UnsupportedOperation` on `fileno()`. This broke any code invoked via `CliRunner.invoke()` that passed `sys.stdout`/`sys.stderr` to `subprocess.run`/`Popen` (which needs a real file descriptor).
+
+`BytesIOCopy` now lazily materializes a real, file-descriptor-backed temporary file the first time `fileno()` is called, transferring the buffered content to it and delegating subsequent reads/writes there. Until `fileno()` is requested it behaves exactly as before (a plain in-memory `BytesIO`), so no filesystem/resource-warning overhead is introduced for the common case. Added cleanup (`close()`) of the mixer's streams in `CliRunner.isolation()`'s `finally` block to release the temp file when it was created.
+
+Verified:
+- The reported reproduction (`subprocess.run(["echo", "foo"], stdout=sys.stderr)` inside a `CliRunner.invoke()`) no longer raises.
+- Full test suite: `1419 passed, 24 skipped, 1 xfailed` — no regressions.

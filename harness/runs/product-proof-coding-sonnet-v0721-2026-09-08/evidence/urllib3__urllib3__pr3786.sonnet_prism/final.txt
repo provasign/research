@@ -1,0 +1,9 @@
+## Summary
+
+Fixed the source-code issue where `HTTPSConnection.ssl_context` (meant for the destination server) was being used to establish the TLS connection to an HTTPS proxy in `use_forwarding_for_https=True` mode, instead of `proxy_ssl_context`.
+
+**`src/urllib3/connection.py`** (`HTTPSConnection.connect`): When the connection is forwarding (not tunneling) to an HTTPS-scheme proxy, the final TLS wrap now uses `proxy_config.ssl_context`/`assert_hostname`/`assert_fingerprint` (i.e. `proxy_ssl_context`) instead of the connection's own `ssl_context`/`assert_hostname`/`assert_fingerprint`, matching what `_connect_tls_proxy` already does for the tunneling case.
+
+**`src/urllib3/poolmanager.py`** (`ProxyManager.__init__`): Added validation — if `use_forwarding_for_https=True` and an `ssl_context` is passed while `proxy_ssl_context` is also set, raise `ValueError` (conflicting config); if only `ssl_context` is set (no `proxy_ssl_context`), raise `ValueError` instructing to use `proxy_ssl_context` instead (this is the 2.x behavior per the issue, vs. a deprecation warning on 1.26.x).
+
+Ran narrow tests: `test_proxymanager.py`, `test_proxy_poolmanager.py`, `test_connection.py`, `test_poolmanager.py` — all pass (65 passed, 1 pre-existing skip left untouched since tests weren't to be modified).
