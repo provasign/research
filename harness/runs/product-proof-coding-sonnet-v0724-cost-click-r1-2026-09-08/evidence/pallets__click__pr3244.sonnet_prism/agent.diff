@@ -1,0 +1,44 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..0e58669 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -76,11 +76,39 @@ class BytesIOCopy(io.BytesIO):
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._fileno_file: t.IO[bytes] | None = None
++        self._fileno_pos = 0
++
++    def fileno(self) -> int:
++        """Provide a real OS-level file descriptor backing this stream.
++
++        Some callers (for example ``subprocess.run(..., stdout=...)``)
++        require an actual file descriptor rather than a pure in-memory
++        buffer. Data written through that descriptor is synced back into
++        this buffer (and ``copy_to``) on the next :meth:`flush` or
++        :meth:`getvalue` call.
++        """
++        if self._fileno_file is None:
++            self._fileno_file = tempfile.TemporaryFile()
++        return self._fileno_file.fileno()
++
++    def _sync_fileno(self) -> None:
++        if self._fileno_file is not None:
++            self._fileno_file.seek(self._fileno_pos)
++            data = self._fileno_file.read()
++            if data:
++                self._fileno_pos += len(data)
++                self.write(data)
+ 
+     def flush(self) -> None:
++        self._sync_fileno()
+         super().flush()
+         self.copy_to.flush()
+ 
++    def getvalue(self) -> bytes:
++        self._sync_fileno()
++        return super().getvalue()
++
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+         return super().write(b)

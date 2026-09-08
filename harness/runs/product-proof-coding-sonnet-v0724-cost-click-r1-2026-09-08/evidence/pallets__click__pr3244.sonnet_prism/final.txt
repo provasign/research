@@ -1,0 +1,9 @@
+All 1419 tests pass with no regressions. Let me clean up the temp repro files (not part of the repo, left in /tmp, no need to remove).
+
+## Summary
+
+The bug: `CliRunner` isolation backs `sys.stdout`/`sys.stderr` with plain `io.BytesIO` buffers, which have no real OS file descriptor. When code under test does `subprocess.run(..., stdout=sys.stdout)`, `Popen` needs `stdout.fileno()`, and `io.BytesIO` raises `io.UnsupportedOperation`.
+
+Fix (in `src/click/testing.py`, `BytesIOCopy`): lazily back the stream with a real `tempfile.TemporaryFile()` when `fileno()` is requested, and sync any bytes written directly to that OS-level file descriptor back into the in-memory buffer (and the mixed `copy_to` stream) on `flush()`/`getvalue()`. This lets subprocesses write into the redirected stream via a real fd while preserving all existing `CliRunner`/`StreamMixer`/`BytesIOCopy` semantics (`getvalue()`, mixing, etc.).
+
+Verified with the issue's reproduction (`subprocess.run(["echo", "foo"], stdout=sys.stderr)` inside a `CliRunner.invoke()`) — now passes and captures `"foo"` in output — and the full existing test suite (1419 passed, 24 skipped, 1 xfailed, no regressions).
