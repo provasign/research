@@ -85,7 +85,7 @@ def agent_worktree(task: dict) -> Path:
     repo = ab.ensure_repo(task["repo"])
     wt = WT_ROOT / f"{task['instance_id']}.oracle"
     if wt.exists():
-        ab.sh("git", "-C", str(repo), "worktree", "remove", "--force", str(wt), check=False)
+        ab.sh("git", "-C", str(repo), "worktree", "remove", "--force", str(wt))
         shutil.rmtree(wt, ignore_errors=True)
     WT_ROOT.mkdir(parents=True, exist_ok=True)
     ab.sh("git", "-C", str(repo), "worktree", "add", "--force", "--detach",
