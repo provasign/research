@@ -393,5 +393,149 @@ class SummarizeSonnetThinkingCaptureTests(unittest.TestCase):
         self.assertEqual(rec["thinking_chars"], 0)
 
 
+class NetworkClassifierTests(unittest.TestCase):
+    def test_definite_fetches(self):
+        for cmd in (
+            "pip download click==8.5.0 --no-deps -d /tmp/x",
+            "cd /tmp && pip download click==8.1.4 --no-deps -d /tmp/y",  # compound form
+            "pip3 install requests",
+            "curl -sI https://example.com | head -1",
+            "wget https://example.com/x.tgz",
+            "gh pr view 5890 --json files",
+            "git clone https://github.com/pallets/click /tmp/c",
+            "cd repo && git fetch origin",
+            "uv pip install requests",
+            "npm install",
+        ):
+            self.assertEqual(rc.classify_network(cmd), "definite", cmd)
+
+    def test_url_literal_is_only_suspect(self):
+        # A URL inside test code proves nothing -- recorded, never a violation.
+        cmd = "python - <<'PY'\nProxyManager('https://localhost:1', use_forwarding_for_https=True)\nPY"
+        self.assertEqual(rc.classify_network(cmd), "suspect")
+
+    def test_local_commands_are_unflagged(self):
+        for cmd in (
+            "pip show click", "pip --version", "python -m pytest tests/ -q",
+            "python3 -c 'import click; print(click.__file__)'",
+            "git diff", "git status", "git log --oneline -3",
+            "uv --version", "grep -rn fileno src/",
+        ):
+            self.assertIsNone(rc.classify_network(cmd), cmd)
+
+
+class NetworkAuditTests(unittest.TestCase):
+    def test_sonnet_shell_fetch_is_a_violation_on_any_arm(self):
+        for arm in ("sonnet_native", "sonnet_prism", "sonnet_codegraph"):
+            rec = {}
+            calls = [{"name": "Bash", "input": {"command": "cd /tmp && pip download click==8.5.0"}}]
+            rc.audit_calls(rec, calls, arm)
+            self.assertIn("network access via shell", rec["violations"], arm)
+            self.assertEqual(len(rec["network_commands"]), 1)
+
+    def test_codex_command_execution_fetch_is_a_violation(self):
+        rec = {}
+        calls = [{"type": "command_execution", "command": "/bin/zsh -lc 'curl -sI https://example.com'",
+                  "status": "completed", "exit_code": 0}]
+        rc.audit_calls(rec, calls, "gpt55_native")
+        self.assertIn("network access via shell", rec["violations"])
+
+    def test_url_literal_is_recorded_not_violated(self):
+        rec = {}
+        calls = [{"name": "Bash", "input": {"command":
+                  "python - <<'PY'\nProxyManager('https://localhost:1')\nPY"}}]
+        rc.audit_calls(rec, calls, "sonnet_native")
+        self.assertNotIn("network access via shell", rec["violations"])
+        self.assertEqual(rec["network_commands"], [])
+        self.assertEqual(len(rec["network_suspects"]), 1)
+
+    def test_clean_cell_has_empty_network_fields(self):
+        rec = {}
+        calls = [{"name": "Bash", "input": {"command": "python -m pytest tests/test_testing.py -q"}}]
+        rc.audit_calls(rec, calls, "sonnet_native")
+        self.assertEqual(rec["network_commands"], [])
+        self.assertEqual(rec["network_suspects"], [])
+        self.assertNotIn("network access via shell", rec["violations"])
+
+
+class BuildCommandNetworkBlockTests(unittest.TestCase):
+    def _sonnet_cmd(self, cfg):
+        return rc.build_command(cfg, Path("/run"), Path("/run/evidence/c"),
+                                Path("/run/work/c"), "sonnet_native", "fix it",
+                                Path("/run/prism-bin"))
+
+    def test_default_denies_shell_fetches_and_web_tools(self):
+        cmd = self._sonnet_cmd(rc.AgentConfig())
+        self.assertIn("--disallowedTools", cmd)
+        deny = cmd[cmd.index("--disallowedTools") + 1]
+        for pattern in ("Bash(pip download:*)", "Bash(pip install:*)", "Bash(curl:*)",
+                        "Bash(wget:*)", "Bash(git clone:*)", "WebFetch", "WebSearch"):
+            self.assertIn(pattern, deny, pattern)
+
+    def test_deny_list_stays_narrow(self):
+        # A broad Bash(pip:*) would deny `pip show`/`pip --version`, which
+        # legitimate cells use; the probes in swebench_ab.py's history show
+        # that breaks runs. Keep the deny list to fetching subcommands.
+        deny = rc.AgentConfig().disallowed_tools
+        self.assertNotIn("Bash(pip:*)", deny)
+        self.assertNotIn("Bash(python", deny)
+        self.assertNotIn("Bash(git:*)", deny)
+
+    def test_empty_deny_list_omits_the_flag(self):
+        cmd = self._sonnet_cmd(rc.AgentConfig(disallowed_tools=""))
+        self.assertNotIn("--disallowedTools", cmd)
+
+
+class NetworkClassifierEdgeTests(unittest.TestCase):
+    def test_heredoc_body_is_not_a_command(self):
+        # Text written to a file must not read as a fetch being run.
+        cmd = "cat > /tmp/repro.py <<'EOF'\nimport click\n# pip install click\ncurl http://x\nEOF\npython /tmp/repro.py"
+        self.assertIsNone(rc.classify_network(cmd))
+
+    def test_command_after_heredoc_still_counts(self):
+        cmd = "cat > /tmp/repro.py <<'EOF'\nprint(1)\nEOF\npip download click==8.5.0 -d /tmp/x"
+        self.assertEqual(rc.classify_network(cmd), "definite")
+
+    def test_local_editable_install_is_suspect_not_definite(self):
+        # The real pr3228 shape: write a repro, then `python -m pip install -e .`
+        cmd = "cat > /tmp/clickfoo.py <<'EOF'\nimport click\nEOF\npython -m pip install -e . -q 2>/dev/null\npython /tmp/clickfoo.py"
+        self.assertEqual(rc.classify_network(cmd), "suspect")
+        for local in ("pip install -e .", "pip install .", "pip install ./vendor/pkg",
+                      "pip install --no-deps -e . -q", "uv pip install -e ."):
+            self.assertEqual(rc.classify_network(local), "suspect", local)
+
+    def test_index_installs_stay_definite(self):
+        for fetch in ("pip install requests", "pip install -q requests",
+                      "pip install -r requirements.txt", "python -m pip install click==8.5.0",
+                      "uv pip install requests"):
+            self.assertEqual(rc.classify_network(fetch), "definite", fetch)
+
+    def test_executed_heredoc_body_is_live_code(self):
+        # `python - <<'PY'` runs the body; a fetch inside it is real network
+        # use and a URL inside it is a real suspect -- neither may be stripped.
+        self.assertEqual(rc.classify_network(
+            "python - <<'PY'\nimport subprocess\nsubprocess.run('pip download click', shell=True)\nPY"),
+            "definite")
+        self.assertEqual(rc.classify_network(
+            "python - <<'PY'\nProxyManager('https://localhost:1')\nPY"), "suspect")
+        self.assertEqual(rc.classify_network(
+            "cat <<'EOF' | python\nprint('https://example.com')\nEOF"), "suspect")
+        self.assertEqual(rc.classify_network(
+            "bash <<'EOF'\ncurl -sI https://example.com\nEOF"), "definite")
+
+    def test_written_heredoc_body_is_inert_even_via_tee(self):
+        self.assertIsNone(rc.classify_network(
+            "tee /tmp/notes.md <<'EOF'\nrun: pip install click\nsee https://example.com\nEOF"))
+
+
+class BuildCommandCodexSandboxTests(unittest.TestCase):
+    def test_codex_pins_workspace_write_network_off(self):
+        cmd = rc.build_command(rc.AgentConfig(), Path("/run"), Path("/run/evidence/c"),
+                               Path("/run/work/c"), "gpt55_native", "fix it",
+                               Path("/run/prism-bin"))
+        self.assertIn("sandbox_workspace_write.network_access=false", cmd)
+        self.assertEqual(cmd[cmd.index("sandbox_workspace_write.network_access=false") - 1], "-c")
+
+
 if __name__ == "__main__":
     unittest.main()

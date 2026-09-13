@@ -316,6 +316,14 @@ def cmd_run(args: argparse.Namespace) -> int:
         # cell, measurement.json `thinking_chars` says whether it actually
         # landed -- the flag can be silently dropped server-side.
         "thinking_display": cfg.thinking_display,
+        # Network policy: blocked on Claude arms by --disallowedTools, on
+        # Codex arms by the workspace-write sandbox; git's network path is
+        # closed for both via GIT_ALLOW_PROTOCOL=file. Any shell fetch that
+        # gets through is a recorded violation (measurement.json
+        # `network_commands`); bare URL literals are recorded as
+        # `network_suspects`, never asserted.
+        "disallowed_tools": cfg.disallowed_tools,
+        "network_policy": "blocked (disallowedTools / codex sandbox / GIT_ALLOW_PROTOCOL=file); shell fetches audited as violations",
         "versions": versions,
         "started_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "hashes": hashes,

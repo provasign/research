@@ -21,6 +21,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import shlex
 import shutil
 import signal
@@ -167,6 +168,76 @@ def _invokes_cli(value: str, binary_name: str) -> bool:
 
 def invokes_prism(value: str) -> bool:
     return _invokes_cli(value, "prism")
+
+
+# Network use via the shell. The task prompt forbids it, and for the e2e
+# suite it is not a mere efficiency leak: every task is a real merged PR whose
+# fix is already published, so `pip download <pkg>` can fetch the answer (a
+# prism cell did exactly that on 2026-09-12). Matched anywhere in the command,
+# not as a prefix, so `cd /tmp && pip download ...` is caught -- the form it
+# actually took.
+#
+# Two tiers, deliberately: DEFINITE is the narrow set of commands that fetch
+# from outside the repo and is a protocol violation. SUSPECT is a bare URL
+# literal, which proves nothing by itself (`ProxyManager('https://localhost:1')`
+# in a test fixture matched a coarser regex in the 2026-09-13 scan) and is
+# recorded for review but never asserted as network use. `pip show`,
+# `pip --version`, `python -c` stay local and unflagged -- a broader list
+# denied those and broke cells in the swebench_ab probes (see its history).
+_NETWORK_DEFINITE = re.compile(
+    r"(?<![\w/.-])(?:pip3?\s+(?:download|install)\b|uv\s+(?:pip\s+install|add|sync)\b"
+    r"|npm\s+(?:install|i|ci)\b|curl\s|wget\s|gh\s+(?:pr|api|repo|issue)\b"
+    r"|git\s+(?:clone|fetch|pull|ls-remote)\b)"
+)
+# `pip install` of a LOCAL path (`-e .`, `.`, `./pkg`, `/abs`) is a build step,
+# not a fetch: it only reaches the index if a dependency is missing, and the
+# task prompt states dependencies are preinstalled. Recorded as suspect, not
+# asserted as network use -- a pr3228 cell did `python -m pip install -e . -q`
+# after writing a repro script, and calling that "network access" would be
+# the same over-claim the two-tier design exists to avoid.
+_PIP_LOCAL_INSTALL = re.compile(
+    r"(?:uv\s+)?pip3?\s+install\s+(?:-{1,2}[\w-]+(?:[=\s]\S+)?\s+)*"
+    r"(?:-e\s+|--editable\s+)?(?:\.(?=[\s/]|$)|/)"
+)
+_NETWORK_SUSPECT = re.compile(r"https?://")
+# A heredoc body fed to `cat`/`tee` is text being WRITTEN to a file, not a
+# command being RUN -- `cat > repro.py <<'EOF' ... pip install foo ... EOF`
+# must not match. But a heredoc fed to an interpreter (`python - <<'PY'`,
+# `bash <<EOF`, or `cat <<EOF | python`) IS executed, so its body is kept:
+# a `pip download` or URL inside it is live code. The opener line and
+# anything after the terminator are always kept, so a real fetch following
+# a written heredoc still counts.
+_HEREDOC = re.compile(
+    r"((?:^|(?<=\n))[^\n]*<<-?\s*['\"]?(\w+)['\"]?[^\n]*\n).*?\n[ \t]*\2[ \t]*(?:\n|$)", re.S
+)
+
+
+def _heredoc_sub(m: re.Match) -> str:
+    opener = m.group(1)
+    before, after = opener.split("<<", 1)
+    writes_file = re.search(r"\b(?:cat|tee)\b", before) is not None and "|" not in after
+    return opener if writes_file else m.group(0)
+
+
+def _without_heredoc_bodies(value: str) -> str:
+    return _HEREDOC.sub(_heredoc_sub, value)
+
+
+def classify_network(value: str) -> str | None:
+    """'definite' for a command that fetches from the network; 'suspect' for a
+    local-path `pip install` or a bare URL literal (recorded for review, never
+    asserted); else None."""
+    cmd = _without_heredoc_bodies(value)
+    hit = False
+    for m in _NETWORK_DEFINITE.finditer(cmd):
+        hit = True
+        tail = cmd[m.start():]
+        if re.match(r"(?:uv\s+)?pip3?\s+install\b", tail) and _PIP_LOCAL_INSTALL.match(tail):
+            continue
+        return "definite"
+    if hit or _NETWORK_SUSPECT.search(cmd):
+        return "suspect"
+    return None
 
 
 def active_tool(arm: str) -> str:
@@ -442,6 +513,10 @@ def audit_calls(rec: dict, calls: list[dict], arm: str) -> None:
                 violations.append("delegation or network tool used")
             elif kind == "file_change" and not rec.get("allow_source_edits"):
                 violations.append("edit used in read-only cell")
+    network_commands = [v for v in native_commands if classify_network(v) == "definite"]
+    network_suspects = [v for v in native_commands if classify_network(v) == "suspect"]
+    if network_commands:
+        violations.append("network access via shell")
     own_spec = TOOLS.get(own_tool)
     own_cli_commands = [value for value in native_commands
                         if own_spec is not None and own_spec.invokes_cli(value)]
@@ -471,6 +546,8 @@ def audit_calls(rec: dict, calls: list[dict], arm: str) -> None:
         own_tool_calls=own_calls,
         own_tool_cli_commands=own_cli_commands,
         cross_tool_violations=cross_tool_violations,
+        network_commands=network_commands,
+        network_suspects=network_suspects,
     )
 
 
@@ -538,6 +615,20 @@ class AgentConfig:
     # allowance is inert) -- this lets one allowedTools string serve every
     # arm regardless of which tool (if any) it uses.
     allowed_tools: str = "Read,Grep,Glob,Bash,Edit,Write,mcp__prism,mcp__codegraph"
+    # Network block for Claude arms, via --disallowedTools. Probed 2026-09-13
+    # with the harness's own flags: deny rules hold under
+    # --dangerously-skip-permissions and Claude Code evaluates each segment
+    # of a compound command, so `cd /tmp && curl ...` is refused too. Narrow
+    # on purpose -- `pip show`, `pip --version`, `python -c` stay allowed
+    # (a broad `Bash(pip:*)` broke legitimate cells in the swebench_ab
+    # probes). Blocking is belt; the audit's `network_commands` record is
+    # braces for anything a pattern misses. Codex arms are covered by the
+    # workspace-write sandbox instead (curl exit 6 in the same probe).
+    disallowed_tools: str = (
+        "Bash(pip download:*),Bash(pip install:*),Bash(pip3 download:*),Bash(pip3 install:*),"
+        "Bash(curl:*),Bash(wget:*),Bash(gh:*),Bash(git clone:*),Bash(git fetch:*),Bash(git pull:*),"
+        "WebFetch,WebSearch"
+    )
     project_doc_max_bytes: int = 32768
     output_schema: bool = False  # codex --output-schema <root>/answer-schema.json
     prism_tools: list[str] = field(default_factory=lambda: list(PRISM_TOOLS))
@@ -568,6 +659,8 @@ def build_command(cfg: AgentConfig, root: Path, out: Path, work: Path, arm: str,
             "--disable-slash-commands", "--no-chrome", "--no-session-persistence",
             "--tools", cfg.tools, "--allowedTools", cfg.allowed_tools,
         ]
+        if cfg.disallowed_tools:
+            cmd += ["--disallowedTools", cfg.disallowed_tools]
         return cmd
     cmd = [
         shutil.which("codex"), "exec", "--ignore-user-config", "--ephemeral",
@@ -582,6 +675,11 @@ def build_command(cfg: AgentConfig, root: Path, out: Path, work: Path, arm: str,
         f"project_doc_max_bytes={cfg.project_doc_max_bytes}", 'web_search="disabled"',
         "features.multi_agent=false", "features.memories=false", "features.hooks=false",
         "features.apps=false", "skills.max_context_tokens=1",
+        # Pin the workspace-write sandbox's network policy rather than rely on
+        # its default. Probed 2026-09-13 under these flags: the default already
+        # blocks (curl exit 6, host unresolvable), so correctness does not
+        # rest on this line -- it makes the policy explicit in command.json.
+        "sandbox_workspace_write.network_access=false",
     ]
     spec = TOOLS.get(tool)
     if spec is not None:
@@ -872,6 +970,11 @@ def run_cell(cell: Cell, cfg: AgentConfig, finalize=None) -> dict:
     out, work, arm = cell.out, cell.work, cell.arm
     env = os.environ.copy()
     env.pop("CLAUDECODE", None)
+    # Close git's network path without denying git: fetch/clone/pull to any
+    # non-file remote fail, local operations are untouched. Independent of
+    # tool-permission rules, so it holds even where a deny pattern misses a
+    # compound command. Same mechanism swebench_ab.py settled on.
+    env["GIT_ALLOW_PROTOCOL"] = "file"
     rg = shutil.which("rg")
     env["PATH"] = agent_path(cell.env_dir, cell.tool_cli_dir, rg)
     if cell.env_dir is not None:
