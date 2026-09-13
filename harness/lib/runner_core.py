@@ -905,8 +905,43 @@ def make_codegraph_template(root: Path, binary: Path, key: str, base: Path) -> t
     return codegraph, template_setup_files(codegraph)
 
 
-def prepare_environment(root: Path, key: str, base: Path) -> Path:
-    """Install dependencies before the timed cells and archive exact versions."""
+def prefetch_dependencies(root: Path, key: str, base: Path, language: str) -> None:
+    """Non-Python languages: fetch dependencies once, before any timed cell,
+    so no agent cell needs network to build or test. Go/Rust caches are
+    global on the host (GOPATH/pkg/mod, CARGO_HOME/registry) -- fetching
+    once here warms them for every later cell on this host, no per-cell
+    copy needed. npm has no such global cache; `npm ci` runs directly in
+    `base` so node_modules is materialized in the template and carried into
+    each cell by prepare_cell's plain `shutil.copytree(template, work)`."""
+    cmds = {"go": ["go", "mod", "download"], "rust": ["cargo", "fetch"],
+            "ts": ["npm", "ci", "--no-audit", "--no-fund"], "js": ["npm", "ci", "--no-audit", "--no-fund"]}
+    cmd = cmds.get(language)
+    if cmd is None:
+        return
+    t0 = time.monotonic()
+    prefetch_env = os.environ.copy()
+    prefetch_env["GOWORK"] = "off"  # see run_cell's GOWORK note
+    # This harness process's own PATH may predate a toolchain install (e.g.
+    # rustup's ~/.cargo/bin) -- same gap agent_path() documents for cells.
+    prefetch_env["PATH"] = os.pathsep.join(
+        [str(Path.home() / ".cargo" / "bin"), "/usr/local/go/bin", prefetch_env.get("PATH", "")])
+    result = subprocess.run(cmd, cwd=base, capture_output=True, text=True, timeout=1800, env=prefetch_env)
+    dump(root / "environments" / key / "setup.json", {
+        "language": language, "wall_s": round(time.monotonic() - t0, 3),
+        "cmd": cmd, "exit_code": result.returncode,
+        "stdout": result.stdout[-2000:], "stderr": result.stderr[-2000:],
+    })
+    if result.returncode != 0:
+        raise RuntimeError(f"{key}: {' '.join(cmd)} failed: {result.stderr[-500:]}")
+
+
+def prepare_environment(root: Path, key: str, base: Path, language: str = "python") -> Path | None:
+    """Install dependencies before the timed cells and archive exact versions.
+    Python only -- other languages use `prefetch_dependencies` and need no
+    venv (their toolchain is on PATH directly, see `agent_path`)."""
+    if language != "python":
+        prefetch_dependencies(root, key, base, language)
+        return None
     env_dir = root / "environments" / key
     python = shutil.which("python3.12") or shutil.which("python3")
     if not python:
@@ -958,13 +993,20 @@ def prepare_environment(root: Path, key: str, base: Path) -> Path:
 
 def agent_path(env_dir: Path | None, tool_cli_dir: Path | None, rg: str | None) -> str:
     """Return an isolated PATH, exposing an arm's own tool CLI only to that
-    arm (a native, or wrong-tool, arm cannot exec it via Bash)."""
+    arm (a native, or wrong-tool, arm cannot exec it via Bash).
+
+    Cells run as host subprocesses, not containers, so a language's own
+    toolchain must already be on this list or the agent cannot invoke it at
+    all -- caught adding Go/Rust/TS tasks 2026-09-13: /usr/local/go/bin (go)
+    and ~/.cargo/bin (cargo/rustc) were both missing, which would have made
+    every non-Python cell unable to self-test regardless of env_dir/venv."""
     parts = [str(env_dir / "bin")] if env_dir is not None else []
     if tool_cli_dir is not None:
         parts.append(str(tool_cli_dir))
     if rg:
         parts.append(str(Path(rg).parent))
-    parts.extend(["/opt/homebrew/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"])
+    parts.extend(["/opt/homebrew/bin", "/usr/local/bin", "/usr/local/go/bin",
+                  str(Path.home() / ".cargo" / "bin"), "/usr/bin", "/bin", "/usr/sbin", "/sbin"])
     return os.pathsep.join(dict.fromkeys(parts))
 
 
@@ -1062,6 +1104,12 @@ def run_cell(cell: Cell, cfg: AgentConfig, finalize=None) -> dict:
     # tool-permission rules, so it holds even where a deny pattern misses a
     # compound command. Same mechanism swebench_ab.py settled on.
     env["GIT_ALLOW_PROTOCOL"] = "file"
+    # An unrelated host go.work (this machine has one at /private/tmp) is
+    # auto-discovered upward from any cwd under /tmp and silently pulls a Go
+    # cell's `go build`/`go test` into the WRONG module set. Caught 2026-09-13:
+    # a cli/cli cell burned several turns discovering and disabling this
+    # itself. Harmless to set for every cell, not only Go ones.
+    env["GOWORK"] = "off"
     rg = shutil.which("rg")
     env["PATH"] = agent_path(cell.env_dir, cell.tool_cli_dir, rg)
     if cell.env_dir is not None:

@@ -20,6 +20,8 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+import docker_eval_lang
+
 CLONE_ROOT = Path.home() / "gvg-corpus" / "e2e-2026"
 IMAGE = "python:3.12"
 RESULT_RE = re.compile(r"^(\S+::\S+)\s+(PASSED|FAILED|ERROR)", re.M)
@@ -66,6 +68,25 @@ EXTRA_PIP = {
     "pydantic/pydantic": ["pytest-run-parallel", "dirty-equals", "pytest-mock",
                           "annotated-types", "email-validator", "pytest-examples"],
 }
+
+
+def _run_tests_in_docker(task: dict, worktree: Path) -> PytestRun:
+    """Dispatch by task["language"] (default python/pytest). Non-Python
+    runners (docker_eval_lang) return a LangRun with the same
+    outcomes/collection_failed shape; wrapped as PytestRun so validate()/
+    score() do not need to know which language ran."""
+    language = task.get("language", "python")
+    if language == "python":
+        return _pytest_in_docker(worktree, task["test_modules"], task["repo"],
+                                  task.get("test_cmds"))
+    runner = docker_eval_lang.RUNNERS.get(language)
+    if runner is None:
+        raise ValueError(f"no docker runner for language={language!r}")
+    if language in docker_eval_lang.NEEDS_TEST_PATCH:
+        run = runner(worktree, task.get("test_patch", ""))
+    else:
+        run = runner(worktree)
+    return PytestRun(run.outcomes, run.collection_failed)
 
 
 def _pytest_in_docker(worktree: Path, modules: list[str], repo: str = "",
@@ -162,15 +183,14 @@ def _cleanup(repo: Path, wt: Path):
 def validate(task: dict) -> dict:
     """Promote a candidate to a task: derive FAIL_TO_PASS (fail on base+tests,
     pass on base+tests+gold)."""
-    mods = task["test_modules"]
     repo, wt = _worktree(task, [task["test_patch"]])
     try:
-        before_run = _pytest_in_docker(wt, mods, task["repo"], task.get("test_cmds"))
+        before_run = _run_tests_in_docker(task, wt)
     finally:
         _cleanup(repo, wt)
     repo, wt = _worktree(task, [task["test_patch"], task["patch"]])
     try:
-        after_run = _pytest_in_docker(wt, mods, task["repo"], task.get("test_cmds"))
+        after_run = _run_tests_in_docker(task, wt)
     finally:
         _cleanup(repo, wt)
     before, after = before_run.outcomes, after_run.outcomes
@@ -191,10 +211,9 @@ def validate(task: dict) -> dict:
 
 def score(task: dict, agent_patch: str) -> dict:
     """Resolved iff every FAIL_TO_PASS passes and no PASS_TO_PASS regresses."""
-    mods = task["test_modules"]
     repo, wt = _worktree(task, [task["test_patch"], agent_patch])
     try:
-        run = _pytest_in_docker(wt, mods, task.get("repo", ""), task.get("test_cmds"))
+        run = _run_tests_in_docker(task, wt)
     finally:
         _cleanup(repo, wt)
     res = run.outcomes

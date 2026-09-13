@@ -101,12 +101,19 @@ def pristine_archive_for_task(task: dict) -> tuple[bytes, dict[str, str], list[s
     return rc.pristine_archive(repo_for(task), task["base_commit"], task["instance_id"])
 
 
+TEST_CMD_BY_LANGUAGE = {
+    "python": "python -m pytest", "go": "go test ./...",
+    "rust": "cargo test", "ts": "npx jest", "js": "npx jest",
+}
+
+
 def prompt_for_coding(task: dict) -> str:
-    return """Work only in the repository in your current directory. Do not use the network,
+    test_cmd = TEST_CMD_BY_LANGUAGE.get(task.get("language", "python"), "the project's own test runner")
+    return f"""Work only in the repository in your current directory. Do not use the network,
 git history, benchmark files, saved answers, memory, skills, or delegated agents. Fix the SOURCE
 code so the issue below is resolved. Do not modify tests, docs, changelogs, or configuration.
 Make the smallest robust change. Investigate, edit, and run a narrow relevant test if time permits;
-do not commit. Dependencies are preinstalled; use `python -m pytest` for narrow tests. You have a
+do not commit. Dependencies are preinstalled; use `{test_cmd}` for narrow tests. You have a
 strict five-minute work budget. A patch present at timeout will still be scored.
 
 ISSUE:
@@ -463,7 +470,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         archive, pristine, excluded = pristine_archive_for_task(task)
         rc.dump(root / "tasks" / path.name, task)
         base, baseline = rc.make_git_template(root, task_id, archive)
-        env_dir = rc.prepare_environment(root, task_id, base)
+        env_dir = rc.prepare_environment(root, task_id, base, task.get("language", "python"))
         base_setup_files = rc.template_setup_files(base)
         tool_templates: dict[str, tuple[Path, list[str]]] = {"native": (base, base_setup_files)}
         if "prism" in tools:
