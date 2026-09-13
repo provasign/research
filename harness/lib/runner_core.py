@@ -31,6 +31,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Callable
 
 PRISM_TOOLS = [
     "prism_search", "prism_query", "prism_read", "prism_lookup",
@@ -41,6 +42,9 @@ PRISM_TOOLS = [
 # PRISM_BINARY is the current name; PRISM_V072_BINARY is kept only because
 # older run scripts/docs still reference it.
 PRISM_BINARY_ENV_VARS = ("PRISM_BINARY", "PRISM_V072_BINARY")
+
+# Human-readable labels for cross-tool-violation messages.
+TOOL_LABEL = {"prism": "Prism", "codegraph": "CodeGraph"}
 
 
 def resolve_prism_binary(explicit: str | None = None) -> Path:
@@ -73,6 +77,30 @@ def resolve_prism_binary(explicit: str | None = None) -> Path:
     raise RuntimeError(
         "no usable Prism binary found. Pass --prism-binary explicitly, set "
         f"PRISM_BINARY, or install prism on PATH. Tried: {tried}"
+    )
+
+
+def resolve_codegraph_binary(explicit: str | None = None) -> Path:
+    """Resolve the CodeGraph binary to use for a run. Mirrors
+    `resolve_prism_binary`: explicit CLI flag, then `$CODEGRAPH_BINARY`, then
+    `PATH` (`which codegraph`). CodeGraph has no `~/bin/codegraph`
+    convention to fall back to."""
+    candidates: list[tuple[str, Path]] = []
+    if explicit:
+        candidates.append(("--codegraph-binary", Path(explicit).expanduser()))
+    value = os.environ.get("CODEGRAPH_BINARY")
+    if value:
+        candidates.append(("$CODEGRAPH_BINARY", Path(value).expanduser()))
+    found = shutil.which("codegraph")
+    if found:
+        candidates.append(("PATH", Path(found)))
+    for source, path in candidates:
+        if path.is_file() and os.access(path, os.X_OK):
+            return path
+    tried = "; ".join(f"{source}: {path}" for source, path in candidates)
+    raise RuntimeError(
+        "no usable CodeGraph binary found. Pass --codegraph-binary explicitly, set "
+        f"CODEGRAPH_BINARY, or install codegraph on PATH. Tried: {tried}"
     )
 
 
@@ -129,12 +157,87 @@ def stop(proc: subprocess.Popen) -> None:
         proc.wait()
 
 
-def invokes_prism(value: str) -> bool:
+def _invokes_cli(value: str, binary_name: str) -> bool:
     try:
         tokens = shlex.split(value)
     except ValueError:
         tokens = value.split()
-    return any(Path(token).name.startswith("prism") for token in tokens)
+    return any(Path(token).name.startswith(binary_name) for token in tokens)
+
+
+def invokes_prism(value: str) -> bool:
+    return _invokes_cli(value, "prism")
+
+
+def active_tool(arm: str) -> str:
+    """Which tool (if any) this arm's name says it uses: the `{prefix}_tool`
+    suffix convention, generalized beyond prism/native."""
+    if arm.endswith("prism"):
+        return "prism"
+    if arm.endswith("codegraph"):
+        return "codegraph"
+    return "native"
+
+
+def _codex_mcp_lines(server: str, binary: Path, args: list[str]) -> list[str]:
+    """Shared shape for a codex `-c mcp_servers.<server>.*` block."""
+    return [
+        f"mcp_servers.{server}.command=" + json.dumps(str(binary)),
+        f"mcp_servers.{server}.args=" + json.dumps(args),
+        f"mcp_servers.{server}.required=true",
+    ]
+
+
+@dataclass(frozen=True)
+class ToolSpec:
+    """One entry in the tool registry `TOOLS`. Every currently-Prism-specific
+    branch in this module becomes a lookup into `TOOLS[active_tool(arm)]`,
+    with the per-tool logic living only here."""
+
+    name: str
+    mcp_server_name: str
+    init_args: Callable[[Path, Path], list[str]]
+    mcp_stdio: Callable[[Path, Path], dict]
+    codex_mcp_config: Callable[[Path, Path], list[str]]
+    invokes_cli: Callable[[str], bool]
+    sonnet_call_prefix: str
+    # Extra codex `-c` lines that need cfg (e.g. Prism's per-tool approval
+    # mode list) -- None when a tool needs nothing beyond codex_mcp_config.
+    codex_extra_config: Callable[["AgentConfig"], list[str]] | None = None
+
+
+TOOLS: dict[str, ToolSpec] = {
+    "prism": ToolSpec(
+        name="prism",
+        mcp_server_name="prism",
+        init_args=lambda binary, target: prism_init_args(binary, target),
+        mcp_stdio=lambda binary, work: {
+            "type": "stdio", "command": str(binary), "args": ["mcp", str(work)],
+        },
+        codex_mcp_config=lambda binary, work: _codex_mcp_lines(
+            "prism", binary, ["mcp", str(work)]),
+        invokes_cli=lambda value: _invokes_cli(value, "prism"),
+        sonnet_call_prefix="mcp__prism__",
+        codex_extra_config=lambda cfg: [
+            f'mcp_servers.prism.tools.{name}.approval_mode="approve"'
+            for name in dict.fromkeys(["prism", *cfg.prism_tools])
+        ],
+    ),
+    "codegraph": ToolSpec(
+        name="codegraph",
+        mcp_server_name="codegraph",
+        init_args=lambda binary, target: [str(binary), "init", str(target)],
+        mcp_stdio=lambda binary, work: {
+            "type": "stdio", "command": str(binary),
+            "args": ["serve", "-p", str(work), "--mcp"],
+        },
+        codex_mcp_config=lambda binary, work: _codex_mcp_lines(
+            "codegraph", binary, ["serve", "-p", str(work), "--mcp"]),
+        invokes_cli=lambda value: _invokes_cli(value, "codegraph"),
+        sonnet_call_prefix="mcp__codegraph__",
+        codex_extra_config=None,
+    ),
+}
 
 
 def result_bytes(value) -> int:
@@ -187,6 +290,7 @@ def summarize_sonnet(events: list[dict], out: Path) -> tuple[dict, str, list[dic
     call_names = {}
     tool_result_bytes = {}
     tool_errors = []
+    thinking_blocks = thinking_chars = 0
     for event in events:
         for block in (event.get("message") or {}).get("content", []):
             if block.get("type") == "tool_use":
@@ -201,7 +305,16 @@ def summarize_sonnet(events: list[dict], out: Path) -> tuple[dict, str, list[dic
                 if block.get("is_error"):
                     tool_errors.append({"tool": call_names.get(identity, ""),
                                         "content": block.get("content")})
+            elif block.get("type") == "thinking" and event.get("type") == "assistant":
+                thinking_blocks += 1
+                thinking_chars += len(block.get("thinking") or "")
     rec["tool_errors"] = tool_errors
+    # Reasoning-capture check (see AgentConfig.thinking_display): blocks
+    # present but zero chars means the API returned signature-only thinking
+    # -- the flag was dropped or unsupported, and "why did the agent do X"
+    # is not answerable from this transcript.
+    rec["thinking_blocks"] = thinking_blocks
+    rec["thinking_chars"] = thinking_chars
     rec["prism_result_bytes"] = sum(
         tool_result_bytes.get(call.get("id"), 0) for call in calls
         if str(call.get("name", "")).startswith("mcp__prism__")
@@ -264,20 +377,48 @@ def summarize_codex(events: list[dict], out: Path, gpt_model: str = "gpt-5.5") -
     return rec, final, calls
 
 
+def _violation_message(own_tool: str, other_tool: str) -> str:
+    label = TOOL_LABEL.get(other_tool, other_tool)
+    if own_tool == "native":
+        return f"native arm used {label}"
+    return f"{own_tool} arm used {label} (not its own tool)"
+
+
 def audit_calls(rec: dict, calls: list[dict], arm: str) -> None:
-    """Protocol-violation audit: catches a native arm invoking Prism (MCP or
-    CLI), delegated/networked tools, and duplicate Prism call signatures."""
-    prism_calls = []
-    native_commands = []
-    signatures = []
-    violations = []
+    """Protocol-violation audit: mutual exclusion across every tool in
+    `TOOLS`, plus delegated/networked tools and duplicate own-tool call
+    signatures.
+
+    A violation is any call to a tool OTHER than `active_tool(arm)` -- for a
+    native arm that means any tool call at all; for a prism arm, a codegraph
+    call is also a violation, and vice versa.
+
+    `prism_calls`/`prism_cli_commands`/`prism_actions`/`duplicate_prism_calls`
+    are kept, for measurement.json backward compatibility, as the count of
+    calls to THIS ARM'S OWN tool -- so on a `sonnet_codegraph` arm,
+    `prism_calls` is actually its CodeGraph call names (a misleading legacy
+    name we're stuck with). `own_tool_calls`/`own_tool_cli_commands`/
+    `cross_tool_violations` are the tool-agnostic equivalents; prefer those
+    in new code.
+    """
+    own_tool = active_tool(arm)
+    own_calls: list[str] = []
+    other_tool_hits: dict[str, int] = {}
+    native_commands: list[str] = []
+    signatures: list[str] = []
+    violations: list[str] = []
     if arm.startswith("sonnet"):
         for call in calls:
             name = call.get("name", "")
             value = call.get("input") or {}
-            if name.startswith("mcp__prism__"):
-                prism_calls.append(name)
-                signatures.append(name + ":" + json.dumps(value, sort_keys=True))
+            matched = next((tname for tname, spec in TOOLS.items()
+                            if name.startswith(spec.sonnet_call_prefix)), None)
+            if matched is not None:
+                if matched == own_tool:
+                    own_calls.append(name)
+                    signatures.append(name + ":" + json.dumps(value, sort_keys=True))
+                else:
+                    other_tool_hits[matched] = other_tool_hits.get(matched, 0) + 1
             elif name == "Bash":
                 native_commands.append(value.get("command", ""))
             elif name in ("Agent", "Task", "WebFetch", "WebSearch"):
@@ -285,26 +426,82 @@ def audit_calls(rec: dict, calls: list[dict], arm: str) -> None:
     else:
         for call in calls:
             kind = call.get("type")
-            if kind == "mcp_tool_call" and call.get("server") == "prism":
-                prism_calls.append(call.get("tool", ""))
-                signatures.append(call.get("tool", "") + ":" +
-                                  json.dumps(call.get("arguments") or {}, sort_keys=True))
+            if kind == "mcp_tool_call":
+                server = call.get("server")
+                if server in TOOLS:
+                    tool_name = call.get("tool", "")
+                    if server == own_tool:
+                        own_calls.append(tool_name)
+                        signatures.append(tool_name + ":" +
+                                          json.dumps(call.get("arguments") or {}, sort_keys=True))
+                    else:
+                        other_tool_hits[server] = other_tool_hits.get(server, 0) + 1
             elif kind == "command_execution":
                 native_commands.append(call.get("command", ""))
-            elif kind in ("collab_tool_call", "web_search", "file_change"):
-                violations.append("delegation, network tool, or edit used")
-    prism_cli_commands = [value for value in native_commands if invokes_prism(value)]
-    if arm.endswith("native") and (prism_calls or prism_cli_commands):
-        violations.append("native arm used Prism")
+            elif kind in ("collab_tool_call", "web_search"):
+                violations.append("delegation or network tool used")
+            elif kind == "file_change" and not rec.get("allow_source_edits"):
+                violations.append("edit used in read-only cell")
+    own_spec = TOOLS.get(own_tool)
+    own_cli_commands = [value for value in native_commands
+                        if own_spec is not None and own_spec.invokes_cli(value)]
+    cross_tool_violations: list[str] = []
+    for tname, count in sorted(other_tool_hits.items()):
+        message = _violation_message(own_tool, tname)
+        violations.append(message)
+        cross_tool_violations.append(f"{message} ({count} MCP call(s))")
+    for tname, spec in sorted(TOOLS.items()):
+        if tname == own_tool:
+            continue
+        cli_hits = [value for value in native_commands if spec.invokes_cli(value)]
+        if cli_hits:
+            message = _violation_message(own_tool, tname)
+            violations.append(message)
+            cross_tool_violations.append(f"{message} ({len(cli_hits)} CLI command(s))")
     rec.update(
         calls=calls,
         tool_calls=len(calls),
-        prism_calls=prism_calls,
-        prism_cli_commands=prism_cli_commands,
-        prism_actions=len(prism_calls) + len(prism_cli_commands),
+        prism_calls=own_calls,
+        prism_cli_commands=own_cli_commands,
+        prism_actions=len(own_calls) + len(own_cli_commands),
         duplicate_prism_calls=len(signatures) - len(set(signatures)),
         native_commands=native_commands,
         violations=violations,
+        own_tool=own_tool,
+        own_tool_calls=own_calls,
+        own_tool_cli_commands=own_cli_commands,
+        cross_tool_violations=cross_tool_violations,
+    )
+
+
+def successful_own_tool_actions(events: list[dict], calls: list[dict], arm: str) -> int:
+    """Count completed own-tool calls, excluding denied MCP attempts."""
+    own_tool = active_tool(arm)
+    spec = TOOLS.get(own_tool)
+    if spec is None:
+        return 0
+    if arm.startswith("sonnet"):
+        results = {}
+        for event in events:
+            for block in (event.get("message") or {}).get("content", []):
+                if block.get("type") == "tool_result":
+                    results[block.get("tool_use_id")] = not block.get("is_error")
+        return sum(
+            bool(results.get(call.get("id"))) and (
+                str(call.get("name", "")).startswith(spec.sonnet_call_prefix) or
+                (call.get("name") == "Bash" and
+                 spec.invokes_cli((call.get("input") or {}).get("command", "")))
+            )
+            for call in calls
+        )
+    return sum(
+        (call.get("type") == "mcp_tool_call" and
+         call.get("server") == own_tool and call.get("status") == "completed" and
+         not call.get("error")) or
+        (call.get("type") == "command_execution" and
+         spec.invokes_cli(call.get("command", "")) and
+         call.get("status") == "completed" and call.get("exit_code") == 0)
+        for call in calls
     )
 
 
@@ -318,6 +515,17 @@ class AgentConfig:
     sonnet_model: str = "claude-sonnet-5"
     gpt_model: str = "gpt-5.5"
     effort: str = "medium"
+    # `--thinking-display summarized` asks the API for thinking summaries so the
+    # model's reasoning lands in stdout.jsonl. Without it, `claude -p
+    # --output-format stream-json` returns signature-only thinking blocks
+    # (`thinking: ""`): the tokens are billed but the text is absent, because
+    # the CLI only consults `showThinkingSummaries` in interactive mode. The
+    # flag is hidden from `claude --help` (v2.1.270) and rides a beta header the
+    # CLI silently drops if the server rejects it -- so check `thinking_chars`
+    # in measurement.json rather than assume capture worked. None omits the
+    # flag. This is display-only: it does not change whether or how much the
+    # model thinks, so it does not affect agent behavior or comparability.
+    thinking_display: str | None = "summarized"
     timeout_s: int = 300
     max_budget_usd: str = "1.50"
     # "skip" -> --dangerously-skip-permissions (coding/product suites, which
@@ -325,7 +533,11 @@ class AgentConfig:
     # --permission-prompts none (readonly/impact suites, which must not edit).
     permission_mode: str = "skip"
     tools: str = "Read,Grep,Glob,Bash,Edit,Write"
-    allowed_tools: str = "Read,Grep,Glob,Bash,Edit,Write,mcp__prism"
+    # mcp__prism/mcp__codegraph are harmless to allow on arms that don't
+    # register that MCP server (mcp.json has no entry for it there, so the
+    # allowance is inert) -- this lets one allowedTools string serve every
+    # arm regardless of which tool (if any) it uses.
+    allowed_tools: str = "Read,Grep,Glob,Bash,Edit,Write,mcp__prism,mcp__codegraph"
     project_doc_max_bytes: int = 32768
     output_schema: bool = False  # codex --output-schema <root>/answer-schema.json
     prism_tools: list[str] = field(default_factory=lambda: list(PRISM_TOOLS))
@@ -333,8 +545,10 @@ class AgentConfig:
 
 
 def build_command(cfg: AgentConfig, root: Path, out: Path, work: Path, arm: str,
-                  prompt: str, prism_binary: Path) -> list[str]:
-    has_prism = arm.endswith("prism")
+                  prompt: str, tool_binary: Path) -> list[str]:
+    """`tool_binary` is the binary for this arm's own tool (per
+    `active_tool(arm)`) -- unused for a native arm."""
+    tool = active_tool(arm)
     if arm.startswith("sonnet"):
         settings = {"autoMemoryEnabled": False, "disableAllHooks": True, "enabledPlugins": {}}
         cmd = [
@@ -342,6 +556,8 @@ def build_command(cfg: AgentConfig, root: Path, out: Path, work: Path, arm: str,
             "--effort", cfg.effort, "--output-format", "stream-json", "--verbose",
             "--max-budget-usd", cfg.max_budget_usd,
         ]
+        if cfg.thinking_display:
+            cmd += ["--thinking-display", cfg.thinking_display]
         if cfg.permission_mode == "restricted":
             cmd += ["--restricted", "--permission-mode", "dontAsk", "--permission-prompts", "none"]
         else:
@@ -367,13 +583,11 @@ def build_command(cfg: AgentConfig, root: Path, out: Path, work: Path, arm: str,
         "features.multi_agent=false", "features.memories=false", "features.hooks=false",
         "features.apps=false", "skills.max_context_tokens=1",
     ]
-    if has_prism:
-        fcfg += [
-            "mcp_servers.prism.command=" + json.dumps(str(prism_binary)),
-            "mcp_servers.prism.args=" + json.dumps(["mcp", str(work)]),
-            "mcp_servers.prism.required=true",
-        ]
-        fcfg += [f'mcp_servers.prism.tools.{name}.approval_mode="approve"' for name in cfg.prism_tools]
+    spec = TOOLS.get(tool)
+    if spec is not None:
+        fcfg += spec.codex_mcp_config(tool_binary, work)
+        if spec.codex_extra_config:
+            fcfg += spec.codex_extra_config(cfg)
     for value in fcfg:
         cmd += ["-c", value]
     return cmd + [prompt]
@@ -420,7 +634,7 @@ def template_content(path: Path) -> dict[str, str]:
         if not item.is_file():
             continue
         rel = item.relative_to(path)
-        if any(part in (".git", ".grove", ".prism") for part in rel.parts):
+        if any(part in (".git", ".grove", ".prism", ".codegraph") for part in rel.parts):
             continue
         values[str(rel)] = hashlib.sha256(item.read_bytes()).hexdigest()
     return values
@@ -442,17 +656,39 @@ def make_prism_template(root: Path, binary: Path, key: str, base: Path) -> tuple
     """Copy the dependency-prepared base, install the Prism product
     integration, and verify the tree is byte-identical to `base` except for
     Prism's own files -- catches a broken install silently corrupting the
-    task."""
+    task.
+
+    Two Prism steps are required, in this order (matching
+    `product_impact_suite.py`): `prism index` builds the Grove graph the MCP
+    server actually serves, then `prism init` (`prism_init_args`) layers the
+    product integration (steering files, harness config) on top. Running
+    `init` alone leaves the graph empty (`filesIndexed`/`symbolCount`/
+    `edgeCount` == 0) -- confirmed directly against a fresh pallets/click
+    checkout -- so `index` must run first or the Prism arm is silently
+    starting every agent session against an empty index.
+    """
     prism = root / "templates" / key / "prism"
     shutil.copytree(base, prism)
     t0 = time.monotonic()
-    indexed = subprocess.run(prism_init_args(binary, prism), cwd=prism,
+    indexed = subprocess.run([str(binary), "index", str(prism)], cwd=prism,
                              stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=300)
+    initialized = subprocess.run(prism_init_args(binary, prism), cwd=prism,
+                             stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=300)
+    status = subprocess.run([str(binary), "status", str(prism)], cwd=prism,
+                            stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=60)
+    try:
+        status_json = json.loads(status.stdout) if status.returncode == 0 else None
+    except json.JSONDecodeError:
+        status_json = None
     dump(root / "templates" / key / "index.json",
-         {"wall_s": time.monotonic() - t0, "exit_code": indexed.returncode,
-          "stdout": indexed.stdout, "stderr": indexed.stderr})
-    if indexed.returncode:
-        raise RuntimeError(f"{key}: indexing failed")
+         {"wall_s": time.monotonic() - t0,
+          "index_exit_code": indexed.returncode, "index_stdout": indexed.stdout, "index_stderr": indexed.stderr,
+          "init_exit_code": initialized.returncode, "init_stdout": initialized.stdout, "init_stderr": initialized.stderr,
+          "status": status_json})
+    if indexed.returncode or initialized.returncode:
+        raise RuntimeError(f"{key}: prism index/init failed")
+    if not status_json or not status_json.get("symbolCount"):
+        raise RuntimeError(f"{key}: prism template has an empty graph after index+init: {status_json}")
     base_content = template_content(base)
     prism_content = template_content(prism)
     mismatched = sorted(path for path, digest in base_content.items()
@@ -460,6 +696,31 @@ def make_prism_template(root: Path, binary: Path, key: str, base: Path) -> tuple
     if mismatched:
         raise RuntimeError(f"{key}: native/Prism template mismatch: {mismatched[:10]}")
     return prism, template_setup_files(prism)
+
+
+def make_codegraph_template(root: Path, binary: Path, key: str, base: Path) -> tuple[Path, list[str]]:
+    """CodeGraph counterpart to `make_prism_template`. `codegraph init`
+    builds `.codegraph/codegraph.db` in one non-interactive step (no
+    separate index command, unlike Prism), so there is no ordering concern
+    here -- just the same copy + init + byte-identical-except-`.codegraph`
+    check."""
+    codegraph = root / "templates" / key / "codegraph"
+    shutil.copytree(base, codegraph)
+    t0 = time.monotonic()
+    initialized = subprocess.run(TOOLS["codegraph"].init_args(binary, codegraph), cwd=codegraph,
+                                 stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=300)
+    dump(root / "templates" / key / "index.codegraph.json",
+         {"wall_s": time.monotonic() - t0, "exit_code": initialized.returncode,
+          "stdout": initialized.stdout, "stderr": initialized.stderr})
+    if initialized.returncode:
+        raise RuntimeError(f"{key}: codegraph init failed")
+    base_content = template_content(base)
+    codegraph_content = template_content(codegraph)
+    mismatched = sorted(path for path, digest in base_content.items()
+                        if codegraph_content.get(path) != digest)
+    if mismatched:
+        raise RuntimeError(f"{key}: native/CodeGraph template mismatch: {mismatched[:10]}")
+    return codegraph, template_setup_files(codegraph)
 
 
 def prepare_environment(root: Path, key: str, base: Path) -> Path:
@@ -510,11 +771,12 @@ def prepare_environment(root: Path, key: str, base: Path) -> Path:
     return env_dir
 
 
-def agent_path(env_dir: Path | None, prism_cli_dir: Path | None, rg: str | None) -> str:
-    """Return an isolated PATH, exposing the Prism CLI only to Prism arms."""
+def agent_path(env_dir: Path | None, tool_cli_dir: Path | None, rg: str | None) -> str:
+    """Return an isolated PATH, exposing an arm's own tool CLI only to that
+    arm (a native, or wrong-tool, arm cannot exec it via Bash)."""
     parts = [str(env_dir / "bin")] if env_dir is not None else []
-    if prism_cli_dir is not None:
-        parts.append(str(prism_cli_dir))
+    if tool_cli_dir is not None:
+        parts.append(str(tool_cli_dir))
     if rg:
         parts.append(str(Path(rg).parent))
     parts.extend(["/opt/homebrew/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"])
@@ -527,7 +789,7 @@ def is_source_path(path: str, extra_suffixes: tuple[str, ...] = (".py", ".pyi"))
     parts = set(value.parts)
     return (
         value.suffix in extra_suffixes
-        and not parts.intersection({"test", "tests", ".grove", ".prism", ".shale"})
+        and not parts.intersection({"test", "tests", ".grove", ".prism", ".shale", ".codegraph"})
         and not value.name.startswith("test_")
         and not value.name.endswith("_test.py")
     )
@@ -562,37 +824,38 @@ class Cell:
     arm: str
     invocation_id: str
     env_dir: Path | None = None
-    prism_cli_dir: Path | None = None
+    tool_cli_dir: Path | None = None
     extra: dict = field(default_factory=dict)
 
 
 def prepare_cell(root: Path, key: str, arm: str, template: Path | None, cfg: AgentConfig,
-                 prism_binary: Path, prompt: str,
-                 env_dir: Path | None = None, prism_cli_dir: Path | None = None,
+                 tool_binary: Path, prompt: str,
+                 env_dir: Path | None = None, tool_cli_dir: Path | None = None,
                  extra: dict | None = None) -> Cell:
     """Assemble one cell's evidence dir, work copy, mcp.json, and command.
 
     `template` is copied into the cell's `work` dir; pass `None` when the
     caller has already materialized `work` itself (e.g. it needed to run
     `prism index`/`prism init` directly inside it before assembly).
+    `tool_binary` is this arm's own tool's binary (per `active_tool(arm)`);
+    unused for a native arm.
     """
     out = root / "evidence" / key
     work = root / "work" / key
     out.mkdir(parents=True)
     if template is not None:
         shutil.copytree(template, work)
-    has_prism = arm.endswith("prism")
+    spec = TOOLS.get(active_tool(arm))
     mcp = {"mcpServers": {}}
-    if has_prism:
-        mcp["mcpServers"]["prism"] = {"type": "stdio", "command": str(prism_binary),
-                                             "args": ["mcp", str(work)]}
+    if spec is not None:
+        mcp["mcpServers"][spec.mcp_server_name] = spec.mcp_stdio(tool_binary, work)
     dump(out / "mcp.json", mcp)
     (out / "prompt.txt").write_text(prompt)
-    cmd = build_command(cfg, root, out, work, arm, prompt, prism_binary)
+    cmd = build_command(cfg, root, out, work, arm, prompt, tool_binary)
     dump(out / "command.json", cmd)
     return Cell(key=key, out=out, work=work, cmd=cmd, arm=arm,
                invocation_id=str(uuid.uuid4()), env_dir=env_dir,
-               prism_cli_dir=(prism_cli_dir if has_prism else None),
+               tool_cli_dir=(tool_cli_dir if spec is not None else None),
                extra=extra or {})
 
 
@@ -610,7 +873,7 @@ def run_cell(cell: Cell, cfg: AgentConfig, finalize=None) -> dict:
     env = os.environ.copy()
     env.pop("CLAUDECODE", None)
     rg = shutil.which("rg")
-    env["PATH"] = agent_path(cell.env_dir, cell.prism_cli_dir, rg)
+    env["PATH"] = agent_path(cell.env_dir, cell.tool_cli_dir, rg)
     if cell.env_dir is not None:
         env["VIRTUAL_ENV"] = str(cell.env_dir)
         env["PYTHONPATH"] = os.pathsep.join([str(work / "src"), str(work)])
@@ -630,7 +893,14 @@ def run_cell(cell: Cell, cfg: AgentConfig, finalize=None) -> dict:
     else:
         rec, final, calls = summarize_codex(events, out, cfg.gpt_model)
     (out / "final.txt").write_text(final)
+    rec["allow_source_edits"] = bool(cell.extra.get("allow_source_edits"))
     audit_calls(rec, calls, arm)
+    rec["successful_own_tool_actions"] = successful_own_tool_actions(events, calls, arm)
+    if active_tool(arm) != "native" and not rec["successful_own_tool_actions"]:
+        rec["violations"].append("own tool had no successful calls")
+    if any("requires approval" in str(err.get("error") or err.get("content") or "")
+           for err in rec.get("tool_errors", [])):
+        rec["violations"].append("tool call blocked by approval policy")
     extra_fields = finalize(cell, rec, final) if finalize else {}
     rec.update(
         cell_id=cell.key, arm=arm, invocation_id=cell.invocation_id,

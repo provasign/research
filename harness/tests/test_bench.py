@@ -20,21 +20,45 @@ import bench  # noqa: E402
 
 
 class ArmsForTests(unittest.TestCase):
-    def test_both_matches_legacy_four_arm_order(self):
+    def test_native_prism_matches_legacy_four_arm_order(self):
+        # Same order the legacy `--prism both` (tools=["native", "prism"])
+        # produced -- the manifest-parity contract with coding_suite.py's
+        # historical output.
         self.assertEqual(
-            bench.arms_for(["claude", "codex"], "both"),
+            bench.arms_for(["claude", "codex"], ["native", "prism"]),
             ["sonnet_native", "gpt55_native", "sonnet_prism", "gpt55_prism"],
         )
 
-    def test_on_is_prism_only(self):
-        self.assertEqual(bench.arms_for(["claude"], "on"), ["sonnet_prism"])
+    def test_prism_only_tool(self):
+        self.assertEqual(bench.arms_for(["claude"], ["prism"]), ["sonnet_prism"])
 
-    def test_off_is_native_only(self):
-        self.assertEqual(bench.arms_for(["claude", "codex"], "off"),
+    def test_native_only_tool(self):
+        self.assertEqual(bench.arms_for(["claude", "codex"], ["native"]),
                          ["sonnet_native", "gpt55_native"])
 
     def test_single_agent_smoke_test(self):
-        self.assertEqual(bench.arms_for(["claude"], "on"), ["sonnet_prism"])
+        self.assertEqual(bench.arms_for(["claude"], ["prism"]), ["sonnet_prism"])
+
+    def test_codegraph_only_tool(self):
+        self.assertEqual(bench.arms_for(["claude"], ["codegraph"]), ["sonnet_codegraph"])
+
+    def test_three_tools_cross_product(self):
+        self.assertEqual(
+            bench.arms_for(["claude", "codex"], ["native", "prism", "codegraph"]),
+            ["sonnet_native", "gpt55_native", "sonnet_prism", "gpt55_prism",
+             "sonnet_codegraph", "gpt55_codegraph"],
+        )
+
+
+class PrismFlagToToolsTests(unittest.TestCase):
+    def test_both_maps_to_native_and_prism(self):
+        self.assertEqual(bench.prism_flag_to_tools("both"), ["native", "prism"])
+
+    def test_on_maps_to_prism_only(self):
+        self.assertEqual(bench.prism_flag_to_tools("on"), ["prism"])
+
+    def test_off_maps_to_native_only(self):
+        self.assertEqual(bench.prism_flag_to_tools("off"), ["native"])
 
 
 class ParseKvTests(unittest.TestCase):
@@ -49,6 +73,24 @@ class ParseKvTests(unittest.TestCase):
     def test_overrides_both_models(self):
         result = bench.parse_kv("claude=a,codex=b", bench.DEFAULT_MODELS)
         self.assertEqual(result, {"claude": "a", "codex": "b"})
+
+
+class RunStatusTests(unittest.TestCase):
+    def test_rejected_model_does_not_produce_a_complete_run(self):
+        rows = [{"audited_valid": False, "agent_error": True,
+                 "score": {"resolved": False}}]
+        self.assertEqual(bench.run_status(rows, 1), "audit_incomplete")
+
+    def test_all_valid_scored_cells_complete(self):
+        rows = [{"audited_valid": True, "score": {"resolved": False}}]
+        self.assertEqual(bench.run_status(rows, 1), "complete")
+
+    def test_missing_cell_or_scoring_error_is_incomplete(self):
+        rows = [{"audited_valid": True, "score": {"harness_error": "docker failed"}}]
+        self.assertEqual(bench.run_status(rows, 1), "audit_incomplete")
+        self.assertEqual(bench.run_status(rows, 2), "audit_incomplete")
+        self.assertEqual(bench.run_status([{"audited_valid": True}], 1),
+                         "audit_incomplete")
 
 
 class IndexTests(unittest.TestCase):
@@ -82,6 +124,19 @@ class IndexTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["agent"], "claude")
         self.assertEqual(rows[0]["prism"], "on")
+        self.assertEqual(rows[0]["tool"], "prism")
+
+    def test_index_codegraph_arm_gets_tool_field_and_legacy_prism_off(self):
+        with tempfile.TemporaryDirectory() as value:
+            root = Path(value)
+            self._write_run(root, "run1", "demo-task.sonnet_codegraph", "sonnet_codegraph")
+            out = root / "index.jsonl"
+            bench.cmd_index(argparse.Namespace(results_dir=str(root), out=str(out)))
+            rows = [json.loads(line) for line in out.read_text().splitlines()]
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["tool"], "codegraph")
+        self.assertEqual(rows[0]["prism"], "off")
 
     def test_index_dedupes_by_run_dir_and_cell_id(self):
         with tempfile.TemporaryDirectory() as value:

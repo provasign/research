@@ -51,6 +51,13 @@ LIMIT_S = 300
 SEED = 20260908
 
 
+def parse_arms(value: str) -> list[str]:
+    arms = value.split(",")
+    if not arms or any(arm not in ARMS for arm in arms) or len(set(arms)) != len(arms):
+        raise ValueError(f"--arms must be distinct names from {','.join(ARMS)}")
+    return arms
+
+
 def prompt_for(task: Task) -> str:
     return """Analyze only the repository in your current working directory. Do not edit source files.
 Do not use the network, other repository copies, benchmark files, git history, saved answers,
@@ -81,13 +88,23 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--run-dir", required=True)
     parser.add_argument("--phase", choices=("pilot", "remaining", "full"), default="pilot")
+    parser.add_argument("--tasks", help="comma-separated task ids (overrides --phase)")
+    parser.add_argument("--arms", default=",".join(ARMS),
+                        help="comma-separated arms to run (default: all four)")
     parser.add_argument("--trials", type=int, default=1)
     parser.add_argument("--preflight-only", action="store_true")
     parser.add_argument("--prism-binary", default=None,
                         help="path to the prism binary to use (default: $PRISM_BINARY, "
                              "PATH, or ~/bin/prism -- see lib.runner_core.resolve_prism_binary)")
     args = parser.parse_args()
-    task_ids = suites.task_ids_for_phase(SUITE, args.phase)
+    try:
+        arms = parse_arms(args.arms)
+    except ValueError as exc:
+        parser.error(str(exc))
+    task_ids = args.tasks.split(",") if args.tasks else suites.task_ids_for_phase(SUITE, args.phase)
+    known_tasks = set(TASK_IDS)
+    if not task_ids or any(task not in known_tasks for task in task_ids) or len(set(task_ids)) != len(task_ids):
+        parser.error("--tasks must contain distinct ids from the manual suite")
     root = Path(args.run_dir).resolve()
     if root.exists():
         raise SystemExit(f"run dir already exists: {root}")
@@ -134,8 +151,8 @@ def main() -> int:
         order = list(task_ids)
         rng.shuffle(order)
         for task_id in order:
-            offset = (task_ids.index(task_id) + trial - 1) % len(ARMS)
-            waves.append((task_id, trial, ARMS[offset:] + ARMS[:offset]))
+            offset = (task_ids.index(task_id) + trial - 1) % len(arms)
+            waves.append((task_id, trial, arms[offset:] + arms[:offset]))
     versions = {
         "claude": rc.command(["claude", "--version"]).decode().strip(),
         "codex": rc.command(["codex", "--version"]).decode().strip(),
@@ -143,11 +160,11 @@ def main() -> int:
     }
     manifest = {
         "schema_version": 1, "study": "product-impact-suite-v1", "status": "preflight",
-        "phase": args.phase, "seed": SEED, "tasks": task_manifest, "arms": ARMS,
+        "phase": args.phase, "seed": SEED, "tasks": task_manifest, "arms": arms,
         "trials": args.trials, "waves": waves,
-        "planned_cells": len(waves) * len(ARMS),
+        "planned_cells": len(waves) * len(arms),
         "models": {"sonnet": SONNET_MODEL, "gpt": GPT_MODEL},
-        "effort": cfg.effort, "timeout_s": LIMIT_S, "concurrency": 4, "retries": 0,
+        "effort": cfg.effort, "timeout_s": LIMIT_S, "concurrency": len(arms), "retries": 0,
         "prompt_pairing": "identical task prompt across all four arms",
         "integration": "Prism init generated product files; normal tool choice; MCP and CLI available",
         "scorer_version": SCORER_VERSION,
@@ -200,11 +217,11 @@ def main() -> int:
                 )
             prompt = prompt_for(task)
             cell = rc.prepare_cell(root, key, arm, None, cfg, binary, prompt,
-                                   prism_cli_dir=(root / "bin") if has_prism else None,
+                                   tool_cli_dir=(root / "bin") if has_prism else None,
                                    extra={"task": task, "trial": trial})
             cell.extra["pristine"] = snapshot_files(cell.work)
             cells.append(cell)
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(arms)) as pool:
             futures = [pool.submit(rc.run_cell, cell, cfg, finalize_impact) for cell in cells]
             for future in concurrent.futures.as_completed(futures):
                 rows.append(future.result())
@@ -212,6 +229,9 @@ def main() -> int:
                     "status": "running", "completed": len(rows),
                     "planned": manifest["planned_cells"], "rows": rows,
                 })
+        if any(not row.get("audited_valid") for row in rows[-len(cells):]):
+            print("STOP: invalid agent cell; later waves will not run", flush=True)
+            break
     valid = sum(bool(row.get("audited_valid")) for row in rows)
     status = "complete" if valid == manifest["planned_cells"] else "audit_incomplete"
     rc.dump(root / "summary.json", {

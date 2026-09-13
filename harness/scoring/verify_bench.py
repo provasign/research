@@ -13,12 +13,23 @@ Plus one complete-update control trial per task (all files touched):
 anything flagged there in a GT file is a false positive; verdict should not
 be "incomplete" on account of GT files.
 """
-import json, random, re, subprocess, sys
+import hashlib
+import json, os, random, re, subprocess, sys
 from pathlib import Path
 
-HARNESS = Path.home()/"Projects/provasign/research/harness"
-PRISM = "/tmp/prism-task"
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from lib.runner_core import resolve_prism_binary  # noqa: E402
+
+HARNESS = Path(__file__).resolve().parent.parent
+PRISM = str(resolve_prism_binary(os.environ.get("VERIFY_BENCH_PRISM")))
 OUT = HARNESS/"results/verify-bench"; OUT.mkdir(parents=True, exist_ok=True)
+
+
+def stable_seed(task: str) -> int:
+    """A deterministic per-task seed. Python randomizes str `hash()` per
+    process (PYTHONHASHSEED), so `hash(task)` picked a different trial split
+    every run -- this makes trial selection reproducible across runs."""
+    return int(hashlib.sha256(task.encode()).hexdigest(), 16) & 0xffff
 
 # task -> (decl_relpath, decl_regex, decl_replacement, method_leaf, comment)
 CFG = {
@@ -103,12 +114,12 @@ def run_trial(task, corpus, gt_files, decl, decl_re, decl_new, method, comment, 
 def main():
     results = []
     for task, (decl, decl_re, decl_new, method, comment) in CFG.items():
-        tj = json.loads((HARNESS/f"tasks/{task}.json").read_text())
+        tj = json.loads((HARNESS/f"tasks/manual/{task}.json").read_text())
         corpus = Path(tj["workdir"] or tj["repo"])
         sh(["git", "checkout", "-q", tj["pin"]], corpus)
         sh(["git", "checkout", "-q", "--", "."], corpus)
         gt_files = sorted({s.rsplit(":", 1)[0] for s in tj["ground_truth"]} - {decl})
-        rng = random.Random(hash(task) & 0xffff)
+        rng = random.Random(stable_seed(task))
         trials = []
         for trial in range(3):
             sh(["git", "checkout", "-q", "--", "."], corpus)
@@ -153,4 +164,5 @@ def main():
             tot_f += t["forgot"]; tot_c += t["caught"]; tot_x += t["falseFlag"]
     print(f"\nTOTAL: forgotten-file catch {tot_c}/{tot_f}  false flags on updated files: {tot_x}")
 
-main()
+if __name__ == "__main__":
+    main()

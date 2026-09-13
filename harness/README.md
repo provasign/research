@@ -98,7 +98,7 @@ work described in `docs/BENCH.md`'s "Deferred" section).
 | `tasks/<suite>/*.json` | Task definitions **with GT embedded** — self-contained for scoring; see "Benchmarks at a glance" above |
 | `results/` | All scored runs + transcripts (released; layout below) |
 | `results/index.jsonl` | Cross-run comparison table, rebuilt by `bench.py index` |
-| `tests/` | Unit tests for `lib/`, `bench.py`, and the scorer (`python3 -m unittest discover -s tests`) |
+| `tests/` | Unit tests for `lib/`, `bench.py`, and the scorer (`python3 -m unittest discover -s tests`); full list in [`tests/CATALOG.md`](tests/CATALOG.md) |
 | `scoring/engine_comparison.py` | Engine-level Prism-vs-Engine B completeness sweep, no LLM — see [docs/AB-ENGINE-COMPARISON.md](docs/AB-ENGINE-COMPARISON.md) |
 | `scoring/efficiency_sweep.py` | Speed + tokens for the same one-call use case, reported next to recall |
 | `runners/ab_agentic_mcp.py` | Three-arm agent A/B (prism / engine-b / grep) via `claude -p` + MCP |
