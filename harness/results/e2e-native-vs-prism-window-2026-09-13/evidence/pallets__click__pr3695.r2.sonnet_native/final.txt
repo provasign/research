@@ -1,0 +1,17 @@
+All tests pass.
+
+## Summary
+
+The issue asked whether `LazyFile`, `KeepOpenFile`, `make_short_help` (now `make_default_short_help`), `PacifyFlushWrapper`, and `safecall` being left out of `click/__init__.py`'s public exports was intentional.
+
+It is — these are internal helpers not meant to be part of Click's public API. The codebase already had a precedent for marking such internal-but-not-underscore-prefixed helpers (e.g. `make_default_short_help`) as private via a `:meta private:` Sphinx docstring annotation, which excludes them from generated docs without breaking existing internal/test references to the unprefixed names (some are exercised directly in `tests/test_utils/`).
+
+I applied the same `:meta private:` annotation to the remaining four utilities in `src/click/utils.py`:
+- `safecall`
+- `LazyFile`
+- `KeepOpenFile`
+- `PacifyFlushWrapper`
+
+This makes their private status explicit and consistent with `make_default_short_help`, `_detect_program_name`, and `_expand_args`, without renaming anything (which would have broken `tests/test_utils/test_LazyFile.py` and `test_KeepOpenFile.py`, which access `click.utils.LazyFile`/`click.utils.KeepOpenFile` directly, and I was not permitted to modify tests).
+
+Verified with the full test suite: 1905 passed, 25 skipped, 1 xfailed — no regressions. No commit was made, per instructions.

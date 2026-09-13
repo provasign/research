@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 164970,
+  "stop_reason": "end_turn",
+  "session_id": "174ec856-1c56-47f0-830b-92a56c90219b",
+  "total_cost_usd": 0.36933040000000006,
+  "usage": {
+    "input_tokens": 50,
+    "cache_creation_input_tokens": 37428,
+    "cache_read_input_tokens": 565052,
+    "output_tokens": 10368,
+    "output_tokens_details": {
+      "thinking_tokens": 6030
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 37428,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 595,
+        "cache_read_input_tokens": 43871,
+        "cache_creation_input_tokens": 582,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 582
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 2748,
+      "outputTokens": 16,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.002828,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 50,
+      "outputTokens": 10368,
+      "cacheReadInputTokens": 565052,
+      "cacheCreationInputTokens": 37428,
+      "webSearchRequests": 0,
+      "costUSD": 0.3665024,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 6030,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 25,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "## Summary\n\n**Root cause:** In `Console._render_buffer` (rich/console.py), styled segments were rendered with `Style.render()`, which wraps the *entire* segment text in `ESC[...m<text>ESC[0m`. When soft wrap is enabled, `Console.print()` skips `Segment.split_and_crop_lines` (which normally strips styling from newline segments while cropping/padding), so the trailing `\"\\n\"` segment keeps the original style. That means the ANSI reset code was emitted *after* the newline character instead of before it \u2014 so terminals apply the background color to the new line when scrolling/wrapping.\n\n**Fix:** In `_render_buffer`, when a styled segment's text contains an embedded newline, render each line's text through `Style.render` separately and rejoin with plain `\"\\n\"` characters, ensuring the reset always precedes the newline. This is a small, central fix that doesn't touch the non-soft-wrap path's behavior (segments there don't have embedded newlines) and fixes the bug regardless of print path.\n\n**Verification:**\n- Reproduced the bug and confirmed the fix: output changed from `...\\x1b[34;47m...\\x1b[0m\\n` issue to correctly placing `\\x1b[0m` before `\\n`.\n- `tests/test_console.py` and `tests/test_segment.py` pass (158 passed).\n- Full suite: 7 pre-existing failures in `test_syntax.py`/`test_card.py` are unrelated (confirmed identical before my change \u2014 appear to stem from a Pygments version mismatch in this environment) and `tests/test_pretty.py` fails to collect due to a missing `attr` module (pre-existing environment issue, unrelated to this change).\n\nNo tests, docs, or config were modified \u2014 only `rich/console.py`.",
+  "ttft_ms": 2744,
+  "type": "result",
+  "duration_ms": 172582,
+  "uuid": "aece8800-6a01-42c7-93fa-5463644ffca7",
+  "ttft_stream_ms": 1667,
+  "time_to_request_ms": 21,
+  "first_content_frame_ms": 1667,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

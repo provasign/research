@@ -1,0 +1,14 @@
+All tests pass and the utilities remain importable (no breaking changes).
+
+## Summary
+
+The issue asked whether `LazyFile`, `KeepOpenFile`, `make_short_help` (i.e. `make_default_short_help`), `PacifyFlushWrapper`, and `safecall` being absent from `click`'s public `__init__.py` was intentional, and requested they be made explicitly private.
+
+I found that `click.utils` already has an established convention for marking internal-only symbols: a `:meta private:` note in the docstring (used e.g. by `make_default_short_help`, `_main_module_from_path`, `_expand_args`), which tells Sphinx autodoc to exclude the symbol from generated docs while keeping the object itself usable internally (and in existing tests, which access these via `click.utils.X`).
+
+I applied this same convention — the smallest, consistent fix — to the four utilities that were missing it:
+- `src/click/utils.py`: added `:meta private:` to the docstrings of `safecall`, `LazyFile`, `KeepOpenFile`, and `PacifyFlushWrapper`.
+
+`make_default_short_help` already had the marker, confirming this is the intended pattern rather than renaming with a leading underscore (which would have broken internal call sites and existing tests referencing the public names).
+
+Verified with `python -m pytest tests/test_utils` — all 217 relevant tests pass, and the utilities remain accessible as before.

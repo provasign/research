@@ -1,0 +1,12 @@
+All other tests pass (deselected ones are the pre-existing unrelated unix-socket network test). The change is complete.
+
+## Summary
+
+Added a `subdomain_matching` parameter to `Map.__init__` (alongside the existing `host_matching`), defaulting to `True` to preserve current behavior for direct `Map` users. `Map.bind_to_environ` now only auto-derives the subdomain from `server_name`/`host` when `subdomain_matching` is enabled (and `host_matching` is not), so callers (like Flask) can pass `subdomain_matching=False` to avoid the automatic suffix-stripping restriction described in the issue.
+
+Files changed: `src/werkzeug/routing/map.py`
+
+- Added `subdomain_matching: bool = True` parameter and docstring entry to `Map.__init__`, stored as `self.subdomain_matching`.
+- Updated the condition in `bind_to_environ` from `if subdomain is None and not self.host_matching:` to also require `self.subdomain_matching`.
+
+Verified with `python -m pytest tests/test_routing.py` (117 passed) and the full test suite (953 passed, unrelated pre-existing unix-socket test deselected due to environment sandboxing).

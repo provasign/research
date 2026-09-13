@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 183955,
+  "stop_reason": "end_turn",
+  "session_id": "3cc58b1f-bd12-4e52-ae0c-37de2aaf526c",
+  "total_cost_usd": 0.4145956,
+  "usage": {
+    "input_tokens": 66,
+    "cache_creation_input_tokens": 29722,
+    "cache_read_input_tokens": 700768,
+    "output_tokens": 15400,
+    "output_tokens_details": {
+      "thinking_tokens": 8845
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 29722,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 586,
+        "cache_read_input_tokens": 34686,
+        "cache_creation_input_tokens": 493,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 493
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 1357,
+      "outputTokens": 13,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.0014219999999999999,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 66,
+      "outputTokens": 15400,
+      "cacheReadInputTokens": 700768,
+      "cacheCreationInputTokens": 29722,
+      "webSearchRequests": 0,
+      "costUSD": 0.4131736,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 8845,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 33,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "Full suite passes (1622 passed, 25 skipped, 1 xfailed \u2014 all preexisting).\n\n## Summary\n\n**Root cause:** `click.shell_completion.shell_complete()` wrote the generated shell completion script (e.g. the zsh script) through `click.echo()` as a plain `str`. When stdout is a text-mode stream that performs newline translation (as happens on native Windows Python, e.g. a venv invoked from Git-for-Windows/MSYS2 bash), every `\\n` becomes `\\r\\n`. The stray `\\r` glues onto shell keywords like `fi`, so `fi\\r` is no longer recognized as the `fi` keyword \u2014 the `if` block never closes, and the parser trips on the next `elif`, producing `zsh: parse error near 'elif'`.\n\n**Fix (`src/click/shell_completion.py`):**\n- Encode the generated source script to `bytes` before passing to `echo()` (`echo(comp.source().encode())`). `click.echo()` already special-cases `bytes` by writing directly to the stream's underlying binary buffer, bypassing any text-mode newline translation, so the script always reaches the shell with pure `\\n` line endings.\n- Also removed the unnecessary backslash line-continuations in the bash/zsh/fish script templates, since continuation lines are especially fragile if any CRLF corruption did occur.\n\nVerified: reproduced the corruption by simulating `\\n`\u2192`\\r\\n` translation on the old code (zsh reported the exact same `parse error near 'elif'`), confirmed the new byte-based path avoids it, and ran `tests/test_shell_completion.py` (53 passed) plus the full test suite (1622 passed) with no regressions. No changes made to tests, docs, or config.",
+  "ttft_ms": 1811,
+  "type": "result",
+  "duration_ms": 187341,
+  "uuid": "08ff2656-f527-47d6-9d32-0395aaa790ec",
+  "ttft_stream_ms": 661,
+  "time_to_request_ms": 20,
+  "first_content_frame_ms": 662,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

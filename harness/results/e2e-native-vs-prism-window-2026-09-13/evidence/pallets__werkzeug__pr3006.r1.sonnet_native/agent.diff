@@ -1,0 +1,68 @@
+diff --git a/src/werkzeug/routing/map.py b/src/werkzeug/routing/map.py
+index f757d59..daf7a05 100644
+--- a/src/werkzeug/routing/map.py
++++ b/src/werkzeug/routing/map.py
+@@ -66,6 +66,16 @@ class Map:
+                           feature and disables the subdomain one.  If
+                           enabled the `host` parameter to rules is used
+                           instead of the `subdomain` one.
++    :param subdomain_matching: if set to `True` (the default),
++                          :meth:`~Map.bind_to_environ` will calculate the
++                          current subdomain automatically when a
++                          ``server_name`` is given but no ``subdomain``
++                          is provided.  Set this to `False` to disable
++                          that, so a ``server_name`` hint does not
++                          restrict matching to a specific subdomain.
++
++    .. versionchanged:: 3.1
++        The ``subdomain_matching`` parameter was added.
+ 
+     .. versionchanged:: 3.0
+         The ``charset`` and ``encoding_errors`` parameters were removed.
+@@ -102,6 +112,7 @@ class Map:
+         sort_parameters: bool = False,
+         sort_key: t.Callable[[t.Any], t.Any] | None = None,
+         host_matching: bool = False,
++        subdomain_matching: bool = True,
+     ) -> None:
+         self._matcher = StateMachineMatcher(merge_slashes)
+         self._rules_by_endpoint: dict[t.Any, list[Rule]] = {}
+@@ -112,6 +123,7 @@ class Map:
+         self.strict_slashes = strict_slashes
+         self.redirect_defaults = redirect_defaults
+         self.host_matching = host_matching
++        self.subdomain_matching = subdomain_matching
+ 
+         self.converters = self.default_converters.copy()
+         if converters:
+@@ -263,12 +275,17 @@ class Map:
+         `HTTP_HOST` if provided) as used `server_name` with disabled subdomain
+         feature.
+ 
+-        If `subdomain` is `None` but an environment and a server name is
+-        provided it will calculate the current subdomain automatically.
+-        Example: `server_name` is ``'example.com'`` and the `SERVER_NAME`
+-        in the wsgi `environ` is ``'staging.dev.example.com'`` the calculated
++        If `subdomain` is `None` and the map's ``subdomain_matching`` is
++        enabled, and an environment and a server name is provided it will
++        calculate the current subdomain automatically.  Example:
++        `server_name` is ``'example.com'`` and the `SERVER_NAME` in the
++        wsgi `environ` is ``'staging.dev.example.com'`` the calculated
+         subdomain will be ``'staging.dev'``.
+ 
++        .. versionchanged:: 3.1
++            This only calculates the subdomain if ``subdomain_matching``
++            is enabled on the :class:`Map`.
++
+         If the object passed as environ has an environ attribute, the value of
+         this attribute is used instead.  This allows you to pass request
+         objects.  Additionally `PATH_INFO` added as a default of the
+@@ -318,7 +335,7 @@ class Map:
+             elif scheme in {"https", "wss"} and server_name.endswith(":443"):
+                 server_name = server_name[:-4]
+ 
+-        if subdomain is None and not self.host_matching:
++        if subdomain is None and not self.host_matching and self.subdomain_matching:
+             cur_server_name = wsgi_server_name.split(".")
+             real_server_name = server_name.split(".")
+             offset = -len(real_server_name)

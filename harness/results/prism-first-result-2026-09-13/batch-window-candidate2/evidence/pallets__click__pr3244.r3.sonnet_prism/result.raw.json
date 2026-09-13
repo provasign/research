@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 126348,
+  "stop_reason": "end_turn",
+  "session_id": "cdc23f1a-ceef-4f30-b30b-4d9b23d5bdc8",
+  "total_cost_usd": 0.4297604,
+  "usage": {
+    "input_tokens": 48,
+    "cache_creation_input_tokens": 39976,
+    "cache_read_input_tokens": 739762,
+    "output_tokens": 11776,
+    "output_tokens_details": {
+      "thinking_tokens": 6638
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 39976,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 673,
+        "cache_read_input_tokens": 46799,
+        "cache_creation_input_tokens": 202,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 202
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 19,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.0040479999999999995,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 48,
+      "outputTokens": 11776,
+      "cacheReadInputTokens": 739762,
+      "cacheCreationInputTokens": 39976,
+      "webSearchRequests": 0,
+      "costUSD": 0.4257124,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 6638,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 24,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "## Summary\n\nThe bug: `CliRunner` backed `sys.stdout`/`sys.stderr` with `io.BytesIO`-based streams (`BytesIOCopy(io.BytesIO)`), which have no real OS file descriptor. Any code invoked under `CliRunner.invoke()` that passed `sys.stdout`/`sys.stderr` to `subprocess.run()` (or anything else calling `.fileno()`) would fail with `io.UnsupportedOperation: fileno`.\n\nFix in `src/click/testing.py`:\n- Reimplemented `BytesIOCopy` to be backed by a real `tempfile.TemporaryFile()` instead of `io.BytesIO`, delegating unknown attributes (including `fileno()`) to that real file via `__getattr__`. This lets `subprocess.run(stdout=sys.stderr, ...)` write directly to the underlying fd, and that output is correctly captured (verified via `result.stderr`/`result.stdout`).\n- Added a `getvalue()` method that reads from the temp file without disturbing its position (needed since `Result` construction relies on `outstreams[i].getvalue()`), and kept `write()`/`flush()` mirroring writes to the merged `copy_to` stream.\n- Added a `__del__` on `BytesIOCopy` to close the real backing file, and explicit `stream_mixer.stdout.close()` / `stream_mixer.stderr.close()` calls in `CliRunner.isolation()`'s `finally` block, to avoid leaking real file descriptors / triggering `ResourceWarning`s now that these streams own actual OS files.\n\nVerified with a standalone reproduction of the reported issue (`subprocess.run([\"echo\", \"foo\"], stdout=sys.stderr)` inside a Click command invoked via `CliRunner`), plus the full existing test suite: `1419 passed, 24 skipped, 1 xfailed` \u2014 no regressions.\n\nNo test, doc, changelog, or config files were modified.",
+  "ttft_ms": 2033,
+  "type": "result",
+  "duration_ms": 134506,
+  "uuid": "e98456d0-8903-4c5a-8152-ea63a18ab6b6",
+  "ttft_stream_ms": 920,
+  "time_to_request_ms": 23,
+  "first_content_frame_ms": 920,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

@@ -1,0 +1,147 @@
+Work only in the repository in your current directory. Do not use the network,
+git history, benchmark files, saved answers, memory, skills, or delegated agents. Fix the SOURCE
+code so the issue below is resolved. Do not modify tests, docs, changelogs, or configuration.
+Make the smallest robust change. Investigate, edit, and run a narrow relevant test if time permits;
+do not commit. Dependencies are preinstalled; use `python -m pytest` for narrow tests. You have a
+strict five-minute work budget. A patch present at timeout will still be scored.
+
+ISSUE:
+[BUG] Background color carries over onto the following line when soft wrapping is enabled.
+
+- [x] I've checked [docs](https://rich.readthedocs.io/en/latest/introduction.html) and [closed issues](https://github.com/Textualize/rich/issues?q=is%3Aissue+is%3Aclosed) for possible solutions.
+- [x] I can't find my issue in the [FAQ](https://github.com/Textualize/rich/blob/master/FAQ.md).
+
+<!-- 
+WAIT! Is this a feature request?
+
+Rich isn't accepting new features. If it can be implemented in a third-party library, then that is what I recommend.
+
+Rich *may* accept enhancements to existing features, if they don't have a disruptive impact on the API.
+
+If you think your feature is exceptional, then please make your case in a discussion.
+-->
+
+**Describe the bug**
+
+When printing text with a background color and soft wrapping enabled, the background color incorrectly carries over onto the following line. This means an ANSI reset isn't being placed before the newline.
+
+This issue does not occur when `soft_wrap` is set to `False`.
+
+Here is code to reproduce it.
+
+**Note:** To visually reproduce this issue, you must run the code with your prompt at the bottom of the terminal window, forcing the terminal to scroll.
+
+```Python
+from rich.console import Console
+
+console = Console()
+
+# Print with soft_wrap enabled. The background color carries over to the next line.
+console.print("soft wrap is on", style="blue on white", soft_wrap=True)
+console.print("still has background color from previous line")
+
+console.print()
+
+# Print with soft_wrap disabled. The background color does not carry over.
+console.print("soft wrap is off", style="blue on white", soft_wrap=False)
+console.print("correctly has no color from previous line")
+```
+
+Here is a screenshot of the behavior.
+
+<img width="575" height="99" alt="Image" src="https://github.com/user-attachments/assets/e7b55a01-9199-49a8-b7cf-168d46eb73ed" />
+
+**Platform**
+<details>
+<summary>Click to expand</summary>
+
+What platform (Win/Linux/Mac) are you running on? What terminal software are you using?
+Linux
+
+I may ask you to copy and paste the output of the following commands. It may save some time if you do it now.
+
+If you're using Rich in a terminal:
+
+```
+python -m rich.diagnose
+pip freeze | grep rich
+```
+
+```Console
+(.venv) user@host:~/source/rich$$ python -m rich.diagnose
+╭───────────────────────── <class 'rich.console.Console'> ─────────────────────────╮
+│ A high level console interface.                                                  │
+│                                                                                  │
+│ ╭──────────────────────────────────────────────────────────────────────────────╮ │
+│ │ <console width=237 ColorSystem.EIGHT_BIT>                                    │ │
+│ ╰──────────────────────────────────────────────────────────────────────────────╯ │
+│                                                                                  │
+│     color_system = '256'                                                         │
+│         encoding = 'utf-8'                                                       │
+│             file = <_io.TextIOWrapper name='<stdout>' mode='w' encoding='utf-8'> │
+│           height = 54                                                            │
+│    is_alt_screen = False                                                         │
+│ is_dumb_terminal = False                                                         │
+│   is_interactive = True                                                          │
+│       is_jupyter = False                                                         │
+│      is_terminal = True                                                          │
+│   legacy_windows = False                                                         │
+│         no_color = False                                                         │
+│          options = ConsoleOptions(                                               │
+│                        size=ConsoleDimensions(width=237, height=54),             │
+│                        legacy_windows=False,                                     │
+│                        min_width=1,                                              │
+│                        max_width=237,                                            │
+│                        is_terminal=True,                                         │
+│                        encoding='utf-8',                                         │
+│                        max_height=54,                                            │
+│                        justify=None,                                             │
+│                        overflow=None,                                            │
+│                        no_wrap=False,                                            │
+│                        highlight=None,                                           │
+│                        markup=None,                                              │
+│                        height=None                                               │
+│                    )                                                             │
+│            quiet = False                                                         │
+│           record = False                                                         │
+│         safe_box = True                                                          │
+│             size = ConsoleDimensions(width=237, height=54)                       │
+│        soft_wrap = False                                                         │
+│           stderr = False                                                         │
+│            style = None                                                          │
+│         tab_size = 8                                                             │
+│            width = 237                                                           │
+╰──────────────────────────────────────────────────────────────────────────────────╯
+╭─── <class 'rich._windows.WindowsConsoleFeatures'> ────╮
+│ Windows features available.                           │
+│                                                       │
+│ ╭───────────────────────────────────────────────────╮ │
+│ │ WindowsConsoleFeatures(vt=False, truecolor=False) │ │
+│ ╰───────────────────────────────────────────────────╯ │
+│                                                       │
+│ truecolor = False                                     │
+│        vt = False                                     │
+╰───────────────────────────────────────────────────────╯
+╭────── Environment Variables ───────╮
+│ {                                  │
+│     'CLICOLOR': None,              │
+│     'COLORTERM': None,             │
+│     'COLUMNS': None,               │
+│     'JPY_PARENT_PID': None,        │
+│     'JUPYTER_COLUMNS': None,       │
+│     'JUPYTER_LINES': None,         │
+│     'LINES': None,                 │
+│     'NO_COLOR': None,              │
+│     'TERM_PROGRAM': None,          │
+│     'TERM': 'xterm-256color',      │
+│     'TTY_COMPATIBLE': None,        │
+│     'TTY_INTERACTIVE': None,       │
+│     'VSCODE_VERBOSE_LOGGING': None │
+│ }                                  │
+╰────────────────────────────────────╯
+platform="Linux"
+
+(.venv) user@host:~/source/rich$ pip freeze | grep rich
+rich==14.1.0
+```
+</details>

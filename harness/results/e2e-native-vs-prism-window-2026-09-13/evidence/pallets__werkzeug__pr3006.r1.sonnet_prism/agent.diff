@@ -1,0 +1,42 @@
+diff --git a/src/werkzeug/routing/map.py b/src/werkzeug/routing/map.py
+index f757d59..beccb30 100644
+--- a/src/werkzeug/routing/map.py
++++ b/src/werkzeug/routing/map.py
+@@ -66,6 +66,12 @@ class Map:
+                           feature and disables the subdomain one.  If
+                           enabled the `host` parameter to rules is used
+                           instead of the `subdomain` one.
++    :param subdomain_matching: if set to `True` it will match the
++        subdomain from the ``server_name`` when :meth:`bind_to_environ`
++        is called without a ``subdomain`` argument. Disabled by default.
++
++    .. versionchanged:: 3.1
++        The ``subdomain_matching`` parameter was added.
+ 
+     .. versionchanged:: 3.0
+         The ``charset`` and ``encoding_errors`` parameters were removed.
+@@ -102,6 +108,7 @@ class Map:
+         sort_parameters: bool = False,
+         sort_key: t.Callable[[t.Any], t.Any] | None = None,
+         host_matching: bool = False,
++        subdomain_matching: bool = False,
+     ) -> None:
+         self._matcher = StateMachineMatcher(merge_slashes)
+         self._rules_by_endpoint: dict[t.Any, list[Rule]] = {}
+@@ -112,6 +119,7 @@ class Map:
+         self.strict_slashes = strict_slashes
+         self.redirect_defaults = redirect_defaults
+         self.host_matching = host_matching
++        self.subdomain_matching = subdomain_matching
+ 
+         self.converters = self.default_converters.copy()
+         if converters:
+@@ -318,7 +326,7 @@ class Map:
+             elif scheme in {"https", "wss"} and server_name.endswith(":443"):
+                 server_name = server_name[:-4]
+ 
+-        if subdomain is None and not self.host_matching:
++        if subdomain is None and not self.host_matching and self.subdomain_matching:
+             cur_server_name = wsgi_server_name.split(".")
+             real_server_name = server_name.split(".")
+             offset = -len(real_server_name)

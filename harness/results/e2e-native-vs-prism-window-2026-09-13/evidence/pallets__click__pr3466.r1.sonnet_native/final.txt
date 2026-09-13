@@ -1,0 +1,7 @@
+All tests pass. Summary of the fix:
+
+**Root cause**: `shell_complete()` in `src/click/shell_completion.py` emitted the generated completion script via `echo()`, which writes through a text-mode stdout stream. On Windows (e.g. a Python venv invoked from Git Bash / MSYS2), Python's default text-mode stdout translates `\n` to `\r\n`. Since `eval "$(... zsh_source ...)"` captures that output verbatim (command substitution only strips trailing newlines, not embedded `\r`), the resulting zsh script ends up with `\r` characters at the end of lines. zsh's `if`/`elif`/`fi` keywords are then mis-tokenized (e.g. `fi\r` isn't recognized as `fi`), which manifests as `parse error near `elif''`.
+
+**Fix**: When emitting the `source` instruction, write the generated script directly to the underlying binary stdout stream (`get_binary_stdout()`) instead of going through the text-mode `echo()`, so the exact `\n`-only bytes are preserved regardless of platform newline translation.
+
+I verified the change doesn't alter the generated script content and all existing shell-completion and basic tests (141) still pass. No tests, docs, or config were modified.

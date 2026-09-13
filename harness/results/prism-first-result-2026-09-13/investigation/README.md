@@ -56,6 +56,15 @@ urllib3 0/6 across both builds (at or past the model's ceiling here — swap it 
 The block held on the one live attempt. Discovery reads (~4.5–5.3/cell) go native regardless of first-result content — the
 instruction-level lever is the untried one.
 
+## Window build (2026-09-13, later) — `../batch-window-candidate2/`
+
+Same design, `--concurrency 1`, on the default-on bounded-window build plus the batched-slot fix (see its NOTE.md).
+6/6 valid, 0 timeouts. Resolved 3/6 (click 3/3, urllib3 0/3); Prism calls 2.2, follow-up-op cells 2/6; native reads 5.3
+(3.7 discovery / 1.7 edit-prereq), whole-file 0.8, KiB 19.7; turns 24.0, cost $0.44, cost per resolved $0.88.
+Neutral under the rule: discovery reads and KiB return to the v0.74.1 level, whole-file reads and cost do not improve.
+One cell (click r1) shows the intended shape — search + lookup, a single 3 KiB native read — the other two click cells
+read 26–27 KiB each with a window delivered.
+
 "discovery" vs "edit-prerequisite": a native Read immediately followed by an Edit of the same file is counted as the
 prerequisite Claude Code's Edit tool requires; every other Read is discovery. Recovered cell: `batch-codex-fix/…click…r3`
 (`recovered: true`, CLI exit code unknown; validity rests on a complete result event, no agent error, no violations).

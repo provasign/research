@@ -1,0 +1,15 @@
+The fix works and the full test suite (1419 passed, 24 skipped, 1 xfailed — no failures) is green.
+
+## Summary
+
+The `UnsupportedOperation: fileno` error happened because `CliRunner.isolation()` backed `sys.stdout`/`sys.stderr` with `io.BytesIO` objects (via `BytesIOCopy`), which have no real OS-level file descriptor. Passing such a stream to `subprocess.run(stdout=...)` requires `.fileno()` to work, which `BytesIO` doesn't support.
+
+**Fix** in `src/click/testing.py`:
+- Added `_NamedTemporaryFileCopy`, a small wrapper around a real `tempfile.TemporaryFile()` (which has a genuine OS file descriptor) that still duplicates everything written to it into another stream (mirroring `BytesIOCopy`'s behavior), and exposes `fileno()`/`getvalue()`.
+- `StreamMixer.stdout`/`StreamMixer.stderr` now use `_NamedTemporaryFileCopy` instead of `BytesIOCopy`, so `_NamedTextIOWrapper.fileno()` (inherited from `io.TextIOWrapper`) correctly delegates to a real fd, allowing `subprocess.run(stdout=sys.stderr)` (or `stdout`) to work inside `CliRunner.invoke()`.
+- `CliRunner.isolation()` now explicitly closes `stream_mixer.stdout`/`stderr` in its `finally` block to release the temporary file descriptors, and `_NamedTemporaryFileCopy.__del__` closes the file as a safety net if an instance is never explicitly closed.
+- Kept the original `BytesIOCopy` class intact since it's still part of the public-ish API relied on elsewhere.
+
+Ran `python -m pytest` on the full suite: **1419 passed, 24 skipped, 1 xfailed**, and verified the original SSCCE reproduction from the issue no longer raises and correctly captures `foo\n` in `stderr`.
+
+No changes were made to tests, docs, or configuration; nothing was committed.

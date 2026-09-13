@@ -1,0 +1,13 @@
+That's fine — not required. The fix is complete and verified.
+
+## Summary
+
+The bug: `click.testing.CliRunner` replaces `sys.stdout`/`sys.stderr` with `_NamedTextIOWrapper` objects backed by plain `io.BytesIO` buffers. `io.BytesIO.fileno()` always raises `io.UnsupportedOperation`, so any code invoked under `CliRunner.invoke()` that passes `sys.stdout`/`sys.stderr` to `subprocess.run()` (which needs a real OS file descriptor) crashed.
+
+Fix (`src/click/testing.py`):
+- `BytesIOCopy` (the buffer backing `sys.stdout`/`sys.stderr` during isolation) now lazily creates a real, file-descriptor-backed `tempfile.TemporaryFile()` the first time `fileno()` is called, and transparently promotes reads/writes/`getvalue()` to use it from that point on. Until `fileno()` is used, it behaves exactly as the original in-memory `io.BytesIO`, so no extra resources are ever allocated for normal (non-subprocess) usage.
+- Added `close()` to release that temporary file when the buffer is closed, and added cleanup calls in `CliRunner.isolation()`'s `finally` block so any lazily-created file descriptor doesn't leak.
+
+Verified:
+- The original reproduction (`subprocess.run(["echo", "foo"], stdout=sys.stderr)` inside a `CliRunner.invoke()`) no longer raises and correctly captures `"foo\n"` in `result.stderr`.
+- Full existing test suite (`tests/`) passes: 1419 passed, 24 skipped, 1 xfailed, no regressions in `tests/test_testing.py` or `tests/test_stream_lifecycle.py`.

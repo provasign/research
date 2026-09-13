@@ -1,0 +1,13 @@
+All tests pass (1419 passed, 24 skipped, 1 xfailed - same as baseline expected).
+
+## Summary
+
+The issue: `CliRunner`'s isolated `sys.stdout`/`sys.stderr` were backed by in-memory `io.BytesIO` objects, which don't support `fileno()`. This made `subprocess.run(..., stdout=sys.stderr)` fail with `io.UnsupportedOperation`, even though the same code works fine outside of `CliRunner`.
+
+**Fix** (`src/click/testing.py`, `BytesIOCopy`): backed the stream by a real temporary OS file (`tempfile.TemporaryFile()`) instead of an in-memory `io.BytesIO`. This gives it a genuine file descriptor via `fileno()`, so passing `sys.stdout`/`sys.stderr` to `subprocess.run`/`Popen` now works correctly (the child process writes directly into the same underlying file, which is also visible to Click's own reads via `getvalue()`). All other methods (`write`, `flush`, `read`, `seek`, `close`, plus the existing "copy to mixed output" behavior for regular Python-level writes) were reimplemented against the temp file to preserve previous behavior.
+
+Verified:
+- The original crash reproduction (`subprocess.run(["echo", "foo"], stdout=sys.stderr)` inside a `CliRunner.invoke`) no longer raises; `result.stderr` correctly contains `"foo\n"`.
+- Full existing test suite passes: `1419 passed, 24 skipped, 1 xfailed`.
+
+Note: the "mixed" `result.output` stream (which interleaves stdout/stderr for display) only captures writes made through Click's own I/O calls, not raw OS-level writes made by a subprocess bypassing Python entirely — but `result.stdout`/`result.stderr` are correctly captured in that case since they share the same OS file description with the subprocess.

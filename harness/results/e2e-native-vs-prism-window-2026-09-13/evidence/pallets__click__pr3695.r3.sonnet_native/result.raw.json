@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 136679,
+  "stop_reason": "end_turn",
+  "session_id": "3767e620-94d7-472a-a46c-8192d9d3bb61",
+  "total_cost_usd": 0.33510260000000003,
+  "usage": {
+    "input_tokens": 56,
+    "cache_creation_input_tokens": 26952,
+    "cache_read_input_tokens": 608238,
+    "output_tokens": 10438,
+    "output_tokens_details": {
+      "thinking_tokens": 3337
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 26952,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 485,
+        "cache_read_input_tokens": 32102,
+        "cache_creation_input_tokens": 307,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 307
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 1080,
+      "outputTokens": 15,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.001155,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 56,
+      "outputTokens": 10438,
+      "cacheReadInputTokens": 608238,
+      "cacheCreationInputTokens": 26952,
+      "webSearchRequests": 0,
+      "costUSD": 0.3339476,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 3337,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 28,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "All 1905 tests still pass.\n\n## Summary\n\nThe issue pointed out that `LazyFile`, `KeepOpenFile`, `make_short_help` (i.e. `make_default_short_help`), `PacifyFlushWrapper`, and `safecall` in `click/utils.py` are internal implementation details that were never exported from the `click` package's `__init__.py`, yet were named as if they were public API.\n\nI made them explicitly private, following the same convention already used for `_detect_program_name` and `_expand_args` in the same file:\n\n- Renamed the definitions to `_safecall`, `_make_default_short_help`, `_LazyFile`, `_KeepOpenFile`, `_PacifyFlushWrapper`, and added `:meta private:` docstring notes.\n- Updated all internal call sites in `core.py`, `types.py`, `termui.py`, and `_termui_impl.py` to use the new underscore-prefixed names.\n- Kept the old public names as simple aliases (`safecall = _safecall`, etc.) at the bottom of `utils.py` for backward compatibility, since existing tests reference `click.utils.LazyFile`, `click.utils.KeepOpenFile`, and `click.utils.make_default_short_help` directly, and those weren't to be modified.\n\nRan the full test suite (`python -m pytest`): 1905 passed, 25 skipped, 1 xfailed \u2014 no regressions. Nothing was committed, per instructions.",
+  "ttft_ms": 3019,
+  "type": "result",
+  "duration_ms": 141314,
+  "uuid": "2237c0ab-f789-429e-9678-5ce1bc8d7048",
+  "ttft_stream_ms": 1093,
+  "time_to_request_ms": 20,
+  "first_content_frame_ms": 1093,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

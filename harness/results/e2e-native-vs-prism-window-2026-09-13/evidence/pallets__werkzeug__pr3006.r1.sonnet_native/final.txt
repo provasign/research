@@ -1,0 +1,9 @@
+I added a `subdomain_matching` parameter to `Map` (defaulting to `True` for backward compatibility with existing subdomain-based routing), and `bind_to_environ` now only auto-calculates the subdomain from `server_name` when `subdomain_matching` is enabled. This lets callers set `subdomain_matching=False` so a `server_name` hint no longer restricts matching to a specific subdomain when no subdomain-based rules are used.
+
+Changes made in `src/werkzeug/routing/map.py`:
+- Added `subdomain_matching: bool = True` param to `Map.__init__`, stored as `self.subdomain_matching`.
+- Updated `Map` docstring to document the new parameter.
+- Guarded the subdomain-detection block in `bind_to_environ` with `and self.subdomain_matching`.
+- Updated `bind_to_environ` docstring accordingly.
+
+All routing tests pass (`117 passed`), and the full test suite passes except one pre-existing, unrelated failure (`test_serving.py::test_server[unix socket]`, an `AF_UNIX` path-length issue in this sandbox, unrelated to this change). No test/doc/config files were modified.

@@ -1,0 +1,16 @@
+## Summary
+
+Fixed the bug where background (and other) styles carry over onto the following line when soft wrapping is enabled.
+
+**Root cause:** `Console.print` applies the requested `style` to every rendered segment via `Segment.apply_style`, including the trailing `Segment("\n")`. Since `Style.render` wraps text as `<codes>text<reset>`, the newline segment was rendered as `\x1b[34;47m\n\x1b[0m` — the ANSI reset came *after* the newline character instead of before it, so some terminals paint the new line's background before processing the reset code.
+
+**Fix (`rich/segment.py`):** `Segment.apply_style` now splits any segment's text on `"\n"` and ensures newline characters are emitted as unstyled segments, so styled text is always terminated (reset) before the newline is written.
+
+Verified:
+- `console.print("...", style="blue on white", soft_wrap=True)` now emits `...\x1b[0m\n` (reset before newline) instead of `...\x1b[0m\x1b[34;47m\n\x1b[0m`.
+- Multi-line strings with embedded `\n` in a single `print` call are also fixed the same way.
+- `soft_wrap=False` behavior is unchanged.
+- Ran `tests/test_segment.py`, `tests/test_console.py`, `tests/test_style.py`, `tests/test_align.py`, `tests/test_styled.py`, `tests/test_tree.py` — all pass.
+- Ran the full suite (excluding `test_pretty.py`, which fails to collect due to a pre-existing missing `attr` dependency unrelated to this change): the same 7 tests fail both before and after my change (pre-existing environment-related failures in `test_syntax.py`/`test_card.py`, unrelated to this fix).
+
+No changes made to tests, docs, or config. Nothing committed, per instructions.

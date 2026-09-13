@@ -1,0 +1,9 @@
+All tests pass (1419 passed, 24 skipped, no failures), and the reported issue's reproduction test also passes with no warnings.
+
+## Summary
+
+The bug: `CliRunner`'s `isolation()` backs `sys.stdout`/`sys.stderr` with plain `io.BytesIO` objects (via `BytesIOCopy`). `io.BytesIO.fileno()` always raises `io.UnsupportedOperation`, so passing `sys.stderr`/`sys.stdout` to `subprocess.run(..., stdout=...)` inside a command under test crashes, even though it works fine outside of `CliRunner`.
+
+Fix in `src/click/testing.py`: `BytesIOCopy` now lazily backs itself with a real `tempfile.TemporaryFile()` the first time `fileno()` is called, so callers that pass the captured stream to `subprocess.run` (or any other API needing a real file descriptor) get one. `write()`/`flush()`/`getvalue()` were extended to mirror data between the in-memory buffer and this file-descriptor-backed file when it exists, and `close()`/the `isolation()` teardown now clean up the temp file so nothing leaks when `fileno()` was never used (avoiding ResourceWarning regressions in the existing stream-lifecycle tests).
+
+I did not commit, per instructions.

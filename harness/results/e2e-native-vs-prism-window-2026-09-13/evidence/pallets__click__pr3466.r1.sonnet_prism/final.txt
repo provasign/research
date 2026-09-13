@@ -1,0 +1,20 @@
+All 53 shell-completion tests pass.
+
+## Summary
+
+**Root cause:** In `src/click/shell_completion.py`, the `_SOURCE_ZSH` template had a backslash-newline line continuation splitting the `response=(...)` command across two source lines:
+
+```python
+    response=("${(@f)$(env COMP_WORDS="${words[*]}" COMP_CWORD=$((CURRENT-1)) \
+%(complete_var)s=zsh_complete %(prog_name)s)}")
+```
+
+A literal backslash immediately followed by a `\n` is fragile: if that line ending is ever `\r\n` instead of `\n` (e.g. from a Windows/git-for-Windows/msys2 checkout with CRLF translation), the backslash escapes the `\r` instead of joining the lines. That breaks the single logical `response=(...)` statement into two malformed fragments, leaving an unclosed paren/quote that swallows subsequent script text until zsh's parser finally chokes — which is exactly the `parse error near 'elif'` reported.
+
+**Fix:** Removed the line continuation, keeping the whole `env ...` command on one physical line so there's no reliance on backslash-newline joining:
+
+```python
+    response=("${(@f)$(env COMP_WORDS="${words[*]}" COMP_CWORD=$((CURRENT-1)) %(complete_var)s=zsh_complete %(prog_name)s)}")
+```
+
+Verified the generated zsh completion script still parses cleanly (`zsh -n`) and confirmed the existing test suite (`tests/test_shell_completion.py`, 53 tests) passes. No tests/docs/config were modified.

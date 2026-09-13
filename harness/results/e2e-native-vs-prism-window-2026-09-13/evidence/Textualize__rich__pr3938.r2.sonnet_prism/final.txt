@@ -1,0 +1,3 @@
+The fix resolves the bug: in `Console.print`, when `crop=False` (which happens with `soft_wrap=True`), segments were pushed straight to the buffer with embedded `\n` characters still inside the styled text. `Style.render` wraps the whole segment text (including the trailing `\n`) with `ESC[...m...\x1b[0m`, so the reset code landed *after* the newline, letting the background color bleed onto the next line in the terminal.
+
+The fix splits any `\n` characters out of styled segments before writing to the buffer (matching the existing behavior in `Segment.split_and_crop_lines` used by the `crop=True` path), so the reset now happens right before each newline. Verified with a manual repro and the existing `test_console.py`/`test_segment.py` suites, all passing.

@@ -1,0 +1,13 @@
+All 65 tests pass (the 1 skip is the pre-existing skip referenced in the issue, which I left untouched per instructions not to modify tests).
+
+## Summary
+
+The bug: `HTTPSConnection.connect()` always used `self.ssl_context` (the destination's SSL context) for the TLS handshake, even when in forwarding mode connecting directly to an HTTPS proxy. That's wrong — in forwarding mode the socket-level TLS handshake is with the proxy itself, so it must use `proxy_ssl_context`, not the destination's context.
+
+Changes made in `src/urllib3/connection.py` (`HTTPSConnection.connect`):
+- When `self.proxy_is_forwarding` is true, use `proxy_config.ssl_context`, `proxy_config.assert_hostname`, and `proxy_config.assert_fingerprint` for the TLS handshake instead of the destination's `self.ssl_context`/`self.assert_hostname`/`self.assert_fingerprint`.
+
+Changes made in `src/urllib3/poolmanager.py` (`ProxyManager.__init__`):
+- If `use_forwarding_for_https=True` and a destination `ssl_context` is also passed, raise `ValueError` — with a distinct message if `proxy_ssl_context` was also given vs. not, per the issue's requirements (this is the 2.x codebase per its version/typing style, so `ValueError` is correct rather than a `DeprecationWarning`).
+
+Ran narrow tests (`test_proxymanager.py`, `test_connection.py`, and the full `test_proxy_poolmanager.py` dummyserver suite) — all pass, with the one pre-existing skip (`test_proxy_https_target_tls_error`) untouched since I was told not to modify tests.

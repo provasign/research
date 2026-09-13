@@ -1,0 +1,27 @@
+diff --git a/rich/console.py b/rich/console.py
+index 994adfc..a9a522a 100644
+--- a/rich/console.py
++++ b/rich/console.py
+@@ -2123,8 +2123,21 @@ class Console:
+             buffer = Segment.remove_color(buffer)
+         for text, style, control in buffer:
+             if style:
++                # Render each line separately so that any ANSI codes are
++                # reset *before* the newline, rather than after it. Some
++                # terminals will otherwise apply the (e.g. background)
++                # style to the following line when scrolling / wrapping.
+                 append(
+-                    style.render(
++                    "\n".join(
++                        style.render(
++                            line,
++                            color_system=color_system,
++                            legacy_windows=legacy_windows,
++                        )
++                        for line in text.split("\n")
++                    )
++                    if "\n" in text
++                    else style.render(
+                         text,
+                         color_system=color_system,
+                         legacy_windows=legacy_windows,

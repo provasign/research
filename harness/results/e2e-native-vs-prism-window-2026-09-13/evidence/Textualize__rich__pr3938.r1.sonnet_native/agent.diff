@@ -1,0 +1,42 @@
+diff --git a/rich/segment.py b/rich/segment.py
+index edcb52d..a2039fd 100644
+--- a/rich/segment.py
++++ b/rich/segment.py
+@@ -206,6 +206,8 @@ class Segment(NamedTuple):
+             Iterable[Segments]: A new iterable of segments (possibly the same iterable).
+         """
+         result_segments = segments
++        if not style and not post_style:
++            return result_segments
+         if style:
+             apply = style.__add__
+             result_segments = (
+@@ -225,7 +227,27 @@ class Segment(NamedTuple):
+                 )
+                 for text, _style, control in result_segments
+             )
+-        return result_segments
++        # Ensure that a background (or other) style is not carried over on to the
++        # newline character itself, otherwise a terminal may paint the following
++        # line with the previous line's background colour before the reset code
++        # is processed.
++        def _strip_newline_style(
++            segments: Iterable["Segment"],
++        ) -> Iterable["Segment"]:
++            for segment in segments:
++                text, seg_style, control = segment
++                if control or "\n" not in text:
++                    yield segment
++                    continue
++                while "\n" in text:
++                    before, _, text = text.partition("\n")
++                    if before:
++                        yield cls(before, seg_style)
++                    yield cls("\n")
++                if text:
++                    yield cls(text, seg_style)
++
++        return _strip_newline_style(result_segments)
+ 
+     @classmethod
+     def filter_control(

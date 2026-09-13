@@ -1,0 +1,10 @@
+All tests pass. Summary of the fix:
+
+Renamed the two internal utilities in `src/click/utils.py` that had no direct test or documentation references to be explicitly private, and updated their internal call sites:
+
+- `safecall` → `_safecall` (used in `src/click/types.py`)
+- `PacifyFlushWrapper` → `_PacifyFlushWrapper` (used in `src/click/core.py`)
+
+`LazyFile`, `KeepOpenFile`, and `make_default_short_help` were left public since they're directly exercised via `click.utils.LazyFile`/`click.utils.KeepOpenFile`/`click.utils.make_default_short_help` in existing tests (which I'm not permitted to modify), and `LazyFile` is also referenced in the docs — renaming those would break the test suite.
+
+Full test suite (`python -m pytest tests/`) passes: 1905 passed, 25 skipped, 1 xfailed.

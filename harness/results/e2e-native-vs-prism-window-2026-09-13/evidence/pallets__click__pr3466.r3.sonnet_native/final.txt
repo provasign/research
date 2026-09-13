@@ -1,0 +1,11 @@
+Full suite passes (1622 passed, 25 skipped, 1 xfailed — all preexisting).
+
+## Summary
+
+**Root cause:** `click.shell_completion.shell_complete()` wrote the generated shell completion script (e.g. the zsh script) through `click.echo()` as a plain `str`. When stdout is a text-mode stream that performs newline translation (as happens on native Windows Python, e.g. a venv invoked from Git-for-Windows/MSYS2 bash), every `\n` becomes `\r\n`. The stray `\r` glues onto shell keywords like `fi`, so `fi\r` is no longer recognized as the `fi` keyword — the `if` block never closes, and the parser trips on the next `elif`, producing `zsh: parse error near 'elif'`.
+
+**Fix (`src/click/shell_completion.py`):**
+- Encode the generated source script to `bytes` before passing to `echo()` (`echo(comp.source().encode())`). `click.echo()` already special-cases `bytes` by writing directly to the stream's underlying binary buffer, bypassing any text-mode newline translation, so the script always reaches the shell with pure `\n` line endings.
+- Also removed the unnecessary backslash line-continuations in the bash/zsh/fish script templates, since continuation lines are especially fragile if any CRLF corruption did occur.
+
+Verified: reproduced the corruption by simulating `\n`→`\r\n` translation on the old code (zsh reported the exact same `parse error near 'elif'`), confirmed the new byte-based path avoids it, and ran `tests/test_shell_completion.py` (53 passed) plus the full test suite (1622 passed) with no regressions. No changes made to tests, docs, or config.

@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 150932,
+  "stop_reason": "end_turn",
+  "session_id": "ec4ff0d1-38f7-4147-ba3f-20853b6bf53e",
+  "total_cost_usd": 0.4107648,
+  "usage": {
+    "input_tokens": 58,
+    "cache_creation_input_tokens": 49307,
+    "cache_read_input_tokens": 587039,
+    "output_tokens": 9319,
+    "output_tokens_details": {
+      "thinking_tokens": 3363
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 49307,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 630,
+        "cache_read_input_tokens": 54471,
+        "cache_creation_input_tokens": 293,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 293
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 2748,
+      "outputTokens": 15,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.002823,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 58,
+      "outputTokens": 9319,
+      "cacheReadInputTokens": 587039,
+      "cacheCreationInputTokens": 49307,
+      "webSearchRequests": 0,
+      "costUSD": 0.4079418,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 3363,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 29,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "## Summary\n\nFixed the bug where background (and other) styles carry over onto the following line when soft wrapping is enabled.\n\n**Root cause:** `Console.print` applies the requested `style` to every rendered segment via `Segment.apply_style`, including the trailing `Segment(\"\\n\")`. Since `Style.render` wraps text as `<codes>text<reset>`, the newline segment was rendered as `\\x1b[34;47m\\n\\x1b[0m` \u2014 the ANSI reset came *after* the newline character instead of before it, so some terminals paint the new line's background before processing the reset code.\n\n**Fix (`rich/segment.py`):** `Segment.apply_style` now splits any segment's text on `\"\\n\"` and ensures newline characters are emitted as unstyled segments, so styled text is always terminated (reset) before the newline is written.\n\nVerified:\n- `console.print(\"...\", style=\"blue on white\", soft_wrap=True)` now emits `...\\x1b[0m\\n` (reset before newline) instead of `...\\x1b[0m\\x1b[34;47m\\n\\x1b[0m`.\n- Multi-line strings with embedded `\\n` in a single `print` call are also fixed the same way.\n- `soft_wrap=False` behavior is unchanged.\n- Ran `tests/test_segment.py`, `tests/test_console.py`, `tests/test_style.py`, `tests/test_align.py`, `tests/test_styled.py`, `tests/test_tree.py` \u2014 all pass.\n- Ran the full suite (excluding `test_pretty.py`, which fails to collect due to a pre-existing missing `attr` dependency unrelated to this change): the same 7 tests fail both before and after my change (pre-existing environment-related failures in `test_syntax.py`/`test_card.py`, unrelated to this fix).\n\nNo changes made to tests, docs, or config. Nothing committed, per instructions.",
+  "ttft_ms": 3221,
+  "type": "result",
+  "duration_ms": 156939,
+  "uuid": "1d90131c-35e8-4d7e-b496-97f768518974",
+  "ttft_stream_ms": 1378,
+  "time_to_request_ms": 20,
+  "first_content_frame_ms": 1378,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

@@ -1,0 +1,7 @@
+All green. Summary of the fix:
+
+1. **`src/urllib3/connection.py`** (`HTTPSConnection.connect`): when the connection is to an HTTPS proxy in *forwarding* mode (`proxy_is_forwarding`), the TLS handshake being performed is with the proxy itself, not the origin — so it now uses `proxy_config.ssl_context`, `proxy_config.assert_hostname`, and `proxy_config.assert_fingerprint` instead of the connection's own `self.ssl_context`/`self.assert_hostname`/`self.assert_fingerprint`. Non-forwarding (tunnel) connections keep using the origin's settings as before.
+
+2. **`src/urllib3/poolmanager.py`** (`ProxyManager.__init__`): raises `ValueError` if `use_forwarding_for_https=True` and an `ssl_context` is also passed through `connection_pool_kw`, since that `ssl_context` would previously have been silently (and incorrectly) used to connect to the proxy — callers must use `proxy_ssl_context` instead.
+
+Ran `test/test_proxymanager.py`, `test/test_connection.py`, `test/test_poolmanager.py`, `test/test_util.py` — all pass (287 + 361 passed, 6 pre-existing skips unrelated to this change). No test/doc/config files were modified.

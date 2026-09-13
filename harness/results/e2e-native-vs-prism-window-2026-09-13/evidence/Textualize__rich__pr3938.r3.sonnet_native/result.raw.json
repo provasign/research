@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 101317,
+  "stop_reason": "end_turn",
+  "session_id": "d29b644c-ddd4-4993-a386-9eb0ad35feb6",
+  "total_cost_usd": 0.320645,
+  "usage": {
+    "input_tokens": 48,
+    "cache_creation_input_tokens": 42677,
+    "cache_read_input_tokens": 391565,
+    "output_tokens": 6870,
+    "output_tokens_details": {
+      "thinking_tokens": 2606
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 42677,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 629,
+        "cache_read_input_tokens": 47600,
+        "cache_creation_input_tokens": 534,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 534
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 2748,
+      "outputTokens": 16,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.002828,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 48,
+      "outputTokens": 6870,
+      "cacheReadInputTokens": 391565,
+      "cacheCreationInputTokens": 42677,
+      "webSearchRequests": 0,
+      "costUSD": 0.317817,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 2606,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 24,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "The fix is confirmed working and minimal. Summary:\n\n**Root cause:** In `Console.print`, when `soft_wrap=True` (or `crop=False` generally), rendered segments were pushed to the buffer as-is. Any segment containing a styled `\\n` (e.g. a background-colored newline) kept the style code applied around the newline character (`\\x1b[...m\\n\\x1b[0m`), so the reset code came *after* the newline. Terminals apply background color to the new line before processing the trailing reset, causing the color to bleed onto the next line. The `crop=True` path already avoided this via `Segment.split_and_crop_lines`, which strips style from the `\\n` segment \u2014 but the `soft_wrap` path skipped that logic entirely.\n\n**Fix:** In `rich/console.py` (`Console.print`), for the `crop=False` branch, split any styled segment containing `\\n` and emit the newline as its own unstyled `Segment(\"\\n\")`, matching the behavior already used in the cropped path.\n\n**Verification:**\n- Reproduced the bug and confirmed the fix produces `\\x1b[34;47msoft wrap is on\\x1b[0m\\n` (matches the correct `soft_wrap=False` output) instead of `...\\x1b[0m\\x1b[34;47m\\n\\x1b[0m`.\n- `python -m pytest tests/test_console.py` \u2014 99 passed.\n- `python -m pytest tests/ -k \"segment or console\"` \u2014 169 passed, 1 skipped.\n- Full suite (excluding a pre-existing, unrelated `test_pretty.py` collection error from a missing `attr` module): 875 passed, 7 pre-existing failures in `test_syntax.py`/`test_card.py` that fail identically with or without this change (unrelated Pygments-version snapshot mismatches).\n\nNo tests, docs, or config were modified; changes not committed, per instructions.",
+  "ttft_ms": 3448,
+  "type": "result",
+  "duration_ms": 107215,
+  "uuid": "fa4370e1-f23e-411f-9655-12011989389f",
+  "ttft_stream_ms": 1400,
+  "time_to_request_ms": 18,
+  "first_content_frame_ms": 1400,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 158057,
+  "stop_reason": "end_turn",
+  "session_id": "d302fbec-b19a-4851-8548-74bcfb4c6efe",
+  "total_cost_usd": 0.29325619999999997,
+  "usage": {
+    "input_tokens": 42,
+    "cache_creation_input_tokens": 22263,
+    "cache_read_input_tokens": 389391,
+    "output_tokens": 12482,
+    "output_tokens_details": {
+      "thinking_tokens": 8294
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 22263,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 559,
+        "cache_read_input_tokens": 29008,
+        "cache_creation_input_tokens": 280,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 280
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 1357,
+      "outputTokens": 13,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.0014219999999999999,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 42,
+      "outputTokens": 12482,
+      "cacheReadInputTokens": 389391,
+      "cacheCreationInputTokens": 22263,
+      "webSearchRequests": 0,
+      "costUSD": 0.2918342,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 8294,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 21,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "All 53 shell-completion tests pass.\n\n## Summary\n\n**Root cause:** In `src/click/shell_completion.py`, the `_SOURCE_ZSH` template had a backslash-newline line continuation splitting the `response=(...)` command across two source lines:\n\n```python\n    response=(\"${(@f)$(env COMP_WORDS=\"${words[*]}\" COMP_CWORD=$((CURRENT-1)) \\\n%(complete_var)s=zsh_complete %(prog_name)s)}\")\n```\n\nA literal backslash immediately followed by a `\\n` is fragile: if that line ending is ever `\\r\\n` instead of `\\n` (e.g. from a Windows/git-for-Windows/msys2 checkout with CRLF translation), the backslash escapes the `\\r` instead of joining the lines. That breaks the single logical `response=(...)` statement into two malformed fragments, leaving an unclosed paren/quote that swallows subsequent script text until zsh's parser finally chokes \u2014 which is exactly the `parse error near 'elif'` reported.\n\n**Fix:** Removed the line continuation, keeping the whole `env ...` command on one physical line so there's no reliance on backslash-newline joining:\n\n```python\n    response=(\"${(@f)$(env COMP_WORDS=\"${words[*]}\" COMP_CWORD=$((CURRENT-1)) %(complete_var)s=zsh_complete %(prog_name)s)}\")\n```\n\nVerified the generated zsh completion script still parses cleanly (`zsh -n`) and confirmed the existing test suite (`tests/test_shell_completion.py`, 53 tests) passes. No tests/docs/config were modified.",
+  "ttft_ms": 2134,
+  "type": "result",
+  "duration_ms": 158142,
+  "uuid": "777cf96b-550e-427c-9991-2e8936b1d2f5",
+  "ttft_stream_ms": 689,
+  "time_to_request_ms": 20,
+  "first_content_frame_ms": 689,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

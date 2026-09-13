@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 287937,
+  "stop_reason": "end_turn",
+  "session_id": "5e3acffb-ee81-40d7-88d4-31eeef42627f",
+  "total_cost_usd": 0.6587166,
+  "usage": {
+    "input_tokens": 68,
+    "cache_creation_input_tokens": 50491,
+    "cache_read_input_tokens": 1164093,
+    "output_tokens": 21977,
+    "output_tokens_details": {
+      "thinking_tokens": 13306
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 50491,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 620,
+        "cache_read_input_tokens": 57238,
+        "cache_creation_input_tokens": 278,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 278
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 15,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004028,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 68,
+      "outputTokens": 21977,
+      "cacheReadInputTokens": 1164093,
+      "cacheCreationInputTokens": 50491,
+      "webSearchRequests": 0,
+      "costUSD": 0.6546886000000001,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 13306,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 34,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "That's fine \u2014 not required. The fix is complete and verified.\n\n## Summary\n\nThe bug: `click.testing.CliRunner` replaces `sys.stdout`/`sys.stderr` with `_NamedTextIOWrapper` objects backed by plain `io.BytesIO` buffers. `io.BytesIO.fileno()` always raises `io.UnsupportedOperation`, so any code invoked under `CliRunner.invoke()` that passes `sys.stdout`/`sys.stderr` to `subprocess.run()` (which needs a real OS file descriptor) crashed.\n\nFix (`src/click/testing.py`):\n- `BytesIOCopy` (the buffer backing `sys.stdout`/`sys.stderr` during isolation) now lazily creates a real, file-descriptor-backed `tempfile.TemporaryFile()` the first time `fileno()` is called, and transparently promotes reads/writes/`getvalue()` to use it from that point on. Until `fileno()` is used, it behaves exactly as the original in-memory `io.BytesIO`, so no extra resources are ever allocated for normal (non-subprocess) usage.\n- Added `close()` to release that temporary file when the buffer is closed, and added cleanup calls in `CliRunner.isolation()`'s `finally` block so any lazily-created file descriptor doesn't leak.\n\nVerified:\n- The original reproduction (`subprocess.run([\"echo\", \"foo\"], stdout=sys.stderr)` inside a `CliRunner.invoke()`) no longer raises and correctly captures `\"foo\\n\"` in `result.stderr`.\n- Full existing test suite (`tests/`) passes: 1419 passed, 24 skipped, 1 xfailed, no regressions in `tests/test_testing.py` or `tests/test_stream_lifecycle.py`.",
+  "ttft_ms": 7746,
+  "type": "result",
+  "duration_ms": 296979,
+  "uuid": "a4a8107f-17cd-49a8-8f17-3a365df74861",
+  "ttft_stream_ms": 4769,
+  "time_to_request_ms": 23,
+  "first_content_frame_ms": 4769,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

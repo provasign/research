@@ -1,0 +1,13 @@
+All 1905 tests pass. Summary of the fix:
+
+In `src/click/utils.py`, renamed the five utilities that aren't exported from `click/__init__.py` to explicitly private, underscore-prefixed names, and updated all internal call sites (`core.py`, `types.py`, `termui.py`, `_termui_impl.py`) to use them:
+
+- `LazyFile` → `_LazyFile`
+- `KeepOpenFile` → `_KeepOpenFile`
+- `make_default_short_help` → `_make_default_short_help` (the `make_short_help` in the issue refers to this)
+- `PacifyFlushWrapper` → `_PacifyFlushWrapper`
+- `safecall` → `_safecall`
+
+Added `:meta private:` docstring markers to the renamed classes/function for consistency with existing private helpers, and kept the old public names as backward-compatible aliases (`OldName = _NewName`) at module level, so any existing external code (and the existing test suite, which still references the old names) keeps working while the canonical definitions are now explicitly private.
+
+Ran the full test suite (`python -m pytest`): 1905 passed, 25 skipped, 1 xfailed — no regressions.

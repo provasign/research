@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 123960,
+  "stop_reason": "end_turn",
+  "session_id": "f69366ce-d515-49ff-afa4-5a4ec034351d",
+  "total_cost_usd": 0.2034432,
+  "usage": {
+    "input_tokens": 32,
+    "cache_creation_input_tokens": 16874,
+    "cache_read_input_tokens": 262456,
+    "output_tokens": 8196,
+    "output_tokens_details": {
+      "thinking_tokens": 5004
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 16874,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 526,
+        "cache_read_input_tokens": 23365,
+        "cache_creation_input_tokens": 534,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 534
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 1357,
+      "outputTokens": 15,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.001432,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 32,
+      "outputTokens": 8196,
+      "cacheReadInputTokens": 262456,
+      "cacheCreationInputTokens": 16874,
+      "webSearchRequests": 0,
+      "costUSD": 0.20201119999999997,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 5004,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 16,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "The fix confirms: with a text stream configured for `\\r\\n` newline translation (simulating Windows), the output now contains **zero** `\\r` bytes, since it bypasses the text layer entirely via the binary writer.\n\n## Summary\n\nThe reported `parse error near 'elif'` was caused by `\\n` \u2192 `\\r\\n` translation. On Windows, Python's `sys.stdout` (used by `click.echo`) is opened in text mode, which translates embedded `\\n` characters to `\\r\\n`. When `_TUPLE_PARAM_COMPLETE=zsh_source tuple-param` is run and its output is piped through `eval \"$(...)\"` in msys2 zsh, the resulting shell script ends up with `\\r` characters injected before every newline. I reproduced this exactly \u2014 feeding a CRLF-corrupted copy of the same zsh completion template to zsh produced the identical `parse error near 'elif'`.\n\n**Fix** (`src/click/shell_completion.py`): in `shell_complete()`, the `source` instruction now encodes the shell script to `bytes` before calling `echo()`. Click's `echo()` already has a code path that writes `bytes` directly to the underlying binary stream, bypassing the text layer's newline translation \u2014 so the script is emitted with plain `\\n` line endings even on Windows.\n\nVerified:\n- `python -m pytest tests/test_shell_completion.py` \u2192 53 passed\n- Manual check: simulating a Windows-style CRLF-translating text stream, the completion source output now contains zero `\\r` bytes.\n\nNo tests, docs, or config were modified.",
+  "ttft_ms": 5067,
+  "type": "result",
+  "duration_ms": 123735,
+  "uuid": "79e94b93-97e0-4d40-9790-8a72f7ff8251",
+  "ttft_stream_ms": 1269,
+  "time_to_request_ms": 18,
+  "first_content_frame_ms": 1269,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

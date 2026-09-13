@@ -1,0 +1,13 @@
+The fix is confirmed working and minimal. Summary:
+
+**Root cause:** In `Console.print`, when `soft_wrap=True` (or `crop=False` generally), rendered segments were pushed to the buffer as-is. Any segment containing a styled `\n` (e.g. a background-colored newline) kept the style code applied around the newline character (`\x1b[...m\n\x1b[0m`), so the reset code came *after* the newline. Terminals apply background color to the new line before processing the trailing reset, causing the color to bleed onto the next line. The `crop=True` path already avoided this via `Segment.split_and_crop_lines`, which strips style from the `\n` segment — but the `soft_wrap` path skipped that logic entirely.
+
+**Fix:** In `rich/console.py` (`Console.print`), for the `crop=False` branch, split any styled segment containing `\n` and emit the newline as its own unstyled `Segment("\n")`, matching the behavior already used in the cropped path.
+
+**Verification:**
+- Reproduced the bug and confirmed the fix produces `\x1b[34;47msoft wrap is on\x1b[0m\n` (matches the correct `soft_wrap=False` output) instead of `...\x1b[0m\x1b[34;47m\n\x1b[0m`.
+- `python -m pytest tests/test_console.py` — 99 passed.
+- `python -m pytest tests/ -k "segment or console"` — 169 passed, 1 skipped.
+- Full suite (excluding a pre-existing, unrelated `test_pretty.py` collection error from a missing `attr` module): 875 passed, 7 pre-existing failures in `test_syntax.py`/`test_card.py` that fail identically with or without this change (unrelated Pygments-version snapshot mismatches).
+
+No tests, docs, or config were modified; changes not committed, per instructions.

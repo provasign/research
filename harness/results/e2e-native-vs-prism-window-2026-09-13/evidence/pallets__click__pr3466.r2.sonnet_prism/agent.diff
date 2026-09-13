@@ -1,0 +1,16 @@
+diff --git a/src/click/shell_completion.py b/src/click/shell_completion.py
+index 7235f10..ffda6e3 100644
+--- a/src/click/shell_completion.py
++++ b/src/click/shell_completion.py
+@@ -44,7 +44,10 @@ def shell_complete(
+     comp = comp_cls(cli, ctx_args, prog_name, complete_var)
+ 
+     if instruction == "source":
+-        echo(comp.source())
++        # Write as bytes on the binary stream so line endings aren't
++        # translated (e.g. to "\r\n" on Windows), which would break
++        # shells like zsh that are sensitive to embedded "\r".
++        echo(comp.source().encode())
+         return 0
+ 
+     if instruction == "complete":

@@ -1,0 +1,13 @@
+All 1905 tests still pass.
+
+## Summary
+
+The issue pointed out that `LazyFile`, `KeepOpenFile`, `make_short_help` (i.e. `make_default_short_help`), `PacifyFlushWrapper`, and `safecall` in `click/utils.py` are internal implementation details that were never exported from the `click` package's `__init__.py`, yet were named as if they were public API.
+
+I made them explicitly private, following the same convention already used for `_detect_program_name` and `_expand_args` in the same file:
+
+- Renamed the definitions to `_safecall`, `_make_default_short_help`, `_LazyFile`, `_KeepOpenFile`, `_PacifyFlushWrapper`, and added `:meta private:` docstring notes.
+- Updated all internal call sites in `core.py`, `types.py`, `termui.py`, and `_termui_impl.py` to use the new underscore-prefixed names.
+- Kept the old public names as simple aliases (`safecall = _safecall`, etc.) at the bottom of `utils.py` for backward compatibility, since existing tests reference `click.utils.LazyFile`, `click.utils.KeepOpenFile`, and `click.utils.make_default_short_help` directly, and those weren't to be modified.
+
+Ran the full test suite (`python -m pytest`): 1905 passed, 25 skipped, 1 xfailed — no regressions. Nothing was committed, per instructions.

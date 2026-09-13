@@ -1,0 +1,12 @@
+## Summary
+
+The bug: `CliRunner` backed `sys.stdout`/`sys.stderr` with `io.BytesIO`-based streams (`BytesIOCopy(io.BytesIO)`), which have no real OS file descriptor. Any code invoked under `CliRunner.invoke()` that passed `sys.stdout`/`sys.stderr` to `subprocess.run()` (or anything else calling `.fileno()`) would fail with `io.UnsupportedOperation: fileno`.
+
+Fix in `src/click/testing.py`:
+- Reimplemented `BytesIOCopy` to be backed by a real `tempfile.TemporaryFile()` instead of `io.BytesIO`, delegating unknown attributes (including `fileno()`) to that real file via `__getattr__`. This lets `subprocess.run(stdout=sys.stderr, ...)` write directly to the underlying fd, and that output is correctly captured (verified via `result.stderr`/`result.stdout`).
+- Added a `getvalue()` method that reads from the temp file without disturbing its position (needed since `Result` construction relies on `outstreams[i].getvalue()`), and kept `write()`/`flush()` mirroring writes to the merged `copy_to` stream.
+- Added a `__del__` on `BytesIOCopy` to close the real backing file, and explicit `stream_mixer.stdout.close()` / `stream_mixer.stderr.close()` calls in `CliRunner.isolation()`'s `finally` block, to avoid leaking real file descriptors / triggering `ResourceWarning`s now that these streams own actual OS files.
+
+Verified with a standalone reproduction of the reported issue (`subprocess.run(["echo", "foo"], stdout=sys.stderr)` inside a Click command invoked via `CliRunner`), plus the full existing test suite: `1419 passed, 24 skipped, 1 xfailed` — no regressions.
+
+No test, doc, changelog, or config files were modified.

@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 213553,
+  "stop_reason": "end_turn",
+  "session_id": "5475ed06-6e74-47b5-9b68-51c8d02e8bd6",
+  "total_cost_usd": 0.5830575999999998,
+  "usage": {
+    "input_tokens": 64,
+    "cache_creation_input_tokens": 49777,
+    "cache_read_input_tokens": 1188773,
+    "output_tokens": 14450,
+    "output_tokens_details": {
+      "thinking_tokens": 7043
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 49777,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 596,
+        "cache_read_input_tokens": 56513,
+        "cache_creation_input_tokens": 289,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 289
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 1487,
+      "outputTokens": 16,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.001567,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 64,
+      "outputTokens": 14450,
+      "cacheReadInputTokens": 1188773,
+      "cacheCreationInputTokens": 49777,
+      "webSearchRequests": 0,
+      "costUSD": 0.5814905999999999,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 7043,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 32,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "All 65 tests pass (the 1 skip is the pre-existing skip referenced in the issue, which I left untouched per instructions not to modify tests).\n\n## Summary\n\nThe bug: `HTTPSConnection.connect()` always used `self.ssl_context` (the destination's SSL context) for the TLS handshake, even when in forwarding mode connecting directly to an HTTPS proxy. That's wrong \u2014 in forwarding mode the socket-level TLS handshake is with the proxy itself, so it must use `proxy_ssl_context`, not the destination's context.\n\nChanges made in `src/urllib3/connection.py` (`HTTPSConnection.connect`):\n- When `self.proxy_is_forwarding` is true, use `proxy_config.ssl_context`, `proxy_config.assert_hostname`, and `proxy_config.assert_fingerprint` for the TLS handshake instead of the destination's `self.ssl_context`/`self.assert_hostname`/`self.assert_fingerprint`.\n\nChanges made in `src/urllib3/poolmanager.py` (`ProxyManager.__init__`):\n- If `use_forwarding_for_https=True` and a destination `ssl_context` is also passed, raise `ValueError` \u2014 with a distinct message if `proxy_ssl_context` was also given vs. not, per the issue's requirements (this is the 2.x codebase per its version/typing style, so `ValueError` is correct rather than a `DeprecationWarning`).\n\nRan narrow tests (`test_proxymanager.py`, `test_connection.py`, and the full `test_proxy_poolmanager.py` dummyserver suite) \u2014 all pass, with the one pre-existing skip (`test_proxy_https_target_tls_error`) untouched since I was told not to modify tests.",
+  "ttft_ms": 3670,
+  "type": "result",
+  "duration_ms": 251448,
+  "uuid": "30ae8bda-62b8-4578-978b-41be97936401",
+  "ttft_stream_ms": 1570,
+  "time_to_request_ms": 31,
+  "first_content_frame_ms": 1570,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

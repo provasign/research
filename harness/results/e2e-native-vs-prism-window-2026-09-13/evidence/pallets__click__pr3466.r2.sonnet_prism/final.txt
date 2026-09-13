@@ -1,0 +1,13 @@
+The fix confirms: with a text stream configured for `\r\n` newline translation (simulating Windows), the output now contains **zero** `\r` bytes, since it bypasses the text layer entirely via the binary writer.
+
+## Summary
+
+The reported `parse error near 'elif'` was caused by `\n` → `\r\n` translation. On Windows, Python's `sys.stdout` (used by `click.echo`) is opened in text mode, which translates embedded `\n` characters to `\r\n`. When `_TUPLE_PARAM_COMPLETE=zsh_source tuple-param` is run and its output is piped through `eval "$(...)"` in msys2 zsh, the resulting shell script ends up with `\r` characters injected before every newline. I reproduced this exactly — feeding a CRLF-corrupted copy of the same zsh completion template to zsh produced the identical `parse error near 'elif'`.
+
+**Fix** (`src/click/shell_completion.py`): in `shell_complete()`, the `source` instruction now encodes the shell script to `bytes` before calling `echo()`. Click's `echo()` already has a code path that writes `bytes` directly to the underlying binary stream, bypassing the text layer's newline translation — so the script is emitted with plain `\n` line endings even on Windows.
+
+Verified:
+- `python -m pytest tests/test_shell_completion.py` → 53 passed
+- Manual check: simulating a Windows-style CRLF-translating text stream, the completion source output now contains zero `\r` bytes.
+
+No tests, docs, or config were modified.

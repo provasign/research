@@ -1,0 +1,11 @@
+All 65 tests pass, 1 skipped (the known `test_proxy_https_target_tls_error` skip that the issue mentions but I left tests unmodified per harness instructions). No regressions.
+
+## Summary
+
+Fixed the bug where `HTTPSConnection.ssl_context` (meant for the origin server) was being used to establish the TLS connection to an HTTPS proxy in forwarding mode (`use_forwarding_for_https=True`), instead of `proxy_ssl_context`.
+
+**Changes in `src/urllib3/connection.py`** (`HTTPSConnection.connect`): when `self.proxy_is_forwarding` is true, the initial TLS handshake performed by `_ssl_wrap_socket_and_match_hostname` *is* the connection to the proxy itself (no CONNECT tunnel is used), so it must use the proxy's `ssl_context`/`assert_hostname`/`assert_fingerprint` from `ProxyConfig` rather than the connection's own (origin-targeted) settings.
+
+**Changes in `src/urllib3/poolmanager.py`** (`ProxyManager.__init__`): added a `ValueError` when `use_forwarding_for_https=True` and an `ssl_context` is also passed through `connection_pool_kw`, since in forwarding mode only `proxy_ssl_context` should be used to configure the proxy connection — using `ssl_context` there was silently wrong/ambiguous.
+
+Ran the relevant narrow test suites (`test_util.py -k proxy`, `test_proxymanager.py`, `test_proxy_poolmanager.py`) — all pass with no regressions. No test files were modified, per the task constraints.

@@ -1,0 +1,12 @@
+## Summary
+
+The bug was in `click.testing.BytesIOCopy`, the class used to back `CliRunner`'s captured `stdout`/`stderr` during `invoke()`. It subclassed plain `io.BytesIO`, which has no real file descriptor — so `stream.fileno()` raised `io.UnsupportedOperation`. Any code invoked under `CliRunner` that passed `sys.stdout`/`sys.stderr` to `subprocess.run(...)` (which needs a real fd) would crash, even though the exact same code worked fine outside the test harness.
+
+**Fix** (`src/click/testing.py`): `BytesIOCopy` now also mirrors everything written to it into a real, file-descriptor-backed `tempfile.TemporaryFile()`. `fileno()` returns that file's descriptor, so `subprocess.run(stdout=sys.stderr)` (and similar constructs) work as expected inside `CliRunner`. `getvalue()` reads from that temp file, so output written directly to the fd (e.g., by a child process) is captured correctly, in addition to normal Python-level writes.
+
+Verified with:
+- A reproduction of the exact SSCCE from the issue — now passes and correctly captures the subprocess output.
+- `tests/test_testing.py` (29 passed).
+- The full test suite (1419 passed, 24 skipped, 1 xfailed — unchanged from baseline).
+
+No test, doc, or config files were modified; only `src/click/testing.py`.

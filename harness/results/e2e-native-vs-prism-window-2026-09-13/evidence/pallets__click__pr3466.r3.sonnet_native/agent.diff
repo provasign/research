@@ -1,0 +1,47 @@
+diff --git a/src/click/shell_completion.py b/src/click/shell_completion.py
+index 7235f10..26c08e7 100644
+--- a/src/click/shell_completion.py
++++ b/src/click/shell_completion.py
+@@ -44,7 +44,11 @@ def shell_complete(
+     comp = comp_cls(cli, ctx_args, prog_name, complete_var)
+ 
+     if instruction == "source":
+-        echo(comp.source())
++        # Write as bytes so the shell's stdout text-mode newline
++        # translation (e.g. "\n" -> "\r\n" on Windows) can't corrupt
++        # the script, which would break shells like zsh that require
++        # bare "\n" line endings.
++        echo(comp.source().encode())
+         return 0
+ 
+     if instruction == "complete":
+@@ -97,8 +101,7 @@ _SOURCE_BASH = """\
+     local IFS=$'\\n'
+     local response
+ 
+-    response=$(env COMP_WORDS="${COMP_WORDS[*]}" COMP_CWORD=$COMP_CWORD \
+-%(complete_var)s=bash_complete $1)
++    response=$(env COMP_WORDS="${COMP_WORDS[*]}" COMP_CWORD=$COMP_CWORD %(complete_var)s=bash_complete $1)
+ 
+     for completion in $response; do
+         IFS=',' read type value <<< "$completion"
+@@ -139,8 +142,7 @@ _SOURCE_ZSH = """\
+     local -a response
+     (( ! $+commands[%(prog_name)s] )) && return 1
+ 
+-    response=("${(@f)$(env COMP_WORDS="${words[*]}" COMP_CWORD=$((CURRENT-1)) \
+-%(complete_var)s=zsh_complete %(prog_name)s)}")
++    response=("${(@f)$(env COMP_WORDS="${words[*]}" COMP_CWORD=$((CURRENT-1)) %(complete_var)s=zsh_complete %(prog_name)s)}")
+ 
+     for type key descr in ${response}; do
+         if [[ "$type" == "plain" ]]; then
+@@ -176,8 +178,7 @@ fi
+ 
+ _SOURCE_FISH = """\
+ function %(complete_func)s;
+-    set -l response (env %(complete_var)s=fish_complete COMP_WORDS=(commandline -cp) \
+-COMP_CWORD=(commandline -t) %(prog_name)s);
++    set -l response (env %(complete_var)s=fish_complete COMP_WORDS=(commandline -cp) COMP_CWORD=(commandline -t) %(prog_name)s);
+ 
+     for completion in $response;
+         set -l metadata (string split \n $completion);

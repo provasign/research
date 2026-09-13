@@ -1,0 +1,65 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..03a0984 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -67,23 +67,46 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+         stream._paused = False
+ 
+ 
+-class BytesIOCopy(io.BytesIO):
+-    """Patch ``io.BytesIO`` to let the written stream be copied to another.
++class BytesIOCopy:
++    """A binary stream backed by a real (temporary) file, so that it has a
++    working ``fileno()`` and can be used as ``stdout``/``stderr`` for e.g.
++    :func:`subprocess.run`, while also copying everything written to it
++    into another stream.
+ 
+     .. versionadded:: 8.2
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+-        super().__init__()
++        self._file: t.IO[bytes] = tempfile.TemporaryFile()
+         self.copy_to = copy_to
+ 
++    def __getattr__(self, name: str) -> t.Any:
++        return getattr(self._file, name)
++
++    def __del__(self) -> None:
++        # Make sure the backing temporary file is closed once this object
++        # is garbage collected, instead of relying on the underlying file
++        # object's own finalizer, which would emit a ResourceWarning.
++        try:
++            self._file.close()
++        except Exception:
++            pass
++
+     def flush(self) -> None:
+-        super().flush()
++        self._file.flush()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+-        return super().write(b)
++        return self._file.write(b)
++
++    def getvalue(self) -> bytes:
++        pos = self._file.tell()
++        self._file.seek(0)
++        try:
++            return self._file.read()
++        finally:
++            self._file.seek(pos)
+ 
+ 
+ class StreamMixer:
+@@ -461,6 +484,8 @@ class CliRunner:
+                         pass
+                 else:
+                     os.environ[key] = value
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
+             sys.stdout = old_stdout
+             sys.stderr = old_stderr
+             sys.stdin = old_stdin

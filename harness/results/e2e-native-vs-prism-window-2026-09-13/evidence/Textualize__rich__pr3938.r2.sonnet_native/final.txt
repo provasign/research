@@ -1,0 +1,14 @@
+## Summary
+
+The bug was in `Console.print()` (`rich/console.py`). When `soft_wrap=True` (or otherwise when `crop=False`), the rendered segments were pushed straight into the output buffer without splitting on newlines. This meant a styled segment's text could contain an embedded `\n` character *inside* the ANSI-styled span, e.g. `\x1b[34;47msoft wrap is on\n\x1b[0m` — the reset code landed *after* the newline, so the background color leaked onto the next line in the terminal.
+
+When `crop=True`, `Segment.split_and_crop_lines` was already used, which splits lines and places the newline as a separate, unstyled segment (reset before `\n`), avoiding the issue.
+
+**Fix:** reuse `Segment.split_and_crop_lines` in the `crop=False` branch too (with `sys.maxsize` as the line length so no actual cropping occurs), ensuring newlines are always emitted as separate unstyled segments regardless of the crop setting.
+
+Verified:
+- Reproduction now shows the reset before the newline: `\x1b[34;47msoft wrap is on\x1b[0m\n...`
+- `tests/test_console.py` and `tests/test_segment.py` pass (158 passed).
+- Full test suite shows the same 7 pre-existing failures (in `test_card.py`/`test_syntax.py`) both before and after the change, confirming no regressions were introduced.
+
+No changes were made to tests, docs, or config — only `rich/console.py`. The change was not committed, per instructions.

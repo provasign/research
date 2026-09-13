@@ -1,0 +1,78 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..b6db759 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -86,6 +86,49 @@ class BytesIOCopy(io.BytesIO):
+         return super().write(b)
+ 
+ 
++class _NamedTemporaryFileCopy:
++    """Wraps a real, file-descriptor backed temporary file so that streams
++    exposed by :class:`CliRunner` can be used as ``stdout``/``stderr`` for
++    :func:`subprocess.run` and friends, while also duplicating everything
++    written to it into another stream.
++
++    .. versionadded:: 8.2
++    """
++
++    def __init__(self, copy_to: io.BytesIO) -> None:
++        self._file = tempfile.TemporaryFile()
++        self.copy_to = copy_to
++
++    def __getattr__(self, name: str) -> t.Any:
++        return getattr(self._file, name)
++
++    def flush(self) -> None:
++        self._file.flush()
++        self.copy_to.flush()
++
++    def write(self, b: ReadableBuffer) -> int:
++        self.copy_to.write(b)
++        return self._file.write(b)
++
++    def fileno(self) -> int:
++        return self._file.fileno()
++
++    def getvalue(self) -> bytes:
++        pos = self._file.tell()
++        self._file.seek(0)
++        data = self._file.read()
++        self._file.seek(pos)
++        return data
++
++    def __del__(self) -> None:
++        # Make sure the underlying OS-level file descriptor is always
++        # released, even if the instance is never explicitly closed.
++        try:
++            self._file.close()
++        except Exception:
++            pass
++
++
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.
+ 
+@@ -96,8 +139,12 @@ class StreamMixer:
+ 
+     def __init__(self) -> None:
+         self.output: io.BytesIO = io.BytesIO()
+-        self.stdout: io.BytesIO = BytesIOCopy(copy_to=self.output)
+-        self.stderr: io.BytesIO = BytesIOCopy(copy_to=self.output)
++        self.stdout: t.BinaryIO = t.cast(
++            "t.BinaryIO", _NamedTemporaryFileCopy(copy_to=self.output)
++        )
++        self.stderr: t.BinaryIO = t.cast(
++            "t.BinaryIO", _NamedTemporaryFileCopy(copy_to=self.output)
++        )
+ 
+ 
+ class _NamedTextIOWrapper(io.TextIOWrapper):
+@@ -464,6 +511,8 @@ class CliRunner:
+             sys.stdout = old_stdout
+             sys.stderr = old_stderr
+             sys.stdin = old_stdin
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
+             termui.visible_prompt_func = old_visible_prompt_func
+             termui.hidden_prompt_func = old_hidden_prompt_func
+             termui._getchar = old__getchar_func

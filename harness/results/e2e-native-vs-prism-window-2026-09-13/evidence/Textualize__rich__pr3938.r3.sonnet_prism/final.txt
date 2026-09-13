@@ -1,0 +1,12 @@
+## Summary
+
+**Root cause:** In `Console._render_buffer` (rich/console.py), styled segments were rendered with `Style.render()`, which wraps the *entire* segment text in `ESC[...m<text>ESC[0m`. When soft wrap is enabled, `Console.print()` skips `Segment.split_and_crop_lines` (which normally strips styling from newline segments while cropping/padding), so the trailing `"\n"` segment keeps the original style. That means the ANSI reset code was emitted *after* the newline character instead of before it — so terminals apply the background color to the new line when scrolling/wrapping.
+
+**Fix:** In `_render_buffer`, when a styled segment's text contains an embedded newline, render each line's text through `Style.render` separately and rejoin with plain `"\n"` characters, ensuring the reset always precedes the newline. This is a small, central fix that doesn't touch the non-soft-wrap path's behavior (segments there don't have embedded newlines) and fixes the bug regardless of print path.
+
+**Verification:**
+- Reproduced the bug and confirmed the fix: output changed from `...\x1b[34;47m...\x1b[0m\n` issue to correctly placing `\x1b[0m` before `\n`.
+- `tests/test_console.py` and `tests/test_segment.py` pass (158 passed).
+- Full suite: 7 pre-existing failures in `test_syntax.py`/`test_card.py` are unrelated (confirmed identical before my change — appear to stem from a Pygments version mismatch in this environment) and `tests/test_pretty.py` fails to collect due to a missing `attr` module (pre-existing environment issue, unrelated to this change).
+
+No tests, docs, or config were modified — only `rich/console.py`.

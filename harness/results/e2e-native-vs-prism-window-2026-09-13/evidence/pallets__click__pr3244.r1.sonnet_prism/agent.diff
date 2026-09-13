@@ -1,0 +1,74 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..aed9968 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -67,23 +67,65 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+         stream._paused = False
+ 
+ 
+-class BytesIOCopy(io.BytesIO):
+-    """Patch ``io.BytesIO`` to let the written stream be copied to another.
++class BytesIOCopy(io.RawIOBase):
++    """A binary stream backed by a real, temporary OS file, so that it has a
++    usable ``fileno()``. This lets it be passed as ``stdout``/``stderr`` to
++    APIs such as :func:`subprocess.run`, which need to duplicate a real file
++    descriptor. Everything written to it is also copied to another stream.
+ 
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.3.3
++        Backed by a real temporary file instead of an in-memory buffer, so
++        that ``fileno()`` no longer raises ``io.UnsupportedOperation``.
++        :issue:`2522`
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._file = tempfile.TemporaryFile()
++
++    def fileno(self) -> int:
++        return self._file.fileno()
++
++    def readable(self) -> bool:
++        return True
++
++    def writable(self) -> bool:
++        return True
++
++    def seekable(self) -> bool:
++        return True
+ 
+     def flush(self) -> None:
+-        super().flush()
++        self._file.flush()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+-        return super().write(b)
++        return self._file.write(b)
++
++    def read(self, size: int = -1) -> bytes:
++        return self._file.read(size)
++
++    def seek(self, offset: int, whence: int = 0) -> int:
++        return self._file.seek(offset, whence)
++
++    def tell(self) -> int:
++        return self._file.tell()
++
++    def getvalue(self) -> bytes:
++        pos = self._file.tell()
++        self._file.seek(0)
++        data = self._file.read()
++        self._file.seek(pos)
++        return data
++
++    def close(self) -> None:
++        if not self.closed:
++            self._file.close()
++        super().close()
+ 
+ 
+ class StreamMixer:

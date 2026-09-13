@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 118345,
+  "stop_reason": "end_turn",
+  "session_id": "dccab545-3990-4b34-b7cc-6c85f054809e",
+  "total_cost_usd": 0.2758836,
+  "usage": {
+    "input_tokens": 50,
+    "cache_creation_input_tokens": 29898,
+    "cache_read_input_tokens": 431493,
+    "output_tokens": 6707,
+    "output_tokens_details": {
+      "thinking_tokens": 2411
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 29898,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 520,
+        "cache_read_input_tokens": 34909,
+        "cache_creation_input_tokens": 446,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 446
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 2748,
+      "outputTokens": 15,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.002823,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 50,
+      "outputTokens": 6707,
+      "cacheReadInputTokens": 431493,
+      "cacheCreationInputTokens": 29898,
+      "webSearchRequests": 0,
+      "costUSD": 0.27306060000000004,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 2411,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 25,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "## Summary\n\nThe bug was in `Console.print()` (`rich/console.py`). When `soft_wrap=True` (or otherwise when `crop=False`), the rendered segments were pushed straight into the output buffer without splitting on newlines. This meant a styled segment's text could contain an embedded `\\n` character *inside* the ANSI-styled span, e.g. `\\x1b[34;47msoft wrap is on\\n\\x1b[0m` \u2014 the reset code landed *after* the newline, so the background color leaked onto the next line in the terminal.\n\nWhen `crop=True`, `Segment.split_and_crop_lines` was already used, which splits lines and places the newline as a separate, unstyled segment (reset before `\\n`), avoiding the issue.\n\n**Fix:** reuse `Segment.split_and_crop_lines` in the `crop=False` branch too (with `sys.maxsize` as the line length so no actual cropping occurs), ensuring newlines are always emitted as separate unstyled segments regardless of the crop setting.\n\nVerified:\n- Reproduction now shows the reset before the newline: `\\x1b[34;47msoft wrap is on\\x1b[0m\\n...`\n- `tests/test_console.py` and `tests/test_segment.py` pass (158 passed).\n- Full test suite shows the same 7 pre-existing failures (in `test_card.py`/`test_syntax.py`) both before and after the change, confirming no regressions were introduced.\n\nNo changes were made to tests, docs, or config \u2014 only `rich/console.py`. The change was not committed, per instructions.",
+  "ttft_ms": 5585,
+  "type": "result",
+  "duration_ms": 124175,
+  "uuid": "fc6d503a-b767-4963-935c-742cd1275221",
+  "ttft_stream_ms": 2722,
+  "time_to_request_ms": 19,
+  "first_content_frame_ms": 2723,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

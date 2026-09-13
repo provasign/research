@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 95984,
+  "stop_reason": "end_turn",
+  "session_id": "1acd2422-96d9-43aa-8243-7583fb123871",
+  "total_cost_usd": 0.2040196,
+  "usage": {
+    "input_tokens": 34,
+    "cache_creation_input_tokens": 19292,
+    "cache_read_input_tokens": 324343,
+    "output_tokens": 6076,
+    "output_tokens_details": {
+      "thinking_tokens": 2630
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 19292,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 476,
+        "cache_read_input_tokens": 25951,
+        "cache_creation_input_tokens": 366,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 366
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 1080,
+      "outputTokens": 15,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.001155,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 34,
+      "outputTokens": 6076,
+      "cacheReadInputTokens": 324343,
+      "cacheCreationInputTokens": 19292,
+      "webSearchRequests": 0,
+      "costUSD": 0.20286459999999998,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 2630,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 17,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "All tests pass and the utilities remain importable (no breaking changes).\n\n## Summary\n\nThe issue asked whether `LazyFile`, `KeepOpenFile`, `make_short_help` (i.e. `make_default_short_help`), `PacifyFlushWrapper`, and `safecall` being absent from `click`'s public `__init__.py` was intentional, and requested they be made explicitly private.\n\nI found that `click.utils` already has an established convention for marking internal-only symbols: a `:meta private:` note in the docstring (used e.g. by `make_default_short_help`, `_main_module_from_path`, `_expand_args`), which tells Sphinx autodoc to exclude the symbol from generated docs while keeping the object itself usable internally (and in existing tests, which access these via `click.utils.X`).\n\nI applied this same convention \u2014 the smallest, consistent fix \u2014 to the four utilities that were missing it:\n- `src/click/utils.py`: added `:meta private:` to the docstrings of `safecall`, `LazyFile`, `KeepOpenFile`, and `PacifyFlushWrapper`.\n\n`make_default_short_help` already had the marker, confirming this is the intended pattern rather than renaming with a leading underscore (which would have broken internal call sites and existing tests referencing the public names).\n\nVerified with `python -m pytest tests/test_utils` \u2014 all 217 relevant tests pass, and the utilities remain accessible as before.",
+  "ttft_ms": 7349,
+  "type": "result",
+  "duration_ms": 96314,
+  "uuid": "bf5c32b2-1ea3-4393-8e8e-2f5769991b6e",
+  "ttft_stream_ms": 5040,
+  "time_to_request_ms": 22,
+  "first_content_frame_ms": 5040,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

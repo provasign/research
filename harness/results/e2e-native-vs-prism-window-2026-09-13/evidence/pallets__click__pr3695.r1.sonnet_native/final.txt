@@ -1,0 +1,10 @@
+All tests pass. Summary of the fix:
+
+In `src/click/utils.py`, I renamed the two internal-only helpers that had no external test/API dependency to explicitly private names, and updated their internal usages:
+
+- `safecall` → `_safecall` (used in `src/click/types.py`)
+- `PacifyFlushWrapper` → `_PacifyFlushWrapper` (used in `src/click/core.py`)
+
+`LazyFile`, `KeepOpenFile`, and `make_default_short_help` (the "`make_short_help`" referenced in the issue) were left as public names since the test suite (`tests/test_utils/test_LazyFile.py`, `test_KeepOpenFile.py`, `test_make_default_short_help.py`) accesses them directly as `click.utils.LazyFile`, `click.utils.KeepOpenFile`, and `click.utils.make_default_short_help` — renaming those would require modifying tests, which is out of scope here.
+
+Full test suite passes (1905 passed, 25 skipped, 1 xfailed).

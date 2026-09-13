@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 109714,
+  "stop_reason": "end_turn",
+  "session_id": "8147130b-77e5-46d2-af57-71841542c2f7",
+  "total_cost_usd": 0.2952348000000001,
+  "usage": {
+    "input_tokens": 36,
+    "cache_creation_input_tokens": 29453,
+    "cache_read_input_tokens": 481494,
+    "output_tokens": 7949,
+    "output_tokens_details": {
+      "thinking_tokens": 3538
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 29453,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 563,
+        "cache_read_input_tokens": 36184,
+        "cache_creation_input_tokens": 294,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 294
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 1487,
+      "outputTokens": 15,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.001562,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 36,
+      "outputTokens": 7949,
+      "cacheReadInputTokens": 481494,
+      "cacheCreationInputTokens": 29453,
+      "webSearchRequests": 0,
+      "costUSD": 0.29367280000000007,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 3538,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 18,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "All 65 tests pass, 1 skipped (the known `test_proxy_https_target_tls_error` skip that the issue mentions but I left tests unmodified per harness instructions). No regressions.\n\n## Summary\n\nFixed the bug where `HTTPSConnection.ssl_context` (meant for the origin server) was being used to establish the TLS connection to an HTTPS proxy in forwarding mode (`use_forwarding_for_https=True`), instead of `proxy_ssl_context`.\n\n**Changes in `src/urllib3/connection.py`** (`HTTPSConnection.connect`): when `self.proxy_is_forwarding` is true, the initial TLS handshake performed by `_ssl_wrap_socket_and_match_hostname` *is* the connection to the proxy itself (no CONNECT tunnel is used), so it must use the proxy's `ssl_context`/`assert_hostname`/`assert_fingerprint` from `ProxyConfig` rather than the connection's own (origin-targeted) settings.\n\n**Changes in `src/urllib3/poolmanager.py`** (`ProxyManager.__init__`): added a `ValueError` when `use_forwarding_for_https=True` and an `ssl_context` is also passed through `connection_pool_kw`, since in forwarding mode only `proxy_ssl_context` should be used to configure the proxy connection \u2014 using `ssl_context` there was silently wrong/ambiguous.\n\nRan the relevant narrow test suites (`test_util.py -k proxy`, `test_proxymanager.py`, `test_proxy_poolmanager.py`) \u2014 all pass with no regressions. No test files were modified, per the task constraints.",
+  "ttft_ms": 3575,
+  "type": "result",
+  "duration_ms": 150032,
+  "uuid": "d1f96bb5-c002-4fea-86a2-002c2f41a52c",
+  "ttft_stream_ms": 1630,
+  "time_to_request_ms": 30,
+  "first_content_frame_ms": 1630,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

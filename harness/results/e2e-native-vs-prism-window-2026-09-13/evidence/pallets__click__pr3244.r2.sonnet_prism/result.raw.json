@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 139391,
+  "stop_reason": "end_turn",
+  "session_id": "18031c9d-f551-476d-bba1-c57785f7da1e",
+  "total_cost_usd": 0.48429180000000005,
+  "usage": {
+    "input_tokens": 58,
+    "cache_creation_input_tokens": 42530,
+    "cache_read_input_tokens": 882339,
+    "output_tokens": 13356,
+    "output_tokens_details": {
+      "thinking_tokens": 6568
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 42530,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 726,
+        "cache_read_input_tokens": 49194,
+        "cache_creation_input_tokens": 361,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 361
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 15,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004028,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 58,
+      "outputTokens": 13356,
+      "cacheReadInputTokens": 882339,
+      "cacheCreationInputTokens": 42530,
+      "webSearchRequests": 0,
+      "costUSD": 0.4802638,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 6568,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 29,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "The fix works and the full test suite (1419 passed, 24 skipped, 1 xfailed \u2014 no failures) is green.\n\n## Summary\n\nThe `UnsupportedOperation: fileno` error happened because `CliRunner.isolation()` backed `sys.stdout`/`sys.stderr` with `io.BytesIO` objects (via `BytesIOCopy`), which have no real OS-level file descriptor. Passing such a stream to `subprocess.run(stdout=...)` requires `.fileno()` to work, which `BytesIO` doesn't support.\n\n**Fix** in `src/click/testing.py`:\n- Added `_NamedTemporaryFileCopy`, a small wrapper around a real `tempfile.TemporaryFile()` (which has a genuine OS file descriptor) that still duplicates everything written to it into another stream (mirroring `BytesIOCopy`'s behavior), and exposes `fileno()`/`getvalue()`.\n- `StreamMixer.stdout`/`StreamMixer.stderr` now use `_NamedTemporaryFileCopy` instead of `BytesIOCopy`, so `_NamedTextIOWrapper.fileno()` (inherited from `io.TextIOWrapper`) correctly delegates to a real fd, allowing `subprocess.run(stdout=sys.stderr)` (or `stdout`) to work inside `CliRunner.invoke()`.\n- `CliRunner.isolation()` now explicitly closes `stream_mixer.stdout`/`stderr` in its `finally` block to release the temporary file descriptors, and `_NamedTemporaryFileCopy.__del__` closes the file as a safety net if an instance is never explicitly closed.\n- Kept the original `BytesIOCopy` class intact since it's still part of the public-ish API relied on elsewhere.\n\nRan `python -m pytest` on the full suite: **1419 passed, 24 skipped, 1 xfailed**, and verified the original SSCCE reproduction from the issue no longer raises and correctly captures `foo\\n` in `stderr`.\n\nNo changes were made to tests, docs, or configuration; nothing was committed.",
+  "ttft_ms": 1899,
+  "type": "result",
+  "duration_ms": 146322,
+  "uuid": "2c0c7f15-ade8-41d5-a350-1d32c102ee62",
+  "ttft_stream_ms": 641,
+  "time_to_request_ms": 43,
+  "first_content_frame_ms": 641,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

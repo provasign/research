@@ -1,0 +1,28 @@
+diff --git a/src/click/shell_completion.py b/src/click/shell_completion.py
+index 7235f10..cc88e1d 100644
+--- a/src/click/shell_completion.py
++++ b/src/click/shell_completion.py
+@@ -6,6 +6,7 @@ import re
+ import typing as t
+ from gettext import gettext as _
+ 
++from ._compat import get_binary_stdout
+ from .core import Argument
+ from .core import Command
+ from .core import Context
+@@ -44,7 +45,14 @@ def shell_complete(
+     comp = comp_cls(cli, ctx_args, prog_name, complete_var)
+ 
+     if instruction == "source":
+-        echo(comp.source())
++        # Write directly to the binary stream so newlines in the
++        # generated shell script are not translated to "\r\n" by a
++        # text-mode stdout (e.g. on Windows). A script containing "\r\n"
++        # line endings can fail to parse when ``eval``-ed by shells such
++        # as zsh, producing errors like "parse error near `elif'".
++        stdout = get_binary_stdout()
++        stdout.write(comp.source().encode())
++        stdout.flush()
+         return 0
+ 
+     if instruction == "complete":
