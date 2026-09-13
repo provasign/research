@@ -34,24 +34,27 @@ Turns/cost track the number of edit→test cycles, not the tool. n=1 per cell; t
 Same pilot pair (`pallets__click__pr3244`, `urllib3__urllib3__pr3786`), Prism arm only, 3 trials per task per build,
 Claude Sonnet, thinking captured, network blocked (`--disallowedTools` + `GIT_ALLOW_PROTOCOL=file`). Run B crashed after 5 of 6
 cells on a `permission_denied` system event with a string `message` (the deny list refusing `pip download` in click r3);
-`bench.py rescore` rebuilt that cell from its transcript and scored all five. urllib3 r3 on the new build never ran.
-Valid cells only:
+`bench.py rescore` rebuilt that cell from its transcript and scored all five. urllib3 r3 on the new build was run afterwards
+as its own run dir, `../batch-codex-fix-r3/` (same Prism sha256, post-crash-fix runner; see its NOTE.md) — the new-build
+sample below is those 5 + 1. Valid cells only:
 
-| | OLD v0.74.1 (n=6) | NEW Codex first-result build (n=5) |
+| | OLD v0.74.1 (n=6) | NEW Codex first-result build (n=6) |
 |---|---:|---:|
-| resolved | 2/6 (click 2/3, urllib3 0/3) | 3/5 (click 3/3, urllib3 0/2) |
-| cells with a follow-up op (`read`/`lookup`) | 1/6 | 2/5 |
-| mean Prism calls | 1.7 | 2.2 |
-| mean native reads (discovery / edit-prerequisite) | 5.5 (4.5 / 1.0) | 5.8 (4.6 / 1.2) |
-| mean KB read | 19.6 | 23.9 |
-| mean edits / turns | 2.7 / 22.8 | 2.4 / 22.2 |
-| mean cost | $0.39 | $0.39 |
+| resolved | 2/6 (click 2/3, urllib3 0/3) | 3/6 (click 3/3, urllib3 0/3) |
+| cells with a follow-up op (`read`/`lookup`) | 1/6 | 2/6 |
+| mean Prism calls | 1.7 | 2.0 |
+| mean native reads (discovery / edit-prerequisite) | 5.5 (4.5 / 1.0) | 6.5 (5.3 / 1.2) |
+| mean KB read | 19.6 | 28.5 |
+| mean edits / turns | 2.7 / 22.8 | 2.3 / 22.5 |
+| mean cost | $0.39 | $0.40 |
 | network: executed / blocked attempts | 0 / 0 | 0 / 1 |
 
-Read: the first-result change is behaviorally neutral at this size — turns, cost and discovery reads unchanged, bytes read
-slightly up; follow-up-op use 1/6 → 2/5 is direction-consistent but not a signal at n≈6. urllib3 resolved 0/5 across both
-builds (at or past the model's ceiling here). The block held on the one live attempt. Discovery reads (~4.5/cell) go native
-regardless of first-result content — the instruction-level lever is the untried one.
+Read: the first-result change is behaviorally neutral on turns and cost at this size, and the new build read MORE natively
+(6.5 reads / 28.5 KB per cell vs 5.5 / 19.6) — the inlined body coexisted with native reading rather than displacing it.
+Follow-up-op use 1/6 → 2/6 is direction-consistent but not a signal at n=6. Resolved 3/6 vs 2/6 is one click cell at n=3;
+urllib3 0/6 across both builds (at or past the model's ceiling here — swap it for a ~50%-solvable task in any further batch).
+The block held on the one live attempt. Discovery reads (~4.5–5.3/cell) go native regardless of first-result content — the
+instruction-level lever is the untried one.
 
 "discovery" vs "edit-prerequisite": a native Read immediately followed by an Edit of the same file is counted as the
 prerequisite Claude Code's Edit tool requires; every other Read is discovery. Recovered cell: `batch-codex-fix/…click…r3`

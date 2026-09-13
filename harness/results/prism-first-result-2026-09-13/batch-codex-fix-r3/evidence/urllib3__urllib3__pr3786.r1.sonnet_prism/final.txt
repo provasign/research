@@ -1,0 +1,9 @@
+The fix addresses the issue:
+
+1. **`src/urllib3/poolmanager.py`** — `ProxyManager.__init__` now validates: when `use_forwarding_for_https=True` and an `ssl_context` is passed (meant for the origin), it raises `ValueError` — a more specific one if `proxy_ssl_context` was also given (mutually exclusive), otherwise instructing to use `proxy_ssl_context` instead (this is the 2.x codebase, so `ValueError` per the requirements rather than a deprecation warning).
+
+2. **`src/urllib3/connection.py`** — `HTTPSConnection.connect()` previously always wrapped the socket using `self.ssl_context` (the target/origin TLS settings), even when actually connecting directly to an HTTPS proxy in forwarding mode (`proxy_is_forwarding`). Now, in that case it uses `proxy_config.ssl_context` (i.e. `proxy_ssl_context`) along with the proxy's `assert_hostname`/`assert_fingerprint`, matching what tunnel mode already does via `_connect_tls_proxy`.
+
+I left the test file (`test_proxy_poolmanager.py`, including the `pytest.skip` for `test_proxy_https_target_tls_error`) untouched per the task instructions not to modify tests, even though the issue's checklist mentions removing that skip.
+
+Ran `test_proxymanager.py`, `test_poolmanager.py`, `test_connection.py`, and `test_util.py` — all pass (603 passed, 6 skipped unrelated). Also manually verified the new `ValueError` is raised as expected. No files were committed.
