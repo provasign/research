@@ -107,14 +107,15 @@ TEST_CMD_BY_LANGUAGE = {
 }
 
 
-def prompt_for_coding(task: dict) -> str:
+def prompt_for_coding(task: dict, timeout_s: int = 300) -> str:
     test_cmd = TEST_CMD_BY_LANGUAGE.get(task.get("language", "python"), "the project's own test runner")
+    budget = f"{round(timeout_s / 60)}-minute" if timeout_s >= 60 else f"{timeout_s}-second"
     return f"""Work only in the repository in your current directory. Do not use the network,
 git history, benchmark files, saved answers, memory, skills, or delegated agents. Fix the SOURCE
 code so the issue below is resolved. Do not modify tests, docs, changelogs, or configuration.
 Make the smallest robust change. Investigate, edit, and run a narrow relevant test if time permits;
 do not commit. Dependencies are preinstalled; use `{test_cmd}` for narrow tests. You have a
-strict five-minute work budget. A patch present at timeout will still be scored.
+strict {budget} work budget. A patch present at timeout will still be scored.
 
 ISSUE:
 """ + task["problem_statement"]
@@ -452,7 +453,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         tool_cli_dirs["codegraph"] = cli_dir
 
     cfg = rc.AgentConfig(sonnet_model=models["claude"], gpt_model=models["codex"],
-                        timeout_s=300, max_budget_usd="1.50", permission_mode="skip",
+                        timeout_s=args.timeout_s, max_budget_usd=args.max_budget_usd, permission_mode="skip",
                         tools="Read,Grep,Glob,Bash,Edit,Write",
                         allowed_tools="Read,Grep,Glob,Bash,Edit,Write,mcp__prism,mcp__codegraph",
                         project_doc_max_bytes=32768, output_schema=False,
@@ -566,7 +567,7 @@ def cmd_run(args: argparse.Namespace) -> int:
                 print(f"CELL {next_cell + 1}/{len(scheduled)} {key}", flush=True)
                 cell = rc.prepare_cell(
                     root, key, arm, template, cfg, tool_binaries.get(tool),
-                    prompt_for_coding(tasks[task_id]), env_dir=env_dir,
+                    prompt_for_coding(tasks[task_id], args.timeout_s), env_dir=env_dir,
                     tool_cli_dir=tool_cli_dirs.get(tool),
                     extra={"task_id": task_id, "trial": trial, "baseline": baseline,
                            "setup_files": setup_files, "allow_source_edits": True},
@@ -629,6 +630,17 @@ def main() -> int:
                             "or PATH -- see lib.runner_core.resolve_codegraph_binary). Only "
                             "resolved when codegraph is among the selected --tools.")
     run_p.add_argument("--trials", type=int, default=1)
+    run_p.add_argument("--timeout-s", type=int, default=300,
+                       help="per-cell wall-clock budget in seconds (default: 300, the "
+                            "value every prior study used). A model that would keep working "
+                            "past this is truncated regardless of task complexity -- turns "
+                            "observed at 300s do not show whether a task is 'high-turn', "
+                            "only what fits in 5 minutes. Raise this, not the task set, to "
+                            "test whether turns grow when the cap is not binding.")
+    run_p.add_argument("--max-budget-usd", default="1.50",
+                       help="per-cell Claude Code spend cap (default: 1.50). Raise together "
+                            "with --timeout-s -- a longer wall clock is moot if the session "
+                            "hits this cap first.")
     run_p.add_argument("--phase", choices=("pilot", "remaining", "full"), default="pilot")
     run_p.add_argument("--concurrency", type=int, default=4)
     run_p.add_argument("--out", dest="out", default=None,

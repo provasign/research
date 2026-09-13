@@ -201,3 +201,19 @@ def test_stop_reason_only_for_run_breaking_conditions():
     assert bench.stop_reason({"audited_valid": True, "violations": []}) is None
     assert bench.stop_reason({"audited_valid": False, "harness_error": "KeyError('x')"}).startswith("harness error")
     assert bench.stop_reason({"audited_valid": False, "violations": ["own tool had no successful calls"]}).startswith("protocol violation")
+
+
+def test_prompt_for_coding_states_the_actual_budget_and_language():
+    """The prompt's stated work budget must track --timeout-s: telling the
+    agent 'five minutes' while it actually gets 30 is a lie that would bias
+    its pacing. Added with --timeout-s/--max-budget-usd 2026-09-13 after a
+    polyglot run showed turns capped by the hardcoded 300s, not by task
+    complexity -- raising the budget is the fix, and the prompt must agree
+    with whatever budget is actually configured."""
+    task = {"problem_statement": "x", "language": "go"}
+    assert "5-minute" in bench.prompt_for_coding(task, 300)
+    assert "30-minute" in bench.prompt_for_coding(task, 1800)
+    assert "45-second" in bench.prompt_for_coding(task, 45)
+    assert "go test ./..." in bench.prompt_for_coding(task, 300)
+    py_task = {"problem_statement": "x"}
+    assert "python -m pytest" in bench.prompt_for_coding(py_task, 300)
