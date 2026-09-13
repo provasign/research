@@ -243,6 +243,23 @@ def harness_error_row(cell: rc.Cell, exc: BaseException) -> dict:
     return row
 
 
+def stop_reason(row: dict) -> str | None:
+    """Why a finished cell should halt submission of new cells, or None.
+
+    Only conditions that mean the *run* is broken stop it: a harness error
+    (summarize/audit raised) or a protocol violation (cross-tool use, no
+    successful own-tool call, approval-blocked call) -- those repeat in every
+    later cell and waste money. A timeout, an agent error, or an incomplete
+    measurement is an outcome of that one cell; it is recorded as invalid and
+    the run continues. (2026-09-13: a sequential click cell hit the 300 s
+    budget and halted a 6-cell run after 2.)"""
+    if row.get("harness_error"):
+        return f"harness error: {row['harness_error']}"
+    if row.get("violations"):
+        return "protocol violation: " + "; ".join(map(str, row["violations"]))
+    return None
+
+
 def score_and_summarize(root: Path, rows: list[dict], tasks: dict, manifest: dict,
                         concurrency: int) -> str:
     """Docker-score every row without a verdict, write summary.json, update
@@ -562,10 +579,14 @@ def cmd_run(args: argparse.Namespace) -> int:
                     row = harness_error_row(cell, exc)
                 rows.append(row)
                 if not row.get("audited_valid"):
+                    print(f"INVALID {cell.key}: timed_out={row.get('timed_out')} "
+                          f"agent_error={row.get('agent_error')} violations={row.get('violations')}",
+                          flush=True)
+                reason = stop_reason(row)
+                if reason and not stopped:
                     stopped = True
+                    print(f"STOP: {cell.key}: {reason}; no new cells submitted", flush=True)
             rc.dump(root / "summary.json", {"status": "agents_running", "rows": rows})
-    if stopped:
-        print("STOP: invalid agent cell; no new cells submitted", flush=True)
     order_by_key = {f"{task}.r{trial}.{arm}": i for i, (task, trial, arm) in enumerate(scheduled)}
     rows.sort(key=lambda row: order_by_key[row["cell_id"]])
 

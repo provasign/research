@@ -190,3 +190,14 @@ class NavigationMetricsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_stop_reason_only_for_run_breaking_conditions():
+    """Timeouts and agent errors are cell outcomes; the run continues.
+    Harness errors and protocol violations repeat, so they stop it."""
+    assert bench.stop_reason({"audited_valid": False, "timed_out": True, "violations": []}) is None
+    assert bench.stop_reason({"audited_valid": False, "agent_error": True, "violations": []}) is None
+    assert bench.stop_reason({"audited_valid": False, "measurement_complete": False, "violations": []}) is None
+    assert bench.stop_reason({"audited_valid": True, "violations": []}) is None
+    assert bench.stop_reason({"audited_valid": False, "harness_error": "KeyError('x')"}).startswith("harness error")
+    assert bench.stop_reason({"audited_valid": False, "violations": ["own tool had no successful calls"]}).startswith("protocol violation")
