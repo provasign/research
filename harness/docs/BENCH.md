@@ -62,6 +62,11 @@ python3 bench.py run --suite e2e --tasks pallets__click__pr3244 \
 # Override models.
 python3 bench.py run --suite e2e --phase pilot \
     --models claude=claude-opus-5,codex=gpt-5.5-mini --out /tmp/opus-run
+
+# Paired native/Prism comparison with reasoning capture and three trials.
+python3 bench.py run --suite e2e --phase full --agents claude \
+    --tools native,prism --trials 3 --concurrency 3 \
+    --prism-binary /path/to/prism --out /tmp/paired-run
 ```
 
 Flags:
@@ -73,7 +78,11 @@ Flags:
 - `--models claude=<model>,codex=<model>` — override either or both
   defaults (`claude-sonnet-5`, `gpt-5.5`).
 - `--prism both|on|off` — default `both` (the full native+prism matrix); use
-  `on`/`off` with `--agents` to narrow to one or two arms.
+  `on`/`off` with `--agents` to narrow to one or two arms. `--tools` takes
+  precedence when both are given.
+- `--tools native,prism[,codegraph]` — select paired or individual tool arms.
+  Every selected agent runs once per selected tool and trial. For a CodeGraph
+  arm, `--codegraph-binary PATH` selects its executable.
 - `--prism-binary PATH` — which `prism` binary to use: a system install, a
   pinned release, or one built on the fly all work. Resolution order when
   omitted: `$PRISM_BINARY` env var (legacy alias `$PRISM_V072_BINARY`), then
@@ -81,6 +90,9 @@ Flags:
   naming everything it tried, rather than silently picking a missing binary.
   See `lib.runner_core.resolve_prism_binary`.
 - `--trials N`, `--concurrency N`, `--phase pilot|remaining|full`.
+- `--concurrency N` caps concurrent agent cells across tasks and trials. An
+  invalid cell stops new submissions; cells already running finish and retain
+  evidence for `bench.py rescore`.
 - `--out DIR` — run directory; default `harness/results/bench-<suite>-<timestamp>`.
 - `--preflight-only` — validate tasks, build templates/venvs, write
   `manifest.json`, and stop before invoking any agent.
@@ -90,6 +102,14 @@ Output is the same `manifest.json` / `summary.json` / per-cell
 `harness/results/*` (`cell_id`, `task`, `arm`, `tokens`, `turns`, `wall_s`,
 `cost_usd`, `resolved`, ...).
 
+Claude cells request visible reasoning. `thinking_chars` in each
+`measurement.json` confirms whether the service actually returned it; zero
+means reasoning-based explanations cannot be verified from that transcript.
+Agent network access is blocked by Claude tool restrictions, Codex sandboxing,
+and Git's file-only transport. The audit records failed fetch commands as
+`network_attempts_blocked`; an executed fetch is a protocol violation. URL
+literals and indirect commands are suspect evidence, not proof of access.
+
 ## Indexing results
 
 ```
@@ -97,12 +117,16 @@ python3 bench.py index
 python3 bench.py index --results-dir harness/results --out harness/results/index.jsonl
 ```
 
-Scans every `summary.json` under `--results-dir` and appends one JSONL row
-per cell to `--out`: `{suite, task, agent, model, prism, trial, tokens,
-turns, wall_s, cost_usd, resolved, run_dir, cell_id, timestamp}`. Idempotent
-and safe to re-run against a growing results directory — it dedupes by
-`(run_dir, cell_id)`, so re-running after new runs land only appends the new
-rows.
+Scans every `summary.json` under `--results-dir` and writes one JSONL row
+per cell to `--out`, including validity, resolution, turns, cost, blocked
+network attempts, and, for Claude transcripts, Prism MCP call/op sequence,
+second-call and later read/lookup flags, native Read counts split into discovery versus immediate
+same-file Edit prerequisites, whole-file Reads, read KiB, and native edits.
+The edit-prerequisite rule is deliberately narrow: a Read is classified that
+way only when the next tool call is an Edit of the same file. Codex cells have
+no Claude Read tool events, so those navigation fields are absent. Re-running
+rebuilds rows from current summaries and transcripts, deduped by
+`(run_dir, cell_id)`; historical measurements are never modified.
 
 ## Deferred
 

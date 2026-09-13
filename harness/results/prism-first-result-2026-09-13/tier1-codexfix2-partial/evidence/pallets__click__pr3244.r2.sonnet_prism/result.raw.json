@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 207535,
+  "stop_reason": "end_turn",
+  "session_id": "71e8bdc7-437d-481a-a0b2-abc4e071c8ae",
+  "total_cost_usd": 0.5275612000000001,
+  "usage": {
+    "input_tokens": 42,
+    "cache_creation_input_tokens": 47356,
+    "cache_read_input_tokens": 763501,
+    "output_tokens": 18133,
+    "output_tokens_details": {
+      "thinking_tokens": 13084
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 47356,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 669,
+        "cache_read_input_tokens": 54070,
+        "cache_creation_input_tokens": 297,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 297
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 14,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004023,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 42,
+      "outputTokens": 18133,
+      "cacheReadInputTokens": 763501,
+      "cacheCreationInputTokens": 47356,
+      "webSearchRequests": 0,
+      "costUSD": 0.5235382000000001,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 13084,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 21,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "## Summary\n\nThe `CliRunner` isolation replaced `sys.stdout`/`sys.stderr` with `io.TextIOWrapper` objects backed by plain `io.BytesIO` buffers (`BytesIOCopy`/`StreamMixer` in `src/click/testing.py`). In-memory `BytesIO` has no real file descriptor, so any code invoked under `CliRunner.invoke()` that passed `sys.stdout`/`sys.stderr` to `subprocess.run(...)` (which calls `.fileno()` on non-special stream arguments) raised `io.UnsupportedOperation: fileno`.\n\n**Fix** (`src/click/testing.py`): `BytesIOCopy` is now backed by a real `tempfile.TemporaryFile()` instead of `io.BytesIO`, so `fileno()` (and other file-only operations) work as expected while preserving the class's existing `write`/`flush`/`getvalue`/copy-forwarding behavior via delegation. Added:\n- an explicit close of the `StreamMixer` buffers at the end of `CliRunner.isolation()`'s cleanup, and\n- a `__del__` on `BytesIOCopy` that closes its backing file, so temp files opened during tests don't trigger `ResourceWarning: unclosed file` if a caller (or test) never closes them explicitly.\n\nVerified:\n- The reported reproduction case (`subprocess.run([\"echo\", \"foo\"], stdout=sys.stderr)` invoked via `CliRunner`) now passes.\n- Full existing test suite: `1419 passed, 24 skipped, 30000 deselected, 1 xfailed` \u2014 no regressions, including `tests/test_stream_lifecycle.py` and `tests/test_testing.py`, which exercise `BytesIOCopy`/`StreamMixer` lifecycle directly.\n\nNo tests, docs, changelog, or config files were modified \u2014 only `src/click/testing.py`. The change was not committed, per instructions.",
+  "ttft_ms": 3035,
+  "type": "result",
+  "duration_ms": 216388,
+  "uuid": "9ad3dea1-c7a9-412e-9740-567eaa08c10f",
+  "ttft_stream_ms": 1057,
+  "time_to_request_ms": 24,
+  "first_content_frame_ms": 1057,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

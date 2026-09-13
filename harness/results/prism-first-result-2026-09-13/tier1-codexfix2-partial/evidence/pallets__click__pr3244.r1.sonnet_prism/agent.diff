@@ -1,0 +1,90 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..57a41a6 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -67,23 +67,45 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+         stream._paused = False
+ 
+ 
+-class BytesIOCopy(io.BytesIO):
+-    """Patch ``io.BytesIO`` to let the written stream be copied to another.
++def BytesIOCopy(copy_to: t.BinaryIO) -> t.BinaryIO:
++    """Return a binary stream that copies everything written to it into
++    ``copy_to``.
++
++    Unlike ``io.BytesIO``, the returned stream is backed by a real OS file
++    descriptor, so it can be used as ``stdout``/``stderr`` for a
++    :class:`subprocess.Popen` (e.g. via :func:`subprocess.run`) invoked by
++    code under test.
+ 
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.3.3
++        Backed by a real file instead of :class:`io.BytesIO` so that
++        ``fileno()`` is available to subprocesses.
++        :issue:`2523`
+     """
++    stream = tempfile.TemporaryFile()
++    raw_write = stream.write
++    raw_flush = stream.flush
++
++    def write(b: ReadableBuffer) -> int:
++        copy_to.write(b)
++        return raw_write(b)
+ 
+-    def __init__(self, copy_to: io.BytesIO) -> None:
+-        super().__init__()
+-        self.copy_to = copy_to
++    def flush() -> None:
++        raw_flush()
++        copy_to.flush()
+ 
+-    def flush(self) -> None:
+-        super().flush()
+-        self.copy_to.flush()
++    def getvalue() -> bytes:
++        pos = stream.tell()
++        stream.seek(0)
++        data = stream.read()
++        stream.seek(pos)
++        return data
+ 
+-    def write(self, b: ReadableBuffer) -> int:
+-        self.copy_to.write(b)
+-        return super().write(b)
++    stream.write = write  # type: ignore[method-assign]
++    stream.flush = flush  # type: ignore[method-assign]
++    stream.getvalue = getvalue  # type: ignore[attr-defined]
++    return t.cast("t.BinaryIO", stream)
+ 
+ 
+ class StreamMixer:
+@@ -96,8 +118,8 @@ class StreamMixer:
+ 
+     def __init__(self) -> None:
+         self.output: io.BytesIO = io.BytesIO()
+-        self.stdout: io.BytesIO = BytesIOCopy(copy_to=self.output)
+-        self.stderr: io.BytesIO = BytesIOCopy(copy_to=self.output)
++        self.stdout: t.BinaryIO = BytesIOCopy(copy_to=self.output)
++        self.stderr: t.BinaryIO = BytesIOCopy(copy_to=self.output)
+ 
+ 
+ class _NamedTextIOWrapper(io.TextIOWrapper):
+@@ -280,7 +302,7 @@ class CliRunner:
+         input: str | bytes | t.IO[t.Any] | None = None,
+         env: cabc.Mapping[str, str | None] | None = None,
+         color: bool = False,
+-    ) -> cabc.Iterator[tuple[io.BytesIO, io.BytesIO, io.BytesIO]]:
++    ) -> cabc.Iterator[tuple[t.BinaryIO, t.BinaryIO, io.BytesIO]]:
+         """A context manager that sets up the isolation for invoking of a
+         command line tool.  This sets up `<stdin>` with the given input data
+         and `os.environ` with the overrides from the given dictionary.
+@@ -471,6 +493,8 @@ class CliRunner:
+             _compat.should_strip_ansi = old__compat_should_strip_ansi
+             formatting.FORCED_WIDTH = old_forced_width
+             pdb.Pdb.__init__ = old_pdb_init  # type: ignore[method-assign]
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
+ 
+     def invoke(
+         self,

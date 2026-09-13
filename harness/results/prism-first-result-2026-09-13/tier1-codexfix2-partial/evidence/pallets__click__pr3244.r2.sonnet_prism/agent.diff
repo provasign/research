@@ -1,0 +1,90 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..b113bef 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -67,23 +67,53 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+         stream._paused = False
+ 
+ 
+-class BytesIOCopy(io.BytesIO):
+-    """Patch ``io.BytesIO`` to let the written stream be copied to another.
++class BytesIOCopy:
++    """A binary stream, backed by a real (temporary) file so that it has a
++    usable ``fileno()``, that copies everything written to it into another
++    stream.
++
++    Being backed by a real file (rather than :class:`io.BytesIO`) allows the
++    stream to be passed to APIs such as :func:`subprocess.run` that need a
++    file descriptor, for example when a command redirects its own
++    `<stdout>`/`<stderr>` to a subprocess.
+ 
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.3
++        Backed by a temporary file instead of :class:`io.BytesIO` so
++        ``fileno()`` is supported.
+     """
+ 
+-    def __init__(self, copy_to: io.BytesIO) -> None:
+-        super().__init__()
++    def __init__(self, copy_to: t.BinaryIO | None = None) -> None:
++        self._file = tempfile.TemporaryFile()
+         self.copy_to = copy_to
+ 
+-    def flush(self) -> None:
+-        super().flush()
+-        self.copy_to.flush()
++    def __getattr__(self, name: str) -> t.Any:
++        return getattr(self._file, name)
+ 
+     def write(self, b: ReadableBuffer) -> int:
+-        self.copy_to.write(b)
+-        return super().write(b)
++        if self.copy_to is not None:
++            self.copy_to.write(b)
++        return self._file.write(b)
++
++    def flush(self) -> None:
++        self._file.flush()
++        if self.copy_to is not None:
++            self.copy_to.flush()
++
++    def getvalue(self) -> bytes:
++        pos = self._file.tell()
++        self._file.seek(0)
++        data = self._file.read()
++        self._file.seek(pos)
++        return data
++
++    def __del__(self) -> None:
++        # Make sure the backing temporary file doesn't trigger a
++        # "ResourceWarning: unclosed file" if it wasn't explicitly closed.
++        file = self.__dict__.get("_file")
++        if file is not None:
++            file.close()
+ 
+ 
+ class StreamMixer:
+@@ -95,9 +125,9 @@ class StreamMixer:
+     """
+ 
+     def __init__(self) -> None:
+-        self.output: io.BytesIO = io.BytesIO()
+-        self.stdout: io.BytesIO = BytesIOCopy(copy_to=self.output)
+-        self.stderr: io.BytesIO = BytesIOCopy(copy_to=self.output)
++        self.output: BytesIOCopy = BytesIOCopy()
++        self.stdout: BytesIOCopy = BytesIOCopy(copy_to=self.output)
++        self.stderr: BytesIOCopy = BytesIOCopy(copy_to=self.output)
+ 
+ 
+ class _NamedTextIOWrapper(io.TextIOWrapper):
+@@ -471,6 +501,9 @@ class CliRunner:
+             _compat.should_strip_ansi = old__compat_should_strip_ansi
+             formatting.FORCED_WIDTH = old_forced_width
+             pdb.Pdb.__init__ = old_pdb_init  # type: ignore[method-assign]
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
++            stream_mixer.output.close()
+ 
+     def invoke(
+         self,

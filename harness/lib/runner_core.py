@@ -17,6 +17,7 @@ suite/runner needs zero code changes here -- only a different config.
 """
 from __future__ import annotations
 
+import ast
 import hashlib
 import io
 import json
@@ -163,7 +164,7 @@ def _invokes_cli(value: str, binary_name: str) -> bool:
         tokens = shlex.split(value)
     except ValueError:
         tokens = value.split()
-    return any(Path(token).name.startswith(binary_name) for token in tokens)
+    return any(Path(token).name == binary_name for token in tokens)
 
 
 def invokes_prism(value: str) -> bool:
@@ -203,10 +204,9 @@ _NETWORK_SUSPECT = re.compile(r"https?://")
 # A heredoc body fed to `cat`/`tee` is text being WRITTEN to a file, not a
 # command being RUN -- `cat > repro.py <<'EOF' ... pip install foo ... EOF`
 # must not match. But a heredoc fed to an interpreter (`python - <<'PY'`,
-# `bash <<EOF`, or `cat <<EOF | python`) IS executed, so its body is kept:
-# a `pip download` or URL inside it is live code. The opener line and
-# anything after the terminator are always kept, so a real fetch following
-# a written heredoc still counts.
+# `bash <<EOF`, or `cat <<EOF | python`) IS executed. Python bodies need an
+# AST check: a dictionary containing `{"command": "curl ..."}` is not a
+# fetch. The opener and commands after the terminator remain in shell scope.
 _HEREDOC = re.compile(
     r"((?:^|(?<=\n))[^\n]*<<-?\s*['\"]?(\w+)['\"]?[^\n]*\n).*?\n[ \t]*\2[ \t]*(?:\n|$)", re.S
 )
@@ -216,18 +216,63 @@ def _heredoc_sub(m: re.Match) -> str:
     opener = m.group(1)
     before, after = opener.split("<<", 1)
     writes_file = re.search(r"\b(?:cat|tee)\b", before) is not None and "|" not in after
-    return opener if writes_file else m.group(0)
+    runs_python = re.search(r"\bpython(?:\d+(?:\.\d+)?)?\b", opener) is not None
+    return opener if writes_file or runs_python else m.group(0)
 
 
 def _without_heredoc_bodies(value: str) -> str:
     return _HEREDOC.sub(_heredoc_sub, value)
 
 
+_PYTHON_C = re.compile(r"\bpython(?:\d+(?:\.\d+)?)?\s+-c\s+(['\"])(.*?)\1", re.S)
+
+
+def _python_embedded_code(value: str) -> tuple[str, list[str]]:
+    """Separate Python code from shell commands without declaring literals run."""
+    bodies = []
+    for match in _HEREDOC.finditer(value):
+        if re.search(r"\bpython(?:\d+(?:\.\d+)?)?\b", match.group(1)):
+            bodies.append("\n".join(match.group(0)[len(match.group(1)):].splitlines()[:-1]))
+    shell = _without_heredoc_bodies(value)
+
+    def take(match: re.Match) -> str:
+        bodies.append(match.group(2))
+        return "python -c"
+
+    return _PYTHON_C.sub(take, shell), bodies
+
+
+def _python_executes_fetch(code: str) -> bool:
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return False
+    executors = {"subprocess.run", "subprocess.call", "subprocess.check_call",
+                 "subprocess.check_output", "os.system", "os.popen"}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not node.args:
+            continue
+        name = ""
+        if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name):
+            name = node.func.value.id + "." + node.func.attr
+        if name not in executors:
+            continue
+        try:
+            command = ast.literal_eval(node.args[0])
+        except (ValueError, TypeError):
+            continue
+        if isinstance(command, (list, tuple)):
+            command = " ".join(str(part) for part in command)
+        if isinstance(command, str) and _NETWORK_DEFINITE.search(command) and not _PIP_LOCAL_INSTALL.search(command):
+            return True
+    return False
+
+
 def classify_network(value: str) -> str | None:
     """'definite' for a command that fetches from the network; 'suspect' for a
     local-path `pip install` or a bare URL literal (recorded for review, never
     asserted); else None."""
-    cmd = _without_heredoc_bodies(value)
+    cmd, python_bodies = _python_embedded_code(value)
     hit = False
     for m in _NETWORK_DEFINITE.finditer(cmd):
         hit = True
@@ -235,7 +280,11 @@ def classify_network(value: str) -> str | None:
         if re.match(r"(?:uv\s+)?pip3?\s+install\b", tail) and _PIP_LOCAL_INSTALL.match(tail):
             continue
         return "definite"
-    if hit or _NETWORK_SUSPECT.search(cmd):
+    if any(_python_executes_fetch(code) for code in python_bodies):
+        return "definite"
+    if hit or _NETWORK_SUSPECT.search(cmd) or any(
+            _NETWORK_DEFINITE.search(code) or _NETWORK_SUSPECT.search(code)
+            for code in python_bodies):
         return "suspect"
     return None
 
@@ -867,7 +916,10 @@ def prepare_environment(root: Path, key: str, base: Path) -> Path:
     subprocess.run([python, "-m", "venv", str(env_dir)], check=True)
     env_python = env_dir / "bin/python"
     uv = shutil.which("uv")
-    installed = False
+    packaged = any((base / name).exists() for name in ("pyproject.toml", "setup.py", "setup.cfg"))
+    installed = not packaged
+    if not packaged:
+        logs.append({"target": "source-only repository (no package metadata)", "exit_code": 0})
     if uv and (base / "uv.lock").exists():
         sync_env = os.environ.copy()
         sync_env["UV_PROJECT_ENVIRONMENT"] = str(env_dir)

@@ -5,6 +5,14 @@ production recommendations and corrects validity/quality claims in S1–S8.
 The combined implementation remains local and uncommitted. No release is
 approved by this study.
 
+**2026-09-13 validity addendum.** Five cells previously counted as valid ran
+`pip download`, which could fetch a published fix for this merged upstream PR:
+Prism `s3-compact-t3`, `s3-json-t4`, `s4-dedup-off-t1`; native
+`s1-treatment-t2`, `s3-compact-t2`. Both arms are affected. Treat comparisons
+that include these cells as contaminated and re-evaluate the study's cost and
+quality conclusions on a network-blocked, audited task set. The original
+measurements remain unchanged as historical evidence.
+
 ## Question
 
 Can Prism reduce Sonnet's cost on ordinary coding work without cost-specific

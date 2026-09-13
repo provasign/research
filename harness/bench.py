@@ -41,6 +41,7 @@ for _d in (HARNESS, HARNESS / "runners", HARNESS / "aggregate",
 from lib import runner_core as rc  # noqa: E402
 from lib import scoring as sc  # noqa: E402
 from lib import suites  # noqa: E402
+from lib.cell_metrics import claude_navigation_metrics  # noqa: E402
 from lib.pricing import GPT55_PRICING, add_gpt55_cost  # noqa: E402
 
 AGENT_ARM_PREFIX = {"claude": "sonnet", "codex": "gpt55"}
@@ -139,17 +140,14 @@ def cmd_list_tasks(args: argparse.Namespace) -> int:
 def cmd_index(args: argparse.Namespace) -> int:
     results_dir = Path(args.results_dir).resolve()
     out_path = Path(args.out).resolve()
-    seen = set()
-    rows = []
+    rows_by_key = {}
     if out_path.exists():
         for line in out_path.read_text().splitlines():
             if not line.strip():
                 continue
             row = json.loads(line)
             key = (row.get("run_dir"), row.get("cell_id"))
-            if key not in seen:
-                seen.add(key)
-                rows.append(row)
+            rows_by_key[key] = row
     for summary_path in sorted(results_dir.rglob("summary.json")):
         run_dir = summary_path.parent
         try:
@@ -164,9 +162,6 @@ def cmd_index(args: argparse.Namespace) -> int:
         for row in summary.get("rows", []):
             cell_id = row.get("cell_id")
             key = (str(run_dir), cell_id)
-            if key in seen:
-                continue
-            seen.add(key)
             arm = row.get("arm", "")
             agent = "claude" if arm.startswith("sonnet") else "codex" if arm.startswith("gpt55") else arm
             tool = rc.active_tool(arm)
@@ -175,7 +170,7 @@ def cmd_index(args: argparse.Namespace) -> int:
             # designed -- "off" is the least-surprising value for it). New
             # code should read "tool" instead.
             prism = "on" if tool == "prism" else "off"
-            rows.append({
+            indexed = {
                 "suite": manifest.get("study"), "task": row.get("task"), "agent": agent,
                 "model": models.get("sonnet") if agent == "claude" else models.get("gpt"),
                 "prism": prism, "tool": tool, "trial": row.get("trial", 1),
@@ -184,12 +179,18 @@ def cmd_index(args: argparse.Namespace) -> int:
                 "resolved": row.get("resolved"), "run_dir": str(run_dir),
                 "cell_id": cell_id,
                 "timestamp": manifest.get("started_utc"),
-            })
+                "audited_valid": row.get("audited_valid"),
+                "blocked_attempts": len(row.get("network_attempts_blocked") or []),
+            }
+            transcript = run_dir / "evidence" / str(cell_id) / "stdout.jsonl"
+            if agent == "claude" and transcript.is_file():
+                indexed.update(claude_navigation_metrics(transcript))
+            rows_by_key[key] = indexed
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("w") as fh:
-        for row in rows:
-            fh.write(json.dumps(row, sort_keys=True) + "\n")
-    print(f"INDEXED {len(rows)} cells -> {out_path}")
+        for key in sorted(rows_by_key):
+            fh.write(json.dumps(rows_by_key[key], sort_keys=True) + "\n")
+    print(f"INDEXED {len(rows_by_key)} cells -> {out_path}")
     return 0
 
 
@@ -354,6 +355,8 @@ def cmd_rescore(args: argparse.Namespace) -> int:
 
 
 def cmd_run(args: argparse.Namespace) -> int:
+    if args.concurrency < 1 or args.trials < 1:
+        raise SystemExit("--concurrency and --trials must be positive")
     kind = suites.suite_kind(args.suite)
     if kind != "coding":
         raise SystemExit(
@@ -521,35 +524,50 @@ def cmd_run(args: argparse.Namespace) -> int:
             offset = (task_ids.index(task_id) + trial - 1) % len(arms)
             waves.append((task_id, trial, arms[offset:] + arms[:offset]))
 
-    for wave_number, (task_id, trial, order) in enumerate(waves, 1):
-        baseline, env_dir, tool_templates = templates[task_id]
-        print(f"WAVE {wave_number}/{len(waves)} {task_id} trial={trial} order={order}", flush=True)
-        cells = []
-        for arm in order:
-            tool = rc.active_tool(arm)
-            template, setup_files = tool_templates[tool]
-            key = f"{task_id}.r{trial}.{arm}"
-            prompt = prompt_for_coding(tasks[task_id])
-            cell = rc.prepare_cell(root, key, arm, template, cfg, tool_binaries.get(tool), prompt,
-                                   env_dir=env_dir,
-                                   tool_cli_dir=tool_cli_dirs.get(tool),
-                                   extra={"task_id": task_id, "trial": trial, "baseline": baseline,
-                                          "setup_files": setup_files, "allow_source_edits": True})
-            cells.append(cell)
-        with concurrent.futures.ThreadPoolExecutor(max_workers=args.concurrency) as pool:
-            futures = {pool.submit(rc.run_cell, cell, cfg, finalize_coding): cell for cell in cells}
-            for future in concurrent.futures.as_completed(futures):
+    # A single bounded pool spans all task/trial waves. Submit lazily so an
+    # invalid cell stops new work; already-running cells finish and retain
+    # their evidence for rescore. This also makes a one-arm run concurrent.
+    scheduled = [(task_id, trial, arm) for task_id, trial, order in waves for arm in order]
+    next_cell = 0
+    stopped = False
+    with concurrent.futures.ThreadPoolExecutor(max_workers=args.concurrency) as pool:
+        pending = {}
+        while next_cell < len(scheduled) or pending:
+            while not stopped and next_cell < len(scheduled) and len(pending) < args.concurrency:
+                task_id, trial, arm = scheduled[next_cell]
+                baseline, env_dir, tool_templates = templates[task_id]
+                tool = rc.active_tool(arm)
+                template, setup_files = tool_templates[tool]
+                key = f"{task_id}.r{trial}.{arm}"
+                print(f"CELL {next_cell + 1}/{len(scheduled)} {key}", flush=True)
+                cell = rc.prepare_cell(
+                    root, key, arm, template, cfg, tool_binaries.get(tool),
+                    prompt_for_coding(tasks[task_id]), env_dir=env_dir,
+                    tool_cli_dir=tool_cli_dirs.get(tool),
+                    extra={"task_id": task_id, "trial": trial, "baseline": baseline,
+                           "setup_files": setup_files, "allow_source_edits": True},
+                )
+                pending[pool.submit(rc.run_cell, cell, cfg, finalize_coding)] = cell
+                next_cell += 1
+            if not pending:
+                break
+            done, _ = concurrent.futures.wait(pending, return_when=concurrent.futures.FIRST_COMPLETED)
+            for future in done:
+                cell = pending.pop(future)
                 try:
-                    rows.append(future.result())
-                except Exception as exc:  # a summarize/audit/finalize bug must not kill the run
-                    cell = futures[future]
+                    row = future.result()
+                except Exception as exc:  # preserve evidence and allow rescore
                     print(f"HARNESS ERROR in {cell.key}: {exc!r} -- cell marked invalid; "
                           f"rebuild with `bench.py rescore --out {root}` once fixed", flush=True)
-                    rows.append(harness_error_row(cell, exc))
-        rc.dump(root / "summary.json", {"status": "agents_complete", "rows": rows})
-        if any(not row.get("audited_valid") for row in rows[-len(cells):]):
-            print("STOP: invalid agent cell; later waves will not run", flush=True)
-            break
+                    row = harness_error_row(cell, exc)
+                rows.append(row)
+                if not row.get("audited_valid"):
+                    stopped = True
+            rc.dump(root / "summary.json", {"status": "agents_running", "rows": rows})
+    if stopped:
+        print("STOP: invalid agent cell; no new cells submitted", flush=True)
+    order_by_key = {f"{task}.r{trial}.{arm}": i for i, (task, trial, arm) in enumerate(scheduled)}
+    rows.sort(key=lambda row: order_by_key[row["cell_id"]])
 
     status = score_and_summarize(root, rows, tasks, manifest, args.concurrency)
     return 0 if status == "complete" else 1

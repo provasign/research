@@ -523,6 +523,14 @@ class NetworkClassifierEdgeTests(unittest.TestCase):
         self.assertEqual(rc.classify_network(
             "bash <<'EOF'\ncurl -sI https://example.com\nEOF"), "definite")
 
+    def test_python_test_fixture_containing_fetch_command_is_not_a_fetch(self):
+        code = "events = [{'input': {'command': 'curl -sI https://example.com'}}]"
+        self.assertEqual(rc.classify_network("python3 - <<'PY'\n" + code + "\nPY"), "suspect")
+        self.assertEqual(rc.classify_network('python3 -c "' + code + '"'), "suspect")
+        self.assertEqual(rc.classify_network(
+            "python3 - <<'PY'\nimport subprocess\nsubprocess.run(['curl', '-sI', 'https://example.com'])\nPY"),
+            "definite")
+
     def test_written_heredoc_body_is_inert_even_via_tee(self):
         self.assertIsNone(rc.classify_network(
             "tee /tmp/notes.md <<'EOF'\nrun: pip install click\nsee https://example.com\nEOF"))

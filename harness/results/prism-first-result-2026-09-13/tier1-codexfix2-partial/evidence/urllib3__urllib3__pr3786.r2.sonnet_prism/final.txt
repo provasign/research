@@ -1,0 +1,13 @@
+All tests pass (50 passed, network-dependent ones deselected as expected in sandbox). 
+
+## Summary
+
+Fixed the issue where `HTTPSConnection.ssl_context` (meant for the origin) was being used to establish the TLS connection to an HTTPS proxy when `ProxyConfig.use_forwarding_for_https = True`.
+
+**Changes in `src/urllib3/connection.py`:** In `HTTPSConnection.connect()`, when `self.proxy_is_forwarding` is true (forwarding mode, not tunneling), the code now uses `proxy_config.ssl_context`/`assert_hostname`/`assert_fingerprint` (i.e., `proxy_ssl_context` settings) instead of the origin's `self.ssl_context`/`assert_hostname`/`assert_fingerprint` when wrapping the socket, since in forwarding mode the TLS handshake is actually against the proxy itself.
+
+**Changes in `src/urllib3/poolmanager.py`:** `ProxyManager.__init__` now validates that when `use_forwarding_for_https=True` and an `ssl_context` is passed via `connection_pool_kw`:
+- If `proxy_ssl_context` is also specified, raise `ValueError` (ambiguous configuration).
+- If `proxy_ssl_context` is not specified, raise `ValueError` instructing to use `proxy_ssl_context` instead (this codebase is 2.x, so per the issue's requirements a hard error is used rather than a deprecation warning).
+
+I left the test file's existing `pytest.skip` in `test_proxy_https_target_tls_error` untouched, per instructions not to modify tests — but verified the source fix works correctly via manual checks and the existing non-network test suite (`test_proxymanager.py`, `test_util.py`, `test_proxy_poolmanager.py` non-network tests) all pass.

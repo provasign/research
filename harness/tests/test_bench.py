@@ -17,6 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import bench  # noqa: E402
+from lib.cell_metrics import claude_navigation_metrics  # noqa: E402
 
 
 class ArmsForTests(unittest.TestCase):
@@ -150,6 +151,41 @@ class IndexTests(unittest.TestCase):
 
         self.assertEqual(len(rows), 2)
         self.assertEqual({r["run_dir"] for r in rows}, {str(root / "run1"), str(root / "run2")})
+
+
+class NavigationMetricsTests(unittest.TestCase):
+    def test_shell_grep_operand_is_not_a_prism_cli_action(self):
+        from lib import runner_core as rc
+        self.assertFalse(rc.invokes_prism("grep -v prism-search events.jsonl"))
+        self.assertTrue(rc.invokes_prism("prism search needle --scope text"))
+
+    def test_read_immediately_before_same_file_edit_is_prerequisite(self):
+        calls = [
+            {"type": "tool_use", "id": "s", "name": "mcp__prism__prism",
+             "input": {"op": "search", "args": {"terms": "needle"}}},
+            {"type": "tool_use", "id": "r1", "name": "Read",
+             "input": {"file_path": "/work/a.py"}},
+            {"type": "tool_use", "id": "l", "name": "mcp__prism__prism",
+             "input": {"op": "lookup", "args": {"name": "A"}}},
+            {"type": "tool_use", "id": "r2", "name": "Read",
+             "input": {"file_path": "/work/a.py", "limit": 8}},
+            {"type": "tool_use", "id": "e", "name": "Edit",
+             "input": {"file_path": "/work/a.py"}},
+            {"type": "tool_result", "tool_use_id": "r1", "content": "a" * 1024},
+            {"type": "tool_result", "tool_use_id": "r2", "content": "b" * 512},
+        ]
+        with tempfile.TemporaryDirectory() as value:
+            path = Path(value) / "stdout.jsonl"
+            path.write_text("".join(json.dumps({"message": {"content": [call]}}) + "\n"
+                                    for call in calls))
+            metrics = claude_navigation_metrics(path)
+        self.assertEqual(metrics["prism_op_sequence"], ["search", "lookup"])
+        self.assertTrue(metrics["prism_followup_read_or_lookup"])
+        self.assertTrue(metrics["prism_second_call_read_or_lookup"])
+        self.assertEqual(metrics["native_discovery_reads"], 1)
+        self.assertEqual(metrics["native_edit_prerequisite_reads"], 1)
+        self.assertEqual(metrics["native_whole_file_reads"], 1)
+        self.assertEqual(metrics["native_read_kib"], 1.5)
 
 
 if __name__ == "__main__":
