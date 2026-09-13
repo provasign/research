@@ -1,0 +1,40 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..d5f09d7 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -71,20 +71,35 @@ class BytesIOCopy(io.BytesIO):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.3.2
++        Backed by a real, file-descriptor-backed temporary file so that
++        streams can be passed to APIs (such as
++        :func:`subprocess.run`) that require a ``fileno()``.
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._file = tempfile.TemporaryFile()
+ 
+     def flush(self) -> None:
+         super().flush()
++        self._file.flush()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
++        self._file.write(b)
+         return super().write(b)
+ 
++    def fileno(self) -> int:
++        return self._file.fileno()
++
++    def close(self) -> None:
++        self._file.close()
++        super().close()
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.

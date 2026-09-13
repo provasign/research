@@ -1,0 +1,19 @@
+## Summary
+
+The zsh (and other shell) completion scripts were emitted via `echo(comp.source())` / `echo(comp.complete())` as text, which on Windows Python gets written through a text-mode stdout that translates `"\n"` → `"\r\n"`. The zsh completion script relies on a `\` line continuation:
+
+```zsh
+response=("${(@f)$(env COMP_WORDS="${words[*]}" COMP_CWORD=$((CURRENT-1)) \
+%(complete_var)s=zsh_complete %(prog_name)s)}")
+```
+
+A `\` immediately followed by `\r\n` is **not** a valid line continuation (only `\` + `\n` is), so under MSYS2 zsh the command substitution never closes properly, corrupting the parser state and producing the `parse error near 'elif'` further down.
+
+**Fix** (`src/click/shell_completion.py`): encode the generated source/completion output to `bytes` before passing to `echo()`. Click's `echo()` already has a code path that writes bytes straight to the binary stream, bypassing the text-mode newline translation — guaranteeing `\n`-only line endings regardless of platform.
+
+Verified:
+- `python -m pytest tests/test_shell_completion.py -q` → 53 passed
+- `python -m pytest tests/ -q -k complet` → 53 passed
+- Manual check confirms the generated zsh source string contains no `\r` characters.
+
+No tests, docs, or config were modified.

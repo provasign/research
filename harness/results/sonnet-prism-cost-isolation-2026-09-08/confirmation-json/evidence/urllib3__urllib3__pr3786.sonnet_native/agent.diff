@@ -1,0 +1,74 @@
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 84e1dab..a326733 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -793,24 +793,51 @@ class HTTPSConnection(HTTPConnection):
+             # Remove trailing '.' from fqdn hostnames to allow certificate validation
+             server_hostname_rm_dot = server_hostname.rstrip(".")
+ 
+-            sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+-                sock=sock,
+-                cert_reqs=self.cert_reqs,
+-                ssl_version=self.ssl_version,
+-                ssl_minimum_version=self.ssl_minimum_version,
+-                ssl_maximum_version=self.ssl_maximum_version,
+-                ca_certs=self.ca_certs,
+-                ca_cert_dir=self.ca_cert_dir,
+-                ca_cert_data=self.ca_cert_data,
+-                cert_file=self.cert_file,
+-                key_file=self.key_file,
+-                key_password=self.key_password,
+-                server_hostname=server_hostname_rm_dot,
+-                ssl_context=self.ssl_context,
+-                tls_in_tls=tls_in_tls,
+-                assert_hostname=self.assert_hostname,
+-                assert_fingerprint=self.assert_fingerprint,
+-            )
++            if self.proxy_is_forwarding:
++                # We're connecting (and doing TLS) directly to the proxy since
++                # we're forwarding the request instead of tunneling. The proxy
++                # is what we need to verify here, so only the proxy's TLS
++                # settings (``proxy_ssl_context``, etc.) should be used, never
++                # the ones meant for the origin server.
++                proxy_config = typing.cast(ProxyConfig, self.proxy_config)
++                sock_and_verified = _ssl_wrap_socket_and_match_hostname(
++                    sock=sock,
++                    cert_reqs=self.cert_reqs,
++                    ssl_version=self.ssl_version,
++                    ssl_minimum_version=self.ssl_minimum_version,
++                    ssl_maximum_version=self.ssl_maximum_version,
++                    ca_certs=self.ca_certs,
++                    ca_cert_dir=self.ca_cert_dir,
++                    ca_cert_data=self.ca_cert_data,
++                    server_hostname=server_hostname_rm_dot,
++                    ssl_context=proxy_config.ssl_context,
++                    tls_in_tls=tls_in_tls,
++                    assert_hostname=proxy_config.assert_hostname,
++                    assert_fingerprint=proxy_config.assert_fingerprint,
++                    # Features that aren't implemented for proxies yet:
++                    cert_file=None,
++                    key_file=None,
++                    key_password=None,
++                )
++            else:
++                sock_and_verified = _ssl_wrap_socket_and_match_hostname(
++                    sock=sock,
++                    cert_reqs=self.cert_reqs,
++                    ssl_version=self.ssl_version,
++                    ssl_minimum_version=self.ssl_minimum_version,
++                    ssl_maximum_version=self.ssl_maximum_version,
++                    ca_certs=self.ca_certs,
++                    ca_cert_dir=self.ca_cert_dir,
++                    ca_cert_data=self.ca_cert_data,
++                    cert_file=self.cert_file,
++                    key_file=self.key_file,
++                    key_password=self.key_password,
++                    server_hostname=server_hostname_rm_dot,
++                    ssl_context=self.ssl_context,
++                    tls_in_tls=tls_in_tls,
++                    assert_hostname=self.assert_hostname,
++                    assert_fingerprint=self.assert_fingerprint,
++                )
+             self.sock = sock_and_verified.socket
+ 
+         # If an error occurs during connection/handshake we may need to release

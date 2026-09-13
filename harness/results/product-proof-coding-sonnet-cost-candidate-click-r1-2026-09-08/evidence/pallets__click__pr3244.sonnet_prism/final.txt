@@ -1,0 +1,9 @@
+The issue is resolved. 
+
+## Summary
+
+The bug: `CliRunner` backed `sys.stdout`/`sys.stderr` with `io.BytesIO`-based streams, which don't support `fileno()`. This broke code (like `subprocess.run(..., stdout=sys.stderr)`) that requires a real OS-level file descriptor, raising `io.UnsupportedOperation`.
+
+Fix in `src/click/testing.py`: `BytesIOCopy` now backs its buffer with a real `tempfile.TemporaryFile()` (which has a usable `fileno()`) instead of subclassing `io.BytesIO`, while still mirroring writes into the mixer's `copy_to` stream. Added `getvalue()` (read the full contents while preserving the file position) and `close()`/`__del__()` (to release the real OS handle without triggering `ResourceWarning`s), and `CliRunner.isolation()` now explicitly closes the stdout/stderr backing files when done.
+
+Verified with the reported reproduction case and the full existing test suite (1419 passed, 24 skipped, 1 xfailed — no regressions).

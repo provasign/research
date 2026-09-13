@@ -1,0 +1,56 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..5500a9d 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -71,20 +71,50 @@ class BytesIOCopy(io.BytesIO):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.3.3
++        Supports :meth:`fileno` by lazily backing itself with a real
++        temporary file, so the stream can be passed as ``stdout``/``stderr``
++        to :func:`subprocess.run` (or :class:`subprocess.Popen`) from code
++        under test. :issue:`3244`
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._real_file: t.IO[bytes] | None = None
+ 
+     def flush(self) -> None:
+-        super().flush()
++        if self._real_file is not None:
++            self._real_file.flush()
++        else:
++            super().flush()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
++        if self._real_file is not None:
++            return self._real_file.write(b)
+         return super().write(b)
+ 
++    def getvalue(self) -> bytes:
++        if self._real_file is not None:
++            pos = self._real_file.tell()
++            self._real_file.seek(0)
++            data = self._real_file.read()
++            self._real_file.seek(pos)
++            return data
++        return super().getvalue()
++
++    def fileno(self) -> int:
++        if self._real_file is None:
++            # Materialize a real, unbuffered file so external processes can
++            # write to it directly through its file descriptor. Existing
++            # in-memory content is copied over first to preserve ordering.
++            self._real_file = tempfile.TemporaryFile(buffering=0)
++            self._real_file.write(super().getvalue())
++        return self._real_file.fileno()
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.

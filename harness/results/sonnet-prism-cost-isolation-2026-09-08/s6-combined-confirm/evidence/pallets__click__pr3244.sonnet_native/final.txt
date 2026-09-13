@@ -1,0 +1,9 @@
+The reproduction test passes and the full test suite (1419 passed) remains green.
+
+## Summary
+
+The `UnsupportedOperation: fileno` error occurred because `CliRunner` captured `stdout`/`stderr` using `io.BytesIO`, which has no real file descriptor. Code under test that passed `sys.stdout`/`sys.stderr` to `subprocess.run(...)` (which needs `.fileno()`) crashed during tests even though it worked fine outside of `CliRunner`.
+
+**Fix** (in `src/click/testing.py`): Changed `BytesIOCopy` to back its buffer with a real `tempfile.TemporaryFile()` instead of `io.BytesIO`, so it exposes a working `fileno()` while still supporting the `write`/`flush`/`getvalue` interface (via delegation and a custom `getvalue()`). Added a `__del__` to close the temp file's descriptor when not explicitly closed (avoiding `ResourceWarning`), and explicitly close the mixer's stdout/stderr temp files at the end of `CliRunner.isolation()`.
+
+Ran `python -m pytest tests/` (1419 passed, 24 skipped, 1 xfailed — no regressions) and a narrow reproduction test mirroring the issue's `sscce.py`/`test_sscce.py`, which now passes.

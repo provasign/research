@@ -1,0 +1,66 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..71d2640 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -70,20 +70,51 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+ class BytesIOCopy(io.BytesIO):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
++    A real OS-level file backing is created lazily, the first time
++    ``fileno()`` is requested. This lets code under test pass
++    ``sys.stdout``/``sys.stderr`` directly to APIs like
++    :func:`subprocess.run` without raising ``io.UnsupportedOperation``,
++    while avoiding an unclosed file descriptor for the common case where
++    no such real file descriptor is ever needed.
++
+     .. versionadded:: 8.2
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._fd_backing: t.IO[bytes] | None = None
+ 
+     def flush(self) -> None:
+         super().flush()
+         self.copy_to.flush()
+ 
++        if self._fd_backing is not None:
++            self._fd_backing.flush()
++
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+-        return super().write(b)
++        rv = super().write(b)
++
++        if self._fd_backing is not None:
++            self._fd_backing.write(b)
++
++        return rv
++
++    def fileno(self) -> int:
++        if self._fd_backing is None:
++            self._fd_backing = tempfile.TemporaryFile()
++            self._fd_backing.write(self.getvalue())
++            self._fd_backing.flush()
++
++        return self._fd_backing.fileno()
++
++    def close(self) -> None:
++        if self._fd_backing is not None:
++            self._fd_backing.close()
++            self._fd_backing = None
++
++        super().close()
+ 
+ 
+ class StreamMixer:
+@@ -471,6 +502,8 @@ class CliRunner:
+             _compat.should_strip_ansi = old__compat_should_strip_ansi
+             formatting.FORCED_WIDTH = old_forced_width
+             pdb.Pdb.__init__ = old_pdb_init  # type: ignore[method-assign]
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
+ 
+     def invoke(
+         self,

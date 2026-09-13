@@ -1,0 +1,110 @@
+{
+  "duration_api_ms": 131168,
+  "stop_reason": "end_turn",
+  "session_id": "29dd1966-84eb-4294-8f3b-c1e333ee0f02",
+  "total_cost_usd": 0.30660879999999996,
+  "usage": {
+    "input_tokens": 36,
+    "cache_creation_input_tokens": 26984,
+    "cache_read_input_tokens": 362214,
+    "output_tokens": 12212,
+    "output_tokens_details": {
+      "thinking_tokens": 8231
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 26984,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 447,
+        "cache_read_input_tokens": 32259,
+        "cache_creation_input_tokens": 179,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 179
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 17,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004038,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 36,
+      "outputTokens": 12212,
+      "cacheReadInputTokens": 362214,
+      "cacheCreationInputTokens": 26984,
+      "webSearchRequests": 0,
+      "costUSD": 0.3025707999999999,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 8231,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 18,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "## Summary\n\nFixed `src/click/testing.py`: `BytesIOCopy` (the in-memory buffer backing `CliRunner`'s fake `stdout`/`stderr`) didn't support `fileno()`, so passing `sys.stdout`/`sys.stderr` to `subprocess.run(...)` inside code under test raised `io.UnsupportedOperation` \u2014 even though the same code works fine outside the runner.\n\nI gave `BytesIOCopy.fileno()` a real implementation: on first call it lazily materializes an unbuffered real temp file (`tempfile.TemporaryFile(buffering=0)`), seeded with any content already buffered in memory, and returns its descriptor. From that point on, `write()`/`flush()`/`getvalue()` transparently delegate to that real file, so both Click's own writes and any external process writing directly to the fd stay consistent and are correctly captured/mirrored into `copy_to`.\n\nVerified with a reproduction of the issue's `sscce.py`/`test_sscce.py` (subprocess writing to `sys.stderr` inside a `CliRunner.invoke`) \u2014 now passes and captures output correctly \u2014 plus the full existing test suite (`1419 passed, 24 skipped, 1 xfailed`, no regressions). No tests, docs, or config were modified; changes were not committed.",
+  "ttft_ms": 1321,
+  "type": "result",
+  "duration_ms": 134015,
+  "uuid": "09b6a3f5-e11c-4781-8fec-0ef77223349d",
+  "ttft_stream_ms": 789,
+  "time_to_request_ms": 46,
+  "first_content_frame_ms": 1320,
+  "queued_turn_count": 0
+}

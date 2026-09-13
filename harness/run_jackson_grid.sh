@@ -9,11 +9,11 @@
 #   ./run_jackson_grid.sh --tasks jackson-serialize  # single task
 #
 # After all runs complete, score with:
-#   python rescore_java.py          # map line refs to method names (MANDATORY)
-#   python agg_jackson.py           # summary table
+#   python scoring/rescore_java.py  # map line refs to method names (MANDATORY)
+#   python aggregate/agg_jackson.py # summary table
 #
-# The local (qwen3-coder:30b) arm is run separately via run_local.py since it
-# needs a different invocation path.
+# The local (qwen3-coder:30b) arm is run separately via runners/run_local.py
+# since it needs a different invocation path.
 
 set -euo pipefail
 HARNESS="$(cd "$(dirname "$0")" && pwd)"
@@ -56,7 +56,7 @@ for model in "${MODELS[@]}"; do
       continue
     fi
     echo "=== $task  model=$model  arms=${ARMS[*]} ==="
-    python run.py \
+    python runners/run.py \
       --task "$taskfile" \
       --arms "${ARMS[@]}" \
       --model "$model" \
@@ -67,4 +67,4 @@ for model in "${MODELS[@]}"; do
 done
 
 echo "=== grid done ==="
-echo "Next: python rescore_java.py && python agg_jackson.py"
+echo "Next: python scoring/rescore_java.py && python aggregate/agg_jackson.py"

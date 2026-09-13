@@ -1,0 +1,101 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..6a0df1d 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -67,23 +67,61 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+         stream._paused = False
+ 
+ 
+-class BytesIOCopy(io.BytesIO):
+-    """Patch ``io.BytesIO`` to let the written stream be copied to another.
++class BytesIOCopy:
++    """A binary buffer that copies everything written to it to another
++    stream.
++
++    Backed by an :class:`io.BytesIO` buffer so no real file descriptor is
++    allocated (and nothing needs to be closed) unless ``fileno()`` is
++    actually requested, e.g. by :func:`subprocess.run`. In that case, the
++    buffer's contents are transparently migrated to a real temporary file so
++    a usable file descriptor can be handed out.
+ 
+     .. versionadded:: 8.2
++    .. versionchanged:: 8.3
++        Support ``fileno()`` by lazily backing the stream with a real
++        temporary file when a file descriptor is requested.
+     """
+ 
+-    def __init__(self, copy_to: io.BytesIO) -> None:
+-        super().__init__()
++    def __init__(self, copy_to: t.BinaryIO) -> None:
++        self._buffer: t.BinaryIO = io.BytesIO()
++        self._file: t.BinaryIO | None = None
+         self.copy_to = copy_to
+ 
++    @property
++    def _target(self) -> t.BinaryIO:
++        return self._buffer if self._file is None else self._file
++
++    def fileno(self) -> int:
++        if self._file is None:
++            file = tempfile.TemporaryFile()
++            file.write(self._buffer.getvalue())
++            self._file = file
++        return self._file.fileno()
++
++    def __getattr__(self, name: str) -> t.Any:
++        return getattr(self._target, name)
++
+     def flush(self) -> None:
+-        super().flush()
++        self._target.flush()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+-        return super().write(b)
++        return self._target.write(b)
++
++    def getvalue(self) -> bytes:
++        target = self._target
++        pos = target.tell()
++        target.seek(0)
++        data = target.read()
++        target.seek(pos)
++        return data
++
++    def close(self) -> None:
++        if self._file is not None:
++            self._file.close()
++        self._buffer.close()
+ 
+ 
+ class StreamMixer:
+@@ -96,8 +134,8 @@ class StreamMixer:
+ 
+     def __init__(self) -> None:
+         self.output: io.BytesIO = io.BytesIO()
+-        self.stdout: io.BytesIO = BytesIOCopy(copy_to=self.output)
+-        self.stderr: io.BytesIO = BytesIOCopy(copy_to=self.output)
++        self.stdout: t.BinaryIO = t.cast(t.BinaryIO, BytesIOCopy(copy_to=self.output))
++        self.stderr: t.BinaryIO = t.cast(t.BinaryIO, BytesIOCopy(copy_to=self.output))
+ 
+ 
+ class _NamedTextIOWrapper(io.TextIOWrapper):
+@@ -280,7 +318,7 @@ class CliRunner:
+         input: str | bytes | t.IO[t.Any] | None = None,
+         env: cabc.Mapping[str, str | None] | None = None,
+         color: bool = False,
+-    ) -> cabc.Iterator[tuple[io.BytesIO, io.BytesIO, io.BytesIO]]:
++    ) -> cabc.Iterator[tuple[t.BinaryIO, t.BinaryIO, io.BytesIO]]:
+         """A context manager that sets up the isolation for invoking of a
+         command line tool.  This sets up `<stdin>` with the given input data
+         and `os.environ` with the overrides from the given dictionary.
+@@ -464,6 +502,8 @@ class CliRunner:
+             sys.stdout = old_stdout
+             sys.stderr = old_stderr
+             sys.stdin = old_stdin
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
+             termui.visible_prompt_func = old_visible_prompt_func
+             termui.hidden_prompt_func = old_hidden_prompt_func
+             termui._getchar = old__getchar_func

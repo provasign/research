@@ -1,0 +1,90 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..a0b4081 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -67,23 +67,60 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+         stream._paused = False
+ 
+ 
+-class BytesIOCopy(io.BytesIO):
+-    """Patch ``io.BytesIO`` to let the written stream be copied to another.
++class BytesIOCopy:
++    """Like ``io.BytesIO``, but backed by a real, on-disk file so that
++    :meth:`fileno` is supported. Everything written is also copied to
++    another stream.
++
++    Being backed by a real file allows this object to be used as the
++    ``stdout``/``stderr`` of a :class:`subprocess.Popen`, since child
++    processes need an actual file descriptor to write to.
+ 
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.3.3
++        Back the buffer with a real file instead of an in-memory buffer
++        so ``fileno()`` is supported. :issue:`2296`
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+-        super().__init__()
++        self._file = tempfile.TemporaryFile()
+         self.copy_to = copy_to
+ 
+     def flush(self) -> None:
+-        super().flush()
++        self._file.flush()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+-        return super().write(b)
++        return self._file.write(b)
++
++    def fileno(self) -> int:
++        return self._file.fileno()
++
++    def getvalue(self) -> bytes:
++        # Anything written directly to the file descriptor (for example
++        # by a subprocess using this object as its stdout/stderr) will
++        # also be picked up here, since it shares the same underlying
++        # file.
++        self._file.flush()
++        pos = self._file.tell()
++        self._file.seek(0)
++        data = self._file.read()
++        self._file.seek(pos)
++        return data
++
++    def __getattr__(self, name: str) -> t.Any:
++        return getattr(self._file, name)
++
++    def __del__(self) -> None:
++        # Make sure the real, on-disk file backing this object is closed
++        # even if ``close()`` was never called explicitly, so it doesn't
++        # trigger a ``ResourceWarning`` for a leaked file descriptor.
++        try:
++            self._file.close()
++        except Exception:
++            pass
+ 
+ 
+ class StreamMixer:
+@@ -96,8 +133,8 @@ class StreamMixer:
+ 
+     def __init__(self) -> None:
+         self.output: io.BytesIO = io.BytesIO()
+-        self.stdout: io.BytesIO = BytesIOCopy(copy_to=self.output)
+-        self.stderr: io.BytesIO = BytesIOCopy(copy_to=self.output)
++        self.stdout: t.BinaryIO = t.cast(t.BinaryIO, BytesIOCopy(copy_to=self.output))
++        self.stderr: t.BinaryIO = t.cast(t.BinaryIO, BytesIOCopy(copy_to=self.output))
+ 
+ 
+ class _NamedTextIOWrapper(io.TextIOWrapper):
+@@ -453,6 +490,8 @@ class CliRunner:
+                     os.environ[key] = value
+             yield (stream_mixer.stdout, stream_mixer.stderr, stream_mixer.output)
+         finally:
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
+             for key, value in old_env.items():
+                 if value is None:
+                     try:

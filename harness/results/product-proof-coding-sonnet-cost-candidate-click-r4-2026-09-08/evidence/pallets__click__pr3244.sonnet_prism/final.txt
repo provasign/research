@@ -1,0 +1,12 @@
+## Summary
+
+**Root cause:** `CliRunner`'s `isolation()` backs `sys.stdout`/`sys.stderr` with `BytesIOCopy`, a plain `io.BytesIO` subclass. `io.BytesIO` has no real OS-level file descriptor, so when code under test passes one of these streams to `subprocess.run(..., stdout=...)`, `subprocess.Popen._get_handles()` calls `.fileno()` and gets `io.UnsupportedOperation`.
+
+**Fix** (`src/click/testing.py`, `BytesIOCopy`): lazily back the stream with a real `tempfile.TemporaryFile()` the first time `fileno()` is requested, so a genuine file descriptor is available for subprocess redirection. Since a subprocess writes to that descriptor at the OS level (bypassing Python's `write()`), a `_sync_fd()` helper reads back any bytes landed in the backing file and merges them into the in-memory buffer (and the mirrored `copy_to` stream) whenever the stream is flushed or read via `getvalue()`. This keeps the existing pure in-memory `BytesIOCopy` behavior/tests intact while additively supporting `fileno()`.
+
+**Verification:**
+- Reproduced the issue's `sscce.py`/`test_sscce.py` scenario in isolation — previously failed with `io.UnsupportedOperation: fileno`, now passes and captures the subprocess's `"foo"` output.
+- Ran `tests/test_stream_lifecycle.py`, `tests/test_testing.py`, `tests/test_utils.py`, `tests/test_termui.py` — all pass (374 passed, 23 skipped).
+- Ran the full non-stress test suite — 1419 passed, 24 skipped, 1 xfailed, no regressions.
+
+No tests, docs, changelog, or config files were modified.

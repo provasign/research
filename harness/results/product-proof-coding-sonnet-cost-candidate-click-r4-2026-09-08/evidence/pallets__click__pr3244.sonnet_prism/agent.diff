@@ -1,0 +1,66 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..1684145 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -71,13 +71,22 @@ class BytesIOCopy(io.BytesIO):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.3
++        Supports :meth:`fileno` by lazily backing the stream with a real
++        temporary file, so code under test (such as
++        ``subprocess.run(..., stdout=sys.stdout)``) can use it as a real
++        file descriptor. Bytes written directly to that descriptor (e.g.
++        by a subprocess) are merged back in when the stream is read.
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._fd_file: t.IO[bytes] | None = None
+ 
+     def flush(self) -> None:
++        self._sync_fd()
+         super().flush()
+         self.copy_to.flush()
+ 
+@@ -85,6 +94,38 @@ class BytesIOCopy(io.BytesIO):
+         self.copy_to.write(b)
+         return super().write(b)
+ 
++    def fileno(self) -> int:
++        """Return a real OS-level file descriptor backing this stream.
++
++        ``io.BytesIO`` has no file descriptor, which breaks callers such
++        as ``subprocess.run`` that need one (e.g. when a command passes
++        ``stdout=sys.stdout`` through to a subprocess). A temporary file
++        is created on first use to provide one; any bytes written to it
++        are merged into this stream (and ``copy_to``) the next time the
++        stream is flushed or read.
++        """
++        if self._fd_file is None:
++            self._fd_file = tempfile.TemporaryFile()
++        return self._fd_file.fileno()
++
++    def _sync_fd(self) -> None:
++        """Pull bytes written directly to the backing file descriptor
++        (bypassing :meth:`write`) into the buffer and ``copy_to``.
++        """
++        if self._fd_file is None:
++            return
++        self._fd_file.flush()
++        self._fd_file.seek(0)
++        data = self._fd_file.read()
++        if data:
++            self.write(data)
++        self._fd_file.seek(0)
++        self._fd_file.truncate()
++
++    def getvalue(self) -> bytes:
++        self._sync_fd()
++        return super().getvalue()
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.

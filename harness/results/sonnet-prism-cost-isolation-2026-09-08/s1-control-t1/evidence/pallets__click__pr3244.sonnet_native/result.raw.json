@@ -1,0 +1,110 @@
+{
+  "duration_api_ms": 124828,
+  "stop_reason": "end_turn",
+  "session_id": "7837ccf7-0201-47a5-add7-0efefe679e5f",
+  "total_cost_usd": 0.4627802000000001,
+  "usage": {
+    "input_tokens": 56,
+    "cache_creation_input_tokens": 48057,
+    "cache_read_input_tokens": 772836,
+    "output_tokens": 11185,
+    "output_tokens_details": {
+      "thinking_tokens": 5249
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 48057,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 656,
+        "cache_read_input_tokens": 47213,
+        "cache_creation_input_tokens": 844,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 844
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 14,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004023,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 56,
+      "outputTokens": 11185,
+      "cacheReadInputTokens": 772836,
+      "cacheCreationInputTokens": 48057,
+      "webSearchRequests": 0,
+      "costUSD": 0.4587572000000001,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 5249,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 28,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "Confirmed passing. The full test suite (1419 passed, 24 skipped, 1 xfailed, stress tests deselected) is green, and the original reproduction case no longer raises `UnsupportedOperation`.\n\n## Summary\n\n**Root cause**: `CliRunner.isolation()` backed `sys.stdout`/`sys.stderr` with `io.BytesIO`-based objects. `io.BytesIO.fileno()` always raises `io.UnsupportedOperation`, so any code under test that passed `sys.stdout`/`sys.stderr` to APIs needing a real file descriptor (e.g. `subprocess.run(..., stdout=sys.stderr)`) crashed only when run under `CliRunner`, not when run directly.\n\n**Fix** (`src/click/testing.py`): Reworked `BytesIOCopy` to be backed by a real OS-level file (`tempfile.TemporaryFile()`) instead of `io.BytesIO`, while still duck-typing the `io.BytesIO` interface (`write`, `flush`, `getvalue`, and delegating everything else via `__getattr__`, including `fileno()`). This gives `sys.stdout`/`sys.stderr` inside `CliRunner.invoke()` a genuine file descriptor, so `subprocess.run(stdout=sys.stderr)` and similar calls work. Added a `__del__` to close the underlying temp file on garbage collection, and explicit closes in `isolation()`'s `finally` block, to avoid leaking file descriptors/`ResourceWarning`s.\n\nNote: since `subprocess` writes to the real fd directly (bypassing Python-level buffering), a child process's output isn't mixed into `result.output`/`result.stdout` \u2014 this is an inherent limitation of capturing real OS-level subprocess output via Python buffers, not something the fix could avoid, and it doesn't affect the reported issue (which was about the crash, not about capturing subprocess output).",
+  "ttft_ms": 2107,
+  "type": "result",
+  "duration_ms": 135098,
+  "uuid": "1fee8adc-6068-4e40-bbea-6cead55ab0be",
+  "ttft_stream_ms": 826,
+  "time_to_request_ms": 33,
+  "first_content_frame_ms": 1171,
+  "queued_turn_count": 0
+}

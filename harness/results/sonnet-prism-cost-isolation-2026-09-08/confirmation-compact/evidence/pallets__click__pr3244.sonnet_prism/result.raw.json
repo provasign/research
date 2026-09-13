@@ -1,0 +1,110 @@
+{
+  "duration_api_ms": 183011,
+  "stop_reason": "end_turn",
+  "session_id": "0b6f4f15-df7c-4497-b9b6-9958500a67f9",
+  "total_cost_usd": 0.5465972,
+  "usage": {
+    "input_tokens": 54,
+    "cache_creation_input_tokens": 46014,
+    "cache_read_input_tokens": 933051,
+    "output_tokens": 17177,
+    "output_tokens_details": {
+      "thinking_tokens": 10610
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 46014,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 514,
+        "cache_read_input_tokens": 54582,
+        "cache_creation_input_tokens": 422,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 422
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 20,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004053,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 54,
+      "outputTokens": 17177,
+      "cacheReadInputTokens": 933051,
+      "cacheCreationInputTokens": 46014,
+      "webSearchRequests": 0,
+      "costUSD": 0.5425441999999999,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 10610,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 27,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "Those tests use `BytesIOCopy` but were already re-run above and pass, so this is expected \u2014 I'm not permitted to modify tests anyway. The fix is complete.\n\n## Summary\n\nThe `UnsupportedOperation: fileno` crash happened because `CliRunner`'s captured `sys.stdout`/`sys.stderr` were backed by `io.BytesIO`, which has no real file descriptor. Passing them to `subprocess.run(..., stdout=...)` requires a genuine fd.\n\n**Fix** (`src/click/testing.py`):\n- `BytesIOCopy` now backs its buffer with a real `tempfile.TemporaryFile()` instead of `io.BytesIO`, so `fileno()` works and subprocess calls like `subprocess.run([\"echo\", \"foo\"], stdout=sys.stderr)` succeed inside `CliRunner.invoke()`.\n- Kept the same `write()`/`flush()`/`getvalue()` API via a thin `__getattr__` delegate to the underlying file object.\n- Added a `weakref.finalize` to close the temp file when the wrapper is garbage collected (avoiding `ResourceWarning: unclosed file`), and explicit `.close()` calls in `CliRunner.isolation()`'s cleanup path.\n\nVerified: full test suite (`tests/`) \u2014 1419 passed, 24 skipped, 1 xfailed (no regressions), plus the original issue's reproduction script no longer raises and correctly captures the subprocess's output in `result.stderr`.",
+  "ttft_ms": 2690,
+  "type": "result",
+  "duration_ms": 193013,
+  "uuid": "0f5a39d8-ee43-4d84-8da8-51900f52faae",
+  "ttft_stream_ms": 895,
+  "time_to_request_ms": 23,
+  "first_content_frame_ms": 1563,
+  "queued_turn_count": 0
+}

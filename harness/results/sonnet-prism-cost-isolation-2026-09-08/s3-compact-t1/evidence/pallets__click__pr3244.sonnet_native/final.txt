@@ -1,0 +1,11 @@
+## Summary
+
+The bug: `CliRunner.isolation()` backs `sys.stdout`/`sys.stderr` with `io.BytesIO`-based streams (`BytesIOCopy`). `io.BytesIO` has no real file descriptor, so `subprocess.run(..., stdout=sys.stderr)` fails with `io.UnsupportedOperation: fileno` when subprocess tries `stdout.fileno()`.
+
+Fix (`src/click/testing.py`): gave `BytesIOCopy` a lazy `fileno()` that backs the stream with a real `tempfile.TemporaryFile()` on first access, so it hands subprocess a genuine OS file descriptor to write into. Any prior in-memory content is copied into the temp file when it's created, and `getvalue()` was overridden to sync data written by external processes (via the fd) back into the `BytesIO` (and the mixed `output` stream) before returning captured output — so `result.output`/`result.stdout` still work as before for both `click.echo`-style writes and subprocess writes.
+
+Verified:
+- The reported reproduction case now passes (subprocess writing to `sys.stderr` inside a `CliRunner`-invoked command no longer raises, and its output is captured).
+- Full existing test suite: `1419 passed, 24 skipped, 1 xfailed` — no regressions.
+
+No tests, docs, or config were modified — only `src/click/testing.py`. Nothing was committed.

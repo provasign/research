@@ -1,0 +1,7 @@
+The fix resolves the issue: `BytesIOCopy` (used for `CliRunner`'s captured `stdout`/`stderr`) is now backed by a real, file-descriptor-backed temporary file instead of an in-memory `io.BytesIO`, so `.fileno()` works and `subprocess.run(..., stdout=sys.stderr)` no longer raises `UnsupportedOperation`. I added `getvalue()` (delegating writes are still copied to the mixed `output` buffer as before) and ensured temp files are closed both explicitly (in `CliRunner.isolation`'s `finally`) and via `__del__` as a safety net, so no file descriptors leak.
+
+Verified:
+- SSCCE reproduction test now passes.
+- Full existing test suite (`tests/`) passes: 1419 passed, 24 skipped, 1 xfailed, 0 failures — including `tests/test_testing.py` and `tests/test_stream_lifecycle.py`, which specifically exercise `BytesIOCopy`/`StreamMixer` lifecycle behavior.
+
+No tests, docs, changelogs, or config files were modified — only `src/click/testing.py`.

@@ -1,0 +1,110 @@
+{
+  "duration_api_ms": 107258,
+  "stop_reason": "end_turn",
+  "session_id": "24fe8c5a-3f30-483c-991a-0b06f0e561be",
+  "total_cost_usd": 0.41367960000000004,
+  "usage": {
+    "input_tokens": 50,
+    "cache_creation_input_tokens": 38195,
+    "cache_read_input_tokens": 784983,
+    "output_tokens": 9973,
+    "output_tokens_details": {
+      "thinking_tokens": 3813
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 38195,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 623,
+        "cache_read_input_tokens": 46695,
+        "cache_creation_input_tokens": 490,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 490
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 24,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004073,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 50,
+      "outputTokens": 9973,
+      "cacheReadInputTokens": 784983,
+      "cacheCreationInputTokens": 38195,
+      "webSearchRequests": 0,
+      "costUSD": 0.40960660000000004,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 3813,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 25,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "All 1419 tests pass, plus the reproducer from the issue.\n\n## Summary\n\nThe problem: `CliRunner`'s isolated `sys.stdout`/`sys.stderr` were backed by `io.BytesIO`, which has no real file descriptor. `subprocess.run(..., stdout=sys.stderr)` calls `.fileno()` on the given stream, and `io.BytesIO.fileno()` raises `io.UnsupportedOperation`.\n\nFix in `src/click/testing.py`: backed the mixed stdout/stderr/output streams with a new `SpooledBytesIO` class (subclass of `tempfile.SpooledTemporaryFile`) instead of `io.BytesIO`. `SpooledTemporaryFile.fileno()` transparently rolls the buffer over to a real on-disk file and returns a genuine file descriptor, so passing `sys.stdout`/`sys.stderr` to `subprocess.run` now works exactly as it does outside of `CliRunner`.\n\nSupporting changes:\n- `BytesIOCopy` now extends `SpooledBytesIO` (adding `getvalue()` since `SpooledTemporaryFile` doesn't provide one).\n- `StreamMixer` uses `SpooledBytesIO` for its `stdout`/`stderr`/`output` buffers.\n- `isolation()` explicitly closes the mixer's streams in its `finally` block (after `Result` has already captured their contents via `getvalue()`).\n- Overrode `SpooledBytesIO.__del__` to close silently instead of emitting `SpooledTemporaryFile`'s `ResourceWarning`, preserving `io.BytesIO`-like semantics for streams that aren't explicitly closed.\n\nVerified with the exact reproducer from the issue and the full existing test suite (`tests/` \u2014 1419 passed).",
+  "ttft_ms": 4043,
+  "type": "result",
+  "duration_ms": 116472,
+  "uuid": "52efa1e7-f85f-4e60-9f59-bf7e6be69196",
+  "ttft_stream_ms": 768,
+  "time_to_request_ms": 21,
+  "first_content_frame_ms": 1298,
+  "queued_turn_count": 0
+}

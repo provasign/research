@@ -1,0 +1,40 @@
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 84e1dab..cf72535 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -793,6 +793,21 @@ class HTTPSConnection(HTTPConnection):
+             # Remove trailing '.' from fqdn hostnames to allow certificate validation
+             server_hostname_rm_dot = server_hostname.rstrip(".")
+ 
++            # If we're forwarding to (rather than tunneling through) our
++            # proxy then the TLS handshake we're about to perform is
++            # actually against the proxy itself, not the destination
++            # origin. In that case we must use the proxy's TLS
++            # configuration (``proxy_ssl_context``, etc) instead of the
++            # one meant for the destination origin.
++            if self.proxy_is_forwarding and self.proxy_config is not None:
++                ssl_context = self.proxy_config.ssl_context
++                assert_hostname = self.proxy_config.assert_hostname
++                assert_fingerprint = self.proxy_config.assert_fingerprint
++            else:
++                ssl_context = self.ssl_context
++                assert_hostname = self.assert_hostname
++                assert_fingerprint = self.assert_fingerprint
++
+             sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+                 sock=sock,
+                 cert_reqs=self.cert_reqs,
+@@ -806,10 +821,10 @@ class HTTPSConnection(HTTPConnection):
+                 key_file=self.key_file,
+                 key_password=self.key_password,
+                 server_hostname=server_hostname_rm_dot,
+-                ssl_context=self.ssl_context,
++                ssl_context=ssl_context,
+                 tls_in_tls=tls_in_tls,
+-                assert_hostname=self.assert_hostname,
+-                assert_fingerprint=self.assert_fingerprint,
++                assert_hostname=assert_hostname,
++                assert_fingerprint=assert_fingerprint,
+             )
+             self.sock = sock_and_verified.socket
+ 

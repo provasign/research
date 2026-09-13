@@ -1,0 +1,52 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..a4a74f2 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -70,21 +70,47 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+ class BytesIOCopy(io.BytesIO):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
++    Backed by a real, file-descriptor-backed temporary file rather than a
++    purely in-memory buffer so that it can be passed as ``stdout``/``stderr``
++    to APIs like :func:`subprocess.run`, which need a real ``fileno()``.
++
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.3.3
++        Backed by a temporary file with a real file descriptor so
++        ``fileno()`` works, allowing use with :mod:`subprocess`.
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._file = tempfile.TemporaryFile()
+ 
+     def flush(self) -> None:
+         super().flush()
+         self.copy_to.flush()
++        self._file.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
++        self._file.write(b)
+         return super().write(b)
+ 
++    def fileno(self) -> int:
++        return self._file.fileno()
++
++    def close(self) -> None:
++        self._file.close()
++        super().close()
++
++    def getvalue(self) -> bytes:
++        self.flush()
++        pos = self._file.tell()
++        self._file.seek(0)
++        data = self._file.read()
++        self._file.seek(pos)
++        return data
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.

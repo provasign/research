@@ -1,0 +1,12 @@
+## Summary
+
+**Root cause:** `CliRunner.isolation()` replaces `sys.stdout`/`sys.stderr` with `_NamedTextIOWrapper` instances backed by `BytesIOCopy`, a plain `io.BytesIO` subclass. `io.BytesIO` has no OS-level file descriptor, so any code passing `sys.stdout`/`sys.stderr` to `subprocess.run(..., stdout=...)` fails when subprocess tries `stdout.fileno()`, raising `io.UnsupportedOperation`.
+
+**Fix** (`src/click/testing.py`):
+- `BytesIOCopy` now lazily backs itself with a real `tempfile.TemporaryFile()` the first time `fileno()` is actually called, so normal invocations (the vast majority, which never need a real fd) still incur no extra OS file cost.
+- `write()`/`flush()`/`getvalue()`/`close()` were updated to stay in sync with the backing temp file once it exists (data can be written directly to the fd, e.g. by a subprocess, bypassing `write()`).
+- `CliRunner.isolation()`'s `finally` block now explicitly closes the mixer's stdout/stderr streams to release any backing temp file.
+
+**Verification:**
+- Reproduced the reported crash and confirmed `subprocess.run(["echo", "foo"], stdout=sys.stderr)` inside a Click command invoked via `CliRunner` no longer raises; `result.stderr` correctly contains `"foo\n"`.
+- Full existing test suite: `1419 passed, 24 skipped, 1 xfailed` — no regressions, no resource warnings.

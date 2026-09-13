@@ -1,0 +1,96 @@
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 84e1dab..21265d2 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -657,6 +657,23 @@ class HTTPSConnection(HTTPConnection):
+             proxy_config=proxy_config,
+         )
+ 
++        if (
++            proxy_config
++            and proxy_config.use_forwarding_for_https
++            and ssl_context is not None
++        ):
++            if proxy_config.ssl_context is not None:
++                raise ValueError(
++                    "Cannot specify both 'ssl_context' and 'proxy_ssl_context' "
++                    "when 'use_forwarding_for_https' is True. Use "
++                    "'proxy_ssl_context' to configure the TLS connection to "
++                    "the proxy."
++                )
++            raise ValueError(
++                "Should use 'proxy_ssl_context' and not 'ssl_context' "
++                "when 'use_forwarding_for_https' is True."
++            )
++
+         self.key_file = key_file
+         self.cert_file = cert_file
+         self.key_password = key_password
+@@ -793,24 +810,49 @@ class HTTPSConnection(HTTPConnection):
+             # Remove trailing '.' from fqdn hostnames to allow certificate validation
+             server_hostname_rm_dot = server_hostname.rstrip(".")
+ 
+-            sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+-                sock=sock,
+-                cert_reqs=self.cert_reqs,
+-                ssl_version=self.ssl_version,
+-                ssl_minimum_version=self.ssl_minimum_version,
+-                ssl_maximum_version=self.ssl_maximum_version,
+-                ca_certs=self.ca_certs,
+-                ca_cert_dir=self.ca_cert_dir,
+-                ca_cert_data=self.ca_cert_data,
+-                cert_file=self.cert_file,
+-                key_file=self.key_file,
+-                key_password=self.key_password,
+-                server_hostname=server_hostname_rm_dot,
+-                ssl_context=self.ssl_context,
+-                tls_in_tls=tls_in_tls,
+-                assert_hostname=self.assert_hostname,
+-                assert_fingerprint=self.assert_fingerprint,
+-            )
++            # If we're forwarding to an HTTPS proxy (i.e. connecting directly
++            # to the proxy over TLS without tunneling) we must use the
++            # proxy's SSL context, assertions, etc. and not the ones meant
++            # for the origin server.
++            if self.proxy_is_forwarding and self.proxy is not None:
++                proxy_config = typing.cast(ProxyConfig, self.proxy_config)
++                sock_and_verified = _ssl_wrap_socket_and_match_hostname(
++                    sock=sock,
++                    cert_reqs=self.cert_reqs,
++                    ssl_version=self.ssl_version,
++                    ssl_minimum_version=self.ssl_minimum_version,
++                    ssl_maximum_version=self.ssl_maximum_version,
++                    ca_certs=self.ca_certs,
++                    ca_cert_dir=self.ca_cert_dir,
++                    ca_cert_data=self.ca_cert_data,
++                    cert_file=self.cert_file,
++                    key_file=self.key_file,
++                    key_password=self.key_password,
++                    server_hostname=server_hostname_rm_dot,
++                    ssl_context=proxy_config.ssl_context,
++                    tls_in_tls=tls_in_tls,
++                    assert_hostname=proxy_config.assert_hostname,
++                    assert_fingerprint=proxy_config.assert_fingerprint,
++                )
++            else:
++                sock_and_verified = _ssl_wrap_socket_and_match_hostname(
++                    sock=sock,
++                    cert_reqs=self.cert_reqs,
++                    ssl_version=self.ssl_version,
++                    ssl_minimum_version=self.ssl_minimum_version,
++                    ssl_maximum_version=self.ssl_maximum_version,
++                    ca_certs=self.ca_certs,
++                    ca_cert_dir=self.ca_cert_dir,
++                    ca_cert_data=self.ca_cert_data,
++                    cert_file=self.cert_file,
++                    key_file=self.key_file,
++                    key_password=self.key_password,
++                    server_hostname=server_hostname_rm_dot,
++                    ssl_context=self.ssl_context,
++                    tls_in_tls=tls_in_tls,
++                    assert_hostname=self.assert_hostname,
++                    assert_fingerprint=self.assert_fingerprint,
++                )
+             self.sock = sock_and_verified.socket
+ 
+         # If an error occurs during connection/handshake we may need to release

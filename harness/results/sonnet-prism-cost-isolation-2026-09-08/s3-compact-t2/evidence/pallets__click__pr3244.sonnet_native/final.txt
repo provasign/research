@@ -1,0 +1,13 @@
+## Summary
+
+Fixed the issue where `CliRunner`-invoked code calling `subprocess.run(..., stdout=sys.stderr)` raised `io.UnsupportedOperation: fileno`.
+
+**Root cause:** `CliRunner.isolation()` replaces `sys.stdout`/`sys.stderr` with `_NamedTextIOWrapper` objects backed by in-memory `io.BytesIO` streams. `BytesIO` has no real OS file descriptor, so any call to `.fileno()` (which `subprocess.Popen` makes when given a non-`PIPE`/`DEVNULL` file-like `stdout`/`stderr`) raised `UnsupportedOperation`.
+
+**Fix** (in `src/click/testing.py`):
+- Added an `_FDCapture` helper that duplicates a real OS fd and redirects it (via `os.dup2`) to a temporary file, restoring it and returning the captured bytes on `stop()`.
+- Gave `_NamedTextIOWrapper` a `fileno()` override that returns a captured real fd when one has been set, falling back to the previous (raising) behavior otherwise.
+- In `isolation()`, when the original `sys.stdout`/`sys.stderr` expose real fds, redirect those fds to temp files and mark the new `sys.stdout`/`sys.stderr` wrappers with the redirected fd, so `fileno()` succeeds and any bytes written by native code (e.g. by a spawned subprocess) land in a temp file.
+- On cleanup, the captured bytes are merged back into the runner's output streams.
+
+Verified with the reported reproduction case (now passes) and the full existing test suite (1419 passed, 24 skipped, 1 xfailed — no regressions). No tests, docs, or config were modified.

@@ -1,0 +1,73 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..9a50218 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -67,8 +67,14 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+         stream._paused = False
+ 
+ 
+-class BytesIOCopy(io.BytesIO):
+-    """Patch ``io.BytesIO`` to let the written stream be copied to another.
++class BytesIOCopy(io.RawIOBase):
++    """A binary stream backed by a real (temporary) file whose writes are
++    also copied to another buffer.
++
++    Being backed by an actual OS-level file (rather than an in-memory
++    :class:`io.BytesIO`) means it has a real ``fileno()``, so it can be
++    used with APIs that require a file descriptor, such as
++    ``subprocess.run(..., stdout=sys.stdout)``.
+ 
+     .. versionadded:: 8.2
+     """
+@@ -76,14 +82,38 @@ class BytesIOCopy(io.BytesIO):
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._file = tempfile.TemporaryFile()
+ 
+-    def flush(self) -> None:
+-        super().flush()
+-        self.copy_to.flush()
++    def readable(self) -> bool:
++        return True
++
++    def writable(self) -> bool:
++        return True
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+-        return super().write(b)
++        return self._file.write(b)
++
++    def read(self, size: int = -1) -> bytes:
++        return self._file.read(size)
++
++    def getvalue(self) -> bytes:
++        pos = self._file.tell()
++        self._file.seek(0)
++        data = self._file.read()
++        self._file.seek(pos)
++        return data
++
++    def flush(self) -> None:
++        self._file.flush()
++        self.copy_to.flush()
++
++    def fileno(self) -> int:
++        return self._file.fileno()
++
++    def close(self) -> None:
++        super().close()
++        self._file.close()
+ 
+ 
+ class StreamMixer:
+@@ -464,6 +494,8 @@ class CliRunner:
+             sys.stdout = old_stdout
+             sys.stderr = old_stderr
+             sys.stdin = old_stdin
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
+             termui.visible_prompt_func = old_visible_prompt_func
+             termui.hidden_prompt_func = old_hidden_prompt_func
+             termui._getchar = old__getchar_func

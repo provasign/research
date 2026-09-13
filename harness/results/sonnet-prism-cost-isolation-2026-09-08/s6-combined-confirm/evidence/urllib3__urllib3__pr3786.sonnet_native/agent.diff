@@ -1,0 +1,48 @@
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 84e1dab..9c839d5 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -760,6 +760,29 @@ class HTTPSConnection(HTTPConnection):
+             server_hostname: str = self.host
+             tls_in_tls = False
+ 
++            # When forwarding to an HTTPS proxy (as opposed to tunneling) the
++            # only TLS connection made over this socket is directly to the
++            # proxy itself, so the proxy's SSL context/hostname/fingerprint
++            # must be used instead of the ones configured for the origin.
++            # See: https://github.com/urllib3/urllib3/issues/2577
++            forwarding_for_https_proxy = (
++                self.proxy_is_forwarding
++                and self.proxy is not None
++                and self.proxy.scheme == "https"
++            )
++            if forwarding_for_https_proxy:
++                proxy_config = typing.cast(ProxyConfig, self.proxy_config)
++                ssl_context = proxy_config.ssl_context
++                assert_hostname: None | str | typing.Literal[False] = (
++                    proxy_config.assert_hostname
++                )
++                assert_fingerprint = proxy_config.assert_fingerprint
++                server_hostname = typing.cast(str, self.proxy.host)
++            else:
++                ssl_context = self.ssl_context
++                assert_hostname = self.assert_hostname
++                assert_fingerprint = self.assert_fingerprint
++
+             # Do we need to establish a tunnel?
+             if self.proxy_is_tunneling:
+                 # We're tunneling to an HTTPS origin so need to do TLS-in-TLS.
+@@ -806,10 +829,10 @@ class HTTPSConnection(HTTPConnection):
+                 key_file=self.key_file,
+                 key_password=self.key_password,
+                 server_hostname=server_hostname_rm_dot,
+-                ssl_context=self.ssl_context,
++                ssl_context=ssl_context,
+                 tls_in_tls=tls_in_tls,
+-                assert_hostname=self.assert_hostname,
+-                assert_fingerprint=self.assert_fingerprint,
++                assert_hostname=assert_hostname,
++                assert_fingerprint=assert_fingerprint,
+             )
+             self.sock = sock_and_verified.socket
+ 

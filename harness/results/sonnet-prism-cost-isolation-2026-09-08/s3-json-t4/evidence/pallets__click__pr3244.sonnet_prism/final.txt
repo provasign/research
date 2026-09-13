@@ -1,0 +1,11 @@
+Fix verified as complete with no missed sites, single file changed.
+
+## Summary
+
+Fixed the `UnsupportedOperation: fileno` error raised when code invoked under `CliRunner` passes `sys.stdout`/`sys.stderr` to `subprocess.run` (or any API requiring a real file descriptor).
+
+**Root cause:** `click.testing.BytesIOCopy` (which backs `sys.stdout`/`sys.stderr` during `CliRunner.isolation()`) subclassed `io.BytesIO`, which has no OS-level file descriptor and raises `io.UnsupportedOperation` from `.fileno()`.
+
+**Fix** (`src/click/testing.py`): `BytesIOCopy` now stays purely in-memory (`io.BytesIO`) for the common case, but transparently "rolls over" its contents to a real `tempfile.TemporaryFile()` the first time `.fileno()` is requested. Subsequent writes/flushes/`getvalue()` calls delegate to that real file, so code needing a genuine descriptor (e.g. `subprocess.run(stdout=sys.stderr)`) now works. `close()` was extended to close the backing temp file if one was created, and `CliRunner.isolation()` now explicitly closes the stdout/stderr streams in its `finally` block to avoid leaking any rolled-over temp file descriptor.
+
+Verified with the exact reproduction from the issue (now passes), the full existing test suite (1419 passed, 24 skipped, 1 xfailed — no regressions), and `prism_verify` confirming no missed affected sites.

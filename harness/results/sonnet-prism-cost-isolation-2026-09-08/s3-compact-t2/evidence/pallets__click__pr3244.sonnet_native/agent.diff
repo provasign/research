@@ -1,0 +1,130 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..ea880db 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -100,6 +100,50 @@ class StreamMixer:
+         self.stderr: io.BytesIO = BytesIOCopy(copy_to=self.output)
+ 
+ 
++class _FDCapture:
++    """Redirect a real OS-level file descriptor to a temporary file.
++
++    Used so that code invoked through :class:`CliRunner` which relies on
++    ``fileno()`` (for example ``subprocess.run(..., stdout=sys.stdout)``)
++    keeps working, instead of raising :exc:`io.UnsupportedOperation`.
++    Saves the current target of ``targetfd`` via :func:`os.dup`, then
++    redirects it to a temporary file via :func:`os.dup2`. On :meth:`stop`,
++    restores the original fd and returns the captured bytes.
++
++    .. versionadded:: 8.2.1
++    """
++
++    def __init__(self, targetfd: int) -> None:
++        self._targetfd = targetfd
++        self._saved_fd: int | None = None
++        self._tmpfile: t.BinaryIO | None = None
++
++    def start(self) -> None:
++        try:
++            self._saved_fd = os.dup(self._targetfd)
++            self._tmpfile = tempfile.TemporaryFile()
++            os.dup2(self._tmpfile.fileno(), self._targetfd)
++        except (OSError, ValueError):
++            # The target fd doesn't exist or can't be duplicated (for
++            # example when the real stdout/stderr has already been
++            # replaced by something without a real fd). Fall back to no
++            # capturing rather than failing isolation altogether.
++            self._saved_fd = None
++            self._tmpfile = None
++
++    def stop(self) -> bytes:
++        if self._saved_fd is None or self._tmpfile is None:
++            return b""
++        os.dup2(self._saved_fd, self._targetfd)
++        os.close(self._saved_fd)
++        self._saved_fd = None
++        self._tmpfile.seek(0)
++        data = self._tmpfile.read()
++        self._tmpfile.close()
++        self._tmpfile = None
++        return data
++
++
+ class _NamedTextIOWrapper(io.TextIOWrapper):
+     def __init__(
+         self, buffer: t.BinaryIO, name: str, mode: str, **kwargs: t.Any
+@@ -107,6 +151,11 @@ class _NamedTextIOWrapper(io.TextIOWrapper):
+         super().__init__(buffer, **kwargs)
+         self._name = name
+         self._mode = mode
++        # Set by ``CliRunner.isolation`` when the underlying real fd has
++        # been redirected to a temporary file, so that ``fileno()`` keeps
++        # working for code that relies on it (for example
++        # ``subprocess.run(stdout=sys.stdout)``).
++        self._captured_fd: int | None = None
+ 
+     def close(self) -> None:
+         """
+@@ -117,6 +166,11 @@ class _NamedTextIOWrapper(io.TextIOWrapper):
+         """
+         ...
+ 
++    def fileno(self) -> int:
++        if self._captured_fd is not None:
++            return self._captured_fd
++        return super().fileno()
++
+     @property
+     def name(self) -> str:
+         return self._name
+@@ -347,6 +401,35 @@ class CliRunner:
+             errors="backslashreplace",
+         )
+ 
++        # Redirect the real, underlying OS file descriptors for stdout and
++        # stderr (when they exist) to temporary files. This allows code
++        # invoked through the runner to keep using ``fileno()`` on
++        # ``sys.stdout``/``sys.stderr`` (for example
++        # ``subprocess.run(..., stdout=sys.stdout)``) instead of raising
++        # ``io.UnsupportedOperation``, since the object we replaced them
++        # with is backed by an in-memory ``BytesIO``.
++        stdout_fd_capture = None
++        stderr_fd_capture = None
++        try:
++            real_stdout_fd = old_stdout.fileno()
++        except (AttributeError, io.UnsupportedOperation, ValueError):
++            real_stdout_fd = None
++        try:
++            real_stderr_fd = old_stderr.fileno()
++        except (AttributeError, io.UnsupportedOperation, ValueError):
++            real_stderr_fd = None
++
++        if real_stdout_fd is not None:
++            stdout_fd_capture = _FDCapture(real_stdout_fd)
++            stdout_fd_capture.start()
++            if stdout_fd_capture._tmpfile is not None:
++                sys.stdout._captured_fd = real_stdout_fd
++        if real_stderr_fd is not None:
++            stderr_fd_capture = _FDCapture(real_stderr_fd)
++            stderr_fd_capture.start()
++            if stderr_fd_capture._tmpfile is not None:
++                sys.stderr._captured_fd = real_stderr_fd
++
+         @_pause_echo(echo_input)  # type: ignore
+         def visible_input(prompt: str | None = None) -> str:
+             sys.stdout.write(prompt or "")
+@@ -461,6 +544,14 @@ class CliRunner:
+                         pass
+                 else:
+                     os.environ[key] = value
++            if stdout_fd_capture is not None:
++                captured = stdout_fd_capture.stop()
++                if captured:
++                    stream_mixer.stdout.write(captured)
++            if stderr_fd_capture is not None:
++                captured = stderr_fd_capture.stop()
++                if captured:
++                    stream_mixer.stderr.write(captured)
+             sys.stdout = old_stdout
+             sys.stderr = old_stderr
+             sys.stdin = old_stdin

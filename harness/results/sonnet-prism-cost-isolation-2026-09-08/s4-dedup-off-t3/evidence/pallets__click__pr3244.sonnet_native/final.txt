@@ -1,0 +1,9 @@
+All tests pass (1419 passed, no failures).
+
+## Summary
+
+The bug: `CliRunner`'s isolated `sys.stdout`/`sys.stderr` were backed by `io.BytesIO`, which has no real OS file descriptor. When user code passed one of these streams to `subprocess.run(..., stdout=...)`, `Popen._get_handles` called `stream.fileno()`, and `io.BytesIO.fileno()` raises `io.UnsupportedOperation` by default (since `BytesIO` isn't backed by an actual file).
+
+Fix (`src/click/testing.py`, `BytesIOCopy`): added a lazily-created real `tempfile.TemporaryFile()` backing that `fileno()` returns, so passing these streams to `subprocess.run`/`Popen` works. `write()` mirrors writes into that file when present, and `getvalue()` reads back from the file (merging in anything the subprocess wrote directly to the fd) into the in-memory buffer, keeping existing consumers of `.getvalue()` correct and even letting subprocess output show up in `result.output`/`result.stdout`.
+
+No tests, docs, or config were modified — only the `BytesIOCopy` class in `src/click/testing.py`. Verified with the original reproduction case, the full `tests/test_testing.py` suite, and the entire test suite (1419 passed, 24 skipped, 1 xfailed — no failures).

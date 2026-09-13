@@ -1,0 +1,23 @@
+Work only in the repository in your current directory. Do not use the network,
+git history, benchmark files, saved answers, memory, skills, or delegated agents. Fix the SOURCE
+code so the issue below is resolved. Do not modify tests, docs, changelogs, or configuration.
+Make the smallest robust change. Investigate, edit, and run a narrow relevant test if time permits;
+do not commit. Dependencies are preinstalled; use `python -m pytest` for narrow tests. You have a
+strict five-minute work budget. A patch present at timeout will still be scored.
+
+ISSUE:
+Proxies should use proxy_ssl_context when connecting via ProxyConfig.use_forwarding_for_https = True
+
+This was discovered in https://github.com/urllib3/urllib3/pull/2558 and discussed with @jalopezsilva  on Discord. The gist is it appears that we're using `HTTPSConnection.ssl_context` to connect to HTTPS proxies when using `use_forwarding_with_https = True` mode. This is likely caused by us treating the proxy like it's the origin when we have proxies in "forwarding" mode and previously we didn't have a forwarding mode for HTTPS.
+
+### Minimum requirements
+
+:dollar: **You can get paid to complete this issue! [Please read the docs for more information](https://urllib3.readthedocs.io/en/latest/contributing.html#getting-paid-for-your-contributions).**
+
+- When `ProxyConfig.use_forwarding_with_https = True` and `ssl_context` is specified:
+  - [ ] If `proxy_ssl_context` is specified then error out with `ValueError`
+  - If `proxy_ssl_context` isn't specified:
+    - [ ] On 1.26.x emit a `DeprecationWarning` instructing to switch to `proxy_ssl_context` and set the value of `ssl_context` to `proxy_ssl_context`
+    - [ ] On 2.x raise a `ValueError` that `proxy_ssl_context` should be used, not `ssl_context`.
+- [ ] Only `proxy_ssl_context` should be used for creating the connection to proxies in all modes (HTTP->HTTPS, HTTPS->HTTP, HTTPS->HTTPS, in forwarding/tunnel modes).
+- [ ] Remove the skip to `test_proxy_https_target_tls_error` added in https://github.com/urllib3/urllib3/commit/9f4d05c11eb2f80682c1b7a2671b0636292ef932

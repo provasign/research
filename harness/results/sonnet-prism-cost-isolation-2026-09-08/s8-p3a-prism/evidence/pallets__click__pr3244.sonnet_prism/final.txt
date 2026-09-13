@@ -1,0 +1,13 @@
+## Summary
+
+**Root cause:** `CliRunner`'s captured `stdout`/`stderr` streams (`StreamMixer.stdout`/`stderr`, produced by `BytesIOCopy`) were backed by pure in-memory `io.BytesIO` objects. `BytesIO.fileno()` raises `io.UnsupportedOperation` because there's no real OS-level file descriptor, so passing `sys.stdout`/`sys.stderr` to `subprocess.run(..., stdout=<captured stream>)` failed as soon as `subprocess` tried to duplicate the file descriptor for the child process.
+
+**Fix (`src/click/testing.py`):**
+- `BytesIOCopy` is now backed by a real, on-disk `tempfile.TemporaryFile()` instead of an in-memory `io.BytesIO`, so it exposes a genuine `fileno()`. Writes still get mirrored into the mixed `copy_to` stream for `Result.output`, and anything written directly to the file descriptor by a subprocess is also captured (since it shares the same underlying real file), retrievable via the added `getvalue()`.
+- Added `__del__` to close the backing file if never explicitly closed (avoiding fd leaks/`ResourceWarning`s).
+- `CliRunner.isolation()` now explicitly closes `stream_mixer.stdout`/`stderr` in its `finally` block after all values have been read, cleaning up the real file resources.
+
+**Verification:**
+- Reproduced the exact issue scenario (`subprocess.run(["echo", "foo"], stdout=sys.stderr)` inside a `CliRunner`-invoked command) — previously raised `UnsupportedOperation`, now passes.
+- Full existing test suite: `1419 passed, 24 skipped, 1 xfailed` (no regressions), including the dedicated `tests/test_stream_lifecycle.py` suite that exercises `BytesIOCopy`/`StreamMixer` lifecycle directly.
+- `prism_verify` shows no missed call sites; the only note is an expected review flag on `BytesIOCopy`'s changed base class, which is confirmed safe via the passing tests that exercise it directly.

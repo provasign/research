@@ -1,0 +1,349 @@
+diff --git a/dubbo-dependencies-bom/pom.xml b/dubbo-dependencies-bom/pom.xml
+index 78c1e23..ec42457 100644
+--- a/dubbo-dependencies-bom/pom.xml
++++ b/dubbo-dependencies-bom/pom.xml
+@@ -96,7 +96,6 @@
+     <byte-buddy_version>1.17.5</byte-buddy_version>
+     <netty_version>3.2.10.Final</netty_version>
+     <netty4_version>4.2.2.Final</netty4_version>
+-    <netty_http3_version>0.0.29.Final</netty_http3_version>
+     <httpclient_version>4.5.14</httpclient_version>
+     <httpcore_version>4.4.16</httpcore_version>
+     <fastjson_version>1.2.83_noneautotype</fastjson_version>
+@@ -301,9 +300,9 @@
+         <version>${netty4_version}</version>
+       </dependency>
+       <dependency>
+-        <groupId>io.netty.incubator</groupId>
+-        <artifactId>netty-incubator-codec-http3</artifactId>
+-        <version>${netty_http3_version}</version>
++        <groupId>io.netty</groupId>
++        <artifactId>netty-codec-http3</artifactId>
++        <version>${netty4_version}</version>
+       </dependency>
+       <dependency>
+         <groupId>org.javassist</groupId>
+diff --git a/dubbo-remoting/dubbo-remoting-http3/pom.xml b/dubbo-remoting/dubbo-remoting-http3/pom.xml
+index 4955a9e..7469ad3 100644
+--- a/dubbo-remoting/dubbo-remoting-http3/pom.xml
++++ b/dubbo-remoting/dubbo-remoting-http3/pom.xml
+@@ -43,8 +43,8 @@
+     </dependency>
+ 
+     <dependency>
+-      <groupId>io.netty.incubator</groupId>
+-      <artifactId>netty-incubator-codec-http3</artifactId>
++      <groupId>io.netty</groupId>
++      <artifactId>netty-codec-http3</artifactId>
+     </dependency>
+ 
+     <dependency>
+diff --git a/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/http3/Http3SslContexts.java b/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/http3/Http3SslContexts.java
+index 950fbca..9065e13 100644
+--- a/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/http3/Http3SslContexts.java
++++ b/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/http3/Http3SslContexts.java
+@@ -36,9 +36,9 @@ import io.netty.handler.ssl.ClientAuth;
+ import io.netty.handler.ssl.SslContext;
+ import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
+ import io.netty.handler.ssl.util.SelfSignedCertificate;
+-import io.netty.incubator.codec.http3.Http3;
+-import io.netty.incubator.codec.quic.QuicSslContext;
+-import io.netty.incubator.codec.quic.QuicSslContextBuilder;
++import io.netty.codec.http3.Http3;
++import io.netty.codec.quic.QuicSslContext;
++import io.netty.codec.quic.QuicSslContextBuilder;
+ 
+ public final class Http3SslContexts extends SslContext {
+ 
+diff --git a/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/http3/netty4/Http2HeadersAdapter.java b/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/http3/netty4/Http2HeadersAdapter.java
+index 5799722..9d1c923 100644
+--- a/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/http3/netty4/Http2HeadersAdapter.java
++++ b/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/http3/netty4/Http2HeadersAdapter.java
+@@ -25,7 +25,7 @@ import java.util.function.Consumer;
+ 
+ import io.netty.handler.codec.Headers;
+ import io.netty.handler.codec.http2.Http2Headers;
+-import io.netty.incubator.codec.http3.Http3Headers;
++import io.netty.codec.http3.Http3Headers;
+ 
+ public final class Http2HeadersAdapter implements Http2Headers {
+ 
+diff --git a/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/http3/netty4/Http3ChannelAddressAccessor.java b/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/http3/netty4/Http3ChannelAddressAccessor.java
+index 6239528..3152323 100644
+--- a/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/http3/netty4/Http3ChannelAddressAccessor.java
++++ b/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/http3/netty4/Http3ChannelAddressAccessor.java
+@@ -22,10 +22,10 @@ import org.apache.dubbo.remoting.transport.netty4.ChannelAddressAccessor;
+ import java.net.InetSocketAddress;
+ 
+ import io.netty.channel.Channel;
+-import io.netty.incubator.codec.quic.QuicChannel;
+-import io.netty.incubator.codec.quic.QuicStreamChannel;
++import io.netty.codec.quic.QuicChannel;
++import io.netty.codec.quic.QuicStreamChannel;
+ 
+-@Activate(order = -100, onClass = "io.netty.incubator.codec.quic.QuicChannel")
++@Activate(order = -100, onClass = "io.netty.codec.quic.QuicChannel")
+ public class Http3ChannelAddressAccessor implements ChannelAddressAccessor {
+ 
+     @Override
+diff --git a/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/http3/netty4/Http3HeadersAdapter.java b/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/http3/netty4/Http3HeadersAdapter.java
+index aaf8425..04c39ed 100644
+--- a/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/http3/netty4/Http3HeadersAdapter.java
++++ b/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/http3/netty4/Http3HeadersAdapter.java
+@@ -25,7 +25,7 @@ import java.util.function.Consumer;
+ 
+ import io.netty.handler.codec.Headers;
+ import io.netty.handler.codec.http2.Http2Headers;
+-import io.netty.incubator.codec.http3.Http3Headers;
++import io.netty.codec.http3.Http3Headers;
+ 
+ public final class Http3HeadersAdapter implements Http3Headers {
+ 
+diff --git a/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/http3/netty4/NettyHttp3FrameCodec.java b/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/http3/netty4/NettyHttp3FrameCodec.java
+index dfa8b6d..6753980 100644
+--- a/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/http3/netty4/NettyHttp3FrameCodec.java
++++ b/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/http3/netty4/NettyHttp3FrameCodec.java
+@@ -37,14 +37,14 @@ import io.netty.channel.ChannelHandlerContext;
+ import io.netty.channel.ChannelOutboundHandler;
+ import io.netty.channel.ChannelPromise;
+ import io.netty.handler.codec.http2.Http2Headers.PseudoHeaderName;
+-import io.netty.incubator.codec.http3.DefaultHttp3DataFrame;
+-import io.netty.incubator.codec.http3.DefaultHttp3Headers;
+-import io.netty.incubator.codec.http3.DefaultHttp3HeadersFrame;
+-import io.netty.incubator.codec.http3.Http3DataFrame;
+-import io.netty.incubator.codec.http3.Http3Headers;
+-import io.netty.incubator.codec.http3.Http3HeadersFrame;
+-import io.netty.incubator.codec.http3.Http3RequestStreamInboundHandler;
+-import io.netty.incubator.codec.quic.QuicStreamChannel;
++import io.netty.codec.http3.DefaultHttp3DataFrame;
++import io.netty.codec.http3.DefaultHttp3Headers;
++import io.netty.codec.http3.DefaultHttp3HeadersFrame;
++import io.netty.codec.http3.Http3DataFrame;
++import io.netty.codec.http3.Http3Headers;
++import io.netty.codec.http3.Http3HeadersFrame;
++import io.netty.codec.http3.Http3RequestStreamInboundHandler;
++import io.netty.codec.quic.QuicStreamChannel;
+ 
+ import static org.apache.dubbo.remoting.http3.netty4.Constants.TRI_PING;
+ 
+diff --git a/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/http3/netty4/NettyHttp3ProtocolSelectorHandler.java b/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/http3/netty4/NettyHttp3ProtocolSelectorHandler.java
+index 40b2957..bbf1ea3 100644
+--- a/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/http3/netty4/NettyHttp3ProtocolSelectorHandler.java
++++ b/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/http3/netty4/NettyHttp3ProtocolSelectorHandler.java
+@@ -31,7 +31,7 @@ import io.netty.channel.ChannelHandler.Sharable;
+ import io.netty.channel.ChannelHandlerContext;
+ import io.netty.channel.ChannelPipeline;
+ import io.netty.channel.SimpleChannelInboundHandler;
+-import io.netty.incubator.codec.quic.QuicStreamChannel;
++import io.netty.codec.quic.QuicStreamChannel;
+ 
+ @Sharable
+ public class NettyHttp3ProtocolSelectorHandler extends SimpleChannelInboundHandler<HttpMetadata> {
+diff --git a/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/http3/netty4/NettyHttp3StreamChannel.java b/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/http3/netty4/NettyHttp3StreamChannel.java
+index b149a0a..d12773b 100644
+--- a/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/http3/netty4/NettyHttp3StreamChannel.java
++++ b/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/http3/netty4/NettyHttp3StreamChannel.java
+@@ -28,7 +28,7 @@ import java.util.concurrent.CompletableFuture;
+ 
+ import io.netty.buffer.ByteBuf;
+ import io.netty.buffer.ByteBufOutputStream;
+-import io.netty.incubator.codec.quic.QuicStreamChannel;
++import io.netty.codec.quic.QuicStreamChannel;
+ 
+ public class NettyHttp3StreamChannel implements H2StreamChannel {
+ 
+diff --git a/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/transport/netty4/Http3Helper.java b/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/transport/netty4/Http3Helper.java
+index 4ae742f..c688966 100644
+--- a/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/transport/netty4/Http3Helper.java
++++ b/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/transport/netty4/Http3Helper.java
+@@ -20,8 +20,8 @@ import org.apache.dubbo.common.URL;
+ import org.apache.dubbo.config.context.ConfigManager;
+ import org.apache.dubbo.config.nested.Http3Config;
+ 
+-import io.netty.incubator.codec.quic.QuicCodecBuilder;
+-import io.netty.incubator.codec.quic.QuicCongestionControlAlgorithm;
++import io.netty.codec.quic.QuicCodecBuilder;
++import io.netty.codec.quic.QuicCongestionControlAlgorithm;
+ 
+ import static java.util.concurrent.TimeUnit.MILLISECONDS;
+ 
+diff --git a/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/transport/netty4/NettyHttp3ConnectionClient.java b/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/transport/netty4/NettyHttp3ConnectionClient.java
+index a3ad10d..631eb6b 100644
+--- a/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/transport/netty4/NettyHttp3ConnectionClient.java
++++ b/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/transport/netty4/NettyHttp3ConnectionClient.java
+@@ -34,10 +34,10 @@ import io.netty.channel.ChannelOption;
+ import io.netty.channel.ChannelPipeline;
+ import io.netty.channel.ChannelPromise;
+ import io.netty.channel.socket.nio.NioDatagramChannel;
+-import io.netty.incubator.codec.http3.Http3;
+-import io.netty.incubator.codec.http3.Http3ClientConnectionHandler;
+-import io.netty.incubator.codec.quic.QuicChannel;
+-import io.netty.incubator.codec.quic.QuicChannelBootstrap;
++import io.netty.codec.http3.Http3;
++import io.netty.codec.http3.Http3ClientConnectionHandler;
++import io.netty.codec.quic.QuicChannel;
++import io.netty.codec.quic.QuicChannelBootstrap;
+ import io.netty.util.concurrent.Future;
+ import io.netty.util.concurrent.GenericFutureListener;
+ 
+diff --git a/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/transport/netty4/NettyHttp3Server.java b/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/transport/netty4/NettyHttp3Server.java
+index e9a8634..0177180 100644
+--- a/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/transport/netty4/NettyHttp3Server.java
++++ b/dubbo-remoting/dubbo-remoting-http3/src/main/java/org/apache/dubbo/remoting/transport/netty4/NettyHttp3Server.java
+@@ -40,9 +40,9 @@ import io.netty.channel.ChannelInitializer;
+ import io.netty.channel.ChannelPipeline;
+ import io.netty.channel.EventLoopGroup;
+ import io.netty.channel.socket.nio.NioDatagramChannel;
+-import io.netty.incubator.codec.http3.Http3;
+-import io.netty.incubator.codec.quic.InsecureQuicTokenHandler;
+-import io.netty.incubator.codec.quic.QuicChannel;
++import io.netty.codec.http3.Http3;
++import io.netty.codec.quic.InsecureQuicTokenHandler;
++import io.netty.codec.quic.QuicChannel;
+ import io.netty.util.concurrent.Future;
+ 
+ import static java.util.concurrent.TimeUnit.MILLISECONDS;
+diff --git a/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/Http3Exchanger.java b/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/Http3Exchanger.java
+index 3bea1f4..c852c9d 100644
+--- a/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/Http3Exchanger.java
++++ b/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/Http3Exchanger.java
+@@ -48,15 +48,15 @@ import io.netty.channel.ChannelInitializer;
+ import io.netty.channel.ChannelPipeline;
+ import io.netty.handler.flush.FlushConsolidationHandler;
+ import io.netty.handler.timeout.IdleStateHandler;
+-import io.netty.incubator.codec.http3.Http3ServerConnectionHandler;
+-import io.netty.incubator.codec.quic.QuicStreamChannel;
++import io.netty.codec.http3.Http3ServerConnectionHandler;
++import io.netty.codec.quic.QuicStreamChannel;
+ 
+ import static org.apache.dubbo.remoting.http3.netty4.Constants.PIPELINE_CONFIGURATOR_KEY;
+ 
+ public final class Http3Exchanger {
+ 
+     private static final FluentLogger LOGGER = FluentLogger.of(Http3Exchanger.class);
+-    private static final boolean HAS_NETTY_HTTP3 = ClassUtils.isPresent("io.netty.incubator.codec.http3.Http3");
++    private static final boolean HAS_NETTY_HTTP3 = ClassUtils.isPresent("io.netty.codec.http3.Http3");
+     private static final ConcurrentHashMap<String, RemotingServer> SERVERS = new ConcurrentHashMap<>();
+     private static final Map<String, AbstractConnectionClient> CLIENTS = new ConcurrentHashMap<>(16);
+     private static final ChannelHandler HANDLER = new ChannelHandlerAdapter();
+diff --git a/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/command/Http3CreateStreamQueueCommand.java b/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/command/Http3CreateStreamQueueCommand.java
+index 6d8e256..8f695b1 100644
+--- a/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/command/Http3CreateStreamQueueCommand.java
++++ b/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/command/Http3CreateStreamQueueCommand.java
+@@ -22,9 +22,9 @@ import io.netty.channel.Channel;
+ import io.netty.channel.ChannelHandlerContext;
+ import io.netty.channel.ChannelInitializer;
+ import io.netty.channel.ChannelPromise;
+-import io.netty.incubator.codec.http3.Http3;
+-import io.netty.incubator.codec.quic.QuicChannel;
+-import io.netty.incubator.codec.quic.QuicStreamChannel;
++import io.netty.codec.http3.Http3;
++import io.netty.codec.quic.QuicChannel;
++import io.netty.codec.quic.QuicStreamChannel;
+ 
+ public class Http3CreateStreamQueueCommand extends QueuedCommand {
+ 
+diff --git a/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/h3/Helper.java b/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/h3/Helper.java
+index 4ff365a..51aa131 100644
+--- a/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/h3/Helper.java
++++ b/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/h3/Helper.java
+@@ -23,7 +23,7 @@ import org.apache.dubbo.remoting.http12.HttpMetadata;
+ import org.apache.dubbo.remoting.http12.h2.Http2MetadataFrame;
+ import org.apache.dubbo.remoting.http12.netty4.NettyHttpHeaders;
+ 
+-import io.netty.incubator.codec.http3.DefaultHttp3Headers;
++import io.netty.codec.http3.DefaultHttp3Headers;
+ 
+ public final class Helper {
+ 
+diff --git a/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/h3/Http3ClientFrameCodec.java b/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/h3/Http3ClientFrameCodec.java
+index 34adf25..33962cf 100644
+--- a/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/h3/Http3ClientFrameCodec.java
++++ b/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/h3/Http3ClientFrameCodec.java
+@@ -41,19 +41,19 @@ import io.netty.handler.codec.http2.Http2DataFrame;
+ import io.netty.handler.codec.http2.Http2Headers.PseudoHeaderName;
+ import io.netty.handler.codec.http2.Http2HeadersFrame;
+ import io.netty.handler.codec.http2.Http2PingFrame;
+-import io.netty.incubator.codec.http3.DefaultHttp3DataFrame;
+-import io.netty.incubator.codec.http3.DefaultHttp3Headers;
+-import io.netty.incubator.codec.http3.DefaultHttp3HeadersFrame;
+-import io.netty.incubator.codec.http3.Http3;
+-import io.netty.incubator.codec.http3.Http3DataFrame;
+-import io.netty.incubator.codec.http3.Http3ErrorCode;
+-import io.netty.incubator.codec.http3.Http3Exception;
+-import io.netty.incubator.codec.http3.Http3GoAwayFrame;
+-import io.netty.incubator.codec.http3.Http3Headers;
+-import io.netty.incubator.codec.http3.Http3HeadersFrame;
+-import io.netty.incubator.codec.http3.Http3RequestStreamInitializer;
+-import io.netty.incubator.codec.quic.QuicChannel;
+-import io.netty.incubator.codec.quic.QuicStreamChannel;
++import io.netty.codec.http3.DefaultHttp3DataFrame;
++import io.netty.codec.http3.DefaultHttp3Headers;
++import io.netty.codec.http3.DefaultHttp3HeadersFrame;
++import io.netty.codec.http3.Http3;
++import io.netty.codec.http3.Http3DataFrame;
++import io.netty.codec.http3.Http3ErrorCode;
++import io.netty.codec.http3.Http3Exception;
++import io.netty.codec.http3.Http3GoAwayFrame;
++import io.netty.codec.http3.Http3Headers;
++import io.netty.codec.http3.Http3HeadersFrame;
++import io.netty.codec.http3.Http3RequestStreamInitializer;
++import io.netty.codec.quic.QuicChannel;
++import io.netty.codec.quic.QuicStreamChannel;
+ 
+ import static org.apache.dubbo.common.constants.LoggerCodeConstants.TRANSPORT_FAILED_RECONNECT;
+ 
+diff --git a/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/h3/Http3ClientStreamFactory.java b/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/h3/Http3ClientStreamFactory.java
+index 44b48c2..b7ac851 100644
+--- a/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/h3/Http3ClientStreamFactory.java
++++ b/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/h3/Http3ClientStreamFactory.java
+@@ -27,7 +27,7 @@ import org.apache.dubbo.rpc.protocol.tri.transport.TripleWriteQueue;
+ 
+ import java.util.concurrent.Executor;
+ 
+-@Activate(order = -100, onClass = "io.netty.incubator.codec.quic.QuicChannel")
++@Activate(order = -100, onClass = "io.netty.codec.quic.QuicChannel")
+ public class Http3ClientStreamFactory implements ClientStreamFactory {
+ 
+     @Override
+diff --git a/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/h3/Http3TripleClientStream.java b/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/h3/Http3TripleClientStream.java
+index 4e8c082..9e22952 100644
+--- a/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/h3/Http3TripleClientStream.java
++++ b/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/h3/Http3TripleClientStream.java
+@@ -31,8 +31,8 @@ import java.util.concurrent.Executor;
+ 
+ import io.netty.channel.Channel;
+ import io.netty.handler.codec.http2.Http2StreamChannel;
+-import io.netty.incubator.codec.http3.Http3RequestStreamInitializer;
+-import io.netty.incubator.codec.quic.QuicStreamChannel;
++import io.netty.codec.http3.Http3RequestStreamInitializer;
++import io.netty.codec.quic.QuicStreamChannel;
+ 
+ public final class Http3TripleClientStream extends AbstractTripleClientStream {
+ 
+diff --git a/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/h3/Http3TripleServerConnectionHandler.java b/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/h3/Http3TripleServerConnectionHandler.java
+index afcd19e..d18fdc8 100644
+--- a/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/h3/Http3TripleServerConnectionHandler.java
++++ b/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/h3/Http3TripleServerConnectionHandler.java
+@@ -19,7 +19,7 @@ package org.apache.dubbo.rpc.protocol.tri.h3;
+ import io.netty.channel.ChannelDuplexHandler;
+ import io.netty.channel.ChannelHandlerContext;
+ import io.netty.channel.ChannelPromise;
+-import io.netty.incubator.codec.http3.Http3GoAwayFrame;
++import io.netty.codec.http3.Http3GoAwayFrame;
+ import io.netty.util.ReferenceCountUtil;
+ 
+ public class Http3TripleServerConnectionHandler extends ChannelDuplexHandler {
+diff --git a/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/h3/negotiation/AdaptiveClientStreamFactory.java b/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/h3/negotiation/AdaptiveClientStreamFactory.java
+index dee38d9..08b73f6 100644
+--- a/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/h3/negotiation/AdaptiveClientStreamFactory.java
++++ b/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/h3/negotiation/AdaptiveClientStreamFactory.java
+@@ -30,7 +30,7 @@ import java.util.concurrent.Executor;
+ 
+ import io.netty.channel.Channel;
+ 
+-@Activate(order = -90, onClass = "io.netty.incubator.codec.quic.QuicChannel")
++@Activate(order = -90, onClass = "io.netty.codec.quic.QuicChannel")
+ public class AdaptiveClientStreamFactory implements ClientStreamFactory {
+ 
+     @Override

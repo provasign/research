@@ -2,6 +2,14 @@
 
 Run: cd research/harness && python -m pytest -p no:asyncio -p no:pytest_asyncio tests/test_wide_score.py -q
 """
+
+import sys as _sys, os as _os
+_H = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+for _d in (_H, _os.path.join(_H, "runners"), _os.path.join(_H, "aggregate"),
+           _os.path.join(_H, "build"), _os.path.join(_H, "scoring")):
+    if _d not in _sys.path:
+        _sys.path.insert(0, _d)
+
 import sys
 from pathlib import Path
 

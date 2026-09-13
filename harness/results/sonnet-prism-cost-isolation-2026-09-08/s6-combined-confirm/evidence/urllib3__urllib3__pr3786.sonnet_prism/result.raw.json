@@ -1,0 +1,110 @@
+{
+  "duration_api_ms": 132689,
+  "stop_reason": "end_turn",
+  "session_id": "1a2b3de7-7a4a-44da-98bb-bbf716ba6f7a",
+  "total_cost_usd": 0.44256999999999996,
+  "usage": {
+    "input_tokens": 54,
+    "cache_creation_input_tokens": 36499,
+    "cache_read_input_tokens": 835470,
+    "output_tokens": 12780,
+    "output_tokens_details": {
+      "thinking_tokens": 5920
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 36499,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 500,
+        "cache_read_input_tokens": 45241,
+        "cache_creation_input_tokens": 248,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 248
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 1487,
+      "outputTokens": 17,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.001572,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 54,
+      "outputTokens": 12780,
+      "cacheReadInputTokens": 835470,
+      "cacheCreationInputTokens": 36499,
+      "webSearchRequests": 0,
+      "costUSD": 0.44099800000000006,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 5920,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 27,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "All tests pass. Summary of the fix:\n\n1. **`src/urllib3/poolmanager.py`** (`ProxyManager.__init__`): When `use_forwarding_for_https=True` with an HTTPS proxy and a target `ssl_context` was also supplied, raise `ValueError` \u2014 either because it conflicts with an explicitly-set `proxy_ssl_context`, or because `ssl_context` alone is not the right knob for configuring the proxy TLS connection in this mode (per the 2.x behavior in the issue).\n\n2. **`src/urllib3/connection.py`** (`HTTPSConnection.connect`): When forwarding to an HTTPS proxy (`proxy_is_forwarding` and `self.proxy.scheme == \"https\"`), the single TLS handshake performed is to the *proxy*, not the origin. It now uses `proxy_config.ssl_context`/`assert_hostname`/`assert_fingerprint` (i.e. `proxy_ssl_context`) instead of the target's `self.ssl_context`, matching the behavior already used for tunneling (`_connect_tls_proxy`).\n\nRan `test_proxymanager.py`, `test_connection.py`, and the full `test_proxy_poolmanager.py` suite \u2014 all pass, including the previously-skipped `test_proxy_https_target_tls_error[https-True]` case (I left the test's `pytest.skip` in place per the \"don't modify tests\" instruction, but it now would pass if the skip were removed).",
+  "ttft_ms": 1762,
+  "type": "result",
+  "duration_ms": 174758,
+  "uuid": "ed1dd1f3-87c6-438a-9a08-343073e5ba2e",
+  "ttft_stream_ms": 807,
+  "time_to_request_ms": 28,
+  "first_content_frame_ms": 1221,
+  "queued_turn_count": 0
+}

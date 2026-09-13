@@ -1,0 +1,11 @@
+The fix is complete and minimal.
+
+## Summary
+
+**Root cause**: When `soft_wrap=True`, `Console.print()` sets `crop=False`, which bypasses `Segment.split_and_crop_lines()` entirely and pushes the raw rendered segments straight to the buffer. Since the style (e.g. `"blue on white"`) was applied to *all* segments including the literal `"\n"` segment (via `Segment.apply_style`), the newline character itself got wrapped in the background-color ANSI codes (`\x1b[34;47m\n\x1b[0m`). When a terminal auto-wraps at that point, it fills the remainder of the physical line with the still-active background color before the reset code takes effect.
+
+In the `crop=True` path this didn't happen because `split_and_crop_lines` creates a *fresh, unstyled* newline segment when splitting lines, discarding the color that had been applied to the original `"\n"`.
+
+**Fix** (`rich/console.py`, in `Console.print()`): route the `crop=False` branch through `Segment.split_and_crop_lines()` as well, using an effectively unlimited line length (`sys.maxsize`) so no actual cropping/padding occurs (preserving soft-wrap behavior), while still splitting on newlines to produce fresh, unstyled newline segments — eliminating the background color leak.
+
+Verified with a manual reproduction (styled ANSI now shows `\x1b[34;47m...\x1b[0m\n` instead of `\x1b[34;47m...\x1b[0m\x1b[34;47m\n\x1b[0m`), and confirmed no regressions by running the full test suite before/after — the 7 failures present are pre-existing (verified via `git stash`) and unrelated to this change.

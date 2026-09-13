@@ -1,0 +1,110 @@
+{
+  "duration_api_ms": 248341,
+  "stop_reason": "end_turn",
+  "session_id": "e47ebab2-7a44-44d0-9357-387ce376f34a",
+  "total_cost_usd": 0.6917898,
+  "usage": {
+    "input_tokens": 74,
+    "cache_creation_input_tokens": 47625,
+    "cache_read_input_tokens": 1345244,
+    "output_tokens": 22802,
+    "output_tokens_details": {
+      "thinking_tokens": 13225
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 47625,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 517,
+        "cache_read_input_tokens": 56367,
+        "cache_creation_input_tokens": 248,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 248
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 24,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004073,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 74,
+      "outputTokens": 22802,
+      "cacheReadInputTokens": 1345244,
+      "cacheCreationInputTokens": 47625,
+      "webSearchRequests": 0,
+      "costUSD": 0.6877168,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 13225,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 37,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "All tests pass. Summary of the fix:\n\nIn `src/click/testing.py`, `BytesIOCopy` (the in-memory buffer `CliRunner` substitutes for `sys.stdout`/`sys.stderr`) previously inherited `io.BytesIO.fileno()` unchanged, which raises a bare `io.UnsupportedOperation: fileno` with no context. When code under test passes one of these streams to an API requiring a real file descriptor (e.g. `subprocess.run(..., stdout=sys.stderr)`), the failure surfaced as a confusing low-level traceback deep inside `subprocess`, as in the reported issue.\n\nI added a `fileno()` override on `BytesIOCopy` that raises `io.UnsupportedOperation` with a clear explanation: the stream is an in-memory buffer captured by `CliRunner` and isn't backed by a real OS file descriptor, so APIs like `subprocess.run` that require one can't use it directly. This is the smallest robust change \u2014 it doesn't alter stream semantics, lifecycle, or ownership (which the existing `test_stream_lifecycle.py` suite tests extensively and relies on `io.BytesIO`-based in-memory buffers with no explicit close), it just turns an opaque low-level error into an actionable one.\n\nVerified: full test suite (`tests/`) \u2014 1419 passed, 24 skipped, 1 xfailed, no regressions. The original SSCCE now fails with a clear, explanatory error instead of a deep, confusing `subprocess` traceback.",
+  "ttft_ms": 2320,
+  "type": "result",
+  "duration_ms": 257602,
+  "uuid": "838721a7-628e-44f0-89c2-40ee25011f52",
+  "ttft_stream_ms": 1028,
+  "time_to_request_ms": 28,
+  "first_content_frame_ms": 1570,
+  "queued_turn_count": 0
+}

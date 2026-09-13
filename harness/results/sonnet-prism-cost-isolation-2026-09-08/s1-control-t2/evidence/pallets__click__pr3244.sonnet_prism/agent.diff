@@ -1,0 +1,49 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..af694c1 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -71,20 +71,44 @@ class BytesIOCopy(io.BytesIO):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.3
++        Supports ``fileno()`` by lazily backing the stream with a real
++        temporary file, so code under test can pass ``sys.stdout`` or
++        ``sys.stderr`` to APIs like :func:`subprocess.run` that require an
++        actual file descriptor.
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._fileno_file: t.IO[bytes] | None = None
+ 
+     def flush(self) -> None:
+         super().flush()
+         self.copy_to.flush()
+ 
++        if self._fileno_file is not None:
++            self._fileno_file.flush()
++
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
++
++        if self._fileno_file is not None:
++            self._fileno_file.write(b)
++
+         return super().write(b)
+ 
++    def fileno(self) -> int:
++        # A plain ``io.BytesIO`` has no real file descriptor. Create one
++        # lazily, on demand, so callers that need an actual fd (such as
++        # ``subprocess.run(..., stdout=sys.stdout)``) don't raise
++        # ``io.UnsupportedOperation``.
++        if self._fileno_file is None:
++            self._fileno_file = tempfile.TemporaryFile()
++
++        return self._fileno_file.fileno()
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.

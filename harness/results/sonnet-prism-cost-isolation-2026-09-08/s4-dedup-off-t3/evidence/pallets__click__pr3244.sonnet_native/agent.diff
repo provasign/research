@@ -1,0 +1,69 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..2d04da5 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -71,20 +71,64 @@ class BytesIOCopy(io.BytesIO):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.2.1
++        Gained a working ``fileno()``, backed by a real temporary file
++        created on demand. This allows the stream to be used as
++        ``stdout``/``stderr`` for :func:`subprocess.run` and similar APIs.
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._file: t.IO[bytes] | None = None
+ 
+     def flush(self) -> None:
+         super().flush()
+         self.copy_to.flush()
+ 
++        if self._file is not None:
++            self._file.flush()
++
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
++
++        if self._file is not None:
++            self._file.write(b)
++
+         return super().write(b)
+ 
++    def fileno(self) -> int:
++        if self._file is None:
++            # Lazily back this stream with a real OS-level file so that
++            # code (e.g. ``subprocess.run(..., stdout=stream)``) that
++            # requires an actual file descriptor keeps working.
++            self._file = tempfile.TemporaryFile()
++            self._file.write(super().getvalue())
++            self._file.seek(self.tell())
++
++        return self._file.fileno()
++
++    def getvalue(self) -> bytes:
++        if self._file is not None:
++            # Pull in anything written directly to the file descriptor
++            # (e.g. by a subprocess) and keep the in-memory buffer,
++            # which other callers rely on, in sync with it.
++            pos = self._file.tell()
++            self._file.seek(0)
++            data = self._file.read()
++            self._file.seek(pos)
++
++            cur = self.tell()
++            super().seek(0)
++            super().truncate()
++            super().write(data)
++            super().seek(cur)
++
++            return data
++
++        return super().getvalue()
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.

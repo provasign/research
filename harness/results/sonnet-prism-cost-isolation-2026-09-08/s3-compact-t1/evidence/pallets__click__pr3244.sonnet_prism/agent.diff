@@ -1,0 +1,51 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..fcde935 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -71,16 +71,46 @@ class BytesIOCopy(io.BytesIO):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.3
++        Supports ``fileno()`` by lazily backing the stream with a real
++        temporary file, so it can be passed as ``stdout``/``stderr`` to
++        :class:`subprocess.Popen` (and functions built on it, such as
++        :func:`subprocess.run`).
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._file: t.IO[bytes] | None = None
++        self._file_synced = 0
++
++    def fileno(self) -> int:
++        if self._file is None:
++            self._file = tempfile.TemporaryFile()
++            self._file.write(self.getvalue())
++            self._file_synced = self.tell()
++        return self._file.fileno()
+ 
+     def flush(self) -> None:
+         super().flush()
+         self.copy_to.flush()
+ 
++        if self._file is not None:
++            # Pick up anything written directly to the file descriptor,
++            # e.g. by a subprocess, and mirror it into this buffer.
++            self._file.flush()
++            self._file.seek(self._file_synced)
++            data = self._file.read()
++            self._file_synced = self._file.tell()
++
++            if data:
++                self.copy_to.write(data)
++                pos = self.tell()
++                self.seek(0, io.SEEK_END)
++                super().write(data)
++                self.seek(pos)
++
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+         return super().write(b)

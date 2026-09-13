@@ -1,0 +1,52 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..1a08204 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -67,14 +67,22 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+         stream._paused = False
+ 
+ 
+-class BytesIOCopy(io.BytesIO):
++class BytesIOCopy(tempfile.SpooledTemporaryFile):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
++    Backed by a :class:`~tempfile.SpooledTemporaryFile` so that ``fileno()``
++    works, allowing the stream to be passed to APIs such as
++    :func:`subprocess.run` that require a real file descriptor.
++
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.3.2
++        Use ``SpooledTemporaryFile`` instead of ``BytesIO`` so ``fileno()``
++        does not raise ``io.UnsupportedOperation``.
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+-        super().__init__()
++        super().__init__(max_size=0, mode="rb+")
+         self.copy_to = copy_to
+ 
+     def flush(self) -> None:
+@@ -85,6 +93,13 @@ class BytesIOCopy(io.BytesIO):
+         self.copy_to.write(b)
+         return super().write(b)
+ 
++    def getvalue(self) -> bytes:
++        pos = self.tell()
++        self.seek(0)
++        data = self.read()
++        self.seek(pos)
++        return data
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.
+@@ -453,6 +468,8 @@ class CliRunner:
+                     os.environ[key] = value
+             yield (stream_mixer.stdout, stream_mixer.stderr, stream_mixer.output)
+         finally:
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
+             for key, value in old_env.items():
+                 if value is None:
+                     try:

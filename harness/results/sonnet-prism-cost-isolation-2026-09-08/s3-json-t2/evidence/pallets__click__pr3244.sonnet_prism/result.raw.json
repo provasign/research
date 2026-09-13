@@ -1,0 +1,110 @@
+{
+  "duration_api_ms": 144571,
+  "stop_reason": "end_turn",
+  "session_id": "09b96ca8-fd89-4f34-af04-f6b9bae0b87a",
+  "total_cost_usd": 0.4502496000000001,
+  "usage": {
+    "input_tokens": 60,
+    "cache_creation_input_tokens": 36683,
+    "cache_read_input_tokens": 825598,
+    "output_tokens": 13423,
+    "output_tokens_details": {
+      "thinking_tokens": 6451
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 36683,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 474,
+        "cache_read_input_tokens": 45467,
+        "cache_creation_input_tokens": 206,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 206
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 19,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.0040479999999999995,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 60,
+      "outputTokens": 13423,
+      "cacheReadInputTokens": 825598,
+      "cacheCreationInputTokens": 36683,
+      "webSearchRequests": 0,
+      "costUSD": 0.44620160000000003,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 6451,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 30,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "## Summary\n\nThe issue: `CliRunner`'s `isolation()` context manager captured stdout/stderr using in-memory `io.BytesIO` objects, which have no real OS file descriptor. When code under test called `subprocess.run(..., stdout=sys.stderr)`, `subprocess` tried `stdout.fileno()` and got `io.UnsupportedOperation`.\n\nFix (in `src/click/testing.py`):\n- Reworked `BytesIOCopy` to be backed by a real `tempfile.TemporaryFile()` instead of `io.BytesIO`, so `fileno()` (delegated via `__getattr__`) returns a genuine OS-level file descriptor that `subprocess` can write into directly. It still mirrors writes to the `copy_to` stream and provides a `getvalue()` compatible with existing call sites.\n- Added a `__del__` to close the backing temp file if it was never explicitly closed (avoiding fd leaks/`ResourceWarning`).\n- Explicitly close `stream_mixer.stdout`/`stderr` in the `isolation()` `finally` block, after `getvalue()` has already been read inside `invoke()`, so temp files don't leak per-invocation.\n\nVerified: the issue's reproduction case now passes, and the full existing test suite (`python -m pytest`) passes: 1419 passed, 24 skipped, 1 xfailed, no regressions.",
+  "ttft_ms": 1807,
+  "type": "result",
+  "duration_ms": 152945,
+  "uuid": "432e587c-5d9d-49f9-8c37-9edc7003aaae",
+  "ttft_stream_ms": 974,
+  "time_to_request_ms": 26,
+  "first_content_frame_ms": 1807,
+  "queued_turn_count": 0
+}

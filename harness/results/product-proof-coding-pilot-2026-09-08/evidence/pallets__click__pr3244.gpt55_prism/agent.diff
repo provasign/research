@@ -1,0 +1,46 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..e559730 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -107,6 +107,8 @@ class _NamedTextIOWrapper(io.TextIOWrapper):
+         super().__init__(buffer, **kwargs)
+         self._name = name
+         self._mode = mode
++        self._fd_capture: t.BinaryIO | None = None
++        self._fd_capture_pos = 0
+ 
+     def close(self) -> None:
+         """
+@@ -117,6 +119,32 @@ class _NamedTextIOWrapper(io.TextIOWrapper):
+         """
+         ...
+ 
++    def fileno(self) -> int:
++        if not self.writable():
++            return super().fileno()
++
++        if self._fd_capture is None:
++            self._fd_capture = tempfile.TemporaryFile("w+b")
++
++        return self._fd_capture.fileno()
++
++    def flush(self) -> None:
++        super().flush()
++
++        if self._fd_capture is None:
++            return
++
++        self._fd_capture.flush()
++        pos = self._fd_capture.tell()
++        self._fd_capture.seek(self._fd_capture_pos)
++        captured = self._fd_capture.read()
++        self._fd_capture_pos = self._fd_capture.tell()
++        self._fd_capture.seek(pos)
++
++        if captured:
++            self.buffer.write(captured)
++            self.buffer.flush()
++
+     @property
+     def name(self) -> str:
+         return self._name

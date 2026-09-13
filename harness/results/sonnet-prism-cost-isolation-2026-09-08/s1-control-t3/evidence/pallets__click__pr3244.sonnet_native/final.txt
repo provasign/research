@@ -1,0 +1,9 @@
+Full test suite passes (1419 passed, 24 skipped, 1 xfailed — none failing).
+
+## Summary
+
+The bug: `CliRunner` replaced `sys.stdout`/`sys.stderr` with `io.TextIOWrapper` objects backed by plain `io.BytesIO` buffers. `io.BytesIO` has no real file descriptor, so `.fileno()` raises `UnsupportedOperation`, which broke any code under test that passed `sys.stdout`/`sys.stderr` to `subprocess.run`/`Popen`.
+
+Fix (`src/click/testing.py`): added a new `_FileIOCopy` class that backs the stdout/stderr streams with a real OS-level `tempfile.TemporaryFile()` instead of `io.BytesIO`, while still mirroring writes into the combined `output` buffer (same behavior as the old `BytesIOCopy`) and providing `getvalue()` for retrieving captured output. `StreamMixer` now uses `_FileIOCopy` for `stdout`/`stderr`. Since the underlying buffer has a real file descriptor, `subprocess` calls that redirect to `sys.stdout`/`sys.stderr` inside `CliRunner.invoke()` now work correctly.
+
+Verified with the reproduction from the issue (now passes) and the full existing test suite (1419 passed, no regressions).

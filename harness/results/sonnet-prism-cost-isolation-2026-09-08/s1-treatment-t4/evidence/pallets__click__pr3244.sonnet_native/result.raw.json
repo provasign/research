@@ -1,0 +1,110 @@
+{
+  "duration_api_ms": 136141,
+  "stop_reason": "end_turn",
+  "session_id": "d8a5ea82-3db0-4553-9676-2b7b159a362e",
+  "total_cost_usd": 0.4158556,
+  "usage": {
+    "input_tokens": 50,
+    "cache_creation_input_tokens": 38340,
+    "cache_read_input_tokens": 673738,
+    "output_tokens": 12362,
+    "output_tokens_details": {
+      "thinking_tokens": 5974
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 38340,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 638,
+        "cache_read_input_tokens": 43448,
+        "cache_creation_input_tokens": 346,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 346
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 15,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004028,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 50,
+      "outputTokens": 12362,
+      "cacheReadInputTokens": 673738,
+      "cacheCreationInputTokens": 38340,
+      "webSearchRequests": 0,
+      "costUSD": 0.4118276,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 5974,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 25,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "## Summary\n\nThe issue: `CliRunner`'s isolated `sys.stdout`/`sys.stderr` were backed by `io.BytesIO`, which has no real file descriptor. When user code passed these streams to `subprocess.run(..., stdout=sys.stderr)`, Python tried `stdout.fileno()` and raised `io.UnsupportedOperation`, even though the exact same code works fine outside of `CliRunner`.\n\n**Fix** in `src/click/testing.py`:\n- `BytesIOCopy` (the class backing `StreamMixer.stdout`/`.stderr`) is now backed by a real OS-level file (`tempfile.TemporaryFile()`) instead of `io.BytesIO`, so it exposes a working `fileno()` \u2014 `io.TextIOWrapper.fileno()` (used by `_NamedTextIOWrapper`) delegates to it automatically, allowing `subprocess.run` (and anything else needing a real fd) to work as before.\n- Added `getvalue()` (seek/read/seek-restore) and delegated other attribute access via `__getattr__` so `BytesIOCopy` remains a drop-in replacement.\n- Since it now owns a real OS resource, added explicit cleanup: `isolation()` closes the temp files in its `finally` block, and `BytesIOCopy.__del__` closes the file defensively to avoid `ResourceWarning`s if used directly without a full `isolation()` cycle.\n\nVerified: the reproduction from the issue (`subprocess.run([\"echo\", \"foo\"], stdout=sys.stderr)` inside `CliRunner().invoke(...)`) no longer raises `UnsupportedOperation`, and the subprocess's output is correctly captured in `result.stderr`. Full existing test suite (`tests/`) passes: 1419 passed, 24 skipped, 1 xfailed, no failures/warnings.",
+  "ttft_ms": 1394,
+  "type": "result",
+  "duration_ms": 145637,
+  "uuid": "6ceccb9a-231a-4829-a00e-6dc752a44ae8",
+  "ttft_stream_ms": 788,
+  "time_to_request_ms": 33,
+  "first_content_frame_ms": 1392,
+  "queued_turn_count": 0
+}

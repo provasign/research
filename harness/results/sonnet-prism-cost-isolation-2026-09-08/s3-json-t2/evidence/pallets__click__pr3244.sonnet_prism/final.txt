@@ -1,0 +1,10 @@
+## Summary
+
+The issue: `CliRunner`'s `isolation()` context manager captured stdout/stderr using in-memory `io.BytesIO` objects, which have no real OS file descriptor. When code under test called `subprocess.run(..., stdout=sys.stderr)`, `subprocess` tried `stdout.fileno()` and got `io.UnsupportedOperation`.
+
+Fix (in `src/click/testing.py`):
+- Reworked `BytesIOCopy` to be backed by a real `tempfile.TemporaryFile()` instead of `io.BytesIO`, so `fileno()` (delegated via `__getattr__`) returns a genuine OS-level file descriptor that `subprocess` can write into directly. It still mirrors writes to the `copy_to` stream and provides a `getvalue()` compatible with existing call sites.
+- Added a `__del__` to close the backing temp file if it was never explicitly closed (avoiding fd leaks/`ResourceWarning`).
+- Explicitly close `stream_mixer.stdout`/`stderr` in the `isolation()` `finally` block, after `getvalue()` has already been read inside `invoke()`, so temp files don't leak per-invocation.
+
+Verified: the issue's reproduction case now passes, and the full existing test suite (`python -m pytest`) passes: 1419 passed, 24 skipped, 1 xfailed, no regressions.

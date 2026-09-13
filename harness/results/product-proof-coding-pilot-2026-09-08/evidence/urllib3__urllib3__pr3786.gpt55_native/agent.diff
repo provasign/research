@@ -1,0 +1,134 @@
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 84e1dab..6167409 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -759,13 +759,15 @@ class HTTPSConnection(HTTPConnection):
+             self.sock = sock = self._new_conn()
+             server_hostname: str = self.host
+             tls_in_tls = False
++            sock_and_verified: _WrappedAndVerifiedSocket | None = None
+ 
+             # Do we need to establish a tunnel?
+             if self.proxy_is_tunneling:
+                 # We're tunneling to an HTTPS origin so need to do TLS-in-TLS.
+                 if self._tunnel_scheme == "https":
+                     # _connect_tls_proxy will verify and assign proxy_is_verified
+-                    self.sock = sock = self._connect_tls_proxy(self.host, sock)
++                    sock_and_verified = self._connect_tls_proxy(self.host, sock)
++                    self.sock = sock = sock_and_verified.socket
+                     tls_in_tls = True
+                 elif self._tunnel_scheme == "http":
+                     self.proxy_is_verified = False
+@@ -777,6 +779,11 @@ class HTTPSConnection(HTTPConnection):
+                 # Override the host with the one we're requesting data from.
+                 server_hostname = typing.cast(str, self._tunnel_host)
+ 
++            elif self.proxy_is_forwarding and self.proxy and self.proxy.scheme == "https":
++                sock_and_verified = self._connect_tls_proxy(self.host, sock)
++                self.sock = sock = sock_and_verified.socket
++                self._has_connected_to_proxy = True
++
+             if self.server_hostname is not None:
+                 server_hostname = self.server_hostname
+ 
+@@ -793,25 +800,26 @@ class HTTPSConnection(HTTPConnection):
+             # Remove trailing '.' from fqdn hostnames to allow certificate validation
+             server_hostname_rm_dot = server_hostname.rstrip(".")
+ 
+-            sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+-                sock=sock,
+-                cert_reqs=self.cert_reqs,
+-                ssl_version=self.ssl_version,
+-                ssl_minimum_version=self.ssl_minimum_version,
+-                ssl_maximum_version=self.ssl_maximum_version,
+-                ca_certs=self.ca_certs,
+-                ca_cert_dir=self.ca_cert_dir,
+-                ca_cert_data=self.ca_cert_data,
+-                cert_file=self.cert_file,
+-                key_file=self.key_file,
+-                key_password=self.key_password,
+-                server_hostname=server_hostname_rm_dot,
+-                ssl_context=self.ssl_context,
+-                tls_in_tls=tls_in_tls,
+-                assert_hostname=self.assert_hostname,
+-                assert_fingerprint=self.assert_fingerprint,
+-            )
+-            self.sock = sock_and_verified.socket
++            if not self.proxy_is_forwarding:
++                sock_and_verified = _ssl_wrap_socket_and_match_hostname(
++                    sock=sock,
++                    cert_reqs=self.cert_reqs,
++                    ssl_version=self.ssl_version,
++                    ssl_minimum_version=self.ssl_minimum_version,
++                    ssl_maximum_version=self.ssl_maximum_version,
++                    ca_certs=self.ca_certs,
++                    ca_cert_dir=self.ca_cert_dir,
++                    ca_cert_data=self.ca_cert_data,
++                    cert_file=self.cert_file,
++                    key_file=self.key_file,
++                    key_password=self.key_password,
++                    server_hostname=server_hostname_rm_dot,
++                    ssl_context=self.ssl_context,
++                    tls_in_tls=tls_in_tls,
++                    assert_hostname=self.assert_hostname,
++                    assert_fingerprint=self.assert_fingerprint,
++                )
++                self.sock = sock_and_verified.socket
+ 
+         # If an error occurs during connection/handshake we may need to release
+         # our lock so another connection can probe the origin.
+@@ -832,7 +840,11 @@ class HTTPSConnection(HTTPConnection):
+         # If this connection doesn't know if the origin supports HTTP/2
+         # we report back to the HTTP/2 probe our result.
+         if target_supports_http2 is None:
+-            supports_http2 = sock_and_verified.socket.selected_alpn_protocol() == "h2"
++            supports_http2 = (
++                False
++                if self.proxy_is_forwarding
++                else sock_and_verified.socket.selected_alpn_protocol() == "h2"
++            )
+             http2_probe.set_and_release(
+                 host=probe_http2_host,
+                 port=probe_http2_port,
+@@ -858,7 +870,9 @@ class HTTPSConnection(HTTPConnection):
+         if self._has_connected_to_proxy and self.proxy_is_verified is None:
+             self.proxy_is_verified = sock_and_verified.is_verified
+ 
+-    def _connect_tls_proxy(self, hostname: str, sock: socket.socket) -> ssl.SSLSocket:
++    def _connect_tls_proxy(
++        self, hostname: str, sock: socket.socket
++    ) -> _WrappedAndVerifiedSocket:
+         """
+         Establish a TLS connection to the proxy using the provided SSL context.
+         """
+@@ -885,7 +899,7 @@ class HTTPSConnection(HTTPConnection):
+             tls_in_tls=False,
+         )
+         self.proxy_is_verified = sock_and_verified.is_verified
+-        return sock_and_verified.socket  # type: ignore[return-value]
++        return sock_and_verified
+ 
+ 
+ class _WrappedAndVerifiedSocket(typing.NamedTuple):
+diff --git a/src/urllib3/poolmanager.py b/src/urllib3/poolmanager.py
+index 3914dec..031f8cf 100644
+--- a/src/urllib3/poolmanager.py
++++ b/src/urllib3/poolmanager.py
+@@ -581,6 +581,17 @@ class ProxyManager(PoolManager):
+         if proxy.scheme not in ("http", "https"):
+             raise ProxySchemeUnknown(proxy.scheme)
+ 
++        if (
++            proxy.scheme == "https"
++            and use_forwarding_for_https
++            and "ssl_context" in connection_pool_kw
++            and connection_pool_kw["ssl_context"] is not None
++        ):
++            raise ValueError(
++                "When using HTTPS forwarding proxies, use proxy_ssl_context "
++                "instead of ssl_context."
++            )
++
+         if not proxy.port:
+             port = port_by_scheme.get(proxy.scheme, 80)
+             proxy = proxy._replace(port=port)

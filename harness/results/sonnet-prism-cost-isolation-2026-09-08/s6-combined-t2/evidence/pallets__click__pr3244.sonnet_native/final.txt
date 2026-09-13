@@ -1,0 +1,13 @@
+The issue is resolved: no more `UnsupportedOperation`, and the subprocess's output is captured correctly in `stderr`.
+
+## Summary
+
+The bug was in `src/click/testing.py`'s `BytesIOCopy`, which subclassed `io.BytesIO` to back `sys.stdout`/`sys.stderr` during `CliRunner` isolation. In-memory `BytesIO` objects have no real file descriptor, so `BytesIO.fileno()` raises `io.UnsupportedOperation`. `subprocess.run(..., stdout=<file-like>)` calls `.fileno()` on any non-`PIPE`/`DEVNULL`/int stdout argument, so redirecting a subprocess's output to `sys.stdout`/`sys.stderr` inside a test invoked via `CliRunner` always crashed — even though it works fine outside of tests.
+
+**Fix**: `BytesIOCopy` now starts backed by an in-memory `io.BytesIO` (cheap, no open fd, preserving existing behavior/tests), but lazily "materializes" into a real `tempfile.TemporaryFile()` the first time `fileno()` is accessed, copying over any already-buffered bytes. This makes `fileno()` (and therefore `subprocess.run` redirection) work, while normal captured output continues to work as before. Added a `close()` method and call it from `CliRunner.isolation()`'s cleanup to avoid leaking the materialized file descriptor.
+
+Verified:
+- `python -m pytest` (full suite): **1419 passed, 24 skipped, 1 xfailed** (no failures).
+- The original reproduction script (`subprocess.run(["echo", "foo"], stdout=sys.stderr)` invoked via `CliRunner`) now succeeds with `exit_code == 0` and correctly captures `"foo\n"` in `result.stderr`.
+
+No tests, docs, or config were modified; only `src/click/testing.py` was changed. Nothing was committed.

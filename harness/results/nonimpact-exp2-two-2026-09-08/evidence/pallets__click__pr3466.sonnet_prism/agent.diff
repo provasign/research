@@ -1,0 +1,23 @@
+diff --git a/src/click/shell_completion.py b/src/click/shell_completion.py
+index 7235f10..ea5d442 100644
+--- a/src/click/shell_completion.py
++++ b/src/click/shell_completion.py
+@@ -44,11 +44,16 @@ def shell_complete(
+     comp = comp_cls(cli, ctx_args, prog_name, complete_var)
+ 
+     if instruction == "source":
+-        echo(comp.source())
++        # Encode to bytes and write directly so the output always uses
++        # "\n" line endings, even on Windows, where writing text through
++        # a text-mode stdout would translate "\n" to "\r\n". Some shells
++        # (e.g. zsh via MSYS2) fail to parse a script containing "\r\n",
++        # since it breaks backslash-newline line continuations.
++        echo(comp.source().encode())
+         return 0
+ 
+     if instruction == "complete":
+-        echo(comp.complete())
++        echo(comp.complete().encode())
+         return 0
+ 
+     return 1

@@ -1,0 +1,10 @@
+## Summary
+
+Fixed `src/click/testing.py`'s `BytesIOCopy` (used by `CliRunner`'s `StreamMixer` to back `sys.stdout`/`sys.stderr` during test isolation) so it's also backed by a real, unbuffered OS-level temporary file in addition to the in-memory `io.BytesIO`:
+
+- `fileno()` now delegates to the temp file's real file descriptor instead of raising `io.UnsupportedOperation`, so code invoked under `CliRunner` (e.g. `subprocess.run(..., stdout=sys.stderr)`) works instead of crashing.
+- `write()`/`flush()` mirror to the temp file as well as the existing in-memory buffer and `copy_to` stream.
+- `getvalue()` merges in any bytes written directly to the fd (bypassing Python-level `write()`, e.g. by a child process) so captured output stays correct.
+- `close()` and the `isolation()` teardown close the temp file to avoid resource leaks/warnings.
+
+Verified with the issue's reproduction case (subprocess writing to `sys.stderr` inside a `CliRunner.invoke()` no longer raises) and the full existing test suite (`tests/`), which passes with no regressions (1419 passed, 24 skipped, 1 xfailed).

@@ -1,0 +1,75 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..20581dc 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -67,23 +67,55 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+         stream._paused = False
+ 
+ 
+-class BytesIOCopy(io.BytesIO):
++class BytesIOCopy:
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
++    Backed by a real OS-level temporary file (rather than an in-memory
++    buffer) so that ``fileno()`` returns a genuine file descriptor. This
++    allows code under test to pass ``sys.stdout``/``sys.stderr`` to APIs
++    such as :func:`subprocess.run` that require a real file descriptor,
++    instead of raising :exc:`io.UnsupportedOperation`.
++
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.3.3
++        Backed by a real temporary file so ``fileno()`` works, allowing
++        streams to be passed to :mod:`subprocess`.
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+-        super().__init__()
+         self.copy_to = copy_to
++        self._file = tempfile.TemporaryFile(buffering=0)
+ 
+-    def flush(self) -> None:
+-        super().flush()
+-        self.copy_to.flush()
++    def __getattr__(self, name: str) -> t.Any:
++        return getattr(self._file, name)
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+-        return super().write(b)
++        return self._file.write(b)
++
++    def flush(self) -> None:
++        self._file.flush()
++        self.copy_to.flush()
++
++    def getvalue(self) -> bytes:
++        pos = self._file.tell()
++        self._file.seek(0)
++        data = self._file.read()
++        self._file.seek(pos)
++        return data
++
++    def isatty(self) -> bool:
++        return False
++
++    def __del__(self) -> None:
++        # Ensure the real underlying file descriptor is released even if
++        # this object is only ever garbage collected, mirroring the
++        # implicit cleanup behavior of ``io.BytesIO``.
++        try:
++            self._file.close()
++        except Exception:
++            pass
+ 
+ 
+ class StreamMixer:
+@@ -471,6 +503,8 @@ class CliRunner:
+             _compat.should_strip_ansi = old__compat_should_strip_ansi
+             formatting.FORCED_WIDTH = old_forced_width
+             pdb.Pdb.__init__ = old_pdb_init  # type: ignore[method-assign]
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
+ 
+     def invoke(
+         self,

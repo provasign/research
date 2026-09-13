@@ -1,0 +1,9 @@
+Full suite passes (1419 passed, 24 skipped, 1 xfailed — none broken).
+
+## Summary
+
+**Issue:** `CliRunner` captures `sys.stdout`/`sys.stderr` with in-memory `io.BytesIO`-backed streams that have no OS-level file descriptor. Code under test that calls `subprocess.run(..., stdout=sys.stderr)` fails with `io.UnsupportedOperation: fileno` because `subprocess` requires a real fd for non-`PIPE`/`DEVNULL` stream arguments.
+
+**Fix** (`src/click/testing.py`, `BytesIOCopy`): added a `fileno()` implementation that lazily backs the stream with a real `tempfile.TemporaryFile()`, seeded with any bytes already written. Once created, subsequent writes are mirrored into that temp file (so ordering/content stays consistent), and `getvalue()` reads from the temp file when it exists, ensuring output captured via a real fd (e.g. written directly by a subprocess) is still reflected in `Result.stdout`/`stderr`/`output`.
+
+Verified with the SSCCE from the issue (now passes) and the full existing test suite (1419 passed, 24 skipped, 1 xfailed — no regressions). No tests, docs, or config were modified.

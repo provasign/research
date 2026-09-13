@@ -1,0 +1,63 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..2b8b290 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -70,21 +70,58 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+ class BytesIOCopy(io.BytesIO):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
++    Also backed by a real OS-level temporary file, so a valid file
++    descriptor is available for code that needs one, such as
++    ``subprocess.run(stdout=sys.stdout)``.
++
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.3.3
++        Back the stream with a real file so :meth:`fileno` works, and
++        pick up anything written directly to that file descriptor (for
++        example by a subprocess).
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._file = tempfile.TemporaryFile(buffering=0)
++
++    def _sync_from_file(self) -> None:
++        # Anything in the backing file beyond what we already have was
++        # written directly through the file descriptor (fileno()),
++        # bypassing write(), e.g. by a subprocess.
++        current = io.BytesIO.getvalue(self)
++        self._file.seek(0)
++        file_data = self._file.read()
++        self._file.seek(0, os.SEEK_END)
++
++        if len(file_data) > len(current):
++            extra = file_data[len(current) :]
++            io.BytesIO.write(self, extra)
++            self.copy_to.write(extra)
+ 
+     def flush(self) -> None:
++        self._sync_from_file()
+         super().flush()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
++        self._file.write(b)
+         return super().write(b)
+ 
++    def getvalue(self) -> bytes:
++        self._sync_from_file()
++        return super().getvalue()
++
++    def fileno(self) -> int:
++        return self._file.fileno()
++
++    def close(self) -> None:
++        super().close()
++        self._file.close()
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.

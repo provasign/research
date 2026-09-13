@@ -1,0 +1,9 @@
+All tests pass, including the existing `test_stream_lifecycle.py` suite that directly exercises `BytesIOCopy`. The fix is complete and verified:
+
+## Summary
+
+**Root cause:** `CliRunner.isolation()` backed `sys.stdout`/`sys.stderr` with `io.BytesIO`-based streams (`BytesIOCopy`). `io.BytesIO` has no real file descriptor, so when code under test called `subprocess.run(..., stdout=sys.stderr)`, `subprocess` tried `stdout.fileno()` and raised `io.UnsupportedOperation`.
+
+**Fix** (`src/click/testing.py`): Rewrote `BytesIOCopy` to be backed by a real OS-level temporary file (`tempfile.TemporaryFile()`) instead of `io.BytesIO`, implementing the raw binary I/O protocol (`readable`/`writable`/`seekable`/`write`/`flush`/`fileno`/`close`) plus a `getvalue()` helper that reads back the captured bytes. Since `io.TextIOWrapper.fileno()` delegates to its underlying buffer, `sys.stdout.fileno()` / `sys.stderr.fileno()` now return a real, usable file descriptor, so subprocesses can write to them directly without error. Added cleanup of the temp files in `isolation()`'s `finally` block to avoid leaking file descriptors.
+
+Verified with the original reproduction script/test (now passes), the full existing test suite (1419 passed, 24 skipped, 1 xfailed — no regressions), and `prism_verify` (flagged only the expected base-class change of `BytesIOCopy`, whose existing dedicated test suite `tests/test_stream_lifecycle.py` still passes).

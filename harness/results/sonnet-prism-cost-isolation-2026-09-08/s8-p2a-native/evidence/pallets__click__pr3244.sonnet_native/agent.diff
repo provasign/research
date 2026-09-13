@@ -1,0 +1,59 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..f62231c 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -71,20 +71,54 @@ class BytesIOCopy(io.BytesIO):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.3
++        Lazily backs itself with a real, anonymous temporary file the
++        first time :meth:`fileno` is called, so code invoked through
++        :class:`CliRunner` can pass ``sys.stdout``/``sys.stderr`` to
++        APIs (such as :func:`subprocess.run`) that require a real file
++        descriptor. Until then it behaves exactly like ``io.BytesIO``,
++        with no real file descriptor involved.
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._real_file: t.BinaryIO | None = None
+ 
+     def flush(self) -> None:
+         super().flush()
+         self.copy_to.flush()
++        if self._real_file is not None:
++            self._real_file.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
++        if self._real_file is not None:
++            return self._real_file.write(b)
+         return super().write(b)
+ 
++    def getvalue(self) -> bytes:
++        if self._real_file is not None:
++            pos = self._real_file.tell()
++            self._real_file.seek(0)
++            data = self._real_file.read()
++            self._real_file.seek(pos)
++            return data
++        return super().getvalue()
++
++    def fileno(self) -> int:
++        if self._real_file is None:
++            self._real_file = tempfile.TemporaryFile()
++            self._real_file.write(super().getvalue())
++            self._real_file.flush()
++        return self._real_file.fileno()
++
++    def close(self) -> None:
++        if self._real_file is not None:
++            self._real_file.close()
++        super().close()
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.

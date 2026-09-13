@@ -1,0 +1,14 @@
+This is a small, targeted fix.
+
+## Summary
+
+**Issue**: When using `ProxyConfig.use_forwarding_for_https = True` (forwarding mode, not CONNECT-tunneling) with an HTTPS proxy, `HTTPSConnection.connect()` was wrapping the socket with the *origin's* `ssl_context`/`assert_hostname`/`assert_fingerprint` and verifying against the *target's* hostname — even though the actual TLS peer on that socket is the proxy itself. It should instead use `proxy_ssl_context` (`ProxyConfig.ssl_context`) and the proxy's hostname, the same way `_connect_tls_proxy` already does for the tunneling case.
+
+**Fix** (`src/urllib3/connection.py`, `HTTPSConnection.connect()`): detect when we're forwarding through an HTTPS proxy (`proxy_is_forwarding` and `proxy.scheme == "https"`), and in that case select `proxy_config.ssl_context`/`assert_hostname`/`assert_fingerprint` and `proxy.host` as the server hostname for the single TLS wrap performed on the socket, instead of the origin's settings.
+
+Verified with:
+- `python -m pytest test/test_connection.py` — 279 passed
+- `python -m pytest test/test_proxymanager.py` — 8 passed
+- `python -m pytest test/with_dummyserver/test_proxy_poolmanager.py` — 65 passed, 1 skipped (pre-existing skip for `test_proxy_https_target_tls_error`, left untouched since I was told not to modify tests)
+
+No test, doc, changelog, or config files were modified.

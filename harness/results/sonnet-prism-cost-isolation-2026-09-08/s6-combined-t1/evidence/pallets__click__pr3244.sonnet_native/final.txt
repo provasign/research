@@ -1,0 +1,11 @@
+## Summary
+
+**Root cause:** `CliRunner`'s `StreamMixer.stdout`/`.stderr` were `BytesIOCopy` objects backed by `io.BytesIO`. `io.BytesIO` has no real OS file descriptor, so `subprocess.run(..., stdout=sys.stderr)` (which ultimately calls `stdout.fileno()`) raised `io.UnsupportedOperation`.
+
+**Fix** (`src/click/testing.py`): rewrote `BytesIOCopy` to be backed by a real `tempfile.TemporaryFile()` instead of `io.BytesIO`, so it exposes a genuine `fileno()` while still supporting `write()`/`flush()` (which continue to mirror writes into `copy_to`) and `getvalue()`. Added `close()`/`__del__` cleanup (delegated via `__getattr__`, with an explicit `__del__` to avoid leaking file descriptors) and made `isolation()` close the mixer's streams in its `finally` block once `getvalue()` has been read.
+
+**Verification:**
+- The issue's exact SSCCE (`subprocess.run(["echo", "foo"], stdout=sys.stderr)` inside a `CliRunner`-invoked command) now passes instead of raising `UnsupportedOperation`.
+- Full test suite: `1419 passed, 24 skipped, 1 xfailed` (no failures, no resource warnings), including `tests/test_testing.py` and `tests/test_stream_lifecycle.py` which specifically exercise `BytesIOCopy`/`StreamMixer` lifecycle behavior.
+
+No tests, docs, changelogs, or config were modified — only `src/click/testing.py`.

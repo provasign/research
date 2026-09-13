@@ -1,0 +1,56 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..f8752bc 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -67,14 +67,19 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+         stream._paused = False
+ 
+ 
+-class BytesIOCopy(io.BytesIO):
++class BytesIOCopy(tempfile.SpooledTemporaryFile):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
++    Backed by a :class:`tempfile.SpooledTemporaryFile` instead of a plain
++    ``io.BytesIO`` so that ``fileno()`` works (rolling over to a real file
++    on disk as needed). This allows the stream to be passed to APIs like
++    :func:`subprocess.run` that require a real file descriptor.
++
+     .. versionadded:: 8.2
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+-        super().__init__()
++        super().__init__(mode="wb+")
+         self.copy_to = copy_to
+ 
+     def flush(self) -> None:
+@@ -85,6 +90,20 @@ class BytesIOCopy(io.BytesIO):
+         self.copy_to.write(b)
+         return super().write(b)
+ 
++    def getvalue(self) -> bytes:
++        pos = self.tell()
++        self.seek(0)
++        data = self.read()
++        self.seek(pos)
++        return data
++
++    def __del__(self) -> None:
++        # Silently close instead of the base class's behavior of warning
++        # about an unclosed file. These streams are an internal
++        # implementation detail, not something users are expected to
++        # close themselves.
++        self.close()
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.
+@@ -471,6 +490,8 @@ class CliRunner:
+             _compat.should_strip_ansi = old__compat_should_strip_ansi
+             formatting.FORCED_WIDTH = old_forced_width
+             pdb.Pdb.__init__ = old_pdb_init  # type: ignore[method-assign]
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
+ 
+     def invoke(
+         self,

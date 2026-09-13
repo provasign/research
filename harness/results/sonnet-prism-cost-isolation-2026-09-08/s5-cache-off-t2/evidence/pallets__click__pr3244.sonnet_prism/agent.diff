@@ -1,0 +1,41 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..0da8083 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -70,21 +70,36 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+ class BytesIOCopy(io.BytesIO):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
++    A real, OS-backed temporary file is kept in sync with the in-memory
++    buffer so that :meth:`fileno` returns a valid file descriptor. This
++    allows code under test to pass ``sys.stdout``/``sys.stderr`` to APIs
++    such as :func:`subprocess.run` that require a real file descriptor.
++
+     .. versionadded:: 8.2
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._tempfile = tempfile.TemporaryFile()
+ 
+     def flush(self) -> None:
+         super().flush()
+         self.copy_to.flush()
++        self._tempfile.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
++        self._tempfile.write(b)
+         return super().write(b)
+ 
++    def fileno(self) -> int:
++        return self._tempfile.fileno()
++
++    def close(self) -> None:
++        self._tempfile.close()
++        super().close()
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.

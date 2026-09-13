@@ -1,0 +1,9 @@
+All 29 existing tests pass, and the reproduction case from the issue now works.
+
+## Summary
+
+**Issue:** `CliRunner` backs `sys.stdout`/`sys.stderr` with pure in-memory `io.BytesIO` objects (via `BytesIOCopy`). Code under test that passes these streams to `subprocess.run(...)` fails because `subprocess` needs a real OS file descriptor via `.fileno()`, which `io.BytesIO` doesn't support, raising `io.UnsupportedOperation`.
+
+**Fix** (`src/click/testing.py`, `BytesIOCopy`): keep a real OS-backed `tempfile.TemporaryFile()` in sync with the in-memory buffer. Writes go to both; `fileno()` now delegates to the real temp file, so `subprocess.run(stdout=sys.stderr)` (or similar) works inside `CliRunner.invoke()`. `getvalue()` (used to build the `Result`) still reads from the in-memory `BytesIO`, unaffected.
+
+Verified with the exact repro from the issue and the full `tests/test_testing.py` suite (29 passed).

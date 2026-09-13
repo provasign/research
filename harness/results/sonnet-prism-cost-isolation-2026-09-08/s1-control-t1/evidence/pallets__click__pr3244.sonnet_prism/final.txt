@@ -1,0 +1,11 @@
+## Summary
+
+Fixed the issue in `src/click/testing.py` where `CliRunner`'s captured `stdout`/`stderr` streams were backed purely by `io.BytesIO`, which has no real file descriptor. Any code that used those streams as `stdout=`/`stderr=` for `subprocess.run(...)` (or anything else needing a real `fileno()`) crashed with `io.UnsupportedOperation`.
+
+**Change:** Rewrote `BytesIOCopy` in `src/click/testing.py` to be backed by a real OS-level `tempfile.TemporaryFile()` instead of subclassing `io.BytesIO`. It still tees Python-level `write()` calls into the "mixed" `copy_to` stream, but now also exposes a genuine `fileno()` (delegated via `__getattr__`), so subprocess calls that write directly to the file descriptor work and their output ends up captured in `getvalue()` (since it re-reads the whole real file). Added an explicit `close()` call for the mixer streams in `isolation()`'s cleanup, plus a `__del__` fallback on `BytesIOCopy` to avoid leaking the temporary file descriptors.
+
+**Verification:**
+- Reproduced the reported crash with the SSCCE from the issue (`subprocess.run(["echo", "foo"], stdout=sys.stderr)` inside a `CliRunner`-invoked command) — it now passes, and `result.stderr_bytes` correctly captures `"foo\n"`.
+- Full existing test suite: `python -m pytest tests/` → 1419 passed, 24 skipped, 1 xfailed (no regressions, including `tests/test_stream_lifecycle.py`, which exercises `BytesIOCopy`/`StreamMixer` lifecycle directly).
+
+No tests, docs, changelog, or config files were modified.

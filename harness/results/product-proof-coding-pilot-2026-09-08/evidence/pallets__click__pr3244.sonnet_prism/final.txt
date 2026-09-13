@@ -1,0 +1,9 @@
+The diff is minimal and focused on `src/click/testing.py`. Summary of the fix:
+
+- `BytesIOCopy` no longer subclasses `io.BytesIO` directly. It wraps an `io.BytesIO` by default (so behavior/performance/no-warning-on-GC is unchanged for the common case), but now implements `fileno()`, which lazily rolls the buffer over to a real on-disk `tempfile.TemporaryFile` the first time a file descriptor is actually requested (e.g., by `subprocess.run(stdout=sys.stderr)`).
+- Since `sys.stdout`/`sys.stderr` inside `CliRunner.isolation()` are `_NamedTextIOWrapper` instances wrapping `BytesIOCopy` buffers, `TextIOWrapper.fileno()` now succeeds instead of raising `io.UnsupportedOperation`.
+- Added `close()` on `BytesIOCopy` and call it when tearing down the isolation context, so the on-disk temp file (when created) is cleaned up properly and doesn't trigger `ResourceWarning`s.
+
+Verified:
+- The original reproduction (`subprocess.run(["echo", "foo"], stdout=sys.stderr)` inside `CliRunner().invoke(...)`) no longer raises and correctly captures `"foo\n"` in `result.stderr`.
+- Full existing test suite (`python -m pytest tests/`) passes: 1419 passed, 24 skipped, 1 xfailed — no regressions, including the `test_stream_lifecycle.py` suite that specifically exercises `BytesIOCopy`/`StreamMixer` GC and resource-warning behavior.

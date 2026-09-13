@@ -1,0 +1,70 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..4fa7cf6 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -70,21 +70,55 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+ class BytesIOCopy(io.BytesIO):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
++    ``fileno()`` is only supported lazily: the first time a file descriptor
++    is actually requested (for example by code under test that calls
++    :func:`subprocess.run` with this stream as ``stdout``/``stderr``), the
++    buffer rolls over to a real backing file on disk so a valid descriptor
++    can be returned. Until then this behaves like a plain ``io.BytesIO``.
++
+     .. versionadded:: 8.2
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._temp_file: t.IO[bytes] | None = None
++
++    def fileno(self) -> int:
++        if self._temp_file is None:
++            self._temp_file = tempfile.TemporaryFile()
++            self._temp_file.write(super().getvalue())
++            self._temp_file.seek(self.tell())
++        return self._temp_file.fileno()
++
++    def getvalue(self) -> bytes:
++        if self._temp_file is not None:
++            pos = self._temp_file.tell()
++            self._temp_file.seek(0)
++            try:
++                return self._temp_file.read()
++            finally:
++                self._temp_file.seek(pos)
++        return super().getvalue()
+ 
+     def flush(self) -> None:
+         super().flush()
++        if self._temp_file is not None:
++            self._temp_file.flush()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
++        if self._temp_file is not None:
++            return self._temp_file.write(b)
+         return super().write(b)
+ 
++    def close(self) -> None:
++        if self._temp_file is not None:
++            self._temp_file.close()
++            self._temp_file = None
++        super().close()
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.
+@@ -471,6 +505,9 @@ class CliRunner:
+             _compat.should_strip_ansi = old__compat_should_strip_ansi
+             formatting.FORCED_WIDTH = old_forced_width
+             pdb.Pdb.__init__ = old_pdb_init  # type: ignore[method-assign]
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
++            stream_mixer.output.close()
+ 
+     def invoke(
+         self,

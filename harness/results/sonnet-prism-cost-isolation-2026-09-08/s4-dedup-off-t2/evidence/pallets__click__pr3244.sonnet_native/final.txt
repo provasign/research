@@ -1,0 +1,9 @@
+All 1419 tests pass with no regressions.
+
+## Summary
+
+The issue: when a command run under `CliRunner` calls `subprocess.run(..., stdout=sys.stderr)`, it fails with `io.UnsupportedOperation: fileno` because `CliRunner`'s captured `sys.stdout`/`sys.stderr` are `io.BytesIO`-backed, which have no real file descriptor.
+
+Fix (in `src/click/testing.py`): `BytesIOCopy` (which backs the runner's stdout/stderr) now lazily creates a real OS-backed temp file the first time `fileno()` is requested, and merges its content into `getvalue()` from then on. Normal in-memory usage (the common case, and what other tests rely on) is completely unaffected — no real file is opened unless something (like `subprocess`) actually needs a file descriptor. The temp file, if created, is closed when the isolation context exits.
+
+Verified: the original reproduction case no longer raises and correctly captures `foo\n` in `result.stderr`; the full existing test suite (1419 tests) still passes, including the dedicated `tests/test_stream_lifecycle.py` and `tests/test_testing.py` suites.

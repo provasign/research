@@ -1,0 +1,13 @@
+All 1419 tests pass, no regressions.
+
+## Summary
+
+Fixed `CliRunner` so that `subprocess.run(..., stdout=sys.stdout)` (or `sys.stderr`) no longer raises `io.UnsupportedOperation` for `fileno()`.
+
+**Root cause:** `CliRunner.isolation()` backs `sys.stdout`/`sys.stderr` with `BytesIOCopy`, which subclassed `io.BytesIO`. Pure `io.BytesIO` objects have no real OS file descriptor, so `.fileno()` always raises `UnsupportedOperation` — this broke any code under test that passes `sys.stdout`/`sys.stderr` to `subprocess.run`/`Popen`, even though it works fine outside of `CliRunner`.
+
+**Fix** (`src/click/testing.py`):
+- Rewrote `BytesIOCopy` to be backed by a real `tempfile.TemporaryFile()` instead of `io.BytesIO`, while still mirroring writes to `copy_to` for output mixing. It now implements `fileno()`, `closed`, and the other methods needed to behave like a file object, so wrapping it in `sys.stdout`/`sys.stderr` gives a genuine file descriptor.
+- Added a `close()` on `BytesIOCopy` and made `CliRunner.isolation()` close the temp files when the isolation context exits, plus a `__del__` safety net, to avoid leaking file descriptors/`ResourceWarning`s.
+
+Verified with the issue's SSCCE (now passes) and the full existing test suite (`1419 passed, 24 skipped, 1 xfailed`, no regressions).

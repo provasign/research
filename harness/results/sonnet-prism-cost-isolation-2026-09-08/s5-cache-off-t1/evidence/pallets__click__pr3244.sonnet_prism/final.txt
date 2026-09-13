@@ -1,0 +1,14 @@
+The fix is complete and verified.
+
+## Summary
+
+The issue was that `CliRunner` captured `stdout`/`stderr` using plain `io.BytesIO` objects (via `BytesIOCopy`), which have no real OS file descriptor. When application code passed `sys.stdout`/`sys.stderr` to `subprocess.run(...)`, `subprocess.Popen` tried to call `.fileno()` on the stream and got `io.UnsupportedOperation`.
+
+**Fix** (`src/click/testing.py`, `BytesIOCopy` class): backed the captured stream with a real OS-level temporary file (`tempfile.TemporaryFile()`) in addition to the in-memory `io.BytesIO` buffer:
+
+- `fileno()` now returns a valid descriptor from the backing temp file, so it can be handed to `subprocess.run`/`Popen`.
+- Writes are mirrored to the temp file, the in-memory buffer, and the mixed-output copy.
+- A `_sync()` step lazily pulls in bytes written directly to the file descriptor (e.g., by a subprocess) on the next `write()`/`flush()`/`getvalue()` call, so subprocess output correctly appears in `result.output`/`result.stdout`/`result.stderr`.
+- Overrode `close()` to also close the backing temp file (invoked explicitly in `CliRunner.isolation()`'s `finally` block, and automatically via GC/`io.IOBase.__del__` for standalone use), avoiding file descriptor leaks.
+
+Verified with the reported SSCCE (now passes, subprocess output captured correctly) and the full existing test suite (1419 passed, 24 skipped, 1 xfailed — no regressions).

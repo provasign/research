@@ -1,0 +1,10 @@
+## Summary
+
+**Problem:** `CliRunner`'s isolation swaps `sys.stdout`/`sys.stderr` for `TextIOWrapper` objects backed by in-memory `io.BytesIO` buffers. These have no real OS file descriptor, so passing them to `subprocess.run(stdout=...)` fails with `io.UnsupportedOperation: fileno`, even though the same code works fine outside of tests.
+
+**Fix** (`src/click/testing.py`, `BytesIOCopy` class used by `StreamMixer`/`CliRunner.isolation`):
+- Added a lazy `fileno()` that backs the stream with a real `tempfile.TemporaryFile()` on first request, so passing `sys.stdout`/`sys.stderr` to `subprocess.run` (or any other fd-based API) now works.
+- Added `_sync_fd_file()`, called in `CliRunner.invoke()` right before results are collected, which copies any bytes written directly to that file descriptor (e.g. by a subprocess) into the captured buffer so they appear in `result.stdout`/`stderr`/`output`.
+- Added `close()` to clean up the temp file, and close it in `isolation()`'s `finally` block to avoid descriptor/temp-file leaks.
+
+Verified with the reported reproduction script (previously failing with `UnsupportedOperation`, now passes and captures `"foo"` in output) and the full existing test suite (`1419 passed, 24 skipped, 1 xfailed`, no regressions). No tests, docs, or config were modified.

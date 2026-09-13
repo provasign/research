@@ -1,0 +1,53 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..922c2ae 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -76,15 +76,48 @@ class BytesIOCopy(io.BytesIO):
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._fileno_file: t.IO[bytes] | None = None
+ 
+     def flush(self) -> None:
+         super().flush()
+         self.copy_to.flush()
+ 
++        if self._fileno_file is not None:
++            self._fileno_file.flush()
++
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
++
++        if self._fileno_file is not None:
++            self._fileno_file.write(b)
++
+         return super().write(b)
+ 
++    def fileno(self) -> int:
++        """Back this stream with a real, temporary file so that code
++        under test can pass it to APIs (such as :func:`subprocess.run`)
++        that require an OS-level file descriptor.
++
++        .. versionadded:: 8.3.2
++        """
++        if self._fileno_file is None:
++            self._fileno_file = tempfile.TemporaryFile()
++            self._fileno_file.write(super().getvalue())
++            self._fileno_file.seek(0, io.SEEK_END)
++
++        return self._fileno_file.fileno()
++
++    def getvalue(self) -> bytes:
++        if self._fileno_file is not None:
++            self._fileno_file.flush()
++            pos = self._fileno_file.tell()
++            self._fileno_file.seek(0)
++            data = self._fileno_file.read()
++            self._fileno_file.seek(pos)
++            return data
++
++        return super().getvalue()
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.

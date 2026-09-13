@@ -1,0 +1,40 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..c37fdb4 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -70,21 +70,35 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+ class BytesIOCopy(io.BytesIO):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
++    Backed by a real, file-descriptor-based temporary file so that it can
++    be used as ``stdout``/``stderr`` for :func:`subprocess.run` and similar
++    APIs that require a ``fileno()``.
++
+     .. versionadded:: 8.2
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._file = tempfile.TemporaryFile()
+ 
+     def flush(self) -> None:
+         super().flush()
++        self._file.flush()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
++        self._file.write(b)
+         return super().write(b)
+ 
++    def fileno(self) -> int:
++        return self._file.fileno()
++
++    def close(self) -> None:
++        self._file.close()
++        super().close()
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.

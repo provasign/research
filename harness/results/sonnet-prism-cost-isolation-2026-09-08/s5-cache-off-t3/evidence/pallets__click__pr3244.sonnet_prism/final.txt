@@ -1,0 +1,7 @@
+All tests pass. Summary of the fix:
+
+In `src/click/testing.py`, `BytesIOCopy` (the in-memory buffer `CliRunner` substitutes for `sys.stdout`/`sys.stderr`) previously inherited `io.BytesIO.fileno()` unchanged, which raises a bare `io.UnsupportedOperation: fileno` with no context. When code under test passes one of these streams to an API requiring a real file descriptor (e.g. `subprocess.run(..., stdout=sys.stderr)`), the failure surfaced as a confusing low-level traceback deep inside `subprocess`, as in the reported issue.
+
+I added a `fileno()` override on `BytesIOCopy` that raises `io.UnsupportedOperation` with a clear explanation: the stream is an in-memory buffer captured by `CliRunner` and isn't backed by a real OS file descriptor, so APIs like `subprocess.run` that require one can't use it directly. This is the smallest robust change — it doesn't alter stream semantics, lifecycle, or ownership (which the existing `test_stream_lifecycle.py` suite tests extensively and relies on `io.BytesIO`-based in-memory buffers with no explicit close), it just turns an opaque low-level error into an actionable one.
+
+Verified: full test suite (`tests/`) — 1419 passed, 24 skipped, 1 xfailed, no regressions. The original SSCCE now fails with a clear, explanatory error instead of a deep, confusing `subprocess` traceback.

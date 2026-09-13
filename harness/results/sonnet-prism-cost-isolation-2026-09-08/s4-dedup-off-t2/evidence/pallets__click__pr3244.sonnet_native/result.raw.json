@@ -1,0 +1,110 @@
+{
+  "duration_api_ms": 158560,
+  "stop_reason": "end_turn",
+  "session_id": "f375ba02-994e-46f0-ba4d-9f7aec53936e",
+  "total_cost_usd": 0.5140636000000001,
+  "usage": {
+    "input_tokens": 54,
+    "cache_creation_input_tokens": 48112,
+    "cache_read_input_tokens": 838748,
+    "output_tokens": 14972,
+    "output_tokens_details": {
+      "thinking_tokens": 8107
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 48112,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 401,
+        "cache_read_input_tokens": 53078,
+        "cache_creation_input_tokens": 488,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 488
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 17,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004038,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 54,
+      "outputTokens": 14972,
+      "cacheReadInputTokens": 838748,
+      "cacheCreationInputTokens": 48112,
+      "webSearchRequests": 0,
+      "costUSD": 0.5100256000000001,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 8107,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 27,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "All 1419 tests pass with no regressions.\n\n## Summary\n\nThe issue: when a command run under `CliRunner` calls `subprocess.run(..., stdout=sys.stderr)`, it fails with `io.UnsupportedOperation: fileno` because `CliRunner`'s captured `sys.stdout`/`sys.stderr` are `io.BytesIO`-backed, which have no real file descriptor.\n\nFix (in `src/click/testing.py`): `BytesIOCopy` (which backs the runner's stdout/stderr) now lazily creates a real OS-backed temp file the first time `fileno()` is requested, and merges its content into `getvalue()` from then on. Normal in-memory usage (the common case, and what other tests rely on) is completely unaffected \u2014 no real file is opened unless something (like `subprocess`) actually needs a file descriptor. The temp file, if created, is closed when the isolation context exits.\n\nVerified: the original reproduction case no longer raises and correctly captures `foo\\n` in `result.stderr`; the full existing test suite (1419 tests) still passes, including the dedicated `tests/test_stream_lifecycle.py` and `tests/test_testing.py` suites.",
+  "ttft_ms": 2236,
+  "type": "result",
+  "duration_ms": 168662,
+  "uuid": "26f1cfe6-0c91-4cc9-87ea-a3b4403fd20d",
+  "ttft_stream_ms": 902,
+  "time_to_request_ms": 44,
+  "first_content_frame_ms": 1452,
+  "queued_turn_count": 0
+}

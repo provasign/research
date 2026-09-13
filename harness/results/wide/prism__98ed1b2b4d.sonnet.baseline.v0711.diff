@@ -1,0 +1,1578 @@
+diff --git a/internal/assist/assist.go b/internal/assist/assist.go
+index be8f351..bdd7323 100644
+--- a/internal/assist/assist.go
++++ b/internal/assist/assist.go
+@@ -67,7 +67,6 @@ Rules:
+   * change_impact     — a method/interface signature changes, a deprecation, or "find every site that must change / every caller"
+   * rename_plan       — a rename where the user wants the concrete edits
+   * missing_implementations — "who fails to implement X / who breaks if X becomes required"
+-  * untested_surface  — "what should I test before changing X / which sites lack tests"
+   * dead_code         — unused/unreachable code cleanup
+ - For a multi-method interface change, call change_impact once per method.
+ - Symbols are written Type.method (parameter types optional).
+@@ -96,8 +95,6 @@ func toolDefs() []ToolDef {
+ 				"required": []string{"symbol", "newName"}}},
+ 		{Name: "missing_implementations", Description: "Every type in the contract's closure lacking an implementation.",
+ 			Parameters: sym},
+-		{Name: "untested_surface", Description: "The change-set split into test-covered and untested sites.",
+-			Parameters: sym},
+ 		{Name: "dead_code", Description: "Unreachable production symbols, safe-to-delete list with caveats.",
+ 			Parameters: map[string]any{"type": "object", "properties": map[string]any{}}},
+ 		{Name: "submit", Description: "Finish: a 2-3 sentence summary (totals + warnings; never site lists).",
+@@ -222,9 +219,6 @@ func runOp(call ToolCall, invoke Invoker) (string, map[string]any, error) {
+ 	case "missing_implementations":
+ 		tool = "prism_missing_implementations"
+ 		args["query"], _ = call.Args["symbol"].(string)
+-	case "untested_surface":
+-		tool = "prism_untested_surface"
+-		args["query"], _ = call.Args["symbol"].(string)
+ 	case "dead_code":
+ 		tool = "prism_dead_code"
+ 	default:
+@@ -269,7 +263,7 @@ func compactMeta(op string, full map[string]any) string {
+ 	default:
+ 		for _, group := range []string{"declarations", "family", "callers",
+ 			"declaringTypes", "supers", "edits", "ambiguous", "missing",
+-			"abstractMissing", "unverifiable", "untested", "covered", "dead",
++			"abstractMissing", "unverifiable", "dead",
+ 			"exportedUnreferenced"} {
+ 			if v := asSlice(full[group]); len(v) > 0 {
+ 				m[group] = len(v)
+@@ -320,7 +314,7 @@ func render(out *os.File, call ToolCall, full map[string]any) {
+ 	}
+ 
+ 	groups := []string{"declarations", "declaringTypes", "family", "supers",
+-		"callers", "missing", "abstractMissing", "unverifiable", "untested",
++		"callers", "missing", "abstractMissing", "unverifiable",
+ 		"dead", "exportedUnreferenced", "symbols"}
+ 	for _, g := range groups {
+ 		items := asSlice(full[g])
+diff --git a/internal/cli/commands.go b/internal/cli/commands.go
+index 0da9290..d10a263 100644
+--- a/internal/cli/commands.go
++++ b/internal/cli/commands.go
+@@ -60,16 +60,16 @@ Usage:
+                                   gate ([--deny 'A -> B'] [--depth N] [--json])
+   prism verify [dir]              Verify a diff's completeness (working tree vs
+                                   --base, default HEAD): missed change-impact
+-                                  sites (line-precise), affected tests, new
++                                  sites (line-precise), new
+                                   cross-component deps, introduced arch
+                                   violations; exit 1 if incomplete — the CI
+                                   gate for agent-authored changes
+                                   ([--base REF] [--json])
+   prism query <task> [dir]        Find ranked context for a task; bug-fix/implement
+                                   tasks get line-numbered source windows + per-anchor
+-                                  callers/covering tests (edit-ready)
++                                  callers (edit-ready)
+                                   --terms a,b,c      Anchor on specific symbol names (grep-precision)
+-                                  --include a,b      Categories: graph,tests,docs,coverage_gaps (default: graph,tests)
++                                  --include a,b      Categories: graph,docs (default: graph)
+                                   --delivery source|symbols  Force delivery shape (default: phase-aware)
+                                   --max-files N      source delivery: max files shown (default: 5)
+                                   --depth N          BFS hops for graph expansion (default: 2)
+@@ -94,12 +94,6 @@ Usage:
+                                   implement Type.method (missing / abstract / unverifiable)
+                                   — the interface-evolution companion to change-impact
+                                   --format text|lean|json  Output format (default: json)
+-  prism untested-surface <query> [dir]  Change-set partitioned by covering-test
+-                                  evidence: covered (test within 3 caller hops) vs untested
+-                                  --format text|lean|json  Output format (default: json)
+-  prism affected <file> [file ...]  Tests covering the changed files (CI test selection):
+-                                  git diff --name-only | xargs prism affected  → run only those tests
+-                                  [--dir <path>] [--format text|json]
+   prism dead-code [dir] [--roots a,b]  Unreachable production functions/methods
+   prism assist [--model <spec>] [--apply|--apply-ambiguous] [--verify "<cmd>"] "<task>"
+                                      NL task -> deterministic ops via any model (ollama:/claude:/openai:)
+@@ -180,10 +174,6 @@ func Run(args []string) int {
+ 		return cmdMissingImplementations(rest)
+ 	case "rename-plan":
+ 		return cmdRenamePlan(rest)
+-	case "untested-surface":
+-		return cmdUntestedSurface(rest)
+-	case "affected":
+-		return cmdAffected(rest)
+ 	case "dead-code":
+ 		return cmdDeadCode(rest)
+ 	case "assist":
+@@ -310,7 +300,7 @@ explaining — call the prism tool with the complete task:
+ 
+     prism(task="<the full task, in the user's words>")
+ 
+-It returns edit-ready line-numbered source, each anchor's callers and tests,
++It returns edit-ready line-numbered source, each anchor's callers,
+ and the CHANGE OBLIGATIONS: every site that must be handled if you change
+ those contracts, type-resolved and completeness-tagged. Treat returned
+ source as already read. If the task does not already name the target
+@@ -323,7 +313,7 @@ After editing, call the SAME tool again with the changed files:
+     prism(task="<same task>", changed_files=[...])
+ 
+ It verifies the diff deterministically: contract changes detected, missed
+-call sites reported line-precisely, affected tests listed, verdict
++call sites reported line-precisely, verdict
+ fail-closed (clean|complete|review|incomplete). Resolve everything it
+ reports missing before declaring the task done. "I updated all the callers"
+ is a guess; this is the check of it.
+@@ -334,7 +324,7 @@ them directly when you know exactly which question you are asking.
+ ## Prism — advanced tools
+ 
+ Prism answers whole-task questions (change impact, missing implementations,
+-test gaps, dead code) in ONE deterministic call, and delivers code context
++dead code) in ONE deterministic call, and delivers code context
+ cheaply. Three layers, in priority order.
+ 
+ ### 1. Changing or auditing code? One call answers the whole task
+@@ -348,9 +338,7 @@ cheaply. Three layers, in priority order.
+ | ANY task that says "find all X" for a specific method | prism_change_impact first, before any grep |
+ | Renaming a method and you want the edits, not just the sites | prism_rename_plan(query="Type.method", newName="newName") — every edit line with before/after; review and apply |
+ | Adding a REQUIRED method to an interface/base class ("who is now broken?") | prism_missing_implementations(query="Type.method") — every type in the closure with no implementation |
+-| "What should I test before changing X?" / test-gap audit / symbols with no tests | prism_untested_surface(query="Type.method") — the change-set split covered/untested |
+ | Cleanups, library extraction, "is X still used / can I delete it?" at scale | prism_dead_code — unreachable production symbols, safe-to-delete list + caveats |
+-| "Which tests should run for these changed files?" (pre-commit, CI selection, post-edit) | prism_affected(files=[...]) — every test covering the changed files, via graph test edges |
+ | "How is this repo structured?" / onboarding / refactor-extraction planning / dependency cycles / "what depends on component X?" | prism_map — components + induced dependency edges (weights, evidence tiers, cycles); pass from+to to expand any edge into concrete file:line sites |
+ 
+ **Pre-task rule:** before writing any code on a task that involves changing or
+@@ -427,7 +415,7 @@ const steeringInstructionsCLI = `
+ ## Prism — context delivery (ALWAYS use these tools)
+ 
+ Prism is available as a CLI (use via Bash, --format text). It answers
+-whole-task questions (change impact, missing implementations, test gaps, dead
++whole-task questions (change impact, missing implementations, dead
+ code) in ONE deterministic call, and delivers code context cheaply. Three
+ layers, in priority order.
+ 
+@@ -442,12 +430,10 @@ layers, in priority order.
+ | ANY task that says "find all X" for a specific method | ` + "`" + `prism change-impact` + "`" + ` first, before any grep |
+ | Renaming a method and you want the edits, not just the sites | ` + "`" + `prism rename-plan 'Type.method' NewName` + "`" + ` — every edit line with before/after; review and apply |
+ | Adding a REQUIRED method to an interface/base class ("who is now broken?") | ` + "`" + `prism missing-implementations 'Type.method'` + "`" + ` — every closure type with no implementation |
+-| "What should I test before changing X?" / test-gap audit / symbols with no tests | ` + "`" + `prism untested-surface 'Type.method'` + "`" + ` — change-set split covered/untested |
+ | Cleanups / "is X still used / can I delete it?" at scale | ` + "`" + `prism dead-code` + "`" + ` — unreachable production symbols + caveats |
+-| "Which tests should run for these changed files?" (pre-commit, CI selection) | ` + "`" + `git diff --name-only | xargs prism affected` + "`" + ` — every test covering the changed files |
+ | "How is this repo structured?" / onboarding / refactor planning / dependency cycles | ` + "`" + `prism map [--depth N]` + "`" + ` — components + induced dependency edges (weights, tiers, cycles); ` + "`" + `--expand 'A->B'` + "`" + ` shows concrete file:line sites |
+ | Enforcing declared architecture (pre-commit, CI) | ` + "`" + `prism arch` + "`" + ` — validates arch_deny rules from prism.yaml; violations cite file:line; exit 1 on violation |
+-| Verifying a change/diff is COMPLETE before commit (agent-authored or your own) | ` + "`" + `prism verify [--base REF]` + "`" + ` — missed change-impact sites (line-precise), affected tests, introduced arch violations; exit 1 if incomplete |
++| Verifying a change/diff is COMPLETE before commit (agent-authored or your own) | ` + "`" + `prism verify [--base REF]` + "`" + ` — missed change-impact sites (line-precise), introduced arch violations; exit 1 if incomplete |
+ 
+ **Pre-task rule:** before writing any code on a task that involves changing or
+ renaming an existing symbol, run prism change-impact first — even if the change
+@@ -524,7 +510,7 @@ const steeringInstructionsBoth = `
+ ## Prism — context delivery (ALWAYS use these tools)
+ 
+ Prism answers whole-task questions (change impact, missing implementations,
+-test gaps, dead code) in ONE deterministic call, and delivers code context
++dead code) in ONE deterministic call, and delivers code context
+ cheaply. Three layers, in priority order.
+ 
+ ### When MCP tools are available
+@@ -542,9 +528,7 @@ Use the registered prism_* MCP tools.
+ | ANY task that says "find all X" for a specific method | prism_change_impact first, before any grep |
+ | Renaming a method and you want the edits, not just the sites | prism_rename_plan(query="Type.method", newName="newName") — every edit line with before/after; review and apply |
+ | Adding a REQUIRED method to an interface/base class ("who is now broken?") | prism_missing_implementations(query="Type.method") — every closure type with no implementation |
+-| "What should I test before changing X?" / test-gap audit / symbols with no tests | prism_untested_surface(query="Type.method") — the change-set split covered/untested |
+ | Cleanups, library extraction, "can I delete this?" at scale | prism_dead_code — unreachable production symbols, safe-to-delete list + caveats |
+-| "Which tests should run for these changed files?" (pre-commit, CI selection, post-edit) | prism_affected(files=[...]) — every test covering the changed files, via graph test edges |
+ | "How is this repo structured?" / onboarding / refactor planning / dependency cycles | prism_map — components + induced dependency edges (weights, tiers, cycles); from+to expands any edge to file:line sites |
+ 
+ **2. Reading code? Prism reads are cheaper than shell reads:**
+@@ -617,12 +601,10 @@ Use the prism CLI with --format text instead of MCP tools:
+ | Deprecating a symbol (need all callers to migrate) | ` + "`" + `prism change-impact 'Type.method'` + "`" + ` — complete caller list |
+ | Renaming a method and you want the edits, not just the sites | ` + "`" + `prism rename-plan 'Type.method' NewName` + "`" + ` — every edit line with before/after; review and apply |
+ | Adding a REQUIRED method to an interface/base class ("who is now broken?") | ` + "`" + `prism missing-implementations 'Type.method'` + "`" + ` — every closure type with no implementation |
+-| "What should I test before changing X?" / symbols with no tests | ` + "`" + `prism untested-surface 'Type.method'` + "`" + ` — change-set split covered/untested |
+ | Cleanups / "can I delete this?" at scale | ` + "`" + `prism dead-code` + "`" + ` — unreachable production symbols + caveats |
+-| "Which tests should run for these changed files?" (pre-commit, CI selection) | ` + "`" + `git diff --name-only | xargs prism affected` + "`" + ` — every test covering the changed files |
+ | "How is this repo structured?" / onboarding / refactor planning / dependency cycles | ` + "`" + `prism map [--depth N]` + "`" + ` — components + induced dependency edges (weights, tiers, cycles); ` + "`" + `--expand 'A->B'` + "`" + ` shows concrete file:line sites |
+ | Enforcing declared architecture (pre-commit, CI) | ` + "`" + `prism arch` + "`" + ` — validates arch_deny rules from prism.yaml; violations cite file:line; exit 1 on violation |
+-| Verifying a change/diff is COMPLETE before commit (agent-authored or your own) | ` + "`" + `prism verify [--base REF]` + "`" + ` — missed change-impact sites (line-precise), affected tests, introduced arch violations; exit 1 if incomplete |
++| Verifying a change/diff is COMPLETE before commit (agent-authored or your own) | ` + "`" + `prism verify [--base REF]` + "`" + ` — missed change-impact sites (line-precise), introduced arch violations; exit 1 if incomplete |
+ | Bug report / unfamiliar area (one-call context) | ` + "`" + `prism query "<the symptom>" --format text` + "`" + ` — line-numbered windows + per-anchor callers/tests |
+ | Locate a string, symbol, or file | shell tools (grep, find, rg) — not Prism |
+ | Callers/callees/tests for a symbol just found | ` + "`" + `prism query "<task>" --terms a,b --include graph,tests --format text` + "`" + ` |
+@@ -1695,94 +1677,6 @@ func cmdMissingImplementations(args []string) int {
+ 	return 0
+ }
+ 
+-func cmdUntestedSurface(args []string) int {
+-	if len(args) < 1 {
+-		fmt.Fprintln(os.Stderr, "usage: prism untested-surface <query> [dir]")
+-		fmt.Fprintln(os.Stderr, "  query: Type.method or Type.method(ParamType, ...)")
+-		return 2
+-	}
+-	query := args[0]
+-	dir := "."
+-	format := formatJSON
+-	for i := 1; i < len(args); i++ {
+-		a := args[i]
+-		switch a {
+-		case "--format":
+-			if i+1 < len(args) {
+-				switch outputFormat(args[i+1]) {
+-				case formatText, formatLean, formatJSON:
+-					format = outputFormat(args[i+1])
+-				}
+-				i++
+-			}
+-		default:
+-			if !strings.HasPrefix(a, "-") {
+-				dir = a
+-			}
+-		}
+-	}
+-	out, err := invokeWithPersistentLedger(dir, "prism_untested_surface", map[string]any{"query": query})
+-	if err != nil {
+-		fmt.Fprintln(os.Stderr, "untested-surface:", err)
+-		return 1
+-	}
+-	printOutput(out, format)
+-	return 0
+-}
+-
+-func cmdAffected(args []string) int {
+-	if len(args) < 1 {
+-		fmt.Fprintln(os.Stderr, "usage: prism affected <file> [file ...] [dir] [--format text|json]")
+-		fmt.Fprintln(os.Stderr, "  files: repo-relative changed files, e.g.  git diff --name-only | xargs prism affected")
+-		return 2
+-	}
+-	dir := "."
+-	format := formatJSON
+-	var files []any
+-	for i := 0; i < len(args); i++ {
+-		a := args[i]
+-		switch {
+-		case a == "--format":
+-			if i+1 < len(args) {
+-				switch outputFormat(args[i+1]) {
+-				case formatText, formatLean, formatJSON:
+-					format = outputFormat(args[i+1])
+-				}
+-				i++
+-			}
+-		case a == "--dir":
+-			if i+1 < len(args) {
+-				dir = args[i+1]
+-				i++
+-			}
+-		default:
+-			if strings.HasPrefix(a, "-") {
+-				break
+-			}
+-			// A positional arg that is an existing directory (or "."/"..") is
+-			// the run root; everything else is a changed file (repo-relative).
+-			if a == "." || a == ".." {
+-				dir = a
+-			} else if fi, err := os.Stat(a); err == nil && fi.IsDir() {
+-				dir = a
+-			} else {
+-				files = append(files, a)
+-			}
+-		}
+-	}
+-	if len(files) == 0 {
+-		fmt.Fprintln(os.Stderr, "affected: no changed files given")
+-		return 2
+-	}
+-	out, err := invokeWithPersistentLedger(dir, "prism_affected", map[string]any{"files": files})
+-	if err != nil {
+-		fmt.Fprintln(os.Stderr, "affected:", err)
+-		return 1
+-	}
+-	printOutput(out, format)
+-	return 0
+-}
+-
+ func cmdDeadCode(args []string) int {
+ 	dir := "."
+ 	format := formatJSON
+@@ -2277,18 +2171,6 @@ func printTextOutput(m map[string]any) {
+ 				fmt.Println()
+ 			}
+ 		}
+-		if rawGaps, ok := m["coverageGaps"]; ok {
+-			if gaps, ok := rawGaps.([]any); ok && len(gaps) > 0 {
+-				fmt.Println("// coverage_gaps:")
+-				for _, g := range gaps {
+-					if gap, ok := g.(map[string]any); ok {
+-						name, _ := gap["name"].(string)
+-						fp, _ := gap["filePath"].(string)
+-						fmt.Printf("//   %s (%s)\n", name, fp)
+-					}
+-				}
+-			}
+-		}
+ 		return
+ 	}
+ 	// prism_lookup with --fields: projected columns (name/file/line + selected),
+@@ -2414,7 +2296,7 @@ func jsonInt(v any) int {
+ // emits compact JSON with only the fields agents actually use.
+ func printLeanOutput(m map[string]any) {
+ 	// Task-shaped ops (change-impact, rename-plan, missing-implementations,
+-	// untested-surface, dead-code) return purpose-built maps with no
++	// dead-code) return purpose-built maps with no
+ 	// metadata to strip; lean used to reduce them to {} — pass them through.
+ 	known := false
+ 	for _, k := range []string{"symbols", "symbol", "file", "content"} {
+diff --git a/internal/cli/helpers_test.go b/internal/cli/helpers_test.go
+index bdbe4ee..12f2a7d 100644
+--- a/internal/cli/helpers_test.go
++++ b/internal/cli/helpers_test.go
+@@ -243,23 +243,6 @@ func TestPrintOutput_Text_Query(t *testing.T) {
+ 	}
+ }
+ 
+-func TestPrintOutput_Text_Query_CoverageGaps(t *testing.T) {
+-	input := map[string]any{
+-		"budgetUsed": 50,
+-		"symbols":    []any{},
+-		"coverageGaps": []any{
+-			map[string]any{"name": "UntestedFn", "filePath": "pkg/b.go"},
+-		},
+-	}
+-	got := captureStdout(func() { printOutput(input, formatText) })
+-	if !strings.Contains(got, "coverage_gaps") {
+-		t.Errorf("missing coverage_gaps header: %q", got)
+-	}
+-	if !strings.Contains(got, "UntestedFn") {
+-		t.Errorf("missing gap name: %q", got)
+-	}
+-}
+-
+ func TestPrintOutput_Lean_Query(t *testing.T) {
+ 	input := map[string]any{
+ 		"budgetUsed": 200,
+diff --git a/internal/cli/viewcmds.go b/internal/cli/viewcmds.go
+index a02452f..f72f0ab 100644
+--- a/internal/cli/viewcmds.go
++++ b/internal/cli/viewcmds.go
+@@ -211,7 +211,7 @@ func renderViolations(list []any, label string) {
+ }
+ 
+ // cmdVerify checks a diff (working tree vs --base, default HEAD) for
+-// completeness: missed change-impact sites, affected tests, new
++// completeness: missed change-impact sites, new
+ // cross-component dependencies, introduced arch violations.
+ // Exit codes: 0 = complete/clean, 1 = incomplete (CI-gateable), 2 = error.
+ func cmdVerify(args []string) int {
+@@ -323,23 +323,6 @@ func renderVerifyText(m map[string]any) {
+ 		renderViolations(asSliceAny(m["archIntroduced"]), "ARCH")
+ 	}
+ 
+-	if tests := asSliceAny(m["affectedTests"]); len(tests) > 0 {
+-		fmt.Printf("\naffected tests to run (%d):\n", len(tests))
+-		max := len(tests)
+-		if max > 15 {
+-			max = 15
+-		}
+-		for _, tv := range tests[:max] {
+-			tm, _ := tv.(map[string]any)
+-			if tm == nil {
+-				continue
+-			}
+-			fmt.Printf("  %v  (%s)\n", tm["name"], tm["file"])
+-		}
+-		if len(tests) > 15 {
+-			fmt.Printf("  … and %d more\n", len(tests)-15)
+-		}
+-	}
+ 	for _, n := range asSliceAny(m["notes"]) {
+ 		fmt.Printf("note: %v\n", n)
+ 	}
+diff --git a/internal/grove/client.go b/internal/grove/client.go
+index 11ad079..0ffa29a 100644
+--- a/internal/grove/client.go
++++ b/internal/grove/client.go
+@@ -400,7 +400,6 @@ type ResolvedSymbol struct {
+ // to Grove's edge types.
+ var edgeKindByName = map[string]groveeng.EdgeType{
+ 	"calls":      groveeng.EdgeCalls,
+-	"tests":      groveeng.EdgeTests,
+ 	"uses-type":  groveeng.EdgeUsesType,
+ 	"implements": groveeng.EdgeImplements,
+ 	"extends":    groveeng.EdgeExtends,
+@@ -411,17 +410,16 @@ var edgeKindByName = map[string]groveeng.EdgeType{
+ }
+ 
+ // Edges returns a seed symbol's direct typed graph neighbors. direction is
+-// "out", "in", or "both"; kinds filters by edge-kind name (empty = calls+tests).
++// "out", "in", or "both"; kinds filters by edge-kind name (empty = calls).
+ // This is the primitive the agent drives: "what does X call" is
+-// (direction=out, kinds=[calls]); "who calls X" is (in, [calls]); "what tests X"
+-// is (in, [tests]).
++// (direction=out, kinds=[calls]); "who calls X" is (in, [calls]).
+ func (c *Client) Edges(ctx context.Context, name, direction string, kinds []string) ([]EdgeRecord, error) {
+ 	e, err := c.requireEngine()
+ 	if err != nil {
+ 		return nil, err
+ 	}
+ 	if len(kinds) == 0 {
+-		kinds = []string{"calls", "tests"}
++		kinds = []string{"calls"}
+ 	}
+ 	var types []groveeng.EdgeType
+ 	for _, k := range kinds {
+@@ -558,35 +556,6 @@ func (c *Client) MissingImplementations(ctx context.Context, query string) (*Mis
+ 	}, nil
+ }
+ 
+-// UntestedSurface partitions a method's change-set by covering-test evidence.
+-func (c *Client) UntestedSurface(ctx context.Context, query string) (*UntestedSurfaceResult, error) {
+-	e, err := c.requireEngine()
+-	if err != nil {
+-		return nil, err
+-	}
+-	r, err := e.UntestedSurface(ctx, query)
+-	if err != nil {
+-		return nil, err
+-	}
+-	covered := make([]CoverageSite, 0, len(r.Covered))
+-	for _, cs := range r.Covered {
+-		covered = append(covered, CoverageSite{
+-			Symbol:    convertSymbol(cs.Symbol),
+-			TestCount: cs.TestCount,
+-			Tests:     convertSymbols(cs.Tests),
+-		})
+-	}
+-	return &UntestedSurfaceResult{
+-		Query:             r.Query,
+-		Untested:          convertSymbols(r.Untested),
+-		Covered:           covered,
+-		TotalSites:        r.TotalSites,
+-		ExternalSupers:    r.ExternalSupers,
+-		OverridesExternal: r.OverridesExternal,
+-		Completeness:      r.Completeness,
+-	}, nil
+-}
+-
+ // RenamePlan converts the change-impact set for query into concrete line
+ // edits renaming the member to newName.
+ func (c *Client) RenamePlan(ctx context.Context, query, newName string) (*RenamePlanResult, error) {
+@@ -672,34 +641,6 @@ func (c *Client) Semantic(ctx context.Context, query string, limit int) ([]Seman
+ 	return out, nil
+ }
+ 
+-// Tests returns the tests covering query.
+-func (c *Client) Tests(ctx context.Context, query string) ([]SymbolRecord, error) {
+-	e, err := c.requireEngine()
+-	if err != nil {
+-		return nil, err
+-	}
+-	syms, err := e.Tests(ctx, query)
+-	if err != nil {
+-		return nil, err
+-	}
+-	return convertSymbols(syms), nil
+-}
+-
+-// AffectedTests returns the tests covering any symbol defined in the given
+-// repo-relative files — the file-diff form of Tests, for "run only affected
+-// tests" from a `git diff --name-only`.
+-func (c *Client) AffectedTests(ctx context.Context, files []string) ([]SymbolRecord, error) {
+-	e, err := c.requireEngine()
+-	if err != nil {
+-		return nil, err
+-	}
+-	syms, err := e.AffectedTests(ctx, files)
+-	if err != nil {
+-		return nil, err
+-	}
+-	return convertSymbols(syms), nil
+-}
+-
+ // SnapshotGraph returns every symbol and edge in the current graph. This is
+ // the bulk export the view layer builds component projections from; edges
+ // carry their evidence source so induced results can report the tier of
+diff --git a/internal/grove/client_test.go b/internal/grove/client_test.go
+index 61a7981..780ac75 100644
+--- a/internal/grove/client_test.go
++++ b/internal/grove/client_test.go
+@@ -46,9 +46,6 @@ func TestClient_RequiresEnsureRunning(t *testing.T) {
+ 	if _, err := c.Semantic(ctx, "x", 1); err == nil {
+ 		t.Fatal("expected semantic error before EnsureRunning")
+ 	}
+-	if _, err := c.Tests(ctx, "x"); err == nil {
+-		t.Fatal("expected tests error before EnsureRunning")
+-	}
+ }
+ 
+ func TestClient_EnsureRunningRequiresRoot(t *testing.T) {
+@@ -112,9 +109,6 @@ func TestClient_EndToEndEmbedded(t *testing.T) {
+ 	if _, err := c.Semantic(ctx, "main entry", 5); err != nil {
+ 		t.Fatalf("semantic: %v", err)
+ 	}
+-	if _, err := c.Tests(ctx, "Main"); err != nil {
+-		t.Fatalf("tests: %v", err)
+-	}
+ 
+ 	c.Shutdown()
+ 	if err := c.Health(ctx); err == nil {
+diff --git a/internal/grove/types.go b/internal/grove/types.go
+index 03ed735..03544ce 100644
+--- a/internal/grove/types.go
++++ b/internal/grove/types.go
+@@ -153,28 +153,6 @@ type MissingImplementationsResult struct {
+ 	Completeness      string   `json:"completeness,omitempty"`
+ }
+ 
+-// CoverageSite pairs a change-set site with the tests that reach it within
+-// the engine's bounded caller-hop horizon.
+-type CoverageSite struct {
+-	Symbol    SymbolRecord   `json:"symbol"`
+-	TestCount int            `json:"testCount"`
+-	Tests     []SymbolRecord `json:"tests"` // capped; testCount carries the truth
+-}
+-
+-// UntestedSurfaceResult partitions a method's change-set by covering-test
+-// evidence: "before I change Type.method, what in its blast radius has no
+-// test pinning it?"
+-type UntestedSurfaceResult struct {
+-	Query      string         `json:"query"`
+-	Untested   []SymbolRecord `json:"untested"`
+-	Covered    []CoverageSite `json:"covered"`
+-	TotalSites int            `json:"totalSites"`
+-
+-	ExternalSupers    []string `json:"externalSupers,omitempty"`
+-	OverridesExternal []string `json:"overridesExternal,omitempty"`
+-	Completeness      string   `json:"completeness,omitempty"`
+-}
+-
+ // RenameEdit is one suggested line edit in a rename plan.
+ type RenameEdit struct {
+ 	FilePath string `json:"filePath"`
+diff --git a/internal/httpapi/http.go b/internal/httpapi/http.go
+index e053a39..b57b1f0 100644
+--- a/internal/httpapi/http.go
++++ b/internal/httpapi/http.go
+@@ -29,7 +29,7 @@ func (s *Server) Handler() http.Handler {
+ 		"prism_index", "prism_drift", "prism_compact", "prism_savings",
+ 		"prism_feedback", "prism_evidence",
+ 		"prism_change_impact", "prism_missing_implementations",
+-		"prism_untested_surface", "prism_dead_code", "prism_rename_plan",
++		"prism_dead_code", "prism_rename_plan",
+ 	} {
+ 		n := name
+ 		mux.HandleFunc("POST /"+n, func(w http.ResponseWriter, r *http.Request) {
+diff --git a/internal/mcp/delivery.go b/internal/mcp/delivery.go
+index 3e90a3d..acddc2a 100644
+--- a/internal/mcp/delivery.go
++++ b/internal/mcp/delivery.go
+@@ -16,7 +16,7 @@ import (
+ // Source delivery for prism_query: the same budgeted selection, delivered the
+ // way an agent about to EDIT needs it — verbatim, line-numbered source windows
+ // grouped by file (identical framing to a Read the agent already performed),
+-// headed by a per-anchor summary (callers + covering tests). Files whose full
++// headed by a per-anchor summary (callers). Files whose full
+ // content was already delivered this session return a one-line sha pointer
+ // instead of a resend. prism_query picks this delivery phase-aware (debug and
+ // implement tasks) unless the caller passes delivery explicitly.
+@@ -58,24 +58,13 @@ func (h *Handler) deliverSource(ctx context.Context, task string, sel *selection
+ 	// ── Anchor summary ────────────────────────────────────────────────────
+ 	anchors := h.renderAnchorSummary(ctx, sel.seedSyms)
+ 	if anchors != "" {
+-		b.WriteString("**Anchors — callers and covering tests (verify before editing)**\n\n")
++		b.WriteString("**Anchors — callers (verify before editing)**\n\n")
+ 		b.WriteString(anchors)
+ 		b.WriteString("\n")
+ 	}
+ 
+ 	// ── Source windows, grouped by file, ranked ──────────────────────────
+-	// Keep only tests that exercise an anchor via a real tests edge; tests
+-	// that merely matched the task text lexically dilute an edit-ready
+-	// delivery with noise (measured on the pr3493 probe: unrelated help-
+-	// rendering tests earned whole windows).
+-	picked := make([]ranking.BudgetedSymbol, 0, len(sel.picked))
+-	for _, p := range sel.picked {
+-		if p.Category == ranking.CategoryTest && !sel.testEdgeIDs[p.Symbol.ID] {
+-			continue
+-		}
+-		picked = append(picked, p)
+-	}
+-	files := groupPickedByFile(picked)
++	files := groupPickedByFile(sel.picked)
+ 
+ 	b.WriteString("**Source** — verbatim, current on-disk, line-numbered exactly like the " +
+ 		"Read tool (re-read from disk on this call; NOT a summary or stale cache). " +
+@@ -123,8 +112,8 @@ func (h *Handler) deliverSource(ctx context.Context, task string, sel *selection
+ }
+ 
+ // renderAnchorSummary emits one line per anchor symbol: caller count + caller
+-// files (from the typed calls graph, incoming edges only) and covering tests,
+-// with an explicit warning when none exist.
++// files (from the typed calls graph, incoming edges only), with an explicit
++// warning when none exist.
+ func (h *Handler) renderAnchorSummary(ctx context.Context, anchors []grove.SymbolRecord) string {
+ 	var b strings.Builder
+ 	seen := map[string]bool{}
+@@ -159,28 +148,12 @@ func (h *Handler) renderAnchorSummary(ctx context.Context, anchors []grove.Symbo
+ 				}
+ 			}
+ 		}
+-		testFiles := []string{}
+-		if tests, err := h.Grove.Tests(ctx, q); err == nil {
+-			seenFile := map[string]bool{}
+-			for _, t := range tests {
+-				if !seenFile[t.FilePath] {
+-					seenFile[t.FilePath] = true
+-					testFiles = append(testFiles, t.FilePath)
+-				}
+-			}
+-		}
+-
+ 		fmt.Fprintf(&b, "- `%s` (%s:%d)", a.Name, a.FilePath, a.Span.Start)
+ 		if callerN > 0 {
+ 			fmt.Fprintf(&b, " — %d caller%s in %s", callerN, plural(callerN), joinCapped(callerFiles, 3))
+ 		} else {
+ 			b.WriteString(" — no resolved callers")
+ 		}
+-		if len(testFiles) > 0 {
+-			fmt.Fprintf(&b, "; tests: %s", joinCapped(testFiles, 2))
+-		} else {
+-			b.WriteString("; ⚠️ no covering tests")
+-		}
+ 		b.WriteString("\n")
+ 	}
+ 	return b.String()
+diff --git a/internal/mcp/ledger_taskops_test.go b/internal/mcp/ledger_taskops_test.go
+index 3b6c7af..b936b53 100644
+--- a/internal/mcp/ledger_taskops_test.go
++++ b/internal/mcp/ledger_taskops_test.go
+@@ -9,7 +9,7 @@ import (
+ 	"github.com/provasign/prism/internal/grove"
+ )
+ 
+-// TestTaskOps_RecordedInLedger drives all five task-shaped ops end-to-end
++// TestTaskOps_RecordedInLedger drives all task-shaped ops end-to-end
+ // through the MCP handler and asserts each shows up in the ledger's call
+ // count. These ops have no token-savings baseline (the value is
+ // completeness, not cheaper context delivery), so — unlike prism_query or
+@@ -57,7 +57,6 @@ func TestRun(t interface{}) {
+ 	}{
+ 		{"prism_change_impact", map[string]any{"query": "Doer.Do"}},
+ 		{"prism_missing_implementations", map[string]any{"query": "Doer.Do"}},
+-		{"prism_untested_surface", map[string]any{"query": "Doer.Do"}},
+ 		{"prism_rename_plan", map[string]any{"query": "Doer.Do", "newName": "Execute"}},
+ 		{"prism_dead_code", map[string]any{}},
+ 	}
+diff --git a/internal/mcp/mcp_test.go b/internal/mcp/mcp_test.go
+index d073193..64f165a 100644
+--- a/internal/mcp/mcp_test.go
++++ b/internal/mcp/mcp_test.go
+@@ -325,8 +325,8 @@ func TestSafePathWithinRoot_RelativeSymlinkEscape(t *testing.T) {
+ 
+ func TestToolSchemasReturnsAdvertisedTools(t *testing.T) {
+ 	schemas := ToolSchemas()
+-	if len(schemas) != 17 {
+-		t.Fatalf("want 17 tool schemas, got %d", len(schemas))
++	if len(schemas) != 15 {
++		t.Fatalf("want 15 tool schemas, got %d", len(schemas))
+ 	}
+ 	names := make(map[string]bool)
+ 	for _, s := range schemas {
+@@ -345,7 +345,7 @@ func TestToolSchemasReturnsAdvertisedTools(t *testing.T) {
+ 	for _, want := range []string{
+ 		"prism_query", "prism_read", "prism_search", "prism_lookup",
+ 		"prism_change_impact", "prism_missing_implementations",
+-		"prism_untested_surface", "prism_dead_code", "prism_rename_plan",
++		"prism_dead_code", "prism_rename_plan",
+ 		"prism_index", "prism_drift", "prism_references", "prism_resolve", "prism_edges",
+ 		"prism_change_impact", "prism_map",
+ 	} {
+@@ -418,8 +418,8 @@ func TestServerToolsList(t *testing.T) {
+ 	if !ok {
+ 		t.Fatalf("tools field missing or wrong type: %T", result["tools"])
+ 	}
+-	if len(tools) != 17 {
+-		t.Errorf("tools/list: got %d tools, want 17", len(tools))
++	if len(tools) != 15 {
++		t.Errorf("tools/list: got %d tools, want 15", len(tools))
+ 	}
+ }
+ 
+diff --git a/internal/mcp/selection.go b/internal/mcp/selection.go
+index 4274019..49d7e0c 100644
+--- a/internal/mcp/selection.go
++++ b/internal/mcp/selection.go
+@@ -27,16 +27,13 @@ type selectParams struct {
+ 
+ // selection is the pipeline output: the budgeted picks plus the intermediate
+ // sets that response assembly needs (seeds for empty-result notes, seedSyms +
+-// graphExtra for coverage gaps and blast radius).
++// graphExtra for blast radius).
+ type selection struct {
+ 	picked     []ranking.BudgetedSymbol
+ 	seedSyms   []grove.SymbolRecord
+ 	graphExtra []grove.SymbolRecord
+ 	seeds      []grove.SymbolRecord
+ 	budget     int
+-	// testEdgeIDs marks test symbols connected to a seed by a real tests edge,
+-	// as opposed to tests that merely matched the task text lexically.
+-	testEdgeIDs map[string]bool
+ }
+ 
+ // selectContext runs retrieval (term-seeded or intent-ranked), graph and test
+@@ -142,6 +139,9 @@ func (h *Handler) selectContext(ctx context.Context, p selectParams) (*selection
+ 	}
+ 
+ 	graphDist := make(map[string]int)
++	// hasTestEdgeID/testFilePaths were populated from Grove's test-coverage
++	// edges (removed upstream as unreliable heuristic evidence); left empty so
++	// the test-relevance signal now relies solely on lexical/filename matching.
+ 	hasTestEdgeID := make(map[string]bool)
+ 	testFilePaths := make(map[string]bool)
+ 
+@@ -177,21 +177,6 @@ func (h *Handler) selectContext(ctx context.Context, p selectParams) (*selection
+ 				}
+ 			}
+ 		}
+-		if p.includeSet["tests"] {
+-			if tests, err := h.Grove.Tests(ctx, seedQuery); err == nil {
+-				for _, tst := range tests {
+-					hasTestEdgeID[tst.ID] = true
+-					testFilePaths[tst.FilePath] = true
+-					if _, exists := graphDist[tst.ID]; !exists {
+-						graphDist[tst.ID] = 1
+-					}
+-					if !seenIDs[tst.ID] {
+-						seenIDs[tst.ID] = true
+-						graphExtra = append(graphExtra, tst)
+-					}
+-				}
+-			}
+-		}
+ 	}
+ 
+ 	stamp("graph-expand")
+@@ -200,23 +185,23 @@ func (h *Handler) selectContext(ctx context.Context, p selectParams) (*selection
+ 	merged = append(merged, candidateSyms...)
+ 	merged = append(merged, graphExtra...)
+ 
+-	// Drop categories the agent did not request.
+-	if len(p.includeSet) > 0 {
+-		filtered := merged[:0]
+-		for _, sym := range merged {
+-			cat := string(categorize(sym))
+-			switch {
+-			case cat == string(ranking.CategoryTest) && !p.includeSet["tests"]:
+-				continue
+-			case cat == string(ranking.CategoryDoc) && !p.includeSet["docs"]:
+-				continue
+-			case (cat == string(ranking.CategoryTarget) || cat == string(ranking.CategoryDependency)) && !p.includeSet["graph"]:
+-				continue
+-			}
+-			filtered = append(filtered, sym)
++	// Drop categories the agent did not request. Test symbols are never
++	// delivered here: a lexically task-matched test carries no verified
++	// relation to the anchor, so "tests" is not a selectable category.
++	filtered := merged[:0]
++	for _, sym := range merged {
++		cat := string(categorize(sym))
++		switch {
++		case cat == string(ranking.CategoryTest):
++			continue
++		case cat == string(ranking.CategoryDoc) && !p.includeSet["docs"]:
++			continue
++		case (cat == string(ranking.CategoryTarget) || cat == string(ranking.CategoryDependency)) && !p.includeSet["graph"]:
++			continue
+ 		}
+-		merged = filtered
++		filtered = append(filtered, sym)
+ 	}
++	merged = filtered
+ 
+ 	candidates := make([]ranking.Candidate, 0, len(merged))
+ 	for i, sym := range merged {
+@@ -274,11 +259,10 @@ func (h *Handler) selectContext(ctx context.Context, p selectParams) (*selection
+ 	stamp("rank+budget")
+ 
+ 	return &selection{
+-		picked:      picked,
+-		seedSyms:    seedSyms,
+-		graphExtra:  graphExtra,
+-		seeds:       seeds,
+-		budget:      budget,
+-		testEdgeIDs: hasTestEdgeID,
++		picked:     picked,
++		seedSyms:   seedSyms,
++		graphExtra: graphExtra,
++		seeds:      seeds,
++		budget:     budget,
+ 	}, nil
+ }
+diff --git a/internal/mcp/task.go b/internal/mcp/task.go
+index 254c98f..92f1fcf 100644
+--- a/internal/mcp/task.go
++++ b/internal/mcp/task.go
+@@ -3,9 +3,9 @@ package mcp
+ // prism — the unified task tool (task compiler). One tool, two moments:
+ //
+ //   prism(task="...")                        prepare: anchors -> edit-ready
+-//                                            source -> change obligations ->
+-//                                            tests/coverage gaps; obligations
+-//                                            persisted for the verify moment.
++//                                            source -> change obligations;
++//                                            obligations persisted for the
++//                                            verify moment.
+ //   prism(task="...", changed_files=[...])   verify: the shipped prism_verify
+ //                                            pipeline + the stored obligations
+ //                                            checked against the diff.
+@@ -105,7 +105,7 @@ func (h *Handler) taskPrepare(ctx context.Context, task string, args map[string]
+ 	sel, err := h.selectContext(ctx, selectParams{
+ 		task:        task,
+ 		terms:       terms,
+-		includeSet:  map[string]bool{"graph": true, "tests": true},
++		includeSet:  map[string]bool{"graph": true},
+ 		limit:       intArg(args, "limit", 50),
+ 		contextUsed: int64(intArg(args, "context_used", 0)),
+ 		model:       stringArg(args, "model", ""),
+@@ -182,8 +182,6 @@ func (h *Handler) taskPrepare(ctx context.Context, task string, args map[string]
+ 		obligations = append(obligations, ob)
+ 	}
+ 
+-	gaps := buildCoverageGaps(ctx, h.Grove, sel.seedSyms, sel.graphExtra)
+-
+ 	// Persist the package for the verify moment (best-effort: a read-only
+ 	// checkout must not fail the prepare call).
+ 	pkg := taskPackage{Task: task, Base: gitHead(h.Root), Obligations: obligations}
+@@ -202,9 +200,6 @@ func (h *Handler) taskPrepare(ctx context.Context, task string, args map[string]
+ 		"next": "make the edits, then call prism again with the same task and " +
+ 			"changed_files=[...] to verify the change is complete",
+ 	}
+-	if len(gaps) > 0 {
+-		out["coverageGaps"] = gaps
+-	}
+ 	if len(obligationNotes) > 0 {
+ 		out["notes"] = obligationNotes
+ 	}
+diff --git a/internal/mcp/tools.go b/internal/mcp/tools.go
+index a536f90..379556a 100644
+--- a/internal/mcp/tools.go
++++ b/internal/mcp/tools.go
+@@ -209,10 +209,6 @@ func (h *Handler) Invoke(name string, args map[string]any) (any, error) {
+ 		return h.toolChangeImpact(ctx, args)
+ 	case "prism_missing_implementations":
+ 		return h.toolMissingImplementations(ctx, args)
+-	case "prism_untested_surface":
+-		return h.toolUntestedSurface(ctx, args)
+-	case "prism_affected":
+-		return h.toolAffected(ctx, args)
+ 	case "prism_dead_code":
+ 		return h.toolDeadCode(ctx, args)
+ 	case "prism_rename_plan":
+@@ -257,8 +253,8 @@ func ToolSchemas() []map[string]any {
+ 		"prism",
+ 		"prism_query", "prism_read", "prism_search", "prism_lookup",
+ 		"prism_references", "prism_resolve", "prism_edges", "prism_change_impact",
+-		"prism_missing_implementations", "prism_untested_surface", "prism_dead_code",
+-		"prism_rename_plan", "prism_affected", "prism_map",
++		"prism_missing_implementations", "prism_dead_code",
++		"prism_rename_plan", "prism_map",
+ 		"prism_index", "prism_drift",
+ 	}
+ 	out := make([]map[string]any, 0, len(names))
+@@ -341,8 +337,8 @@ func toolSchema(name string) map[string]any {
+ 				},
+ 				"include": map[string]any{
+ 					"type":        "array",
+-					"items":       map[string]any{"type": "string", "enum": []string{"graph", "tests", "docs", "coverage_gaps"}},
+-					"description": "Categories: graph (callers/callees), tests, docs (filenames only), coverage_gaps (untested symbols; audits only the seeds + blast radius, so use 1-2 terms per query and union results). Default: [\"graph\",\"tests\"].",
++					"items":       map[string]any{"type": "string", "enum": []string{"graph", "docs"}},
++					"description": "Categories: graph (callers/callees), docs (filenames only). Default: [\"graph\"].",
+ 				},
+ 				"graph_depth": map[string]any{
+ 					"type":        "integer",
+@@ -438,7 +434,7 @@ func toolSchema(name string) map[string]any {
+ 			"properties": map[string]any{
+ 				"name":      map[string]any{"type": "string", "description": "Seed symbol (bare or Type.Method)."},
+ 				"direction": map[string]any{"type": "string", "enum": []string{"out", "in", "both"}, "description": "out = edges from the seed (callees, uses-type); in = edges into it (callers, tests). Default both."},
+-				"kinds":     map[string]any{"type": "array", "items": map[string]any{"type": "string", "enum": []string{"calls", "tests", "uses-type", "implements", "extends", "overrides", "contains", "defines", "imports"}}, "description": "Edge kinds to return. Default [calls,tests]."},
++				"kinds":     map[string]any{"type": "array", "items": map[string]any{"type": "string", "enum": []string{"calls", "uses-type", "implements", "extends", "overrides", "contains", "defines", "imports"}}, "description": "Edge kinds to return. Default [calls]."},
+ 			},
+ 		}
+ 	case "prism_index":
+@@ -474,7 +470,7 @@ func toolSchema(name string) map[string]any {
+ 				},
+ 			},
+ 		}
+-	case "prism_change_impact", "prism_missing_implementations", "prism_untested_surface":
++	case "prism_change_impact", "prism_missing_implementations":
+ 		return map[string]any{
+ 			"type":     "object",
+ 			"required": []string{"query"},
+@@ -485,18 +481,6 @@ func toolSchema(name string) map[string]any {
+ 				},
+ 			},
+ 		}
+-	case "prism_affected":
+-		return map[string]any{
+-			"type":     "object",
+-			"required": []string{"files"},
+-			"properties": map[string]any{
+-				"files": map[string]any{
+-					"type":        "array",
+-					"items":       map[string]any{"type": "string"},
+-					"description": "Repo-relative changed files (e.g. from `git diff --name-only`).",
+-				},
+-			},
+-		}
+ 	case "prism_rename_plan":
+ 		return map[string]any{
+ 			"type":     "object",
+@@ -563,11 +547,11 @@ func toolDescription(name string) string {
+ 	case "prism":
+ 		return "THE default tool for any codebase task — call it FIRST, before grep or file reads. " +
+ 			"Two moments: (1) BEFORE editing, prism(task=\"<the full task>\") returns edit-ready " +
+-			"line-numbered source, each anchor's callers/tests, and the CHANGE OBLIGATIONS — every " +
++			"line-numbered source, each anchor's callers, and the CHANGE OBLIGATIONS — every " +
+ 			"site that must be handled if you change those contracts, type-resolved and " +
+ 			"completeness-tagged. (2) AFTER editing, prism(task=..., changed_files=[...]) verifies " +
+ 			"the diff: contract changes detected, missed call sites reported line-precisely, " +
+-			"prepare-time obligations checked, affected tests listed. Verdicts are fail-closed " +
++			"prepare-time obligations checked. Verdicts are fail-closed " +
+ 			"(clean|complete|review|incomplete). Treat returned source as already read; satisfy " +
+ 			"every reported obligation before finishing. NEVER answer a completeness or change-set " +
+ 			"question from memory or a quick read — an answer not backed by this tool's result on the " +
+@@ -583,10 +567,9 @@ func toolDescription(name string) string {
+ 			"confirmed anchor beats a well-phrased task, but a guessed term for a common name hurts. " +
+ 			"Prism finds those symbols then expands through the call graph (callers, callees, tests). " +
+ 			"For bug-fix/implement tasks it delivers verbatim LINE-NUMBERED source windows plus each " +
+-			"anchor's callers and covering tests — edit-ready, identical to Read output; do NOT re-read " +
++			"anchor's callers — edit-ready, identical to Read output; do NOT re-read " +
+ 			"the files it shows. Unchanged files already delivered this session come back as one-line " +
+ 			"cached pointers. delivery=\"symbols\" forces the compact per-symbol list. " +
+-			"Use include=[\"coverage_gaps\"] when writing or fixing code. " +
+ 			"Use include=[\"docs\"] for doc filenames only."
+ 	case "prism_read":
+ 		return "Whole-file read with session compression: full content on first read; a repeat read of " +
+@@ -616,11 +599,11 @@ func toolDescription(name string) string {
+ 			"then resolve/traverse from it. Never guess names by trying resolve repeatedly."
+ 	case "prism_edges":
+ 		return "Walk the code graph one hop from a symbol. The graph has these edge kinds: " +
+-			"calls (X calls Y), tests (a test exercises Y), uses-type (X mentions a type), " +
++			"calls (X calls Y), uses-type (X mentions a type), " +
+ 			"implements/extends/overrides, contains, defines, imports. direction=out gives edges FROM " +
+-			"the seed (its callees, the types it uses); direction=in gives edges INTO it (its callers, " +
+-			"its tests). Recipes: what does X call → (out, [calls]); who calls X → (in, [calls]); " +
+-			"what tests X → (in, [tests]); interface dispatch resolves: (out, [calls]) returns the " +
++			"the seed (its callees, the types it uses); direction=in gives edges INTO it (its callers). " +
++			"Recipes: what does X call → (out, [calls]); who calls X → (in, [calls]); " +
++			"interface dispatch resolves: (out, [calls]) returns the " +
+ 			"implementors actually called. Results are grouped by '<kind> <direction>' and capped with a " +
+ 			"true total. Each neighbor's file:line is AUTHORITATIVE — trust it, don't re-grep to verify. " +
+ 			"This is the precise primitive — prefer it over prism_query when you know the anchor."
+@@ -690,31 +673,6 @@ func toolDescription(name string) string {
+ 			"'missing' reads as 'inherits the default — breaks if the member becomes required'. " +
+ 			"Same completeness reporting as change_impact. RELAY the result as-is: do not " +
+ 			"re-verify through grep — the closure and inheritance walk are already solved."
+-	case "prism_untested_surface":
+-		return "Coverage partition of a change-set: pass 'Type.method' and get the same " +
+-			"change-set as prism_change_impact, split into covered (a test reaches the site " +
+-			"within 3 resolved caller hops; up to 3 example tests + true count) and untested " +
+-			"(no such test — the sites a signature change can break silently). THE pre-refactor " +
+-			"pipeline: change_impact to see the blast radius, untested_surface to know which of " +
+-			"those sites to write tests for FIRST. 'untested' means no test within the resolved " +
+-			"caller horizon — dynamic dispatch the graph cannot see (reflection, framework " +
+-			"executors, CLI runners, fixtures, proxy globals) may still exercise the site, so it " +
+-			"is a work list, NOT proof. Coverage edges are heuristic: before you report a site as " +
+-			"an untested gap, CONFIRM by grepping the test suite for the symbol, its class, and " +
+-			"its callers — this is the one traversal where grep legitimately COMPLETES the graph " +
+-			"answer. (Grep-completion is for coverage only: change_impact / rename_plan / " +
+-			"missing_implementations return the closed set — relay those as-is, never re-derive " +
+-			"them via grep.)"
+-	case "prism_affected":
+-		return "The file-diff form of test selection: pass the CHANGED FILES (repo-relative, " +
+-			"e.g. `git diff --name-only`) and get back exactly the tests that cover any symbol " +
+-			"defined in them — grouped by test file, so a CI step can run ONLY the affected " +
+-			"tests instead of the whole suite. Coverage follows the same evidence-backed graph " +
+-			"traversal as untested_surface (a test reaches a changed symbol within the resolved " +
+-			"caller horizon); low-confidence edges are excluded so unrelated tests are not swept " +
+-			"in. Dynamic dispatch the graph cannot see (reflection, framework executors) may " +
+-			"still exercise a site, so treat the set as a high-signal selection, not a proof of " +
+-			"total isolation. RELAY the result as-is."
+ 	case "prism_rename_plan":
+ 		return "The rename executed as a plan: pass 'Type.method' and newName, get the " +
+ 			"complete change-impact set converted to concrete line edits — file, line, " +
+@@ -754,24 +712,13 @@ func toolDescription(name string) string {
+ // --- Tool implementations -----------------------------------------------
+ 
+ type queryResult struct {
+-	BudgetUsed   int            `json:"budgetUsed"`
+-	Symbols      []rankedSymbol `json:"symbols"`
+-	CoverageGaps []coverageGap  `json:"coverageGaps,omitempty"`
++	BudgetUsed int            `json:"budgetUsed"`
++	Symbols    []rankedSymbol `json:"symbols"`
+ 	// Note explains an empty result so agents can tell "wrong root" or
+ 	// "term typo" apart from "genuinely no matches" without guessing.
+ 	Note string `json:"note,omitempty"`
+ }
+ 
+-// coverageGap is a code symbol in the query blast radius that has no test
+-// edges in the graph. Returned only when include contains "coverage_gaps".
+-type coverageGap struct {
+-	Name     string         `json:"name"`
+-	QualName string         `json:"qualifiedName,omitempty"`
+-	FilePath string         `json:"filePath"`
+-	Kind     string         `json:"kind"`
+-	Span     grove.SpanInfo `json:"span,omitempty"`
+-}
+-
+ type rankedSymbol struct {
+ 	Name          string         `json:"name"`
+ 	QualifiedName string         `json:"qualifiedName"`
+@@ -817,8 +764,8 @@ func (h *Handler) toolQuery(ctx context.Context, args map[string]any) (any, erro
+ 	}
+ 
+ 	// include: controls which result categories are returned.
+-	// Accepted values: "graph" (code + callers/callees), "tests", "docs".
+-	// Default when omitted: ["graph", "tests"].
++	// Accepted values: "graph" (code + callers/callees), "docs".
++	// Default when omitted: ["graph"].
+ 	includeSet := map[string]bool{}
+ 	if raw, ok := args["include"]; ok {
+ 		switch v := raw.(type) {
+@@ -835,7 +782,7 @@ func (h *Handler) toolQuery(ctx context.Context, args map[string]any) (any, erro
+ 		}
+ 	}
+ 	if len(includeSet) == 0 {
+-		includeSet = map[string]bool{"graph": true, "tests": true}
++		includeSet = map[string]bool{"graph": true}
+ 	}
+ 
+ 	// graph_depth is accepted for backward compatibility but expansion is a
+@@ -869,9 +816,6 @@ func (h *Handler) toolQuery(ctx context.Context, args map[string]any) (any, erro
+ 	}
+ 	if delivery == "source" {
+ 		out := h.deliverSource(ctx, task, sel, intArg(args, "max_files", 0), sel.budget)
+-		if includeSet["coverage_gaps"] {
+-			out["coverageGaps"] = buildCoverageGaps(ctx, h.Grove, sel.seedSyms, sel.graphExtra)
+-		}
+ 		delivered, _ := out["deliveredTokens"].(int)
+ 		h.Ledger.Record("prism_query", h.queryBaselineTokens(sel.picked, delivered), delivered)
+ 		return out, nil
+@@ -908,12 +852,6 @@ func (h *Handler) toolQuery(ctx context.Context, args map[string]any) (any, erro
+ 		}
+ 	}
+ 
+-	// Coverage gaps: code symbols in the blast radius with no test edges.
+-	// Only computed when the agent explicitly requests include=["coverage_gaps"].
+-	if includeSet["coverage_gaps"] {
+-		out.CoverageGaps = buildCoverageGaps(ctx, h.Grove, sel.seedSyms, sel.graphExtra)
+-	}
+-
+ 	// Baseline for the savings ledger: the token cost of reading each
+ 	// containing file once in full — what assembling the same context by
+ 	// file reads would have cost. Measured from on-disk sizes, never assumed.
+@@ -945,112 +883,6 @@ func (h *Handler) queryBaselineTokens(picked []ranking.BudgetedSymbol, delivered
+ 	return total
+ }
+ 
+-// buildCoverageGaps returns code symbols (seeds + blast-radius) that have no
+-// direct `tests` edge pointing at them in Grove's graph. Grove scopes test
+-// edges through the import graph and backs them with call-site evidence
+-// (v0.6.0), so the edge itself is the authority — no name heuristics. Cost is
+-// one Deps() call per distinct file.
+-func buildCoverageGaps(ctx context.Context, g *grove.Client, seeds []grove.SymbolRecord, blastRadius []grove.SymbolRecord) []coverageGap {
+-	var gaps []coverageGap
+-	seen := make(map[string]bool)
+-	tested := newTestedChecker(g)
+-
+-	isCodeSym := func(s grove.SymbolRecord) bool {
+-		cat := categorize(s)
+-		if cat == ranking.CategoryTest || cat == ranking.CategoryDoc {
+-			return false
+-		}
+-		if s.Kind != "function" && s.Kind != "method" {
+-			return false
+-		}
+-		if strings.HasPrefix(s.Name, "New") {
+-			return false
+-		}
+-		return isExportedName(s.Name)
+-	}
+-
+-	for _, group := range [][]grove.SymbolRecord{seeds, blastRadius} {
+-		for _, s := range group {
+-			if seen[s.ID] || !isCodeSym(s) {
+-				continue
+-			}
+-			seen[s.ID] = true
+-			if !tested.covered(ctx, s) {
+-				gaps = append(gaps, coverageGap{
+-					Name:     s.Name,
+-					QualName: s.QualifiedName,
+-					FilePath: s.FilePath,
+-					Kind:     s.Kind,
+-					Span:     s.Span,
+-				})
+-			}
+-		}
+-	}
+-
+-	return gaps
+-}
+-
+-// testedChecker answers "does a direct tests edge point at this symbol?"
+-// with a per-file edge cache so each file's edges are fetched once.
+-type testedChecker struct {
+-	g      *grove.Client
+-	byFile map[string]map[string]bool // file → set of tested edge-target keys
+-}
+-
+-func newTestedChecker(g *grove.Client) *testedChecker {
+-	return &testedChecker{g: g, byFile: map[string]map[string]bool{}}
+-}
+-
+-func (t *testedChecker) covered(ctx context.Context, sym grove.SymbolRecord) bool {
+-	targets, ok := t.byFile[sym.FilePath]
+-	if !ok {
+-		targets = map[string]bool{}
+-		if edges, err := t.g.Deps(ctx, sym.FilePath); err == nil {
+-			for _, e := range edges {
+-				if e.Type != "tests" {
+-					continue
+-				}
+-				// Grove v0.7.0 tiers tests edges by confidence: ≥0.8 is a
+-				// direct relation; lower tiers (helper-transitive 0.6–0.75,
+-				// one-hop-past-entry 0.55) mean "possibly related" and must
+-				// not silence a coverage gap.
+-				if e.Confidence < 0.8 {
+-					continue
+-				}
+-				targets[e.To] = true
+-				// Also key by the SHA-independent form so a record from an
+-				// older snapshot still matches after the blob hash moved.
+-				targets[trimSymbolID(e.To)] = true
+-			}
+-		}
+-		t.byFile[sym.FilePath] = targets
+-	}
+-	if targets[sym.ID] {
+-		return true
+-	}
+-	if sym.QualifiedName != "" && targets[sym.FilePath+"::"+sym.QualifiedName] {
+-		return true
+-	}
+-	return targets[sym.FilePath+"::"+sym.Name]
+-}
+-
+-// trimSymbolID strips the trailing "@<blobSHA>[#n]" from a Grove symbol ID
+-// ("file.go::Name@abc123"), leaving the stable "file.go::Name" identity.
+-func trimSymbolID(id string) string {
+-	if i := strings.LastIndex(id, "@"); i > 0 {
+-		return id[:i]
+-	}
+-	return id
+-}
+-
+-func isExportedName(name string) bool {
+-	if name == "" {
+-		return false
+-	}
+-	ch := name[0]
+-	return ch >= 'A' && ch <= 'Z'
+-}
+-
+ func (h *Handler) toolRead(ctx context.Context, args map[string]any) (any, error) {
+ 	path := stringArg(args, "file", stringArg(args, "path", ""))
+ 	if path == "" {
+@@ -1767,105 +1599,6 @@ func (h *Handler) toolMissingImplementations(ctx context.Context, args map[strin
+ 	return out, nil
+ }
+ 
+-func (h *Handler) toolUntestedSurface(ctx context.Context, args map[string]any) (any, error) {
+-	query := stringArg(args, "query", "")
+-	if query == "" {
+-		return nil, errors.New("query is required")
+-	}
+-	r, err := h.Grove.UntestedSurface(ctx, query)
+-	if err != nil {
+-		return nil, fmt.Errorf("untested-surface: %w", err)
+-	}
+-	h.Ledger.RecordCall("prism_untested_surface")
+-	site := func(s grove.SymbolRecord) map[string]any {
+-		qn := s.QualifiedName
+-		if qn == "" {
+-			qn = s.Name
+-		}
+-		return map[string]any{
+-			"name": s.Name, "qualifiedName": qn, "filePath": s.FilePath,
+-			"line": s.Span.Start, "kind": s.Kind,
+-		}
+-	}
+-	untested := make([]map[string]any, 0, len(r.Untested))
+-	for _, s := range r.Untested {
+-		untested = append(untested, site(s))
+-	}
+-	covered := make([]map[string]any, 0, len(r.Covered))
+-	for _, c := range r.Covered {
+-		entry := site(c.Symbol)
+-		entry["testCount"] = c.TestCount
+-		tests := make([]map[string]any, 0, len(c.Tests))
+-		for _, t := range c.Tests {
+-			tests = append(tests, site(t))
+-		}
+-		entry["tests"] = tests
+-		covered = append(covered, entry)
+-	}
+-	out := map[string]any{
+-		"query":      r.Query,
+-		"totalSites": r.TotalSites,
+-		"untested":   untested,
+-		"covered":    covered,
+-		"note": "covered = a test reaches the site within 3 resolved caller hops; " +
+-			"untested = no such test. Dynamic dispatch the graph cannot resolve " +
+-			"(reflection, framework executors) is not seen — untested is a " +
+-			"write-tests-here work list, not proof of zero coverage",
+-	}
+-	if r.Completeness != "" {
+-		out["completeness"] = r.Completeness
+-	}
+-	if len(r.OverridesExternal) > 0 {
+-		out["overridesExternal"] = r.OverridesExternal
+-	}
+-	return out, nil
+-}
+-
+-// toolAffected maps a set of CHANGED FILES to the tests that cover them —
+-// the file-diff form of test selection for CI ("run only the affected tests").
+-func (h *Handler) toolAffected(ctx context.Context, args map[string]any) (any, error) {
+-	var files []string
+-	if raw, ok := args["files"].([]any); ok {
+-		for _, x := range raw {
+-			if s, ok := x.(string); ok && strings.TrimSpace(s) != "" {
+-				files = append(files, strings.TrimSpace(s))
+-			}
+-		}
+-	}
+-	if len(files) == 0 {
+-		return nil, errors.New("files is required (repo-relative paths, e.g. from `git diff --name-only`)")
+-	}
+-	tests, err := h.Grove.AffectedTests(ctx, files)
+-	if err != nil {
+-		return nil, fmt.Errorf("affected: %w", err)
+-	}
+-	h.Ledger.RecordCall("prism_affected")
+-	byFile := map[string][]map[string]any{}
+-	order := []string{}
+-	for _, s := range tests {
+-		if _, seen := byFile[s.FilePath]; !seen {
+-			order = append(order, s.FilePath)
+-		}
+-		qn := s.QualifiedName
+-		if qn == "" {
+-			qn = s.Name
+-		}
+-		byFile[s.FilePath] = append(byFile[s.FilePath], map[string]any{
+-			"name": s.Name, "qualifiedName": qn, "line": s.Span.Start, "kind": s.Kind,
+-		})
+-	}
+-	testFiles := make([]map[string]any, 0, len(order))
+-	for _, f := range order {
+-		testFiles = append(testFiles, map[string]any{"filePath": f, "tests": byFile[f]})
+-	}
+-	return map[string]any{
+-		"changedFiles":  files,
+-		"testFiles":     testFiles, // grouped by test file — the CI unit
+-		"testCount":     len(tests),
+-		"testFileCount": len(order),
+-	}, nil
+-}
+-
+ // identRe: rename targets must be bare identifiers — a path or expression
+ // in the newName slot produces garbage edits framed as authoritative.
+ var identRe = regexp.MustCompile(`^[A-Za-z_$][A-Za-z0-9_$]*$`)
+diff --git a/internal/mcp/tools_cov_test.go b/internal/mcp/tools_cov_test.go
+index a18b7fb..f796336 100644
+--- a/internal/mcp/tools_cov_test.go
++++ b/internal/mcp/tools_cov_test.go
+@@ -320,48 +320,12 @@ func TestToolQuery_GraphDepthClamped(t *testing.T) {
+ 	}
+ }
+ 
+-func TestToolQuery_CoverageGaps(t *testing.T) {
+-	h := newHWithGrove(t, nil)
+-	out, err := h.Invoke("prism_query", map[string]any{
+-		"task":    "fix compression bug",
+-		"include": []any{"graph", "tests", "coverage_gaps"},
+-	})
+-	if err != nil {
+-		t.Fatalf("unexpected error: %v", err)
+-	}
+-	res := out.(queryResult)
+-	// coverageGaps must be a slice (may be empty if grove has no index) — not nil/panic
+-	// Each gap entry must have a non-empty name and filePath
+-	for _, g := range res.CoverageGaps {
+-		if g.Name == "" {
+-			t.Error("gap entry has empty name")
+-		}
+-		if g.FilePath == "" {
+-			t.Error("gap entry has empty filePath")
+-		}
+-	}
+-}
+-
+-func TestToolQuery_CoverageGaps_NotIncludedByDefault(t *testing.T) {
+-	h := newHWithGrove(t, nil)
+-	out, err := h.Invoke("prism_query", map[string]any{
+-		"task": "fix bug",
+-	})
+-	if err != nil {
+-		t.Fatalf("unexpected error: %v", err)
+-	}
+-	res := out.(queryResult)
+-	if len(res.CoverageGaps) > 0 {
+-		t.Error("coverage_gaps should be empty when not requested")
+-	}
+-}
+-
+ func TestToolQuery_TermsAndIncludeCombined(t *testing.T) {
+ 	h := newHWithGrove(t, nil)
+ 	out, err := h.Invoke("prism_query", map[string]any{
+ 		"task":        "repeat read handling",
+ 		"terms":       []any{"AccessCount"},
+-		"include":     []any{"graph", "tests"},
++		"include":     []any{"graph"},
+ 		"graph_depth": 2,
+ 	})
+ 	if err != nil {
+@@ -371,7 +335,7 @@ func TestToolQuery_TermsAndIncludeCombined(t *testing.T) {
+ 	// docs must be absent
+ 	for _, sym := range res.Symbols {
+ 		if sym.Category == string(ranking.CategoryDoc) {
+-			t.Errorf("should not return doc symbol %q when include=[graph,tests]", sym.Name)
++			t.Errorf("should not return doc symbol %q when include=[graph]", sym.Name)
+ 		}
+ 	}
+ }
+@@ -438,204 +402,6 @@ func TestInvoke_WithReadyCh(t *testing.T) {
+ 	}
+ }
+ 
+-func TestBuildCoverageGaps_Seeds(t *testing.T) {
+-	h := newHWithGrove(t, nil)
+-	ctx := t.Context()
+-
+-	codeSym := grove.SymbolRecord{
+-		ID:       "code1",
+-		Name:     "DoSomething",
+-		FilePath: "service.go",
+-		Kind:     "function",
+-	}
+-	testSym := grove.SymbolRecord{
+-		ID:       "test1",
+-		Name:     "TestDoSomething",
+-		FilePath: "service_test.go",
+-		Kind:     "function",
+-	}
+-
+-	// code symbol with no tests edge → gap; test symbol skipped (isCodeSym false)
+-	gaps := buildCoverageGaps(ctx, h.Grove, []grove.SymbolRecord{codeSym, testSym}, nil)
+-	if len(gaps) != 1 {
+-		t.Errorf("expected 1 gap, got %d", len(gaps))
+-	}
+-	if len(gaps) > 0 && gaps[0].Name != "DoSomething" {
+-		t.Errorf("expected gap for DoSomething, got %q", gaps[0].Name)
+-	}
+-}
+-
+-func TestBuildCoverageGaps_SeedCovered(t *testing.T) {
+-	h := newHWithGrove(t, nil)
+-	// A seed with a real `tests` edge in the graph is not a gap.
+-	if err := os.WriteFile(h.Root+"/x.go", []byte("package x\n\nfunc Fn() {}\n"), 0o644); err != nil {
+-		t.Fatal(err)
+-	}
+-	if err := os.WriteFile(h.Root+"/x_test.go", []byte("package x\n\nfunc TestFn(t interface{}) { Fn() }\n"), 0o644); err != nil {
+-		t.Fatal(err)
+-	}
+-	if _, err := h.Grove.Index(t.Context(), h.Root); err != nil {
+-		t.Fatal(err)
+-	}
+-	codeSym := grove.SymbolRecord{ID: "x.go::Fn@", Name: "Fn", FilePath: "x.go", Kind: "function"}
+-	gaps := buildCoverageGaps(t.Context(), h.Grove, []grove.SymbolRecord{codeSym}, nil)
+-	if len(gaps) != 0 {
+-		t.Errorf("covered symbol should not be a gap, got %+v", gaps)
+-	}
+-}
+-
+-func TestBuildCoverageGaps_BlastRadius(t *testing.T) {
+-	h := newHWithGrove(t, nil)
+-	codeSym := grove.SymbolRecord{ID: "br1", Name: "BrFunc", FilePath: "br.go", Kind: "function"}
+-	// blastRadius sym in an empty index → no tests edge → gap
+-	gaps := buildCoverageGaps(t.Context(), h.Grove, nil, []grove.SymbolRecord{codeSym})
+-	if len(gaps) != 1 {
+-		t.Errorf("expected 1 blast-radius gap, got %d", len(gaps))
+-	}
+-}
+-
+-func TestBuildCoverageGaps_BlastRadiusRequiresDirectTest(t *testing.T) {
+-	h := newHWithGrove(t, nil)
+-	src := `package pay
+-
+-func UpdatePayment() {}
+-func RefundPayment() { UpdatePayment() }
+-`
+-	testSrc := `package pay
+-
+-func TestRefundPayment(t interface{}) {
+-	RefundPayment()
+-}
+-`
+-	if err := os.WriteFile(h.Root+"/payment.go", []byte(src), 0o644); err != nil {
+-		t.Fatal(err)
+-	}
+-	if err := os.WriteFile(h.Root+"/payment_test.go", []byte(testSrc), 0o644); err != nil {
+-		t.Fatal(err)
+-	}
+-	if _, err := h.Grove.Index(t.Context(), h.Root); err != nil {
+-		t.Fatal(err)
+-	}
+-
+-	update := grove.SymbolRecord{ID: "payment.go::UpdatePayment@", Name: "UpdatePayment", FilePath: "payment.go", Kind: "function"}
+-	gaps := buildCoverageGaps(t.Context(), h.Grove, nil, []grove.SymbolRecord{update})
+-	if len(gaps) != 1 || gaps[0].Name != "UpdatePayment" {
+-		t.Fatalf("indirectly reached test should not cover UpdatePayment, got %+v", gaps)
+-	}
+-}
+-
+-func TestBuildCoverageGaps_BlastRadiusAcceptsDirectTest(t *testing.T) {
+-	h := newHWithGrove(t, nil)
+-	src := `package pay
+-
+-func RefundPayment() {}
+-`
+-	testSrc := `package pay
+-
+-func TestRefundPayment(t interface{}) {
+-	RefundPayment()
+-}
+-`
+-	if err := os.WriteFile(h.Root+"/payment.go", []byte(src), 0o644); err != nil {
+-		t.Fatal(err)
+-	}
+-	if err := os.WriteFile(h.Root+"/payment_test.go", []byte(testSrc), 0o644); err != nil {
+-		t.Fatal(err)
+-	}
+-	if _, err := h.Grove.Index(t.Context(), h.Root); err != nil {
+-		t.Fatal(err)
+-	}
+-
+-	refund := grove.SymbolRecord{ID: "payment.go::RefundPayment@", Name: "RefundPayment", FilePath: "payment.go", Kind: "function"}
+-	gaps := buildCoverageGaps(t.Context(), h.Grove, nil, []grove.SymbolRecord{refund})
+-	if len(gaps) != 0 {
+-		t.Fatalf("direct test should cover RefundPayment, got %+v", gaps)
+-	}
+-}
+-
+-func TestBuildCoverageGaps_DirectTestRequiresSamePackageDir(t *testing.T) {
+-	h := newHWithGrove(t, nil)
+-	if err := os.MkdirAll(h.Root+"/payment", 0o755); err != nil {
+-		t.Fatal(err)
+-	}
+-	if err := os.MkdirAll(h.Root+"/storage", 0o755); err != nil {
+-		t.Fatal(err)
+-	}
+-	if err := os.WriteFile(h.Root+"/payment/service.go", []byte("package payment\n\nfunc ListPayments() {}\n"), 0o644); err != nil {
+-		t.Fatal(err)
+-	}
+-	if err := os.WriteFile(h.Root+"/storage/memory.go", []byte("package storage\n\nfunc ListPayments() {}\n"), 0o644); err != nil {
+-		t.Fatal(err)
+-	}
+-	if err := os.WriteFile(h.Root+"/storage/memory_test.go", []byte("package storage\n\nfunc TestListPayments_FilterByUser(t interface{}) { ListPayments() }\n"), 0o644); err != nil {
+-		t.Fatal(err)
+-	}
+-	if _, err := h.Grove.Index(t.Context(), h.Root); err != nil {
+-		t.Fatal(err)
+-	}
+-
+-	paymentList := grove.SymbolRecord{ID: "payment/service.go::ListPayments@", Name: "ListPayments", FilePath: "payment/service.go", Kind: "function"}
+-	storageList := grove.SymbolRecord{ID: "storage/memory.go::ListPayments@", Name: "ListPayments", FilePath: "storage/memory.go", Kind: "function"}
+-	gaps := buildCoverageGaps(t.Context(), h.Grove, nil, []grove.SymbolRecord{paymentList, storageList})
+-	if len(gaps) != 1 || gaps[0].FilePath != "payment/service.go" {
+-		t.Fatalf("same-name test in another package should not cover payment ListPayments, got %+v", gaps)
+-	}
+-}
+-
+-// Constructors (New*) are skipped, and a test that exercises a symbol by
+-// calling it (call-site evidence edge) covers it even when the test's name
+-// doesn't mention the symbol.
+-func TestBuildCoverageGaps_SkipsConstructorsAndAcceptsCallEvidencedTests(t *testing.T) {
+-	h := newHWithGrove(t, nil)
+-	if err := os.WriteFile(h.Root+"/memory.go", []byte("package storage\n\nfunc NewMemoryStore() {}\nfunc SavePayment() {}\n"), 0o644); err != nil {
+-		t.Fatal(err)
+-	}
+-	if err := os.WriteFile(h.Root+"/memory_test.go", []byte("package storage\n\nimport \"testing\"\n\nfunc TestSaveAndGet(t *testing.T) { SavePayment() }\n"), 0o644); err != nil {
+-		t.Fatal(err)
+-	}
+-	if _, err := h.Grove.Index(t.Context(), h.Root); err != nil {
+-		t.Fatal(err)
+-	}
+-
+-	constructor := grove.SymbolRecord{ID: "memory.go::NewMemoryStore@", Name: "NewMemoryStore", FilePath: "memory.go", Kind: "function"}
+-	save := grove.SymbolRecord{ID: "memory.go::SavePayment@", Name: "SavePayment", FilePath: "memory.go", Kind: "function"}
+-	gaps := buildCoverageGaps(t.Context(), h.Grove, nil, []grove.SymbolRecord{constructor, save})
+-	if len(gaps) != 0 {
+-		t.Fatalf("constructor and call-evidenced SavePayment should not be gaps, got %+v", gaps)
+-	}
+-}
+-
+-// A test edge to one symbol must not bleed coverage onto an uncalled
+-// neighbour in the same file.
+-func TestBuildCoverageGaps_CallEvidenceDoesNotCrossSymbols(t *testing.T) {
+-	h := newHWithGrove(t, nil)
+-	if err := os.WriteFile(h.Root+"/validator.go", []byte("package payment\n\nfunc ValidateCurrency() {}\nfunc ValidateAmount() {}\n"), 0o644); err != nil {
+-		t.Fatal(err)
+-	}
+-	if err := os.WriteFile(h.Root+"/validator_test.go", []byte("package payment\n\nimport \"testing\"\n\nfunc TestValidateAmount(t *testing.T) { ValidateAmount() }\n"), 0o644); err != nil {
+-		t.Fatal(err)
+-	}
+-	if _, err := h.Grove.Index(t.Context(), h.Root); err != nil {
+-		t.Fatal(err)
+-	}
+-
+-	currency := grove.SymbolRecord{ID: "validator.go::ValidateCurrency@", Name: "ValidateCurrency", FilePath: "validator.go", Kind: "function"}
+-	gaps := buildCoverageGaps(t.Context(), h.Grove, nil, []grove.SymbolRecord{currency})
+-	if len(gaps) != 1 || gaps[0].Name != "ValidateCurrency" {
+-		t.Fatalf("TestValidateAmount should not cover ValidateCurrency, got %+v", gaps)
+-	}
+-}
+-
+-func TestBuildCoverageGaps_Dedup(t *testing.T) {
+-	h := newHWithGrove(t, nil)
+-	sym := grove.SymbolRecord{ID: "d1", Name: "DupFn", FilePath: "dup.go", Kind: "function"}
+-	// same sym in both seeds and blastRadius → only 1 gap (dedup via seen map)
+-	gaps := buildCoverageGaps(t.Context(), h.Grove, []grove.SymbolRecord{sym}, []grove.SymbolRecord{sym})
+-	if len(gaps) != 1 {
+-		t.Errorf("expected 1 gap (dedup), got %d", len(gaps))
+-	}
+-}
+-
+ func TestToolRead_SeenFile(t *testing.T) {
+ 	srv := fakeGroveSrv(t, map[string]any{"symbols": []map[string]any{}})
+ 	defer srv.Close()
+diff --git a/internal/mcp/verify.go b/internal/mcp/verify.go
+index 5b70f5e..287ecd3 100644
+--- a/internal/mcp/verify.go
++++ b/internal/mcp/verify.go
+@@ -377,16 +377,7 @@ func (h *Handler) toolVerify(ctx context.Context, args map[string]any) (any, err
+ 		return missed[i].Line < missed[j].Line
+ 	})
+ 
+-	// 3) Tests that must run for this diff.
+-	var affectedTests []map[string]any
+-	if tests, err := h.Grove.AffectedTests(ctx, changedFiles); err == nil {
+-		for _, t := range tests {
+-			affectedTests = append(affectedTests, map[string]any{
+-				"name": displayQN(t), "file": t.FilePath, "line": t.Span.Start})
+-		}
+-	}
+-
+-	// 4) Cross-component dependency CANDIDATES: induced edges whose every
++	// 3) Cross-component dependency CANDIDATES: induced edges whose every
+ 	// evidence site sits inside code this diff touched (line-level, not
+ 	// file-level — a pre-existing edge elsewhere in a touched file must not
+ 	// fire). No base-graph comparison is performed, so these are candidates
+@@ -460,7 +451,6 @@ func (h *Handler) toolVerify(ctx context.Context, args map[string]any) (any, err
+ 		"signatureChanges": sigChanges,
+ 		"missedSites":      missed,
+ 		"unverifiedSeeds":  unverifiedSeeds,
+-		"affectedTests":    affectedTests,
+ 		"newDependencies":  newDeps,
+ 		"archStatus":       archStatus,
+ 		"archIntroduced":   archIntroduced,

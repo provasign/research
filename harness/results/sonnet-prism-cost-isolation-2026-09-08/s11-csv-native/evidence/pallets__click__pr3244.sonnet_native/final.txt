@@ -1,0 +1,13 @@
+Full test suite passes (1419 passed). The fix resolves the reported crash.
+
+## Summary
+
+**Root cause**: `CliRunner`'s `StreamMixer` backed the captured `stdout`/`stderr` streams with `io.BytesIO`, which has no real OS file descriptor. When user code called `subprocess.run(..., stdout=sys.stderr)`, `subprocess` tried `stdout.fileno()` and got `io.UnsupportedOperation`.
+
+**Fix** (`src/click/testing.py`): Replaced `BytesIOCopy`'s `io.BytesIO` backing with a real `tempfile.TemporaryFile()`, so it exposes a genuine `fileno()` while still forwarding writes to the `copy_to` buffer (for the mixed `output` stream) and preserving the `getvalue()` API used elsewhere. Added cleanup (`stream_mixer.stdout.close()` / `.close()`) in `isolation()`'s `finally` block to avoid leaking the temp files.
+
+Verified:
+- The reported reproduction (`subprocess.run(["echo", "foo"], stdout=sys.stderr)` inside a Click command invoked via `CliRunner`) no longer raises and correctly captures `"foo\n"` in `result.stderr_bytes`.
+- Full existing test suite: `1419 passed, 24 skipped, 1 xfailed` — no regressions.
+
+Note: bytes written directly by a subprocess to the OS-level fd bypass the in-memory `copy_to` mix, so they land in `stdout_bytes`/`stderr_bytes` but not in the combined `output`/`output_bytes` stream — an inherent limitation of mixing OS-level writes with an in-process buffer, not something feasible to close within this fix's scope.

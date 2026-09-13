@@ -1,0 +1,9 @@
+Full test suite passes (1419 passed, no failures).
+
+## Summary
+
+The issue: `CliRunner` backs `sys.stdout`/`sys.stderr` with `io.BytesIO`-based streams (`BytesIOCopy`) during test isolation. `io.BytesIO` has no real OS file descriptor, so calling `.fileno()` on it raises `io.UnsupportedOperation`. Code under test that does `subprocess.run(..., stdout=sys.stderr)` triggers this because `subprocess` calls `.fileno()` on file-like stdout/stderr arguments.
+
+Fix (`src/click/testing.py`): `BytesIOCopy.fileno()` now lazily creates a real `tempfile.TemporaryFile()` on first access and returns its file descriptor; subsequent writes are mirrored into that temp file so its contents stay in sync. This lets file-descriptor-requiring APIs like `subprocess.run` work under `CliRunner`, while the in-memory `BytesIO` behavior (`getvalue()`, output mixing, etc.) is unchanged for all existing use cases.
+
+Verified with the exact reproduction from the issue (now passes) and the full existing test suite (`tests/test_testing.py` and the whole `tests/` directory) — no regressions.

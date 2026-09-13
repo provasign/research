@@ -1,0 +1,110 @@
+{
+  "duration_api_ms": 244638,
+  "stop_reason": "end_turn",
+  "session_id": "c118c209-4b3a-483b-94bc-36c68558d85f",
+  "total_cost_usd": 0.8581124000000002,
+  "usage": {
+    "input_tokens": 80,
+    "cache_creation_input_tokens": 59911,
+    "cache_read_input_tokens": 1890202,
+    "output_tokens": 23624,
+    "output_tokens_details": {
+      "thinking_tokens": 12046
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 59911,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 567,
+        "cache_read_input_tokens": 68792,
+        "cache_creation_input_tokens": 368,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 368
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 15,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004028,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 80,
+      "outputTokens": 23624,
+      "cacheReadInputTokens": 1890202,
+      "cacheCreationInputTokens": 59911,
+      "webSearchRequests": 0,
+      "costUSD": 0.8540844000000003,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 12046,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 40,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "## Summary\n\n**Root cause:** `CliRunner.isolation()` replaces `sys.stdout`/`sys.stderr` with `_NamedTextIOWrapper` instances backed by in-memory `io.BytesIO`-based `BytesIOCopy` buffers. `subprocess.run(..., stdout=sys.stderr)` calls `.fileno()` on the underlying buffer to get a real file descriptor, but `io.BytesIO` doesn't support `fileno()`, raising `io.UnsupportedOperation`.\n\n**Fix** (`src/click/testing.py`, `BytesIOCopy`): made `fileno()` work by lazily rolling the buffer over to a real `tempfile.TemporaryFile()` the first time a file descriptor is actually requested \u2014 mirroring `tempfile.SpooledTemporaryFile`'s own rollover trick, but keeping `BytesIOCopy` itself as a plain `io.BytesIO` subclass otherwise (so it needs no explicit closing and doesn't emit `ResourceWarning`s unless it actually rolled over). `getvalue()`/`write()`/`flush()`/`close()` were extended to transparently delegate to the backing file once it exists. Also added cleanup of the mixer's streams in `isolation()`'s `finally` block so any rolled-over temp files get closed.\n\n**Verification:**\n- The original repro no longer raises `UnsupportedOperation`.\n- `python -m pytest tests/` \u2192 1419 passed, 24 skipped, 1 xfailed, 0 failed.\n- `ruff check` and `mypy` pass cleanly on the modified file.\n\nNo tests, docs, or config were modified.",
+  "ttft_ms": 2219,
+  "type": "result",
+  "duration_ms": 256206,
+  "uuid": "42ea6f25-f1e0-4ac7-84a9-25d7a4f37cbd",
+  "ttft_stream_ms": 1157,
+  "time_to_request_ms": 69,
+  "first_content_frame_ms": 1533,
+  "queued_turn_count": 0
+}

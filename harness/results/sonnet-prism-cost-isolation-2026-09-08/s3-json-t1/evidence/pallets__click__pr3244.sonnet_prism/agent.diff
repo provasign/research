@@ -1,0 +1,83 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..47bd319 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -67,13 +67,43 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+         stream._paused = False
+ 
+ 
+-class BytesIOCopy(io.BytesIO):
+-    """Patch ``io.BytesIO`` to let the written stream be copied to another.
++class SpooledBytesIO(tempfile.SpooledTemporaryFile):
++    """A ``BytesIO``-like stream that can be spilled to a real file on
++    disk. Unlike :class:`io.BytesIO`, calling :meth:`fileno` on this
++    stream works, since :class:`~tempfile.SpooledTemporaryFile` rolls
++    itself over to a real file when a file descriptor is requested.
++    This allows the streams used during :class:`CliRunner` isolation to
++    be passed to APIs like :func:`subprocess.run` that require a real
++    file descriptor.
++
++    .. versionadded:: 8.3.2
++    """
++
++    def __init__(self) -> None:
++        super().__init__(mode="w+b")
++
++    def getvalue(self) -> bytes:
++        pos = self.tell()
++        self.seek(0)
++        rv = self.read()
++        self.seek(pos)
++        return rv
++
++    def __del__(self) -> None:
++        # Unlike ``tempfile.SpooledTemporaryFile``, don't warn about being
++        # garbage collected while still open. ``io.BytesIO``, which this
++        # class otherwise behaves like, doesn't require an explicit
++        # ``close()`` either.
++        self.close()
++
++
++class BytesIOCopy(SpooledBytesIO):
++    """Patch ``SpooledBytesIO`` to let the written stream be copied to another.
+ 
+     .. versionadded:: 8.2
+     """
+ 
+-    def __init__(self, copy_to: io.BytesIO) -> None:
++    def __init__(self, copy_to: SpooledBytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
+ 
+@@ -95,9 +125,9 @@ class StreamMixer:
+     """
+ 
+     def __init__(self) -> None:
+-        self.output: io.BytesIO = io.BytesIO()
+-        self.stdout: io.BytesIO = BytesIOCopy(copy_to=self.output)
+-        self.stderr: io.BytesIO = BytesIOCopy(copy_to=self.output)
++        self.output: SpooledBytesIO = SpooledBytesIO()
++        self.stdout: SpooledBytesIO = BytesIOCopy(copy_to=self.output)
++        self.stderr: SpooledBytesIO = BytesIOCopy(copy_to=self.output)
+ 
+ 
+ class _NamedTextIOWrapper(io.TextIOWrapper):
+@@ -280,7 +310,7 @@ class CliRunner:
+         input: str | bytes | t.IO[t.Any] | None = None,
+         env: cabc.Mapping[str, str | None] | None = None,
+         color: bool = False,
+-    ) -> cabc.Iterator[tuple[io.BytesIO, io.BytesIO, io.BytesIO]]:
++    ) -> cabc.Iterator[tuple[SpooledBytesIO, SpooledBytesIO, SpooledBytesIO]]:
+         """A context manager that sets up the isolation for invoking of a
+         command line tool.  This sets up `<stdin>` with the given input data
+         and `os.environ` with the overrides from the given dictionary.
+@@ -464,6 +494,9 @@ class CliRunner:
+             sys.stdout = old_stdout
+             sys.stderr = old_stderr
+             sys.stdin = old_stdin
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
++            stream_mixer.output.close()
+             termui.visible_prompt_func = old_visible_prompt_func
+             termui.hidden_prompt_func = old_hidden_prompt_func
+             termui._getchar = old__getchar_func

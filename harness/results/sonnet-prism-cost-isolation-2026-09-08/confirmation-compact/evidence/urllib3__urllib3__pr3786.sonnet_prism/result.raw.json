@@ -1,0 +1,110 @@
+{
+  "duration_api_ms": 138651,
+  "stop_reason": "end_turn",
+  "session_id": "25f6b381-3295-4d47-8f70-90da8202cc0b",
+  "total_cost_usd": 0.43842220000000004,
+  "usage": {
+    "input_tokens": 58,
+    "cache_creation_input_tokens": 35799,
+    "cache_read_input_tokens": 854291,
+    "output_tokens": 12268,
+    "output_tokens_details": {
+      "thinking_tokens": 5554
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 35799,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 598,
+        "cache_read_input_tokens": 42795,
+        "cache_creation_input_tokens": 1994,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 1994
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 1487,
+      "outputTokens": 17,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.001572,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 58,
+      "outputTokens": 12268,
+      "cacheReadInputTokens": 854291,
+      "cacheCreationInputTokens": 35799,
+      "webSearchRequests": 0,
+      "costUSD": 0.4368502,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 5554,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 29,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "The change is complete and focused. Summary:\n\n**Root cause**: `HTTPSConnection.connect()` used `self.ssl_context` (meant for the origin server) even when the connection was actually a direct TLS handshake to an HTTPS proxy in forwarding mode (`use_forwarding_for_https=True`), because in that mode `self.host`/`self.port` are set to the proxy's address but the code didn't distinguish it from a normal direct TLS connection.\n\n**Fix** (`src/urllib3/connection.py`):\n1. In `HTTPSConnection.connect()`, when `self.proxy_is_forwarding` is true, use `proxy_config.ssl_context` (i.e., `proxy_ssl_context`) plus the proxy's `assert_hostname`/`assert_fingerprint` for the TLS handshake, instead of the origin's `self.ssl_context`/`self.assert_hostname`/`self.assert_fingerprint`. This mirrors what `_connect_tls_proxy` already does for tunneling mode.\n2. In `HTTPSConnection.__init__`, raise `ValueError` when `proxy_config.use_forwarding_for_https` is `True` and `ssl_context` is specified \u2014 with a distinct message depending on whether `proxy_ssl_context` was also specified (ambiguous configuration) or not (wrong parameter used), matching the 2.x behavior requested in the issue.\n\nVerified with `python -m pytest test/test_connection.py test/test_proxymanager.py test/test_poolmanager.py test/test_util.py` (all pass) and the local dummyserver proxy suite `test/with_dummyserver/test_proxy_poolmanager.py` (65 passed, 1 pre-existing skip untouched since tests weren't modified per instructions).",
+  "ttft_ms": 1947,
+  "type": "result",
+  "duration_ms": 201217,
+  "uuid": "d6d4a4db-9ae8-4d87-97ce-94ede4f6ccc5",
+  "ttft_stream_ms": 807,
+  "time_to_request_ms": 24,
+  "first_content_frame_ms": 1438,
+  "queued_turn_count": 0
+}

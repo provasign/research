@@ -1,0 +1,76 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..c65cd10 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -67,23 +67,57 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+         stream._paused = False
+ 
+ 
+-class BytesIOCopy(io.BytesIO):
+-    """Patch ``io.BytesIO`` to let the written stream be copied to another.
++class BytesIOCopy:
++    """A binary buffer that also copies everything written to it to
++    another stream.
++
++    It starts out backed by an in-memory :class:`io.BytesIO`, avoiding the
++    cost (and open file descriptor) of a real file. If ``fileno()`` is
++    accessed -- e.g. because the stream is passed as ``stdout``/``stderr``
++    to :func:`subprocess.run` -- it transparently materializes itself into
++    a real, file-descriptor backed temporary file so that the underlying
++    call succeeds.
+ 
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.2.1
++        Materializes into a real temporary file on first use of
++        ``fileno()``, fixing ``subprocess.run(..., stdout=<captured
++        stream>)`` raising ``io.UnsupportedOperation``.
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+-        super().__init__()
++        self._file: io.BytesIO | t.IO[bytes] = io.BytesIO()
+         self.copy_to = copy_to
+ 
++    def fileno(self) -> int:
++        if isinstance(self._file, io.BytesIO):
++            real_file = tempfile.TemporaryFile()
++            real_file.write(self._file.getvalue())
++            self._file = real_file
++
++        return self._file.fileno()
++
+     def flush(self) -> None:
+-        super().flush()
++        self._file.flush()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+-        return super().write(b)
++        return self._file.write(b)
++
++    def getvalue(self) -> bytes:
++        pos = self._file.tell()
++        self._file.seek(0)
++        data = self._file.read()
++        self._file.seek(pos)
++        return data
++
++    def close(self) -> None:
++        self._file.close()
++
++    def __getattr__(self, name: str) -> t.Any:
++        return getattr(self._file, name)
+ 
+ 
+ class StreamMixer:
+@@ -464,6 +498,8 @@ class CliRunner:
+             sys.stdout = old_stdout
+             sys.stderr = old_stderr
+             sys.stdin = old_stdin
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
+             termui.visible_prompt_func = old_visible_prompt_func
+             termui.hidden_prompt_func = old_hidden_prompt_func
+             termui._getchar = old__getchar_func

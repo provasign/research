@@ -1,0 +1,13 @@
+Full suite passes (1419 passed) and the reproduction test from the issue now passes as well.
+
+## Summary
+
+The bug: during `CliRunner.invoke()`, `sys.stdout`/`sys.stderr` were backed by plain `io.BytesIO` objects, which don't support `fileno()`. Any code that passed these streams to `subprocess.run()`/`Popen` (which requires a real file descriptor for non-`PIPE`/`DEVNULL` file-like arguments) raised `io.UnsupportedOperation` inside `CliRunner`, even though the same code worked fine outside of tests.
+
+Fix (`src/click/testing.py`):
+- Changed `BytesIOCopy` to be backed by `tempfile.SpooledTemporaryFile` instead of `io.BytesIO`. It transparently rolls over to a real on-disk file when `fileno()` is requested (e.g., by `subprocess`), so passing `sys.stdout`/`sys.stderr` to subprocess now works.
+- Added a `getvalue()` override that works correctly whether the file is still in-memory or has rolled over to disk (seeks to 0, reads, restores position).
+- Added a silent `__del__` override so failing to explicitly close these internal streams doesn't emit `ResourceWarning`s (matching prior `io.BytesIO` behavior, since this is an internal implementation detail, not something callers manage themselves).
+- Explicitly close the mixer's `stdout`/`stderr` streams at the end of `CliRunner.isolation()` now that they hold real OS resources.
+
+No tests, docs, or config were modified.

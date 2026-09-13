@@ -1,0 +1,7 @@
+## Summary
+
+Fixed `src/click/testing.py`: `CliRunner`'s `BytesIOCopy` streams (used to back `sys.stdout`/`sys.stderr` during `invoke()`) were pure `io.BytesIO`, which has no real file descriptor. Any code under test that passed these streams to `subprocess.run(..., stdout=...)` hit `io.UnsupportedOperation: fileno`.
+
+Change: `BytesIOCopy` now also backs itself with a real `tempfile.TemporaryFile`, mirrors writes/flushes into it, and exposes a working `fileno()` delegating to that file — so `subprocess.run` (and anything else needing a real fd) works under `CliRunner`. Added proper cleanup (`close()`/`__del__`) so the temp file descriptor doesn't leak/warn, and close it in `CliRunner.isolation()`'s teardown.
+
+Verified: the issue's exact reproducer (`CliRunner().invoke()` running a command that does `subprocess.run(["echo", "foo"], stdout=sys.stderr)`) now passes, and the full existing test suite (`tests/`, 1419 tests) still passes with no regressions.

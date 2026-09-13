@@ -1,0 +1,110 @@
+{
+  "duration_api_ms": 142345,
+  "stop_reason": "end_turn",
+  "session_id": "96ff52aa-2e02-4299-9b31-934a74f84935",
+  "total_cost_usd": 0.43203859999999994,
+  "usage": {
+    "input_tokens": 54,
+    "cache_creation_input_tokens": 38881,
+    "cache_read_input_tokens": 715068,
+    "output_tokens": 12936,
+    "output_tokens_details": {
+      "thinking_tokens": 6892
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 38881,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 507,
+        "cache_read_input_tokens": 44113,
+        "cache_creation_input_tokens": 222,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 222
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 16,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004033,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 54,
+      "outputTokens": 12936,
+      "cacheReadInputTokens": 715068,
+      "cacheCreationInputTokens": 38881,
+      "webSearchRequests": 0,
+      "costUSD": 0.4280056,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 6892,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 27,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "The fix works. Summary of changes to `src/click/testing.py`:\n\n- Replaced `BytesIOCopy`'s `io.BytesIO` backing with a real `tempfile.TemporaryFile`, so it exposes a genuine `fileno()` \u2014 this is what `subprocess.run(..., stdout=sys.stdout)` (or `stderr`) needs instead of raising `io.UnsupportedOperation`. Added `getvalue()` (seek/read/restore-position) and `__getattr__` delegation to preserve the existing `io.BytesIO`-like interface used elsewhere (e.g. `.closed`).\n- Added `__del__` to close the underlying temp file on garbage collection (avoiding `ResourceWarning`s in tests that construct `BytesIOCopy`/`StreamMixer` directly).\n- Explicitly close `stream_mixer.stdout`/`stderr`'s underlying temp files in `CliRunner.isolation`'s `finally` block after the captured values have been read, so `CliRunner.invoke()` doesn't leak file descriptors.\n\nVerified:\n- The original SSCCE (`subprocess.run([\"echo\", \"foo\"], stdout=sys.stderr)` inside a `CliRunner`-invoked command) now succeeds and correctly captures `foo\\n` in `result.stderr`.\n- Full existing test suite (`python -m pytest tests/`) passes: 1419 passed, 24 skipped, 1 xfailed, no failures or resource warnings.",
+  "ttft_ms": 1946,
+  "type": "result",
+  "duration_ms": 149841,
+  "uuid": "3f6a0cab-7bc2-40b9-bb4b-262042f3b2a0",
+  "ttft_stream_ms": 845,
+  "time_to_request_ms": 35,
+  "first_content_frame_ms": 1027,
+  "queued_turn_count": 0
+}

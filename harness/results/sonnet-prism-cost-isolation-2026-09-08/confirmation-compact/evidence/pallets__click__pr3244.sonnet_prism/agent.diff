@@ -1,0 +1,93 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..25ba8f1 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -9,6 +9,7 @@ import shlex
+ import sys
+ import tempfile
+ import typing as t
++import weakref
+ from types import TracebackType
+ 
+ from . import _compat
+@@ -67,23 +68,48 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+         stream._paused = False
+ 
+ 
+-class BytesIOCopy(io.BytesIO):
+-    """Patch ``io.BytesIO`` to let the written stream be copied to another.
++class BytesIOCopy:
++    """A binary stream backed by a real file, so ``fileno()`` works, that
++    also copies whatever is written to it to another stream.
++
++    Code under test may pass ``sys.stdout``/``sys.stderr`` to APIs that
++    need a real file descriptor, such as ``subprocess.run(..., stdout=...)``.
++    A plain ``io.BytesIO`` has no file descriptor and raises
++    ``io.UnsupportedOperation`` in that case, so this uses a
++    ``tempfile.TemporaryFile`` for its backing storage instead, while still
++    exposing a ``getvalue()`` method like ``io.BytesIO``.
+ 
+     .. versionadded:: 8.2
+     """
+ 
+-    def __init__(self, copy_to: io.BytesIO) -> None:
+-        super().__init__()
++    def __init__(self, copy_to: "BytesIOCopy | None" = None) -> None:
++        self._file: t.IO[bytes] = tempfile.TemporaryFile()
+         self.copy_to = copy_to
++        # Ensure the real file behind this object is closed once this
++        # wrapper is garbage collected, even if nobody calls ``close()``
++        # explicitly. This avoids ``ResourceWarning: unclosed file``
++        # while still not requiring callers to manage the lifetime.
++        weakref.finalize(self, self._file.close)
+ 
+-    def flush(self) -> None:
+-        super().flush()
+-        self.copy_to.flush()
++    def __getattr__(self, name: str) -> t.Any:
++        return getattr(self._file, name)
+ 
+     def write(self, b: ReadableBuffer) -> int:
+-        self.copy_to.write(b)
+-        return super().write(b)
++        if self.copy_to is not None:
++            self.copy_to.write(b)
++        return self._file.write(b)
++
++    def flush(self) -> None:
++        self._file.flush()
++        if self.copy_to is not None:
++            self.copy_to.flush()
++
++    def getvalue(self) -> bytes:
++        pos = self._file.tell()
++        self._file.seek(0)
++        data = self._file.read()
++        self._file.seek(pos)
++        return data
+ 
+ 
+ class StreamMixer:
+@@ -95,9 +121,9 @@ class StreamMixer:
+     """
+ 
+     def __init__(self) -> None:
+-        self.output: io.BytesIO = io.BytesIO()
+-        self.stdout: io.BytesIO = BytesIOCopy(copy_to=self.output)
+-        self.stderr: io.BytesIO = BytesIOCopy(copy_to=self.output)
++        self.output = BytesIOCopy()
++        self.stdout = BytesIOCopy(copy_to=self.output)
++        self.stderr = BytesIOCopy(copy_to=self.output)
+ 
+ 
+ class _NamedTextIOWrapper(io.TextIOWrapper):
+@@ -464,6 +490,9 @@ class CliRunner:
+             sys.stdout = old_stdout
+             sys.stderr = old_stderr
+             sys.stdin = old_stdin
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
++            stream_mixer.output.close()
+             termui.visible_prompt_func = old_visible_prompt_func
+             termui.hidden_prompt_func = old_hidden_prompt_func
+             termui._getchar = old__getchar_func

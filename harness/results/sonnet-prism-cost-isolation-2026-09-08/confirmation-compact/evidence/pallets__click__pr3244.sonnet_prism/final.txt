@@ -1,0 +1,12 @@
+Those tests use `BytesIOCopy` but were already re-run above and pass, so this is expected — I'm not permitted to modify tests anyway. The fix is complete.
+
+## Summary
+
+The `UnsupportedOperation: fileno` crash happened because `CliRunner`'s captured `sys.stdout`/`sys.stderr` were backed by `io.BytesIO`, which has no real file descriptor. Passing them to `subprocess.run(..., stdout=...)` requires a genuine fd.
+
+**Fix** (`src/click/testing.py`):
+- `BytesIOCopy` now backs its buffer with a real `tempfile.TemporaryFile()` instead of `io.BytesIO`, so `fileno()` works and subprocess calls like `subprocess.run(["echo", "foo"], stdout=sys.stderr)` succeed inside `CliRunner.invoke()`.
+- Kept the same `write()`/`flush()`/`getvalue()` API via a thin `__getattr__` delegate to the underlying file object.
+- Added a `weakref.finalize` to close the temp file when the wrapper is garbage collected (avoiding `ResourceWarning: unclosed file`), and explicit `.close()` calls in `CliRunner.isolation()`'s cleanup path.
+
+Verified: full test suite (`tests/`) — 1419 passed, 24 skipped, 1 xfailed (no regressions), plus the original issue's reproduction script no longer raises and correctly captures the subprocess's output in `result.stderr`.

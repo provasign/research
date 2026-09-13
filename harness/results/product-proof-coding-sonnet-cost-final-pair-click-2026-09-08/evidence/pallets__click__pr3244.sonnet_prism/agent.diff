@@ -1,0 +1,88 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..676cbc9 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -71,20 +71,63 @@ class BytesIOCopy(io.BytesIO):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.3.3
++        ``fileno()`` no longer always raises ``io.UnsupportedOperation``.
++        On first use it lazily backs itself with a real temporary file, so
++        the stream can be passed as ``stdout``/``stderr`` to
++        :func:`subprocess.run` and similar APIs. Streams that never need a
++        real file descriptor keep using the in-memory buffer as before.
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._file: t.IO[bytes] | None = None
+ 
+     def flush(self) -> None:
+         super().flush()
+         self.copy_to.flush()
++        if self._file is not None:
++            self._file.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
++
++        if self._file is not None:
++            return self._file.write(b)
++
+         return super().write(b)
+ 
++    def fileno(self) -> int:
++        if self._file is None:
++            # Lazily back this stream with a real, file descriptor backed
++            # temporary file, seeded with everything written so far, so
++            # that APIs like ``subprocess.run(stdout=...)`` that require a
++            # ``fileno()`` keep working.
++            self._file = tempfile.TemporaryFile()
++            self._file.write(super().getvalue())
++            self._file.flush()
++
++        return self._file.fileno()
++
++    def getvalue(self) -> bytes:
++        if self._file is not None:
++            pos = self._file.tell()
++            self._file.seek(0)
++            try:
++                return self._file.read()
++            finally:
++                self._file.seek(pos)
++
++        return super().getvalue()
++
++    def close(self) -> None:
++        if self._file is not None:
++            self._file.close()
++
++        super().close()
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.
+@@ -96,8 +139,8 @@ class StreamMixer:
+ 
+     def __init__(self) -> None:
+         self.output: io.BytesIO = io.BytesIO()
+-        self.stdout: io.BytesIO = BytesIOCopy(copy_to=self.output)
+-        self.stderr: io.BytesIO = BytesIOCopy(copy_to=self.output)
++        self.stdout: BytesIOCopy = BytesIOCopy(copy_to=self.output)
++        self.stderr: BytesIOCopy = BytesIOCopy(copy_to=self.output)
+ 
+ 
+ class _NamedTextIOWrapper(io.TextIOWrapper):
+@@ -461,6 +504,8 @@ class CliRunner:
+                         pass
+                 else:
+                     os.environ[key] = value
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
+             sys.stdout = old_stdout
+             sys.stderr = old_stderr
+             sys.stdin = old_stdin

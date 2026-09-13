@@ -1,0 +1,7 @@
+## Summary
+
+The issue was that `CliRunner`'s captured `sys.stdout`/`sys.stderr` were backed by plain `io.BytesIO` objects, which don't have a real OS file descriptor. When user code passed `sys.stdout`/`sys.stderr` to `subprocess.run(...)`, Python tried to call `.fileno()` on the underlying buffer and got `io.UnsupportedOperation`, even though running the same script directly (with real OS streams) worked fine.
+
+**Fix** (`src/click/testing.py`, `BytesIOCopy`): added lazy support for `fileno()` by backing the stream with a real `tempfile.TemporaryFile()` the first time a file descriptor is requested. On `flush()`, any bytes written directly to that file descriptor (e.g., by a subprocess) are pulled in and mirrored into the in-memory buffer (and the mixed `output` stream), so `Result.stdout`/`Result.stderr`/`Result.output` still reflect everything that was written, whether via Python-level `.write()` calls or a subprocess writing directly to the fd.
+
+This makes `subprocess.run(..., stdout=sys.stdout)` (or `stderr`) work under `CliRunner` without raising, matching the behavior of running the script directly. Verified with the SSCCE from the issue and the full test suite (1419 passed, 0 failed).

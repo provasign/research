@@ -1,0 +1,83 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..7af4920 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -67,23 +67,52 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+         stream._paused = False
+ 
+ 
+-class BytesIOCopy(io.BytesIO):
+-    """Patch ``io.BytesIO`` to let the written stream be copied to another.
++class BytesIOCopy:
++    """A binary stream, backed by a real (unlinked) temporary file so it
++    has a working file descriptor, that also copies everything written to
++    it into another stream.
++
++    A real file descriptor is required so that code under test can pass
++    these streams (through ``sys.stdout``/``sys.stderr``) to things like
++    :func:`subprocess.run`, which needs ``fileno()`` to work.
+ 
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.3
++        Backed by a real temporary file instead of :class:`io.BytesIO` so
++        that ``fileno()`` works.
+     """
+ 
+-    def __init__(self, copy_to: io.BytesIO) -> None:
+-        super().__init__()
++    def __init__(self, copy_to: t.BinaryIO) -> None:
++        self._file: t.BinaryIO = tempfile.TemporaryFile()
+         self.copy_to = copy_to
+ 
++    def __getattr__(self, name: str) -> t.Any:
++        return getattr(self._file, name)
++
+     def flush(self) -> None:
+-        super().flush()
++        self._file.flush()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+-        return super().write(b)
++        return self._file.write(b)
++
++    def getvalue(self) -> bytes:
++        pos = self._file.tell()
++        self._file.seek(0)
++        data = self._file.read()
++        self._file.seek(pos)
++        return data
++
++    def __del__(self) -> None:
++        # Make sure the underlying OS-level file is always closed, even if
++        # it was never explicitly closed, so it doesn't emit a
++        # ResourceWarning when garbage collected.
++        try:
++            self._file.close()
++        except Exception:
++            pass
+ 
+ 
+ class StreamMixer:
+@@ -96,8 +125,8 @@ class StreamMixer:
+ 
+     def __init__(self) -> None:
+         self.output: io.BytesIO = io.BytesIO()
+-        self.stdout: io.BytesIO = BytesIOCopy(copy_to=self.output)
+-        self.stderr: io.BytesIO = BytesIOCopy(copy_to=self.output)
++        self.stdout: BytesIOCopy = BytesIOCopy(copy_to=self.output)
++        self.stderr: BytesIOCopy = BytesIOCopy(copy_to=self.output)
+ 
+ 
+ class _NamedTextIOWrapper(io.TextIOWrapper):
+@@ -461,6 +490,8 @@ class CliRunner:
+                         pass
+                 else:
+                     os.environ[key] = value
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
+             sys.stdout = old_stdout
+             sys.stderr = old_stderr
+             sys.stdin = old_stdin

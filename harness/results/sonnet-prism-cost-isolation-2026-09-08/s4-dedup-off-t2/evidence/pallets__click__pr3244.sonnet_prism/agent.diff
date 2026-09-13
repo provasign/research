@@ -1,0 +1,38 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..a82ba9b 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -125,6 +125,33 @@ class _NamedTextIOWrapper(io.TextIOWrapper):
+     def mode(self) -> str:
+         return self._mode
+ 
++    def fileno(self) -> int:
++        """
++        Fall back to the real terminal stream's file descriptor.
++
++        The buffers used during ``CliRunner`` isolation are in-memory
++        (``io.BytesIO``-backed) and don't have a real file descriptor,
++        so calling :meth:`fileno` on them raises
++        :exc:`io.UnsupportedOperation`. This breaks code that passes
++        ``sys.stdout``/``sys.stderr``/``sys.stdin`` to APIs that need a
++        real file descriptor, such as :class:`subprocess.Popen`.
++
++        Mirror the ``pdb`` terminal fallback above by returning the
++        file descriptor of the real, non-captured stream instead.
++
++        .. versionadded:: 8.3.3
++        """
++        real_stream = {"<stdin>": sys.__stdin__, "<stdout>": sys.__stdout__,
++                        "<stderr>": sys.__stderr__}.get(self._name)
++
++        if real_stream is not None:
++            try:
++                return real_stream.fileno()
++            except (AttributeError, io.UnsupportedOperation):
++                pass
++
++        return super().fileno()
++
+ 
+ def make_input_stream(
+     input: str | bytes | t.IO[t.Any] | None, charset: str

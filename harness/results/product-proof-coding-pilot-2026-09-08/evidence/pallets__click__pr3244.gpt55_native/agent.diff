@@ -1,0 +1,60 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..f47144d 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -76,12 +76,55 @@ class BytesIOCopy(io.BytesIO):
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._file: t.BinaryIO | None = None
++        self._copy_pos = 0
++
++    def _sync_external_writes(self) -> None:
++        if self._file is None:
++            return
++
++        self._file.flush()
++        pos = self._file.tell()
++        self._file.seek(self._copy_pos)
++        chunk = self._file.read(pos - self._copy_pos)
++
++        if chunk:
++            super().write(chunk)
++            self.copy_to.write(chunk)
++
++        self._copy_pos = pos
++        self._file.seek(pos)
+ 
+     def flush(self) -> None:
+         super().flush()
++
++        if self._file is not None:
++            self._file.flush()
++
+         self.copy_to.flush()
+ 
++    def fileno(self) -> int:
++        if self._file is None:
++            self._file = tempfile.TemporaryFile()
++            value = super().getvalue()
++
++            if value:
++                self._file.write(value)
++                self._copy_pos = self._file.tell()
++
++        return self._file.fileno()
++
++    def getvalue(self) -> bytes:
++        self._sync_external_writes()
++        return super().getvalue()
++
+     def write(self, b: ReadableBuffer) -> int:
++        self._sync_external_writes()
++
++        if self._file is not None:
++            self._file.write(b)
++            self._copy_pos = self._file.tell()
++
+         self.copy_to.write(b)
+         return super().write(b)
+ 

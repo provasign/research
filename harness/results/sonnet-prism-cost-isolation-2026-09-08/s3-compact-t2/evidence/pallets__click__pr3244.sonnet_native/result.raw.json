@@ -1,0 +1,110 @@
+{
+  "duration_api_ms": 130891,
+  "stop_reason": "end_turn",
+  "session_id": "be5c465b-cd30-4ca9-bf7d-75302066d30c",
+  "total_cost_usd": 0.36922079999999996,
+  "usage": {
+    "input_tokens": 44,
+    "cache_creation_input_tokens": 32942,
+    "cache_read_input_tokens": 563759,
+    "output_tokens": 12058,
+    "output_tokens_details": {
+      "thinking_tokens": 5731
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 32942,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 602,
+        "cache_read_input_tokens": 38208,
+        "cache_creation_input_tokens": 188,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 188
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 16,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004033,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 44,
+      "outputTokens": 12058,
+      "cacheReadInputTokens": 563759,
+      "cacheCreationInputTokens": 32942,
+      "webSearchRequests": 0,
+      "costUSD": 0.3651878,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 5731,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 22,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "## Summary\n\nFixed the issue where `CliRunner`-invoked code calling `subprocess.run(..., stdout=sys.stderr)` raised `io.UnsupportedOperation: fileno`.\n\n**Root cause:** `CliRunner.isolation()` replaces `sys.stdout`/`sys.stderr` with `_NamedTextIOWrapper` objects backed by in-memory `io.BytesIO` streams. `BytesIO` has no real OS file descriptor, so any call to `.fileno()` (which `subprocess.Popen` makes when given a non-`PIPE`/`DEVNULL` file-like `stdout`/`stderr`) raised `UnsupportedOperation`.\n\n**Fix** (in `src/click/testing.py`):\n- Added an `_FDCapture` helper that duplicates a real OS fd and redirects it (via `os.dup2`) to a temporary file, restoring it and returning the captured bytes on `stop()`.\n- Gave `_NamedTextIOWrapper` a `fileno()` override that returns a captured real fd when one has been set, falling back to the previous (raising) behavior otherwise.\n- In `isolation()`, when the original `sys.stdout`/`sys.stderr` expose real fds, redirect those fds to temp files and mark the new `sys.stdout`/`sys.stderr` wrappers with the redirected fd, so `fileno()` succeeds and any bytes written by native code (e.g. by a spawned subprocess) land in a temp file.\n- On cleanup, the captured bytes are merged back into the runner's output streams.\n\nVerified with the reported reproduction case (now passes) and the full existing test suite (1419 passed, 24 skipped, 1 xfailed \u2014 no regressions). No tests, docs, or config were modified.",
+  "ttft_ms": 1551,
+  "type": "result",
+  "duration_ms": 134122,
+  "uuid": "862c778d-14d5-4ce7-9986-4ad810a89c6b",
+  "ttft_stream_ms": 907,
+  "time_to_request_ms": 24,
+  "first_content_frame_ms": 1548,
+  "queued_turn_count": 0
+}

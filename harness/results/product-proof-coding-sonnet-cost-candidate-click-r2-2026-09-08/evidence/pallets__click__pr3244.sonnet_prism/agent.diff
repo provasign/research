@@ -1,0 +1,65 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..06796b4 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -71,20 +71,60 @@ class BytesIOCopy(io.BytesIO):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.3.2
++        Support :meth:`fileno` by lazily backing the stream with a real
++        temporary file. This allows the stream to be passed as
++        ``stdout``/``stderr`` to :class:`subprocess.Popen` (and
++        :func:`subprocess.run`) during ``CliRunner`` isolation.
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._temp_file: t.IO[bytes] | None = None
++        self._temp_file_synced = 0
++
++    def _sync_temp_file(self) -> None:
++        """Pull in any bytes written directly to the backing temporary
++        file's descriptor (for example by a subprocess) since the last
++        sync, so they show up through the normal ``BytesIO`` interface.
++        """
++        if self._temp_file is None:
++            return
++
++        self._temp_file.flush()
++        pos = self._temp_file.tell()
++        self._temp_file.seek(self._temp_file_synced)
++        data = self._temp_file.read()
++        self._temp_file.seek(pos)
++        self._temp_file_synced = pos
++
++        if data:
++            self.copy_to.write(data)
++            io.BytesIO.write(self, data)
+ 
+     def flush(self) -> None:
++        self._sync_temp_file()
+         super().flush()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
++        self._sync_temp_file()
+         self.copy_to.write(b)
+         return super().write(b)
+ 
++    def getvalue(self) -> bytes:
++        self._sync_temp_file()
++        return super().getvalue()
++
++    def fileno(self) -> int:
++        if self._temp_file is None:
++            self._temp_file = tempfile.TemporaryFile()
++            self._temp_file_synced = 0
++
++        return self._temp_file.fileno()
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.

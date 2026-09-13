@@ -1,0 +1,11 @@
+Implemented the source fix in [connection.py](/Users/tapabratapal/Projects/provasign/research/harness/runs/product-proof-coding-pilot-2026-09-08/work/urllib3__urllib3__pr3786.gpt55_native/src/urllib3/connection.py) and [poolmanager.py](/Users/tapabratapal/Projects/provasign/research/harness/runs/product-proof-coding-pilot-2026-09-08/work/urllib3__urllib3__pr3786.gpt55_native/src/urllib3/poolmanager.py).
+
+What changed:
+- HTTPS forwarding proxy connections now wrap the proxy socket with `proxy_ssl_context` via `_connect_tls_proxy()` and skip the origin `ssl_context` wrapping.
+- `_connect_tls_proxy()` now returns the verified socket metadata so forwarding and tunneling paths share the same proxy TLS result handling.
+- `ProxyManager` now raises `ValueError` when `ssl_context` is supplied with an HTTPS forwarding proxy, instructing callers to use `proxy_ssl_context`.
+
+Verification:
+- `python -m py_compile src/urllib3/connection.py src/urllib3/poolmanager.py` passed.
+- A direct smoke check confirmed the new `ValueError`.
+- The narrow dummyserver pytest could not run because the Hypercorn fixture failed to bind a socket before reaching urllib3 code.

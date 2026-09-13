@@ -1,0 +1,110 @@
+{
+  "duration_api_ms": 128764,
+  "stop_reason": "end_turn",
+  "session_id": "44fb1d68-addd-4ac6-9960-31bdd7d546e4",
+  "total_cost_usd": 0.34963420000000006,
+  "usage": {
+    "input_tokens": 44,
+    "cache_creation_input_tokens": 32009,
+    "cache_read_input_tokens": 579861,
+    "output_tokens": 10151,
+    "output_tokens_details": {
+      "thinking_tokens": 5448
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 32009,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 629,
+        "cache_read_input_tokens": 37250,
+        "cache_creation_input_tokens": 213,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 213
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 15,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004028,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 44,
+      "outputTokens": 10151,
+      "cacheReadInputTokens": 579861,
+      "cacheCreationInputTokens": 32009,
+      "webSearchRequests": 0,
+      "costUSD": 0.3456062,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 5448,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 22,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "## Summary\n\n**Root cause:** `CliRunner.isolation()` captures `stdout`/`stderr` using `BytesIOCopy`, a subclass of `io.BytesIO`. In-memory `BytesIO` objects have no real OS file descriptor, so `.fileno()` raises `io.UnsupportedOperation`. Code under test that passes `sys.stdout`/`sys.stderr` to `subprocess.run(...)` (which needs a real fd) crashes only when run under `CliRunner`.\n\n**Fix** (`src/click/testing.py`):\n- Reimplemented `BytesIOCopy` to be backed by a real `tempfile.TemporaryFile()` instead of `io.BytesIO`, while still mirroring every write to the `copy_to` stream. This gives it a genuine `fileno()`, so `subprocess.run(stdout=sys.stderr)` (and similar) now works inside `CliRunner.invoke()`.\n- Added `getvalue()` (seek-read-restore) since real files don't have it natively.\n- Added `__del__` to close the backing temp file automatically, and close `stream_mixer.stdout`/`stderr` explicitly in `CliRunner.isolation()`'s teardown, avoiding `ResourceWarning`s from unclosed file descriptors.\n\n**Verification:**\n- Reproduced the issue's SSCCE (`subprocess.run([\"echo\", \"foo\"], stdout=sys.stderr)` inside a `CliRunner.invoke()`'d command) \u2014 previously raised `UnsupportedOperation`, now passes.\n- Full existing test suite: `1419 passed, 24 skipped, 1 xfailed` (no regressions), including `tests/test_testing.py` and `tests/test_stream_lifecycle.py`.\n\nNo tests, docs, or config were modified \u2014 only `src/click/testing.py`.",
+  "ttft_ms": 2472,
+  "type": "result",
+  "duration_ms": 137948,
+  "uuid": "a6d63634-dd8c-40b5-b424-321dae259a8b",
+  "ttft_stream_ms": 1656,
+  "time_to_request_ms": 36,
+  "first_content_frame_ms": 2471,
+  "queued_turn_count": 0
+}

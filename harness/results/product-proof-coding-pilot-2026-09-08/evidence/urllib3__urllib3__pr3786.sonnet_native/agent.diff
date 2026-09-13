@@ -1,0 +1,85 @@
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 84e1dab..fbf2a5a 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -793,24 +793,36 @@ class HTTPSConnection(HTTPConnection):
+             # Remove trailing '.' from fqdn hostnames to allow certificate validation
+             server_hostname_rm_dot = server_hostname.rstrip(".")
+ 
+-            sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+-                sock=sock,
+-                cert_reqs=self.cert_reqs,
+-                ssl_version=self.ssl_version,
+-                ssl_minimum_version=self.ssl_minimum_version,
+-                ssl_maximum_version=self.ssl_maximum_version,
+-                ca_certs=self.ca_certs,
+-                ca_cert_dir=self.ca_cert_dir,
+-                ca_cert_data=self.ca_cert_data,
+-                cert_file=self.cert_file,
+-                key_file=self.key_file,
+-                key_password=self.key_password,
+-                server_hostname=server_hostname_rm_dot,
+-                ssl_context=self.ssl_context,
+-                tls_in_tls=tls_in_tls,
+-                assert_hostname=self.assert_hostname,
+-                assert_fingerprint=self.assert_fingerprint,
+-            )
++            if self.proxy_is_forwarding:
++                # We're connecting directly (forwarding) to an HTTPS proxy, so
++                # the TLS handshake we're about to perform is with the proxy
++                # itself, not the origin. Only `proxy_ssl_context` (and the
++                # related `proxy_*` settings) should ever be used here.
++                # `_connect_tls_proxy` will verify and assign proxy_is_verified.
++                sock_and_verified = _WrappedAndVerifiedSocket(
++                    socket=self._connect_tls_proxy(server_hostname_rm_dot, sock),
++                    is_verified=self.proxy_is_verified or False,
++                )
++                self._has_connected_to_proxy = True
++            else:
++                sock_and_verified = _ssl_wrap_socket_and_match_hostname(
++                    sock=sock,
++                    cert_reqs=self.cert_reqs,
++                    ssl_version=self.ssl_version,
++                    ssl_minimum_version=self.ssl_minimum_version,
++                    ssl_maximum_version=self.ssl_maximum_version,
++                    ca_certs=self.ca_certs,
++                    ca_cert_dir=self.ca_cert_dir,
++                    ca_cert_data=self.ca_cert_data,
++                    cert_file=self.cert_file,
++                    key_file=self.key_file,
++                    key_password=self.key_password,
++                    server_hostname=server_hostname_rm_dot,
++                    ssl_context=self.ssl_context,
++                    tls_in_tls=tls_in_tls,
++                    assert_hostname=self.assert_hostname,
++                    assert_fingerprint=self.assert_fingerprint,
++                )
+             self.sock = sock_and_verified.socket
+ 
+         # If an error occurs during connection/handshake we may need to release
+diff --git a/src/urllib3/poolmanager.py b/src/urllib3/poolmanager.py
+index 3914dec..4c20a47 100644
+--- a/src/urllib3/poolmanager.py
++++ b/src/urllib3/poolmanager.py
+@@ -585,6 +585,21 @@ class ProxyManager(PoolManager):
+             port = port_by_scheme.get(proxy.scheme, 80)
+             proxy = proxy._replace(port=port)
+ 
++        if use_forwarding_for_https and connection_pool_kw.get("ssl_context"):
++            if proxy_ssl_context:
++                raise ValueError(
++                    "Cannot specify both 'ssl_context' and 'proxy_ssl_context' "
++                    "when 'use_forwarding_for_https' is enabled. When forwarding "
++                    "to an HTTPS proxy the connection's TLS handshake is made "
++                    "with the proxy, so only 'proxy_ssl_context' should be used."
++                )
++            raise ValueError(
++                "'ssl_context' should not be used when 'use_forwarding_for_https' "
++                "is enabled, use 'proxy_ssl_context' instead. When forwarding to "
++                "an HTTPS proxy the connection's TLS handshake is made with the "
++                "proxy, not the destination."
++            )
++
+         self.proxy = proxy
+         self.proxy_headers = proxy_headers or {}
+         self.proxy_ssl_context = proxy_ssl_context

@@ -37,10 +37,10 @@ Run twice so `\cref`/`\Cref` cross-references resolve.
       (mapped to Haiku / Sonnet / Opus in the run logs). Decide whether to name the
       exact model versions in the camera-ready (recommended for reproducibility).
 - [ ] **Numbers cross-check.** All recall/cost figures trace to
-      `harness/agg_jackson.py` over `harness/runs/`; regenerate and confirm the
+      `harness/aggregate/agg_jackson.py` over `harness/results/`; regenerate and confirm the
       tables match if any runs are re-scored.
 
 ## Provenance of the numbers
 Every figure in the paper is produced deterministically (no LLM in the loop) by
-`harness/rescore_java.py` + `harness/agg_jackson.py` over the committed run logs.
+`harness/scoring/rescore_java.py` + `harness/aggregate/agg_jackson.py` over the committed run logs.
 `THESIS.md` holds the falsifiable sub-claims (C1–C7) and their verdicts.

@@ -1,0 +1,77 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..e781090 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -76,6 +76,8 @@ class BytesIOCopy(io.BytesIO):
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._fd_file: t.IO[bytes] | None = None
++        self._fd_synced = 0
+ 
+     def flush(self) -> None:
+         super().flush()
+@@ -85,6 +87,43 @@ class BytesIOCopy(io.BytesIO):
+         self.copy_to.write(b)
+         return super().write(b)
+ 
++    def fileno(self) -> int:
++        """Provide a real file descriptor backing this stream.
++
++        Some code (for example ``subprocess.run(..., stdout=sys.stdout)``)
++        needs an actual OS-level file descriptor rather than a Python
++        file-like object. Since this stream is normally backed by an
++        in-memory buffer, lazily back it with a temporary file the first
++        time a file descriptor is requested.
++        """
++        if self._fd_file is None:
++            self._fd_file = tempfile.TemporaryFile()
++        return self._fd_file.fileno()
++
++    def _sync_fd_file(self) -> None:
++        """Copy any bytes written directly to the file descriptor (for
++        example by a subprocess) into this buffer, so they show up in the
++        captured output.
++        """
++        if self._fd_file is None:
++            return
++        self._fd_file.flush()
++        end = self._fd_file.tell()
++        if end == self._fd_synced:
++            return
++        self._fd_file.seek(self._fd_synced)
++        data = self._fd_file.read(end - self._fd_synced)
++        self._fd_synced = end
++        self._fd_file.seek(end)
++        if data:
++            self.write(data)
++
++    def close(self) -> None:
++        if self._fd_file is not None:
++            self._fd_file.close()
++            self._fd_file = None
++        super().close()
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.
+@@ -464,6 +503,10 @@ class CliRunner:
+             sys.stdout = old_stdout
+             sys.stderr = old_stderr
+             sys.stdin = old_stdin
++            if stream_mixer.stdout._fd_file is not None:
++                stream_mixer.stdout._fd_file.close()
++            if stream_mixer.stderr._fd_file is not None:
++                stream_mixer.stderr._fd_file.close()
+             termui.visible_prompt_func = old_visible_prompt_func
+             termui.hidden_prompt_func = old_hidden_prompt_func
+             termui._getchar = old__getchar_func
+@@ -570,6 +613,8 @@ class CliRunner:
+             finally:
+                 sys.stdout.flush()
+                 sys.stderr.flush()
++                outstreams[0]._sync_fd_file()  # type: ignore[attr-defined]
++                outstreams[1]._sync_fd_file()  # type: ignore[attr-defined]
+                 stdout = outstreams[0].getvalue()
+                 stderr = outstreams[1].getvalue()
+                 output = outstreams[2].getvalue()

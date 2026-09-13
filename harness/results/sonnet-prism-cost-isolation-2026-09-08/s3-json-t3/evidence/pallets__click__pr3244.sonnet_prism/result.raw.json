@@ -1,0 +1,110 @@
+{
+  "duration_api_ms": 155290,
+  "stop_reason": "end_turn",
+  "session_id": "9e012e8f-e4ec-4a3c-a872-299521722556",
+  "total_cost_usd": 0.5782641999999999,
+  "usage": {
+    "input_tokens": 58,
+    "cache_creation_input_tokens": 49504,
+    "cache_read_input_tokens": 1149946,
+    "output_tokens": 14607,
+    "output_tokens_details": {
+      "thinking_tokens": 6708
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 49504,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 625,
+        "cache_read_input_tokens": 58154,
+        "cache_creation_input_tokens": 340,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 340
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 24,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004073,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 58,
+      "outputTokens": 14607,
+      "cacheReadInputTokens": 1149946,
+      "cacheCreationInputTokens": 49504,
+      "webSearchRequests": 0,
+      "costUSD": 0.5741911999999999,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 6708,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 29,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "Formatting is fine (two blank lines, PEP8 compliant). The diff is minimal and clean.\n\n## Summary\n\n**Root cause:** `CliRunner` replaces `sys.stdout`/`sys.stderr` with `_NamedTextIOWrapper` objects backed by `BytesIOCopy` (a subclass of `io.BytesIO`). When application code calls `subprocess.run(..., stdout=sys.stderr)`, `subprocess` needs a real OS file descriptor via `.fileno()`, but `io.BytesIO` doesn't support that, raising `io.UnsupportedOperation`.\n\n**Fix** (`src/click/testing.py`): Gave `BytesIOCopy` a working `fileno()` that lazily creates a real temporary file (via `tempfile.TemporaryFile()`) the first time a descriptor is requested, seeded with any output already written so far. Also overrode `close()` to clean up that temp file when the buffer is closed. This keeps normal (non-subprocess) usage untouched \u2014 no extra file is created unless `fileno()` is actually needed \u2014 while making `subprocess.run(stdout=sys.stdout/sys.stderr)` work under `CliRunner`.\n\n**Verification:**\n- Reproduced the issue's `sscce.py`/`test_sscce.py` \u2014 failed before the fix (`io.UnsupportedOperation: fileno`), passes after.\n- Full existing suite: `python -m pytest tests/ -q` \u2192 1419 passed, 24 skipped, 1 xfailed (no regressions, including `tests/test_testing.py` and `tests/test_stream_lifecycle.py`, which specifically exercise `CliRunner`/`StreamMixer`/`BytesIOCopy` stream-lifecycle behavior).\n\nNo tests, docs, or config were modified \u2014 only `src/click/testing.py`.",
+  "ttft_ms": 2602,
+  "type": "result",
+  "duration_ms": 163244,
+  "uuid": "2e047f82-dfe8-4ca7-93f2-c2e5d9cf16d6",
+  "ttft_stream_ms": 835,
+  "time_to_request_ms": 23,
+  "first_content_frame_ms": 1377,
+  "queued_turn_count": 0
+}

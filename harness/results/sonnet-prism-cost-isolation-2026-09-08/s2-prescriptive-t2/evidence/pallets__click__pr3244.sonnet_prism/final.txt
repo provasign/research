@@ -1,0 +1,7 @@
+## Summary
+
+Fixed `src/click/testing.py`: `CliRunner`'s captured `sys.stdout`/`sys.stderr` streams were backed only by `io.BytesIO`, which has no real file descriptor. This made `subprocess.run(..., stdout=sys.stderr)` (or any API needing `.fileno()`) raise `io.UnsupportedOperation`, even though the exact same code works fine outside the runner.
+
+Change: `BytesIOCopy` now stores its content in an `io.BytesIO` as before (so no behavior change for normal use — no real fd is allocated, nothing needs closing, matching the existing lifecycle tests), but gained a `fileno()` method that lazily migrates the buffered content into a real `tempfile.TemporaryFile()` the first time a file descriptor is actually requested. `_NamedTextIOWrapper` delegates `fileno()` to its buffer via the standard `io.TextIOWrapper` machinery, so `sys.stdout.fileno()` / `sys.stderr.fileno()` now work once needed, and subsequent reads (`getvalue()`) transparently read from whichever backing store (in-memory or real file) is active. `isolation()` closes the mixer's real file if one was created, avoiding descriptor leaks.
+
+Verified with the reported reproduction (`subprocess.run(["echo", "foo"], stdout=sys.stderr)` inside `CliRunner().invoke(...)`) — now passes — and the full existing test suite (`1419 passed, 24 skipped, 1 xfailed`), including `tests/test_testing.py` and `tests/test_stream_lifecycle.py`.

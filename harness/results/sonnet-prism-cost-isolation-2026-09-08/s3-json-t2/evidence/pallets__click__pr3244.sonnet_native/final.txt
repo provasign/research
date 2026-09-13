@@ -1,0 +1,11 @@
+The fix resolves the issue: `CliRunner`'s captured `stdout`/`stderr` streams now lazily back onto a real OS-level temporary file the first time `fileno()` is requested (e.g., by `subprocess.run(stdout=sys.stderr)`), so `io.UnsupportedOperation` is no longer raised. For the common case where no real file descriptor is ever needed, the streams stay pure in-memory `io.BytesIO` objects (avoiding unclosed-file resource warnings), and the file descriptor is properly closed when `CliRunner.isolation()` tears down.
+
+Summary of changes in `src/click/testing.py`:
+- `BytesIOCopy` gained a lazy `fileno()` that spins up a `tempfile.TemporaryFile()` mirror on first use, keeps subsequent writes synced to it, and a `close()` override that releases it.
+- `CliRunner.isolation()` now closes the stdout/stderr `BytesIOCopy` streams in its `finally` block to avoid leaking the lazily-created file descriptor.
+
+Verified:
+- The reported reproduction (`subprocess.run(["echo", "foo"], stdout=sys.stderr)` under `CliRunner`) no longer raises and passes.
+- Full existing test suite (`python -m pytest tests/`, excluding the opt-in stress-marked tests): 1419 passed, 24 skipped, 1 xfailed, no failures.
+
+No changes were made to tests, docs, or config; nothing was committed.

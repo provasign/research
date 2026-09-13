@@ -1,0 +1,47 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..a401bf9 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -71,11 +71,18 @@ class BytesIOCopy(io.BytesIO):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.3.2
++        Gained a working :meth:`fileno`, lazily backed by a real
++        temporary file, so this can be used as ``stdout``/``stderr`` for
++        :func:`subprocess.run` and similar APIs that require the target
++        stream to expose a file descriptor.
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._tmpfile: t.IO[bytes] | None = None
+ 
+     def flush(self) -> None:
+         super().flush()
+@@ -85,6 +92,23 @@ class BytesIOCopy(io.BytesIO):
+         self.copy_to.write(b)
+         return super().write(b)
+ 
++    def fileno(self) -> int:
++        # Lazily back this buffer with a real file the first time a file
++        # descriptor is requested, e.g. when passed as ``stdout``/``stderr``
++        # to :func:`subprocess.run`. Anything already written is copied
++        # over so the descriptor starts in a consistent state.
++        if self._tmpfile is None:
++            self._tmpfile = tempfile.TemporaryFile()
++            self._tmpfile.write(self.getvalue())
++            self._tmpfile.seek(self.tell())
++        return self._tmpfile.fileno()
++
++    def close(self) -> None:
++        if self._tmpfile is not None:
++            self._tmpfile.close()
++            self._tmpfile = None
++        super().close()
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.

@@ -1,0 +1,89 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..777e3ec 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -67,13 +67,58 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+         stream._paused = False
+ 
+ 
+-class BytesIOCopy(io.BytesIO):
+-    """Patch ``io.BytesIO`` to let the written stream be copied to another.
++class _FileBackedBytesIO:
++    """A binary stream backed by a real file on disk, instead of memory
++    like ``io.BytesIO``. This means it exposes a real file descriptor via
++    ``fileno()``, so it can be used with APIs like
++    ``subprocess.run(stdout=...)`` that require one.
++
++    .. versionadded:: 8.3
++    """
++
++    def __init__(self) -> None:
++        self._file = tempfile.TemporaryFile()
++
++    def write(self, b: ReadableBuffer) -> int:
++        return self._file.write(b)
++
++    def flush(self) -> None:
++        self._file.flush()
++
++    def getvalue(self) -> bytes:
++        pos = self._file.tell()
++        self._file.seek(0)
++        try:
++            return self._file.read()
++        finally:
++            self._file.seek(pos)
++
++    def fileno(self) -> int:
++        return self._file.fileno()
++
++    def close(self) -> None:
++        self._file.close()
++
++    def __del__(self) -> None:
++        # Avoid leaking the underlying file descriptor (and the
++        # ``ResourceWarning`` that comes with it) if this is garbage
++        # collected without an explicit ``close()`` call.
++        try:
++            self._file.close()
++        except Exception:
++            pass
++
++    def __getattr__(self, name: str) -> t.Any:
++        return getattr(self._file, name)
++
++
++class BytesIOCopy(_FileBackedBytesIO):
++    """Patch to let the written stream be copied to another.
+ 
+     .. versionadded:: 8.2
+     """
+ 
+-    def __init__(self, copy_to: io.BytesIO) -> None:
++    def __init__(self, copy_to: t.BinaryIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
+ 
+@@ -95,9 +140,9 @@ class StreamMixer:
+     """
+ 
+     def __init__(self) -> None:
+-        self.output: io.BytesIO = io.BytesIO()
+-        self.stdout: io.BytesIO = BytesIOCopy(copy_to=self.output)
+-        self.stderr: io.BytesIO = BytesIOCopy(copy_to=self.output)
++        self.output: _FileBackedBytesIO = _FileBackedBytesIO()
++        self.stdout: BytesIOCopy = BytesIOCopy(copy_to=self.output)
++        self.stderr: BytesIOCopy = BytesIOCopy(copy_to=self.output)
+ 
+ 
+ class _NamedTextIOWrapper(io.TextIOWrapper):
+@@ -471,6 +516,9 @@ class CliRunner:
+             _compat.should_strip_ansi = old__compat_should_strip_ansi
+             formatting.FORCED_WIDTH = old_forced_width
+             pdb.Pdb.__init__ = old_pdb_init  # type: ignore[method-assign]
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
++            stream_mixer.output.close()
+ 
+     def invoke(
+         self,

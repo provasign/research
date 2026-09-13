@@ -1,0 +1,42 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..46599f0 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -85,6 +85,37 @@ class BytesIOCopy(io.BytesIO):
+         self.copy_to.write(b)
+         return super().write(b)
+ 
++    def fileno(self) -> int:
++        """Back this stream with a real, writable file so that code under
++        test can pass it (or ``sys.stdout``/``sys.stderr`` wrapping it) to
++        things like :func:`subprocess.run` that require a real file
++        descriptor.
++
++        .. versionadded:: 8.3
++        """
++        if not hasattr(self, "_tempfile"):
++            self._tempfile = tempfile.TemporaryFile()
++            self._tempfile.write(self.getvalue())
++
++        return self._tempfile.fileno()
++
++    def _sync_from_tempfile(self) -> None:
++        if hasattr(self, "_tempfile"):
++            pos = self._tempfile.tell()
++            self._tempfile.seek(0)
++            data = self._tempfile.read()
++            self._tempfile.seek(pos)
++
++            if data:
++                super().write(data)
++                self.copy_to.write(data)
++                self._tempfile.seek(0)
++                self._tempfile.truncate()
++
++    def getvalue(self) -> bytes:
++        self._sync_from_tempfile()
++        return super().getvalue()
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.

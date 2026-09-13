@@ -1,0 +1,90 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..f3d00a8 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -86,6 +86,56 @@ class BytesIOCopy(io.BytesIO):
+         return super().write(b)
+ 
+ 
++class FileIOCopy:
++    """A real, file-descriptor backed stream that copies everything
++    written to it to another file-like object.
++
++    Unlike :class:`BytesIOCopy`, this is backed by an actual OS file,
++    so it has a working ``fileno()``. This lets code under test pass
++    ``sys.stdout``/``sys.stderr`` to APIs that require a real file
++    descriptor, such as :func:`subprocess.run`.
++
++    .. versionadded:: 8.3
++    """
++
++    def __init__(self, copy_to: io.BytesIO) -> None:
++        self._file = tempfile.TemporaryFile()
++        self.copy_to = copy_to
++
++    def write(self, b: ReadableBuffer) -> int:
++        self.copy_to.write(b)
++        return self._file.write(b)
++
++    def flush(self) -> None:
++        self._file.flush()
++        self.copy_to.flush()
++
++    def fileno(self) -> int:
++        return self._file.fileno()
++
++    def close(self) -> None:
++        self._file.close()
++
++    def __del__(self) -> None:
++        # Ensure the backing temporary file is closed even if it was
++        # never explicitly closed, so a garbage collected instance
++        # doesn't trigger a ResourceWarning for an unclosed file.
++        try:
++            self._file.close()
++        except Exception:
++            pass
++
++    def getvalue(self) -> bytes:
++        pos = self._file.tell()
++        self._file.seek(0)
++        data = self._file.read()
++        self._file.seek(pos)
++        return data
++
++    def __getattr__(self, name: str) -> t.Any:
++        return getattr(self._file, name)
++
++
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.
+ 
+@@ -96,8 +146,8 @@ class StreamMixer:
+ 
+     def __init__(self) -> None:
+         self.output: io.BytesIO = io.BytesIO()
+-        self.stdout: io.BytesIO = BytesIOCopy(copy_to=self.output)
+-        self.stderr: io.BytesIO = BytesIOCopy(copy_to=self.output)
++        self.stdout: FileIOCopy = FileIOCopy(copy_to=self.output)
++        self.stderr: FileIOCopy = FileIOCopy(copy_to=self.output)
+ 
+ 
+ class _NamedTextIOWrapper(io.TextIOWrapper):
+@@ -280,7 +330,7 @@ class CliRunner:
+         input: str | bytes | t.IO[t.Any] | None = None,
+         env: cabc.Mapping[str, str | None] | None = None,
+         color: bool = False,
+-    ) -> cabc.Iterator[tuple[io.BytesIO, io.BytesIO, io.BytesIO]]:
++    ) -> cabc.Iterator[tuple[FileIOCopy, FileIOCopy, io.BytesIO]]:
+         """A context manager that sets up the isolation for invoking of a
+         command line tool.  This sets up `<stdin>` with the given input data
+         and `os.environ` with the overrides from the given dictionary.
+@@ -464,6 +514,8 @@ class CliRunner:
+             sys.stdout = old_stdout
+             sys.stderr = old_stderr
+             sys.stdin = old_stdin
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
+             termui.visible_prompt_func = old_visible_prompt_func
+             termui.hidden_prompt_func = old_hidden_prompt_func
+             termui._getchar = old__getchar_func

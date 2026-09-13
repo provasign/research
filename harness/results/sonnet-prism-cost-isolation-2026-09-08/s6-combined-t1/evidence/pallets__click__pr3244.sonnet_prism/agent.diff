@@ -1,0 +1,77 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..fecd463 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -70,21 +70,63 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+ class BytesIOCopy(io.BytesIO):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
++    A plain ``io.BytesIO`` has no OS-level file descriptor, so passing it
++    (or a text wrapper around it, such as ``sys.stdout``/``sys.stderr``
++    during :meth:`CliRunner.isolation`) to APIs like
++    ``subprocess.run(..., stdout=sys.stdout)`` raises
++    ``io.UnsupportedOperation: fileno``. To support that use case without
++    paying the cost of a real file for every invocation, a backing
++    temporary file is only created lazily, the first time ``fileno()`` is
++    actually requested.
++
+     .. versionadded:: 8.2
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._fileno_backing: t.BinaryIO | None = None
+ 
+     def flush(self) -> None:
+         super().flush()
+         self.copy_to.flush()
++        if self._fileno_backing is not None:
++            self._fileno_backing.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
++        if self._fileno_backing is not None:
++            self._fileno_backing.write(b)
+         return super().write(b)
+ 
++    def fileno(self) -> int:
++        """Back this stream with a real temporary file so it can be used
++        with APIs (such as :func:`subprocess.run`) that require an OS-level
++        file descriptor.
++        """
++        if self._fileno_backing is None:
++            self._fileno_backing = tempfile.TemporaryFile()
++            self._fileno_backing.write(self.getvalue())
++
++        return self._fileno_backing.fileno()
++
++    def getvalue(self) -> bytes:
++        if self._fileno_backing is not None:
++            # Data may have been written directly to the file descriptor
++            # (for example by a subprocess), bypassing ``write()``.
++            pos = self._fileno_backing.tell()
++            self._fileno_backing.seek(0)
++            data = self._fileno_backing.read()
++            self._fileno_backing.seek(pos)
++            return data
++
++        return super().getvalue()
++
++    def close(self) -> None:
++        if self._fileno_backing is not None:
++            self._fileno_backing.close()
++        super().close()
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.
+@@ -471,6 +513,8 @@ class CliRunner:
+             _compat.should_strip_ansi = old__compat_should_strip_ansi
+             formatting.FORCED_WIDTH = old_forced_width
+             pdb.Pdb.__init__ = old_pdb_init  # type: ignore[method-assign]
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
+ 
+     def invoke(
+         self,

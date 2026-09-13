@@ -1,0 +1,66 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..70bbea9 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -67,23 +67,47 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+         stream._paused = False
+ 
+ 
+-class BytesIOCopy(io.BytesIO):
+-    """Patch ``io.BytesIO`` to let the written stream be copied to another.
++class BytesIOCopy:
++    """Mimic ``io.BytesIO`` while backed by a real file, so that the
++    written stream is also copied to another stream and can be used as
++    the target of e.g. ``subprocess.run(stdout=...)``, which requires a
++    stream with a real file descriptor.
+ 
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.3.2
++        Backed by a real file so it has a usable ``fileno()``.
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+-        super().__init__()
++        self._file: t.BinaryIO = tempfile.TemporaryFile()
+         self.copy_to = copy_to
+ 
++    def __getattr__(self, name: str) -> t.Any:
++        return getattr(self._file, name)
++
+     def flush(self) -> None:
+-        super().flush()
++        self._file.flush()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+-        return super().write(b)
++        return self._file.write(b)
++
++    def getvalue(self) -> bytes:
++        pos = self._file.tell()
++        self._file.seek(0)
++        data = self._file.read()
++        self._file.seek(pos)
++        return data
++
++    def close(self) -> None:
++        self._file.close()
++
++    def __del__(self) -> None:
++        # Explicitly close the backing file so it isn't finalized by the
++        # garbage collector, which would otherwise emit a ResourceWarning.
++        self.close()
+ 
+ 
+ class StreamMixer:
+@@ -471,6 +495,8 @@ class CliRunner:
+             _compat.should_strip_ansi = old__compat_should_strip_ansi
+             formatting.FORCED_WIDTH = old_forced_width
+             pdb.Pdb.__init__ = old_pdb_init  # type: ignore[method-assign]
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
+ 
+     def invoke(
+         self,

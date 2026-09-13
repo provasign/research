@@ -1,0 +1,93 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..7dfb68c 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -67,23 +67,62 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+         stream._paused = False
+ 
+ 
+-class BytesIOCopy(io.BytesIO):
+-    """Patch ``io.BytesIO`` to let the written stream be copied to another.
++class BytesIOCopy:
++    """Copies written bytes to another stream, while itself acting like an
++    in-memory ``io.BytesIO`` for as long as possible.
++
++    It only spills over to a real, on-disk file the first time a real file
++    descriptor is actually requested via ``fileno()``. This lets the stream
++    be used as ``stdout``/``stderr`` for :func:`subprocess.run` and similar
++    APIs that require a ``fileno()``, without paying the cost (or leaving
++    unclosed file handles behind) when that is never needed.
+ 
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.2.1
++        Spills over to a real temporary file on first use of ``fileno()``,
++        fixing use with :mod:`subprocess`.
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+-        super().__init__()
++        self._file: t.BinaryIO = io.BytesIO()
+         self.copy_to = copy_to
+ 
+     def flush(self) -> None:
+-        super().flush()
++        self._file.flush()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+-        return super().write(b)
++        return self._file.write(b)
++
++    def getvalue(self) -> bytes:
++        pos = self._file.tell()
++        self._file.seek(0)
++        try:
++            return self._file.read()
++        finally:
++            self._file.seek(pos)
++
++    def fileno(self) -> int:
++        if isinstance(self._file, io.BytesIO):
++            # Roll over to a real, on-disk file so that a valid file
++            # descriptor can be handed out, e.g. to ``subprocess.run``.
++            data = self._file.getvalue()
++            pos = self._file.tell()
++            real_file = tempfile.TemporaryFile()
++            real_file.write(data)
++            real_file.seek(pos)
++            self._file.close()
++            self._file = real_file
++
++        return self._file.fileno()
++
++    def close(self) -> None:
++        self._file.close()
++
++    def __getattr__(self, name: str) -> t.Any:
++        return getattr(self._file, name)
+ 
+ 
+ class StreamMixer:
+@@ -96,8 +135,8 @@ class StreamMixer:
+ 
+     def __init__(self) -> None:
+         self.output: io.BytesIO = io.BytesIO()
+-        self.stdout: io.BytesIO = BytesIOCopy(copy_to=self.output)
+-        self.stderr: io.BytesIO = BytesIOCopy(copy_to=self.output)
++        self.stdout: t.BinaryIO = t.cast("t.BinaryIO", BytesIOCopy(copy_to=self.output))
++        self.stderr: t.BinaryIO = t.cast("t.BinaryIO", BytesIOCopy(copy_to=self.output))
+ 
+ 
+ class _NamedTextIOWrapper(io.TextIOWrapper):
+@@ -453,6 +492,9 @@ class CliRunner:
+                     os.environ[key] = value
+             yield (stream_mixer.stdout, stream_mixer.stderr, stream_mixer.output)
+         finally:
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
++
+             for key, value in old_env.items():
+                 if value is None:
+                     try:

@@ -1,0 +1,9 @@
+The change is complete and focused. Summary:
+
+**Root cause**: `HTTPSConnection.connect()` used `self.ssl_context` (meant for the origin server) even when the connection was actually a direct TLS handshake to an HTTPS proxy in forwarding mode (`use_forwarding_for_https=True`), because in that mode `self.host`/`self.port` are set to the proxy's address but the code didn't distinguish it from a normal direct TLS connection.
+
+**Fix** (`src/urllib3/connection.py`):
+1. In `HTTPSConnection.connect()`, when `self.proxy_is_forwarding` is true, use `proxy_config.ssl_context` (i.e., `proxy_ssl_context`) plus the proxy's `assert_hostname`/`assert_fingerprint` for the TLS handshake, instead of the origin's `self.ssl_context`/`self.assert_hostname`/`self.assert_fingerprint`. This mirrors what `_connect_tls_proxy` already does for tunneling mode.
+2. In `HTTPSConnection.__init__`, raise `ValueError` when `proxy_config.use_forwarding_for_https` is `True` and `ssl_context` is specified — with a distinct message depending on whether `proxy_ssl_context` was also specified (ambiguous configuration) or not (wrong parameter used), matching the 2.x behavior requested in the issue.
+
+Verified with `python -m pytest test/test_connection.py test/test_proxymanager.py test/test_poolmanager.py test/test_util.py` (all pass) and the local dummyserver proxy suite `test/with_dummyserver/test_proxy_poolmanager.py` (65 passed, 1 pre-existing skip untouched since tests weren't modified per instructions).

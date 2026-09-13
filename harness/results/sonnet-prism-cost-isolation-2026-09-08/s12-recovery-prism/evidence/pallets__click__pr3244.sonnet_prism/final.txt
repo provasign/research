@@ -1,0 +1,9 @@
+Verified complete with no missed call sites.
+
+## Summary
+
+**Root cause:** `CliRunner`'s captured `sys.stdout`/`sys.stderr` were backed by plain `io.BytesIO` objects (via `BytesIOCopy`), which have no real file descriptor. Passing them to `subprocess.run(stdout=...)` made `Popen._get_handles` call `.fileno()`, which `io.BytesIO` doesn't support, raising `io.UnsupportedOperation`.
+
+**Fix** (`src/click/testing.py`): `BytesIOCopy.fileno()` now lazily backs itself with a real `tempfile.TemporaryFile()` the first time a file descriptor is requested, keeping ordinary in-memory `io.BytesIO` semantics for the common case (no temp file created unless `fileno()` is actually called). `write`/`flush`/`getvalue`/`close` were updated to stay consistent with whichever backing (in-memory or file-backed) is active, so captured output remains correct — including bytes written by a subprocess directly to the shared fd. Added cleanup of these buffers in `CliRunner.isolation()`'s `finally` block to close the lazily-created temp files.
+
+**Verification:** Full existing test suite (`pytest tests`) passes — 1419 passed, 24 skipped, 1 xfailed, no warnings. Reproduced the issue's `sscce.py`/`test_sscce.py` scenario manually: previously crashed with `io.UnsupportedOperation: fileno`; now runs cleanly and `result.stderr` correctly captures the subprocess's output (`'foo\n'`).

@@ -1,0 +1,82 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..0c6f844 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -70,21 +70,68 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+ class BytesIOCopy(io.BytesIO):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
++    Calling :meth:`fileno` lazily backs this stream with a real temporary
++    file, so it can be passed as ``stdout``/``stderr`` to
++    :class:`subprocess.Popen` (e.g. via :func:`subprocess.run`) without
++    raising ``io.UnsupportedOperation``. Until ``fileno()`` is accessed,
++    this behaves like a plain ``io.BytesIO`` and never touches the disk.
++
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.3.3
++        Support ``fileno()`` by lazily creating a backing temporary file.
++        :issue:`2522`
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._real_file: t.IO[bytes] | None = None
+ 
+     def flush(self) -> None:
+         super().flush()
+         self.copy_to.flush()
+ 
++        if self._real_file is not None:
++            self._real_file.flush()
++
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
++
++        if self._real_file is not None:
++            self._real_file.write(b)
++
+         return super().write(b)
+ 
++    def fileno(self) -> int:
++        if self._real_file is None:
++            self._real_file = tempfile.TemporaryFile()
++            self._real_file.write(super().getvalue())
++            self._real_file.flush()
++
++        return self._real_file.fileno()
++
++    def getvalue(self) -> bytes:
++        if self._real_file is None:
++            return super().getvalue()
++
++        # Once a real file backs this stream, external code (such as a
++        # subprocess) may have written to it directly through the file
++        # descriptor, bypassing ``write()``. Read the real file, which is
++        # the source of truth from this point on.
++        pos = self._real_file.tell()
++        try:
++            self._real_file.seek(0)
++            return self._real_file.read()
++        finally:
++            self._real_file.seek(pos)
++
++    def close(self) -> None:
++        if self._real_file is not None:
++            self._real_file.close()
++
++        super().close()
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.
+@@ -464,6 +511,8 @@ class CliRunner:
+             sys.stdout = old_stdout
+             sys.stderr = old_stderr
+             sys.stdin = old_stdin
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
+             termui.visible_prompt_func = old_visible_prompt_func
+             termui.hidden_prompt_func = old_hidden_prompt_func
+             termui._getchar = old__getchar_func

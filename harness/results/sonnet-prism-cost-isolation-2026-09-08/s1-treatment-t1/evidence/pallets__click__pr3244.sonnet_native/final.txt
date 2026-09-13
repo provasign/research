@@ -1,0 +1,9 @@
+The fix works. Summary of changes to `src/click/testing.py`:
+
+- Replaced `BytesIOCopy`'s `io.BytesIO` backing with a real `tempfile.TemporaryFile`, so it exposes a genuine `fileno()` — this is what `subprocess.run(..., stdout=sys.stdout)` (or `stderr`) needs instead of raising `io.UnsupportedOperation`. Added `getvalue()` (seek/read/restore-position) and `__getattr__` delegation to preserve the existing `io.BytesIO`-like interface used elsewhere (e.g. `.closed`).
+- Added `__del__` to close the underlying temp file on garbage collection (avoiding `ResourceWarning`s in tests that construct `BytesIOCopy`/`StreamMixer` directly).
+- Explicitly close `stream_mixer.stdout`/`stderr`'s underlying temp files in `CliRunner.isolation`'s `finally` block after the captured values have been read, so `CliRunner.invoke()` doesn't leak file descriptors.
+
+Verified:
+- The original SSCCE (`subprocess.run(["echo", "foo"], stdout=sys.stderr)` inside a `CliRunner`-invoked command) now succeeds and correctly captures `foo\n` in `result.stderr`.
+- Full existing test suite (`python -m pytest tests/`) passes: 1419 passed, 24 skipped, 1 xfailed, no failures or resource warnings.

@@ -1,0 +1,110 @@
+{
+  "duration_api_ms": 130080,
+  "stop_reason": "end_turn",
+  "session_id": "98b22546-3c55-4885-ab0c-74ec0c130da7",
+  "total_cost_usd": 0.37643719999999997,
+  "usage": {
+    "input_tokens": 42,
+    "cache_creation_input_tokens": 32581,
+    "cache_read_input_tokens": 672706,
+    "output_tokens": 10745,
+    "output_tokens_details": {
+      "thinking_tokens": 5563
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 32581,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 520,
+        "cache_read_input_tokens": 42436,
+        "cache_creation_input_tokens": 363,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 363
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 17,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004038,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 42,
+      "outputTokens": 10745,
+      "cacheReadInputTokens": 672706,
+      "cacheCreationInputTokens": 32581,
+      "webSearchRequests": 0,
+      "costUSD": 0.3723992,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 5563,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 21,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "## Summary\n\nThe issue: `CliRunner`'s isolation replaced `sys.stdout`/`sys.stderr` with `io.TextIOWrapper` objects backed by `io.BytesIO`, which has no real OS-level file descriptor. Passing such a stream to `subprocess.run(..., stdout=sys.stderr)` triggered `stdout.fileno()`, raising `io.UnsupportedOperation`.\n\n**Fix** (`src/click/testing.py`): Changed `BytesIOCopy` (used to back `StreamMixer.stdout`/`.stderr`) to wrap a real `tempfile.TemporaryFile()` instead of subclassing `io.BytesIO`. It still mirrors writes into the combined `output` stream and exposes `getvalue()` for reading captured bytes, but now delegates `fileno()` (via `__getattr__`) to a genuine OS file, so it can be handed to `subprocess.run`/`Popen`. Added `close()` calls in `isolation()`'s cleanup and a `__del__` fallback so the temp file descriptors don't leak.\n\nVerified:\n- The exact reproduction from the issue (`subprocess.run([\"echo\", \"foo\"], stdout=sys.stderr)` inside a `CliRunner.invoke`) no longer raises.\n- Full existing test suite (`tests/`) passes: 1419 passed, 24 skipped, 1 xfailed \u2014 no regressions, including the stream-lifecycle tests exercising `BytesIOCopy` GC/close semantics.",
+  "ttft_ms": 4274,
+  "type": "result",
+  "duration_ms": 140754,
+  "uuid": "0f705beb-f5d6-4638-81c9-f2c6c9f482f7",
+  "ttft_stream_ms": 1779,
+  "time_to_request_ms": 27,
+  "first_content_frame_ms": 2648,
+  "queued_turn_count": 0
+}

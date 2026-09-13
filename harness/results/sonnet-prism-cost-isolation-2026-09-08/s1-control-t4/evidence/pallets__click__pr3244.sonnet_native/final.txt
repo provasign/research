@@ -1,0 +1,9 @@
+The original repro passes now, and the full test suite (1419 tests) passes with no failures or resource warnings.
+
+## Summary
+
+The issue: `CliRunner`'s `sys.stdout`/`sys.stderr` during isolation were backed by `io.BytesIO`, which has no real OS file descriptor. Code under test calling `subprocess.run(..., stdout=sys.stderr)` triggered `stdout.fileno()`, raising `io.UnsupportedOperation`.
+
+**Fix** in `src/click/testing.py`: reworked `BytesIOCopy` (used by `StreamMixer` to back `stdout`/`stderr`) to be backed by a real `tempfile.TemporaryFile()` instead of subclassing `io.BytesIO`. This gives it a genuine `fileno()` (delegated via `__getattr__`), so passing `sys.stdout`/`sys.stderr` to `subprocess.run` now works instead of raising. `write()`/`flush()` still mirror data into the combined `output` stream, and `getvalue()` is reimplemented to read the full temp-file contents. Added explicit `close()` calls when isolation tears down, plus a `__del__` fallback to avoid leaking unclosed OS file descriptors (which otherwise surfaced as `ResourceWarning`s under pytest).
+
+Verified with the reported reproduction case and the full `tests/` suite (1419 passed, 24 skipped, 1 xfailed — no regressions).

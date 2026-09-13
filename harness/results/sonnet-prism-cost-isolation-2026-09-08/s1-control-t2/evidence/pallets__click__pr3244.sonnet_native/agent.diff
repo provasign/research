@@ -1,0 +1,63 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..ef1673a 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -76,15 +76,58 @@ class BytesIOCopy(io.BytesIO):
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._readfd: int | None = None
++        self._writefd: int | None = None
+ 
+     def flush(self) -> None:
+         super().flush()
++        self._drain_fd()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+         return super().write(b)
+ 
++    def fileno(self) -> int:
++        """Return a real OS-level file descriptor backed by a pipe.
++
++        This allows the stream to be used with APIs that require an
++        actual file descriptor, such as passing it as ``stdout`` or
++        ``stderr`` to :class:`subprocess.Popen`. Anything written to
++        the returned descriptor is copied into this stream the next
++        time it is flushed (or closed).
++
++        .. versionadded:: 8.3
++        """
++        if self._writefd is None:
++            self._readfd, self._writefd = os.pipe()
++            os.set_blocking(self._readfd, False)
++        return self._writefd
++
++    def _drain_fd(self) -> None:
++        if self._readfd is None:
++            return
++        while True:
++            try:
++                chunk = os.read(self._readfd, 65536)
++            except BlockingIOError:
++                break
++            except OSError:
++                break
++            if not chunk:
++                break
++            self.write(chunk)
++
++    def close(self) -> None:
++        self._drain_fd()
++        if self._writefd is not None:
++            os.close(self._writefd)
++            self._writefd = None
++        if self._readfd is not None:
++            os.close(self._readfd)
++            self._readfd = None
++        super().close()
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.

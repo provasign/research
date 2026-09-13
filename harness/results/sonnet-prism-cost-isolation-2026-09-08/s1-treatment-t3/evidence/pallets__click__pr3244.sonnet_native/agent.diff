@@ -1,0 +1,77 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..53ec37c 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -67,23 +67,54 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+         stream._paused = False
+ 
+ 
+-class BytesIOCopy(io.BytesIO):
+-    """Patch ``io.BytesIO`` to let the written stream be copied to another.
++class BytesIOCopy(io.RawIOBase):
++    """A writable stream backed by a real (file-descriptor-backed) temporary
++    file, so that it can be used as ``stdout``/``stderr`` for
++    :func:`subprocess.run` and similar APIs that need a real ``fileno()``.
++    Everything written is also copied to another stream.
+ 
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.2.2
++        Backed by a real file instead of :class:`io.BytesIO` so that
++        ``fileno()`` works, allowing subprocess output to be redirected
++        here without raising ``io.UnsupportedOperation``.
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+-        super().__init__()
+         self.copy_to = copy_to
++        self._file = tempfile.TemporaryFile()
++
++    def writable(self) -> bool:
++        return True
++
++    def write(self, b: ReadableBuffer) -> int:
++        n = self._file.write(b)
++        if n is None:
++            n = len(b)  # type: ignore[arg-type]
++        self.copy_to.write(bytes(b)[:n])
++        return n
+ 
+     def flush(self) -> None:
+-        super().flush()
++        self._file.flush()
+         self.copy_to.flush()
+ 
+-    def write(self, b: ReadableBuffer) -> int:
+-        self.copy_to.write(b)
+-        return super().write(b)
++    def fileno(self) -> int:
++        return self._file.fileno()
++
++    def getvalue(self) -> bytes:
++        self.flush()
++        pos = self._file.tell()
++        self._file.seek(0)
++        data = self._file.read()
++        self._file.seek(pos)
++        return data
++
++    def close(self) -> None:
++        try:
++            self._file.close()
++        finally:
++            super().close()
+ 
+ 
+ class StreamMixer:
+@@ -96,8 +127,8 @@ class StreamMixer:
+ 
+     def __init__(self) -> None:
+         self.output: io.BytesIO = io.BytesIO()
+-        self.stdout: io.BytesIO = BytesIOCopy(copy_to=self.output)
+-        self.stderr: io.BytesIO = BytesIOCopy(copy_to=self.output)
++        self.stdout: BytesIOCopy = BytesIOCopy(copy_to=self.output)
++        self.stderr: BytesIOCopy = BytesIOCopy(copy_to=self.output)
+ 
+ 
+ class _NamedTextIOWrapper(io.TextIOWrapper):

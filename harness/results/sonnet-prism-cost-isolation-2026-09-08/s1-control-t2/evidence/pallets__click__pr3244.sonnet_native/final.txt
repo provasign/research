@@ -1,0 +1,9 @@
+Full test suite passes (1419 passed, no regressions).
+
+## Summary
+
+The issue: `CliRunner`'s captured `sys.stdout`/`sys.stderr` are backed by `io.BytesIO` objects, which don't have a real OS file descriptor. When code under test does `subprocess.run(..., stdout=sys.stderr)`, `subprocess` calls `.fileno()` on the stream, and `io.BytesIO` doesn't support that, raising `io.UnsupportedOperation`.
+
+Fix in `src/click/testing.py`: gave `BytesIOCopy` (the class backing the captured streams) a real `fileno()` implementation. On first access it creates an `os.pipe()`, exposing the write end as a genuine file descriptor that `subprocess.Popen` can use directly. Any bytes written into that pipe by a child process are drained into the `BytesIO` buffer (and copied to the mixed-output stream) whenever the stream is flushed or closed — this happens naturally via the existing `sys.stdout.flush()`/`sys.stderr.flush()` calls in `CliRunner.invoke()` right before results are read, so no interleaving-timing races are introduced and no background threads are needed.
+
+This is a minimal, targeted change — only `BytesIOCopy` was touched; no tests, docs, or config were modified.

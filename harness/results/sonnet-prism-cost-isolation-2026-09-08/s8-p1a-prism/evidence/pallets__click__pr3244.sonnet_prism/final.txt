@@ -1,0 +1,12 @@
+The fix resolves the issue.
+
+## Summary
+
+**Root cause:** `CliRunner` backed `sys.stdout`/`sys.stderr` with `io.BytesIO` (via `BytesIOCopy`), which has no OS-level file descriptor. When code under test passed `sys.stdout`/`sys.stderr` to `subprocess.run(...)`, `subprocess.Popen` called `.fileno()` on that stream and raised `io.UnsupportedOperation`, even though the script works fine outside the test runner.
+
+**Fix** (`src/click/testing.py`):
+- Changed `BytesIOCopy` to subclass `tempfile.SpooledTemporaryFile` instead of `io.BytesIO`. It behaves identically to an in-memory buffer for normal use, but transparently rolls over to a real temp file (with a genuine fd) if `.fileno()` is ever requested — exactly what `subprocess.Popen` needs.
+- Added a `getvalue()` method (not provided by `SpooledTemporaryFile`) that preserves the previous behavior/API used by `CliRunner`.
+- Added explicit `.close()` calls for `stream_mixer.stdout`/`stream_mixer.stderr` at the end of `CliRunner.isolation()`, and overrode `BytesIOCopy.__del__` to close silently instead of emitting `ResourceWarning`, since these objects (unlike plain `io.BytesIO`) now wrap real OS file handles when rolled over.
+
+Ran the full test suite (`tests/`) plus the reported reproduction case — all 1419 tests pass, and `subprocess.run(["echo", "foo"], stdout=sys.stderr)` inside a `CliRunner.invoke()` no longer raises.

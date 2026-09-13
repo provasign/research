@@ -1,0 +1,110 @@
+{
+  "duration_api_ms": 125921,
+  "stop_reason": "end_turn",
+  "session_id": "4b1a7301-478f-41f6-a468-b0ba525135af",
+  "total_cost_usd": 0.24856260000000005,
+  "usage": {
+    "input_tokens": 36,
+    "cache_creation_input_tokens": 21610,
+    "cache_read_input_tokens": 312588,
+    "output_tokens": 9550,
+    "output_tokens_details": {
+      "thinking_tokens": 5866
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 21610,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 557,
+        "cache_read_input_tokens": 26732,
+        "cache_creation_input_tokens": 332,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 332
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 16,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004033,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 36,
+      "outputTokens": 9550,
+      "cacheReadInputTokens": 312588,
+      "cacheCreationInputTokens": 21610,
+      "webSearchRequests": 0,
+      "costUSD": 0.24452960000000004,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 5866,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 18,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "## Summary\n\nFixed the root cause in `src/click/testing.py`: `BytesIOCopy` (used by `CliRunner`'s `StreamMixer` to back `sys.stdout`/`sys.stderr` during test isolation) subclassed `io.BytesIO`, whose `fileno()` always raises `io.UnsupportedOperation`. This made it impossible to pass captured streams to APIs like `subprocess.run(..., stdout=sys.stderr)` that need a real file descriptor.\n\nThe fix backs each `BytesIOCopy` with a real `tempfile.TemporaryFile()` (which has a genuine OS-level file descriptor) alongside the in-memory `io.BytesIO` buffer:\n- `fileno()` now returns the real file's descriptor, so subprocess (or anything else needing a raw fd) can write directly to it.\n- Any bytes written directly to that descriptor (bypassing Python's `write()`) are synced into the in-memory buffer and the mixed `output` stream whenever `write()` or `getvalue()` is called, so `result.stdout`/`stderr`/`output` still reflect subprocess output correctly.\n- `close()` also cleans up the temp file.\n\nVerified with:\n- A reproduction of the exact issue scenario (`subprocess.run([\"echo\", \"foo\"], stdout=sys.stderr)` inside a Click command invoked via `CliRunner`) \u2014 no longer raises, and captured output correctly contains `foo`.\n- Full existing test suite (`tests/`): 1419 passed, 24 skipped, 1 xfailed \u2014 no regressions.\n\nNo test, doc, changelog, or config files were modified.",
+  "ttft_ms": 2180,
+  "type": "result",
+  "duration_ms": 128423,
+  "uuid": "dc477378-4ea3-4d15-bfc5-bef3e2264082",
+  "ttft_stream_ms": 1493,
+  "time_to_request_ms": 23,
+  "first_content_frame_ms": 2177,
+  "queued_turn_count": 0
+}

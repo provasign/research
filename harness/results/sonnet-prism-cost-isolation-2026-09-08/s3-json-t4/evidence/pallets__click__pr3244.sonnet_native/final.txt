@@ -1,0 +1,11 @@
+## Summary
+
+The bug: `CliRunner`'s `sys.stdout`/`sys.stderr` replacements are backed by `io.BytesIO`, which has no real OS file descriptor. When code under test calls `subprocess.run(..., stdout=sys.stderr)`, `subprocess` needs `stdout.fileno()`, and `io.BytesIO.fileno()` raises `io.UnsupportedOperation`.
+
+**Fix** (`src/click/testing.py`, `BytesIOCopy`): `fileno()` now lazily creates a real `tempfile.TemporaryFile()`, seeds it with data already written to the buffer, and mirrors subsequent `write()`/`flush()` calls into it — so callers that request a file descriptor get a working one, while streams that never call `fileno()` stay pure in-memory buffers (preserving existing lifecycle/GC guarantees tested elsewhere). `CliRunner.isolation()`'s cleanup now closes that backing temp file (via a new private `_close_fd_file()`) without closing the `BytesIO` buffer itself, avoiding resource leaks.
+
+Verified:
+- The issue's exact reproduction (`subprocess.run(["echo", "foo"], stdout=sys.stderr)` inside `CliRunner().invoke(...)`) now passes instead of raising `UnsupportedOperation`.
+- Full existing test suite: `1419 passed, 24 skipped, 1 xfailed` (no regressions), including `tests/test_stream_lifecycle.py`, which specifically guards the buffer-ownership/GC semantics that a naive fix (switching to always-real files) would have broken.
+
+No tests, docs, or config were modified; only `src/click/testing.py`. Nothing committed, per instructions.

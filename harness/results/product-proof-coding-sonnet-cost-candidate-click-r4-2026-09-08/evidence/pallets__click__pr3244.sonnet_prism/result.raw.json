@@ -1,0 +1,110 @@
+{
+  "duration_api_ms": 130123,
+  "stop_reason": "end_turn",
+  "session_id": "b844ba99-01ac-4afe-83c4-8c09abaf65f2",
+  "total_cost_usd": 0.371386,
+  "usage": {
+    "input_tokens": 30,
+    "cache_creation_input_tokens": 37296,
+    "cache_read_input_tokens": 510220,
+    "output_tokens": 11604,
+    "output_tokens_details": {
+      "thinking_tokens": 7544
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 37296,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 634,
+        "cache_read_input_tokens": 46176,
+        "cache_creation_input_tokens": 337,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 337
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 21,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004058,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 30,
+      "outputTokens": 11604,
+      "cacheReadInputTokens": 510220,
+      "cacheCreationInputTokens": 37296,
+      "webSearchRequests": 0,
+      "costUSD": 0.367328,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 7544,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 15,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "## Summary\n\n**Root cause:** `CliRunner`'s `isolation()` backs `sys.stdout`/`sys.stderr` with `BytesIOCopy`, a plain `io.BytesIO` subclass. `io.BytesIO` has no real OS-level file descriptor, so when code under test passes one of these streams to `subprocess.run(..., stdout=...)`, `subprocess.Popen._get_handles()` calls `.fileno()` and gets `io.UnsupportedOperation`.\n\n**Fix** (`src/click/testing.py`, `BytesIOCopy`): lazily back the stream with a real `tempfile.TemporaryFile()` the first time `fileno()` is requested, so a genuine file descriptor is available for subprocess redirection. Since a subprocess writes to that descriptor at the OS level (bypassing Python's `write()`), a `_sync_fd()` helper reads back any bytes landed in the backing file and merges them into the in-memory buffer (and the mirrored `copy_to` stream) whenever the stream is flushed or read via `getvalue()`. This keeps the existing pure in-memory `BytesIOCopy` behavior/tests intact while additively supporting `fileno()`.\n\n**Verification:**\n- Reproduced the issue's `sscce.py`/`test_sscce.py` scenario in isolation \u2014 previously failed with `io.UnsupportedOperation: fileno`, now passes and captures the subprocess's `\"foo\"` output.\n- Ran `tests/test_stream_lifecycle.py`, `tests/test_testing.py`, `tests/test_utils.py`, `tests/test_termui.py` \u2014 all pass (374 passed, 23 skipped).\n- Ran the full non-stress test suite \u2014 1419 passed, 24 skipped, 1 xfailed, no regressions.\n\nNo tests, docs, changelog, or config files were modified.",
+  "ttft_ms": 2600,
+  "type": "result",
+  "duration_ms": 136206,
+  "uuid": "aebb3e92-16a7-4f20-9a7f-fce2963cf1c8",
+  "ttft_stream_ms": 1498,
+  "time_to_request_ms": 24,
+  "first_content_frame_ms": 2096,
+  "queued_turn_count": 0
+}

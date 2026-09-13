@@ -1,0 +1,65 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..f570752 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -67,23 +67,46 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+         stream._paused = False
+ 
+ 
+-class BytesIOCopy(io.BytesIO):
+-    """Patch ``io.BytesIO`` to let the written stream be copied to another.
++class BytesIOCopy:
++    """A file-like object backed by a real file (so it has a usable
++    ``fileno()``, unlike :class:`io.BytesIO`) whose written data is also
++    copied to another stream.
++
++    Having a real ``fileno()`` allows the stream to be used as
++    ``stdout``/``stderr`` for :func:`subprocess.run` and similar APIs
++    during ``CliRunner`` isolation.
+ 
+     .. versionadded:: 8.2
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+-        super().__init__()
++        self._file = tempfile.TemporaryFile()
+         self.copy_to = copy_to
+ 
++    def __getattr__(self, name: str) -> t.Any:
++        return getattr(self._file, name)
++
+     def flush(self) -> None:
+-        super().flush()
++        self._file.flush()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+-        return super().write(b)
++        return self._file.write(b)
++
++    def getvalue(self) -> bytes:
++        pos = self._file.tell()
++        self._file.seek(0)
++        data = self._file.read()
++        self._file.seek(pos)
++        return data
++
++    def __del__(self) -> None:
++        # Make sure the backing temporary file is closed if it was never
++        # explicitly closed, so it doesn't emit a ResourceWarning.
++        file = self.__dict__.get("_file")
++        if file is not None:
++            file.close()
+ 
+ 
+ class StreamMixer:
+@@ -453,6 +476,8 @@ class CliRunner:
+                     os.environ[key] = value
+             yield (stream_mixer.stdout, stream_mixer.stderr, stream_mixer.output)
+         finally:
++            stream_mixer.stdout._file.close()
++            stream_mixer.stderr._file.close()
+             for key, value in old_env.items():
+                 if value is None:
+                     try:

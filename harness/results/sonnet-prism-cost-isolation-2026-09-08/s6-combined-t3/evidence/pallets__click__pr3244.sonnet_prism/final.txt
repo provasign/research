@@ -1,0 +1,11 @@
+I've reviewed all references to `BytesIOCopy` (in `testing.py` itself and `test_stream_lifecycle.py`), and all tests pass.
+
+## Summary
+
+Fixed `src/click/testing.py`: `CliRunner`'s captured `sys.stdout`/`sys.stderr` streams were backed by `io.BytesIO`, which has no real file descriptor, so `subprocess.run(..., stdout=sys.stderr)` (or similar APIs requiring a real fd) raised `io.UnsupportedOperation: fileno`.
+
+Changed `BytesIOCopy` to wrap a real `tempfile.TemporaryFile()` (delegating attribute access, adding `getvalue()`, and closing the temp file promptly via `isolation()`'s cleanup and a `__del__` fallback) instead of subclassing `io.BytesIO`. This gives the captured streams a genuine, `fileno()`-capable file descriptor while preserving existing behavior (`getvalue()`, `flush()` propagation to the mixed `output` stream, etc.).
+
+Verified with:
+- A reproduction of the reported issue (subprocess writing to `sys.stderr` inside a `CliRunner`-invoked command) — now passes.
+- Full existing test suite (`python -m pytest`): 1419 passed, 24 skipped, 1 xfailed, no regressions.

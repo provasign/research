@@ -1,0 +1,110 @@
+{
+  "duration_api_ms": 194830,
+  "stop_reason": "end_turn",
+  "session_id": "52034dc1-f04d-4780-a50c-a8c8e1e6cb39",
+  "total_cost_usd": 0.6464816000000001,
+  "usage": {
+    "input_tokens": 68,
+    "cache_creation_input_tokens": 52270,
+    "cache_read_input_tokens": 1282413,
+    "output_tokens": 17675,
+    "output_tokens_details": {
+      "thinking_tokens": 10853
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 52270,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 836,
+        "cache_read_input_tokens": 60985,
+        "cache_creation_input_tokens": 275,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 275
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 16,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004033,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 68,
+      "outputTokens": 17675,
+      "cacheReadInputTokens": 1282413,
+      "cacheCreationInputTokens": 52270,
+      "webSearchRequests": 0,
+      "costUSD": 0.6424486,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 10853,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 35,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "## Summary\n\n**Root cause:** `CliRunner`'s captured `stdout`/`stderr` streams (`StreamMixer.stdout`/`stderr`, produced by `BytesIOCopy`) were backed by pure in-memory `io.BytesIO` objects. `BytesIO.fileno()` raises `io.UnsupportedOperation` because there's no real OS-level file descriptor, so passing `sys.stdout`/`sys.stderr` to `subprocess.run(..., stdout=<captured stream>)` failed as soon as `subprocess` tried to duplicate the file descriptor for the child process.\n\n**Fix (`src/click/testing.py`):**\n- `BytesIOCopy` is now backed by a real, on-disk `tempfile.TemporaryFile()` instead of an in-memory `io.BytesIO`, so it exposes a genuine `fileno()`. Writes still get mirrored into the mixed `copy_to` stream for `Result.output`, and anything written directly to the file descriptor by a subprocess is also captured (since it shares the same underlying real file), retrievable via the added `getvalue()`.\n- Added `__del__` to close the backing file if never explicitly closed (avoiding fd leaks/`ResourceWarning`s).\n- `CliRunner.isolation()` now explicitly closes `stream_mixer.stdout`/`stderr` in its `finally` block after all values have been read, cleaning up the real file resources.\n\n**Verification:**\n- Reproduced the exact issue scenario (`subprocess.run([\"echo\", \"foo\"], stdout=sys.stderr)` inside a `CliRunner`-invoked command) \u2014 previously raised `UnsupportedOperation`, now passes.\n- Full existing test suite: `1419 passed, 24 skipped, 1 xfailed` (no regressions), including the dedicated `tests/test_stream_lifecycle.py` suite that exercises `BytesIOCopy`/`StreamMixer` lifecycle directly.\n- `prism_verify` shows no missed call sites; the only note is an expected review flag on `BytesIOCopy`'s changed base class, which is confirmed safe via the passing tests that exercise it directly.",
+  "ttft_ms": 3941,
+  "type": "result",
+  "duration_ms": 205294,
+  "uuid": "b370d687-5bcc-4df0-9611-02d5aa2b0176",
+  "ttft_stream_ms": 1688,
+  "time_to_request_ms": 26,
+  "first_content_frame_ms": 2058,
+  "queued_turn_count": 0
+}

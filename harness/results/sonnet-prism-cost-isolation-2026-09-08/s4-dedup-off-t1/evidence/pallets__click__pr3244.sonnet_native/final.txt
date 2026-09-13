@@ -1,0 +1,7 @@
+## Summary
+
+Fixed `src/click/testing.py`: `BytesIOCopy` (the in-memory buffer backing `CliRunner`'s fake `stdout`/`stderr`) didn't support `fileno()`, so passing `sys.stdout`/`sys.stderr` to `subprocess.run(...)` inside code under test raised `io.UnsupportedOperation` — even though the same code works fine outside the runner.
+
+I gave `BytesIOCopy.fileno()` a real implementation: on first call it lazily materializes an unbuffered real temp file (`tempfile.TemporaryFile(buffering=0)`), seeded with any content already buffered in memory, and returns its descriptor. From that point on, `write()`/`flush()`/`getvalue()` transparently delegate to that real file, so both Click's own writes and any external process writing directly to the fd stay consistent and are correctly captured/mirrored into `copy_to`.
+
+Verified with a reproduction of the issue's `sscce.py`/`test_sscce.py` (subprocess writing to `sys.stderr` inside a `CliRunner.invoke`) — now passes and captures output correctly — plus the full existing test suite (`1419 passed, 24 skipped, 1 xfailed`, no regressions). No tests, docs, or config were modified; changes were not committed.

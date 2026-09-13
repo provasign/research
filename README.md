@@ -10,16 +10,33 @@ The latest paired nine-task Sonnet sample covers Go, Java, TypeScript, and Pytho
 
 See [RESULTS.md](RESULTS.md) for the full table, repeated-trial evidence, scoring corrections, and limitations.
 
+## Running a benchmark
+
+There is one standard runner: `harness/bench.py`. It drives Claude (default
+`claude-sonnet-5`) and Codex (default `gpt-5.5`), each with Prism registered
+as an MCP server or not, against a suite of tasks, and records tokens,
+turns, wall time, cost, and correctness for every cell. **Do not write a new
+one-off runner script** — add a flag to `bench.py` or a suite under
+`harness/tasks/` instead. See [harness/docs/BENCH.md](harness/docs/BENCH.md)
+for the full reference; quick start:
+
+```sh
+cd harness
+python3 bench.py list-suites
+python3 bench.py run --suite e2e --phase pilot --preflight-only
+python3 bench.py index   # rebuild the cross-run results/index.jsonl
+```
+
 ## What is in this repository
 
 | Path | Contents |
 |---|---|
 | [RESULTS.md](RESULTS.md) | Current product-facing results and validity limits |
 | [THESIS.md](THESIS.md) | Research claims and falsifiable predictions |
-| `harness/tasks/*.json` | Task definitions and committed ground truth |
+| `harness/tasks/<suite>/*.json` | Task definitions and committed ground truth, grouped by suite (`e2e`, `manual`, `wide`, ...) |
 | [harness/README.md](harness/README.md) | Runner, scorer, and oracle documentation |
-| `harness/runs/` | Scored run records, protocols, artifacts, and transcripts |
-| `harness/impact_oracle.py` | Deterministic engine scoring against a task oracle |
+| `harness/results/` | Scored run records, protocols, artifacts, and transcripts |
+| `harness/scoring/impact_oracle.py` | Deterministic engine scoring against a task oracle |
 | [paper/paper.tex](paper/paper.tex) | Paper source |
 | [LOCAL-MODEL-SETUP.md](LOCAL-MODEL-SETUP.md) | Local model setup |
 
@@ -46,11 +63,11 @@ cd harness
 python3 -m unittest discover -s tests
 
 # Score the current Prism engine directly, without an agent
-python3 impact_oracle.py tasks/grafana-querydata-impact.json
+python3 scoring/impact_oracle.py tasks/manual/grafana-querydata-impact.json
 
-# Run fresh agent trials
-python3 run.py \
-  --task tasks/jackson-serialize.json \
+# Run fresh agent trials (legacy Mode-A tool-arm study; see harness/docs/MODE-A-STUDY.md)
+python3 runners/run.py \
+  --task tasks/manual/jackson-serialize.json \
   --arms T Gstar \
   --trials 3 \
   --model sonnet
@@ -67,17 +84,17 @@ Task files contain the authoritative upstream commit. Local absolute paths from 
 - Audit the oracle when precision remains unexpectedly low across unrelated engine changes.
 - Preserve failed and invalid experiments with an explanation; do not cite their toplines.
 
-Prompt caching may reuse identical static prefixes at the provider. It does not share prior answers or agent conversation state. The freshness audit in `harness/runs/impact-oracle-reliability-2026-09-07/` records six distinct sessions, snapshots, and transcript directories.
+Prompt caching may reuse identical static prefixes at the provider. It does not share prior answers or agent conversation state. The freshness audit in `harness/results/impact-oracle-reliability-2026-09-07/` records six distinct sessions, snapshots, and transcript directories.
 
 ## Historical studies
 
 The repository retains dated studies and raw artifacts for auditability. Several are historical and should not be mixed with the current release gate:
 
 - [BENCH-MATRIX.md](harness/BENCH-MATRIX.md) — multi-tier change-impact study
-- [AB-ENGINE-COMPARISON.md](harness/AB-ENGINE-COMPARISON.md) — cross-engine comparisons
-- [AB-LOCAL-CLIS.md](harness/AB-LOCAL-CLIS.md) — local model and CLI experiments
-- [SWEBENCH-AB-RESULTS.md](harness/SWEBENCH-AB-RESULTS.md) — excluded because contamination made the topline non-citable
-- [PR-REPLAY-FINDINGS.md](harness/PR-REPLAY-FINDINGS.md) — negative result on mining clean tasks from merged PRs
+- [docs/AB-ENGINE-COMPARISON.md](harness/docs/AB-ENGINE-COMPARISON.md) — cross-engine comparisons
+- [docs/AB-LOCAL-CLIS.md](harness/docs/AB-LOCAL-CLIS.md) — local model and CLI experiments
+- [docs/SWEBENCH-AB-RESULTS.md](harness/docs/SWEBENCH-AB-RESULTS.md) — excluded because contamination made the topline non-citable
+- [docs/PR-REPLAY-FINDINGS.md](harness/docs/PR-REPLAY-FINDINGS.md) — negative result on mining clean tasks from merged PRs
 
 Read the protocol and date beside any historical result before comparing it with current numbers.
 

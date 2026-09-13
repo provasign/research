@@ -1,0 +1,9 @@
+Full test suite passes (1419 passed, 24 skipped, 1 xfailed — no regressions).
+
+## Summary
+
+**Issue:** `CliRunner` in `click.testing` captured `sys.stdout`/`sys.stderr` with a plain `io.BytesIO`-backed stream (`BytesIOCopy`). Code like `subprocess.run(..., stdout=sys.stderr)` needs a real file descriptor via `.fileno()`, but `io.BytesIO` doesn't support one, raising `io.UnsupportedOperation`.
+
+**Fix** (`src/click/testing.py`, `BytesIOCopy` class): lazily back the stream with a real `tempfile.TemporaryFile()` the first time `fileno()` is requested, so `subprocess.run()` and similar fd-dependent code work under `CliRunner`. `write()`, `flush()`, and `getvalue()` were updated to keep the real file, the in-memory buffer, and the mixed-output copy consistent — including picking up bytes written directly at the OS level (bypassing Python's `write()`, as a subprocess does) during `flush()`.
+
+Verified with the reported SSCCE (no longer crashes, and `result.stderr` correctly captures the subprocess's "foo" output) plus the full existing test suite (1419 passed, no regressions). No tests, docs, or config were modified; changes are confined to source. Nothing was committed, per instructions.

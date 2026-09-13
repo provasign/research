@@ -1,0 +1,74 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..4be719f 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -70,21 +70,60 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+ class BytesIOCopy(io.BytesIO):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
++    Also backed by a real temporary file so that :meth:`fileno` returns a
++    valid file descriptor. This allows the stream to be passed to APIs such
++    as :func:`subprocess.run` (e.g. ``stdout=sys.stderr`` from code under
++    test), instead of raising ``io.UnsupportedOperation``. Any bytes written
++    directly to that file descriptor (bypassing :meth:`write`) are picked up
++    the next time the stream is flushed or read.
++
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.3.3
++        Backed by a real file so ``fileno()`` is supported.
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._file = tempfile.TemporaryFile()
++        self._file_pos = 0
++
++    def fileno(self) -> int:
++        return self._file.fileno()
++
++    def __del__(self) -> None:
++        # Ensure the backing temporary file doesn't trigger a
++        # ResourceWarning if this object is garbage collected without
++        # ``isolation()`` explicitly closing it first.
++        self._file.close()
+ 
+     def flush(self) -> None:
+         super().flush()
++        self._sync_fd_writes()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+         return super().write(b)
+ 
++    def getvalue(self) -> bytes:
++        self._sync_fd_writes()
++        return super().getvalue()
++
++    def _sync_fd_writes(self) -> None:
++        """Mirror any bytes written directly to the underlying file
++        descriptor (such as by a subprocess given this stream as its
++        ``stdout``/``stderr`` via :meth:`fileno`) into the in-memory
++        buffers, since such writes bypass :meth:`write`.
++        """
++        self._file.seek(self._file_pos)
++        data = self._file.read()
++        if data:
++            self._file_pos += len(data)
++            self.copy_to.write(data)
++            super().write(data)
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.
+@@ -453,6 +492,8 @@ class CliRunner:
+                     os.environ[key] = value
+             yield (stream_mixer.stdout, stream_mixer.stderr, stream_mixer.output)
+         finally:
++            stream_mixer.stdout._file.close()
++            stream_mixer.stderr._file.close()
+             for key, value in old_env.items():
+                 if value is None:
+                     try:

@@ -1,0 +1,10 @@
+## Summary
+
+The issue: `CliRunner`'s isolation mixes `stdout`/`stderr` into plain `io.BytesIO` objects, which don't support `fileno()`. When a test invokes CLI code that calls `subprocess.run(..., stdout=sys.stderr)`, `subprocess` needs a real file descriptor for the passed stream object and raises `io.UnsupportedOperation`.
+
+Fix (in `src/click/testing.py`, `BytesIOCopy`): lazily back the stream with a real `tempfile.TemporaryFile()` the first time `fileno()` is requested, so it can be handed to `subprocess.Popen`/`subprocess.run`. Any bytes a subprocess writes directly to that file descriptor (bypassing Python-level `write()`) are synced back into the in-memory `BytesIO` buffer (and the mixed `copy_to` stream) whenever the object is written to, flushed, or read via `getvalue()`, so `CliRunner`'s captured `output`/`stdout`/`stderr` still reflect subprocess output correctly.
+
+Verified:
+- The reported SSCCE (`subprocess.run(["echo", "foo"], stdout=sys.stderr)` inside a `CliRunner`-invoked command) now passes and captures `"foo"` in the output.
+- Full existing test suite: 1419 passed, 24 skipped, 1 xfailed — no regressions.
+- `prism_verify` reports the change is self-contained with no missed call sites.

@@ -1,0 +1,67 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..3ffb371 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -70,21 +70,53 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+ class BytesIOCopy(io.BytesIO):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
++    Backed by a real, unbuffered temporary file (instead of only an
++    in-memory buffer) so that code invoked through :class:`CliRunner`,
++    such as :func:`subprocess.run`, can use it as ``stdout``/``stderr``
++    and call :meth:`fileno` on it without raising
++    :exc:`io.UnsupportedOperation`.
++
+     .. versionadded:: 8.2
++    .. versionchanged:: 8.3.3
++        Back the stream with a real file descriptor so ``fileno()`` works.
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._tmpfile = tempfile.TemporaryFile(buffering=0)
++
++    def fileno(self) -> int:
++        return self._tmpfile.fileno()
++
++    def close(self) -> None:
++        self._tmpfile.close()
++        super().close()
+ 
+     def flush(self) -> None:
+         super().flush()
+         self.copy_to.flush()
++        self._tmpfile.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
++        self._tmpfile.write(b)
+         self.copy_to.write(b)
+         return super().write(b)
+ 
++    def getvalue(self) -> bytes:
++        # Merge in anything written directly to the underlying file
++        # descriptor (for example, by a child process) that bypassed
++        # ``write()``.
++        self._tmpfile.seek(0)
++        data = self._tmpfile.read()
++        self._tmpfile.seek(0, os.SEEK_END)
++        if len(data) > super().tell():
++            super().truncate(0)
++            super().seek(0)
++            super().write(data)
++            super().seek(0, os.SEEK_END)
++        return super().getvalue()
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.
+@@ -469,6 +501,8 @@ class CliRunner:
+             termui._getchar = old__getchar_func
+             utils.should_strip_ansi = old_should_strip_ansi  # type: ignore
+             _compat.should_strip_ansi = old__compat_should_strip_ansi
++            stream_mixer.stdout._tmpfile.close()
++            stream_mixer.stderr._tmpfile.close()
+             formatting.FORCED_WIDTH = old_forced_width
+             pdb.Pdb.__init__ = old_pdb_init  # type: ignore[method-assign]
+ 

@@ -1,0 +1,68 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..c3221a1 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -70,21 +70,54 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+ class BytesIOCopy(io.BytesIO):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
++    ``fileno()`` is backed by a real, OS-level temporary file created lazily
++    on first use, so that code under test can pass ``sys.stdout`` or
++    ``sys.stderr`` to APIs such as :func:`subprocess.run` that require a real
++    file descriptor. The temporary file is only created when ``fileno()`` is
++    actually called, so streams that are never asked for a file descriptor
++    remain plain in-memory buffers.
++
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.3
++        ``fileno()`` returns a real file descriptor instead of raising
++        ``UnsupportedOperation``.
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._fd_file: t.IO[bytes] | None = None
+ 
+     def flush(self) -> None:
+         super().flush()
+         self.copy_to.flush()
++        if self._fd_file is not None:
++            self._fd_file.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
++        if self._fd_file is not None:
++            self._fd_file.write(b)
+         return super().write(b)
+ 
++    def fileno(self) -> int:
++        if self._fd_file is None:
++            self._fd_file = tempfile.TemporaryFile()
++            self._fd_file.write(self.getvalue())
++            self._fd_file.flush()
++        return self._fd_file.fileno()
++
++    def _close_fd_file(self) -> None:
++        """Release the real file backing ``fileno()``, if one was created.
++
++        This does not close the ``BytesIO`` buffer itself, only the
++        auxiliary OS-level file used to satisfy ``fileno()`` calls.
++        """
++        if self._fd_file is not None:
++            self._fd_file.close()
++            self._fd_file = None
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.
+@@ -463,6 +496,8 @@ class CliRunner:
+                     os.environ[key] = value
+             sys.stdout = old_stdout
+             sys.stderr = old_stderr
++            stream_mixer.stdout._close_fd_file()
++            stream_mixer.stderr._close_fd_file()
+             sys.stdin = old_stdin
+             termui.visible_prompt_func = old_visible_prompt_func
+             termui.hidden_prompt_func = old_hidden_prompt_func

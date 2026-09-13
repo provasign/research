@@ -1,0 +1,13 @@
+All 1419 tests pass (plus the reproducer from the issue), no skipped/failed regressions, and no resource warnings.
+
+## Summary
+
+**Root cause:** `CliRunner.isolation()` redirected `sys.stdout`/`sys.stderr` to `io.TextIOWrapper` objects backed by `io.BytesIO` (via `BytesIOCopy`). `io.BytesIO` has no OS-level file descriptor, so `.fileno()` raises `io.UnsupportedOperation`. Since `subprocess.run(..., stdout=sys.stderr)` needs a real `fileno()` when given a file-like object, code under `CliRunner` that shells out with `stdout`/`stderr` pointed at the captured streams crashed, even though it worked fine outside the test harness.
+
+**Fix (`src/click/testing.py`):** Reimplemented `BytesIOCopy` to be backed by a real `tempfile.TemporaryFile()` instead of subclassing `io.BytesIO`, while still mirroring every write into the aggregate `copy_to` stream and providing a `getvalue()` compatible with existing callers. Because it's a real file, `fileno()` (and other file-object methods) are available via delegation, so `subprocess.run` works normally. Added explicit closing of the temp files at the end of `isolation()`'s `finally` block, plus a `__del__` safety net on `BytesIOCopy` so any object that's garbage-collected without explicit closing (e.g. in unit tests exercising `BytesIOCopy` directly) doesn't leak file descriptors or trigger `ResourceWarning`.
+
+**Verification:**
+- The issue's exact reproducer (`subprocess.run(["echo", "foo"], stdout=sys.stderr)` invoked through `CliRunner`) now passes.
+- Full existing test suite: `1419 passed, 24 skipped, 1 xfailed` — no regressions, including the dedicated `tests/test_stream_lifecycle.py` and `tests/test_testing.py` suites.
+
+No tests, docs, or config were modified — only `src/click/testing.py`.

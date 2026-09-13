@@ -1,0 +1,10 @@
+## Summary
+
+The issue: `CliRunner`'s isolated `sys.stdout`/`sys.stderr` were backed by `io.BytesIO`, which has no real file descriptor. When user code passed these streams to `subprocess.run(..., stdout=sys.stderr)`, Python tried `stdout.fileno()` and raised `io.UnsupportedOperation`, even though the exact same code works fine outside of `CliRunner`.
+
+**Fix** in `src/click/testing.py`:
+- `BytesIOCopy` (the class backing `StreamMixer.stdout`/`.stderr`) is now backed by a real OS-level file (`tempfile.TemporaryFile()`) instead of `io.BytesIO`, so it exposes a working `fileno()` — `io.TextIOWrapper.fileno()` (used by `_NamedTextIOWrapper`) delegates to it automatically, allowing `subprocess.run` (and anything else needing a real fd) to work as before.
+- Added `getvalue()` (seek/read/seek-restore) and delegated other attribute access via `__getattr__` so `BytesIOCopy` remains a drop-in replacement.
+- Since it now owns a real OS resource, added explicit cleanup: `isolation()` closes the temp files in its `finally` block, and `BytesIOCopy.__del__` closes the file defensively to avoid `ResourceWarning`s if used directly without a full `isolation()` cycle.
+
+Verified: the reproduction from the issue (`subprocess.run(["echo", "foo"], stdout=sys.stderr)` inside `CliRunner().invoke(...)`) no longer raises `UnsupportedOperation`, and the subprocess's output is correctly captured in `result.stderr`. Full existing test suite (`tests/`) passes: 1419 passed, 24 skipped, 1 xfailed, no failures/warnings.

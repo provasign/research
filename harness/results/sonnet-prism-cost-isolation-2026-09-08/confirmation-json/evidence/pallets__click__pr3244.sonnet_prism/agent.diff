@@ -1,0 +1,75 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..a2d2052 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -67,23 +67,56 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+         stream._paused = False
+ 
+ 
+-class BytesIOCopy(io.BytesIO):
+-    """Patch ``io.BytesIO`` to let the written stream be copied to another.
++class BytesIOCopy:
++    """A real, file descriptor backed stream whose written bytes are also
++    copied to another stream.
++
++    Unlike :class:`io.BytesIO`, this is backed by an actual OS-level
++    temporary file, so it has a valid ``fileno()``. This allows code
++    invoked through :class:`CliRunner` to pass ``sys.stdout``/``sys.stderr``
++    to APIs such as :func:`subprocess.run` that require a real file
++    descriptor.
+ 
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.3
++        Backed by a real temporary file instead of :class:`io.BytesIO` so
++        that ``fileno()`` is supported.
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+-        super().__init__()
++        self._file: t.IO[bytes] = tempfile.TemporaryFile()
+         self.copy_to = copy_to
+ 
+     def flush(self) -> None:
+-        super().flush()
++        self._file.flush()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+-        return super().write(b)
++        return self._file.write(b)
++
++    def getvalue(self) -> bytes:
++        pos = self._file.tell()
++        self._file.seek(0)
++        data = self._file.read()
++        self._file.seek(pos)
++        return data
++
++    def __getattr__(self, name: str) -> t.Any:
++        return getattr(self._file, name)
++
++    def close(self) -> None:
++        self._file.close()
++
++    def __del__(self) -> None:
++        # Quietly release the underlying temporary file if it was never
++        # explicitly closed, mirroring the "no explicit close needed"
++        # behavior callers relied on when this was backed by ``io.BytesIO``.
++        try:
++            self._file.close()
++        except Exception:
++            pass
+ 
+ 
+ class StreamMixer:
+@@ -464,6 +497,8 @@ class CliRunner:
+             sys.stdout = old_stdout
+             sys.stderr = old_stderr
+             sys.stdin = old_stdin
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
+             termui.visible_prompt_func = old_visible_prompt_func
+             termui.hidden_prompt_func = old_hidden_prompt_func
+             termui._getchar = old__getchar_func

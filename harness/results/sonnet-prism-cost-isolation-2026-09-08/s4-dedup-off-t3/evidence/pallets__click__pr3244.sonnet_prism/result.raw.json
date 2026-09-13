@@ -1,0 +1,110 @@
+{
+  "duration_api_ms": 121638,
+  "stop_reason": "end_turn",
+  "session_id": "84716a51-2f06-4d87-b6a2-cd88c9ea2ffb",
+  "total_cost_usd": 0.29924880000000004,
+  "usage": {
+    "input_tokens": 26,
+    "cache_creation_input_tokens": 28065,
+    "cache_read_input_tokens": 367694,
+    "output_tokens": 10937,
+    "output_tokens_details": {
+      "thinking_tokens": 7189
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 28065,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 599,
+        "cache_read_input_tokens": 36797,
+        "cache_creation_input_tokens": 258,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 258
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 15,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004028,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 26,
+      "outputTokens": 10937,
+      "cacheReadInputTokens": 367694,
+      "cacheCreationInputTokens": 28065,
+      "webSearchRequests": 0,
+      "costUSD": 0.2952208,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 7189,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 13,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "All tests pass, including the existing `test_stream_lifecycle.py` suite that directly exercises `BytesIOCopy`. The fix is complete and verified:\n\n## Summary\n\n**Root cause:** `CliRunner.isolation()` backed `sys.stdout`/`sys.stderr` with `io.BytesIO`-based streams (`BytesIOCopy`). `io.BytesIO` has no real file descriptor, so when code under test called `subprocess.run(..., stdout=sys.stderr)`, `subprocess` tried `stdout.fileno()` and raised `io.UnsupportedOperation`.\n\n**Fix** (`src/click/testing.py`): Rewrote `BytesIOCopy` to be backed by a real OS-level temporary file (`tempfile.TemporaryFile()`) instead of `io.BytesIO`, implementing the raw binary I/O protocol (`readable`/`writable`/`seekable`/`write`/`flush`/`fileno`/`close`) plus a `getvalue()` helper that reads back the captured bytes. Since `io.TextIOWrapper.fileno()` delegates to its underlying buffer, `sys.stdout.fileno()` / `sys.stderr.fileno()` now return a real, usable file descriptor, so subprocesses can write to them directly without error. Added cleanup of the temp files in `isolation()`'s `finally` block to avoid leaking file descriptors.\n\nVerified with the original reproduction script/test (now passes), the full existing test suite (1419 passed, 24 skipped, 1 xfailed \u2014 no regressions), and `prism_verify` (flagged only the expected base-class change of `BytesIOCopy`, whose existing dedicated test suite `tests/test_stream_lifecycle.py` still passes).",
+  "ttft_ms": 3194,
+  "type": "result",
+  "duration_ms": 127067,
+  "uuid": "844ed011-9ba0-473d-8f0d-66e54ca6e31a",
+  "ttft_stream_ms": 1691,
+  "time_to_request_ms": 28,
+  "first_content_frame_ms": 2192,
+  "queued_turn_count": 0
+}

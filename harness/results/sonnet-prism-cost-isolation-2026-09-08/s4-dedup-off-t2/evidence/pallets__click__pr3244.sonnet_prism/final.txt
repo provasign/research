@@ -1,0 +1,9 @@
+All tests pass (1419 passed, 24 skipped, 1 xfailed — none failed).
+
+## Summary
+
+**Root cause:** `CliRunner`'s isolation replaces `sys.stdin`/`sys.stdout`/`sys.stderr` with `_NamedTextIOWrapper` instances backed by in-memory `io.BytesIO` buffers. These have no real OS file descriptor, so calling `.fileno()` on them (as `subprocess.run`/`Popen` do when given a file-like `stdout`/`stderr`) raises `io.UnsupportedOperation`.
+
+**Fix** (`src/click/testing.py`): Added a `fileno()` override to `_NamedTextIOWrapper` that falls back to the real, non-captured terminal stream (`sys.__stdin__`/`sys.__stdout__`/`sys.__stderr__`) based on the wrapper's name, mirroring the existing pattern used for the `pdb` terminal fallback in the same file. This lets code that passes `sys.stdout`/`sys.stderr` to `subprocess.run` work under `CliRunner` just as it does outside of it (writing to the real stream instead of the captured buffer), instead of crashing with a confusing `UnsupportedOperation`.
+
+Verified with the exact SSCCE from the issue (now passes) plus the full existing test suite (no regressions).

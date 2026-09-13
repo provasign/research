@@ -1,0 +1,9 @@
+Implemented the fix in [src/click/testing.py](/Users/tapabratapal/Projects/provasign/research/harness/runs/product-proof-coding-pilot-2026-09-08/work/pallets__click__pr3244.gpt55_prism/src/click/testing.py:107). `_NamedTextIOWrapper` now provides a writable file descriptor backed by a temporary file, and `flush()` copies descriptor-level writes back into Click’s captured stream. This makes `subprocess.run(..., stdout=sys.stderr)` work under `CliRunner` and preserves captured `stderr`/mixed output.
+
+Prism impact for `CliRunner.isolation` was closed:
+`CliRunner.isolation` declaration; callers `CliRunner.invoke`, `test_isolation_stderr_errors`, `test_isolation_flushes_unflushed_stderr`.
+
+Verification:
+`python -m pytest tests/test_testing.py::test_stderr tests/test_testing.py::test_isolation_stderr_errors tests/test_testing.py::test_isolation_flushes_unflushed_stderr tests/test_stream_lifecycle.py::test_wrapper_close_does_not_close_underlying_buffer tests/test_stream_lifecycle.py::test_wrapper_del_does_not_close_underlying_buffer` passed.
+
+`prism verify` could not run because Prism tried to write a cache lock under `~/Library/Caches`, which is outside the sandbox.

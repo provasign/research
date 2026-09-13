@@ -1,0 +1,9 @@
+All tests pass (1419 passed, 24 skipped, 1 xfailed as before).
+
+## Summary
+
+The `CliRunner` crashed with `io.UnsupportedOperation: fileno` when a command under test called `subprocess.run(..., stdout=sys.stderr)` (or `stdout`), because `CliRunner.isolation()` captured output using plain `io.BytesIO` objects, which don't have a real OS file descriptor for `subprocess.Popen` to write into.
+
+**Fix** (`src/click/testing.py`): `BytesIOCopy` (used to back the captured `stdout`/`stderr` streams) now also maintains a real, file-descriptor-backed `tempfile.TemporaryFile`, and exposes `fileno()` from it. This lets the captured streams be passed directly to `subprocess.run`/`Popen` as `stdout`/`stderr`. `write()` writes to this temp file too, and `getvalue()` reads back from it, so both in-process `sys.stdout`/`sys.stderr` writes and direct subprocess writes to the fd are captured correctly and in order.
+
+Verified: the original reproduction no longer crashes and correctly captures `"foo\n"` in `result.stderr`; the full existing test suite (`tests/`) still passes (1419 passed, 24 skipped, 1 xfailed), including all `tests/test_testing.py` cases.

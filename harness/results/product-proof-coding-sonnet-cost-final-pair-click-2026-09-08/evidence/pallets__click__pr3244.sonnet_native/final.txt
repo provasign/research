@@ -1,0 +1,9 @@
+The `subprocess.run(..., stdout=sys.stderr)` call from the issue no longer raises `io.UnsupportedOperation`, and the subprocess's output is correctly captured.
+
+## Summary
+
+The `CliRunner`'s captured streams were backed by `io.BytesIO`, which has no real file descriptor. When application code passed one of these streams (e.g. `sys.stderr`) to `subprocess.run(..., stdout=...)`, `subprocess` called `.fileno()` on it and raised `io.UnsupportedOperation`.
+
+**Fix** (`src/click/testing.py`): Changed `BytesIOCopy` to be backed by a real `tempfile.TemporaryFile()` instead of `io.BytesIO`, so it has a genuine file descriptor while still supporting the existing `write()`/`flush()`-based mirroring to the combined output stream, plus `getvalue()` for the existing `Result` API. Added `close()`/`__del__` to clean up the temporary file (avoiding descriptor leaks/`ResourceWarning`s), and wired `close()` into `CliRunner.isolation()`'s teardown, after output has already been captured.
+
+Verified with the exact reproduction from the issue (no more crash, and the subprocess's fd-level writes now land in `result.stderr`), and the full existing test suite (`1419 passed, 24 skipped, 1 xfailed`, no regressions).

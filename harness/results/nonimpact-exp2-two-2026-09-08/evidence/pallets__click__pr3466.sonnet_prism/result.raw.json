@@ -1,0 +1,110 @@
+{
+  "duration_api_ms": 98593,
+  "stop_reason": "end_turn",
+  "session_id": "a36ff13f-872d-4571-af15-27635b25f177",
+  "total_cost_usd": 0.26594,
+  "usage": {
+    "input_tokens": 34,
+    "cache_creation_input_tokens": 31494,
+    "cache_read_input_tokens": 335345,
+    "output_tokens": 7140,
+    "output_tokens_details": {
+      "thinking_tokens": 4408
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 31494,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 493,
+        "cache_read_input_tokens": 31227,
+        "cache_creation_input_tokens": 267,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 267
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 1357,
+      "outputTokens": 14,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.0014269999999999999,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 34,
+      "outputTokens": 7140,
+      "cacheReadInputTokens": 335345,
+      "cacheCreationInputTokens": 31494,
+      "webSearchRequests": 0,
+      "costUSD": 0.26451300000000005,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 4408,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 17,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "## Summary\n\nThe zsh (and other shell) completion scripts were emitted via `echo(comp.source())` / `echo(comp.complete())` as text, which on Windows Python gets written through a text-mode stdout that translates `\"\\n\"` \u2192 `\"\\r\\n\"`. The zsh completion script relies on a `\\` line continuation:\n\n```zsh\nresponse=(\"${(@f)$(env COMP_WORDS=\"${words[*]}\" COMP_CWORD=$((CURRENT-1)) \\\n%(complete_var)s=zsh_complete %(prog_name)s)}\")\n```\n\nA `\\` immediately followed by `\\r\\n` is **not** a valid line continuation (only `\\` + `\\n` is), so under MSYS2 zsh the command substitution never closes properly, corrupting the parser state and producing the `parse error near 'elif'` further down.\n\n**Fix** (`src/click/shell_completion.py`): encode the generated source/completion output to `bytes` before passing to `echo()`. Click's `echo()` already has a code path that writes bytes straight to the binary stream, bypassing the text-mode newline translation \u2014 guaranteeing `\\n`-only line endings regardless of platform.\n\nVerified:\n- `python -m pytest tests/test_shell_completion.py -q` \u2192 53 passed\n- `python -m pytest tests/ -q -k complet` \u2192 53 passed\n- Manual check confirms the generated zsh source string contains no `\\r` characters.\n\nNo tests, docs, or config were modified.",
+  "ttft_ms": 2179,
+  "type": "result",
+  "duration_ms": 101640,
+  "uuid": "ec57fa63-3ad2-496c-aa0a-cc10cafc481f",
+  "ttft_stream_ms": 1473,
+  "time_to_request_ms": 97,
+  "first_content_frame_ms": 2176,
+  "queued_turn_count": 0
+}

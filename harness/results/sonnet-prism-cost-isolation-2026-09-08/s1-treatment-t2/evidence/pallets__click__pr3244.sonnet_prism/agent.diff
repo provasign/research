@@ -1,0 +1,66 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..d7d85a3 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -67,23 +67,45 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+         stream._paused = False
+ 
+ 
+-class BytesIOCopy(io.BytesIO):
+-    """Patch ``io.BytesIO`` to let the written stream be copied to another.
++class BytesIOCopy:
++    """Mimic ``io.BytesIO`` while backing the data with a real, file
++    descriptor-backed temporary file, and let the written stream be
++    copied to another buffer.
++
++    Being backed by a real file means the stream can be used with APIs
++    that require a file descriptor, such as passing ``sys.stdout`` or
++    ``sys.stderr`` to :func:`subprocess.run`.
+ 
+     .. versionadded:: 8.2
++    .. versionchanged:: 8.3.3
++        Backed by a real file instead of an in-memory buffer so that
++        ``fileno()`` works. :issue:`2522`
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+-        super().__init__()
+         self.copy_to = copy_to
++        self._file = tempfile.TemporaryFile()
++
++    def write(self, b: ReadableBuffer) -> int:
++        self.copy_to.write(b)
++        return self._file.write(b)
+ 
+     def flush(self) -> None:
+-        super().flush()
++        self._file.flush()
+         self.copy_to.flush()
+ 
+-    def write(self, b: ReadableBuffer) -> int:
+-        self.copy_to.write(b)
+-        return super().write(b)
++    def getvalue(self) -> bytes:
++        pos = self._file.tell()
++        self._file.seek(0)
++        data = self._file.read()
++        self._file.seek(pos)
++        return data
++
++    def fileno(self) -> int:
++        return self._file.fileno()
++
++    def __getattr__(self, name: str) -> t.Any:
++        return getattr(self._file, name)
+ 
+ 
+ class StreamMixer:
+@@ -453,6 +475,8 @@ class CliRunner:
+                     os.environ[key] = value
+             yield (stream_mixer.stdout, stream_mixer.stderr, stream_mixer.output)
+         finally:
++            stream_mixer.stdout._file.close()
++            stream_mixer.stderr._file.close()
+             for key, value in old_env.items():
+                 if value is None:
+                     try:

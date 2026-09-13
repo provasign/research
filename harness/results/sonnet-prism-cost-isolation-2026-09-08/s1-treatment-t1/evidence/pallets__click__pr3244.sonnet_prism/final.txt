@@ -1,0 +1,9 @@
+All 1419 tests pass. The fix resolves the issue.
+
+## Summary
+
+The problem: `CliRunner`'s `isolation()` context manager backs `sys.stdout`/`sys.stderr` with `io.BytesIO`-based buffers (`BytesIOCopy`), which don't support `fileno()`. Code under test that passes these streams to `subprocess.run(..., stdout=sys.stderr)` fails with `io.UnsupportedOperation: fileno`.
+
+Fix in `src/click/testing.py`: `BytesIOCopy` now lazily backs itself with a real `tempfile.TemporaryFile()` the first time `fileno()` is called, moving previously-captured bytes into it and keeping subsequent reads/writes/`getvalue()` in sync with whichever backing store is active. This keeps the common case (`io.BytesIO`, no real file descriptor, no leak risk) unchanged while making `fileno()` — and thus APIs like `subprocess.run` — work when actually needed. `close()` was overridden to also close the real file when present, so garbage collection doesn't leak file descriptors.
+
+Verified with the issue's reproduction case plus the full test suite (1419 passed, 24 skipped, 1 xfailed, no regressions, no resource warnings).

@@ -1,0 +1,9 @@
+Full test suite passes (1419 passed, no failures).
+
+## Summary
+
+**Root cause:** `CliRunner`'s stream isolation backed `sys.stdout`/`sys.stderr` with pure in-memory `io.BytesIO` objects (via `BytesIOCopy`). When application code passed one of these (e.g. `sys.stderr`) to `subprocess.run(..., stdout=...)`, `subprocess` calls `.fileno()` on it to hand a real OS file descriptor to the child process — but `io.BytesIO` doesn't support `fileno()`, raising `io.UnsupportedOperation`.
+
+**Fix** (`src/click/testing.py`, `BytesIOCopy`): back the stream with a real OS-level `tempfile.TemporaryFile()` in addition to the in-memory buffer, and add a `fileno()` method that delegates to it. Writes now go to both the in-memory buffer (for output capture as before) and the real file (so `fileno()`/`subprocess` calls work), and `close()` cleans up the temp file.
+
+Verified with the SSCCE from the issue (now passes) and the full existing test suite (1419 passed, 0 failed).

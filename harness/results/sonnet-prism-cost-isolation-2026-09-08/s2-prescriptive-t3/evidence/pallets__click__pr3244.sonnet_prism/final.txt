@@ -1,0 +1,12 @@
+## Summary
+
+**Root cause:** `CliRunner.isolation()` replaces `sys.stdout`/`sys.stderr` with `_NamedTextIOWrapper` instances backed by in-memory `io.BytesIO`-based `BytesIOCopy` buffers. `subprocess.run(..., stdout=sys.stderr)` calls `.fileno()` on the underlying buffer to get a real file descriptor, but `io.BytesIO` doesn't support `fileno()`, raising `io.UnsupportedOperation`.
+
+**Fix** (`src/click/testing.py`, `BytesIOCopy`): made `fileno()` work by lazily rolling the buffer over to a real `tempfile.TemporaryFile()` the first time a file descriptor is actually requested — mirroring `tempfile.SpooledTemporaryFile`'s own rollover trick, but keeping `BytesIOCopy` itself as a plain `io.BytesIO` subclass otherwise (so it needs no explicit closing and doesn't emit `ResourceWarning`s unless it actually rolled over). `getvalue()`/`write()`/`flush()`/`close()` were extended to transparently delegate to the backing file once it exists. Also added cleanup of the mixer's streams in `isolation()`'s `finally` block so any rolled-over temp files get closed.
+
+**Verification:**
+- The original repro no longer raises `UnsupportedOperation`.
+- `python -m pytest tests/` → 1419 passed, 24 skipped, 1 xfailed, 0 failed.
+- `ruff check` and `mypy` pass cleanly on the modified file.
+
+No tests, docs, or config were modified.

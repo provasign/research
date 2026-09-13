@@ -1,0 +1,110 @@
+{
+  "duration_api_ms": 157471,
+  "stop_reason": "end_turn",
+  "session_id": "483046f4-66f5-449a-a2a8-200d7ba78662",
+  "total_cost_usd": 0.4822360000000001,
+  "usage": {
+    "input_tokens": 56,
+    "cache_creation_input_tokens": 43057,
+    "cache_read_input_tokens": 816615,
+    "output_tokens": 14255,
+    "output_tokens_details": {
+      "thinking_tokens": 7463
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 43057,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 493,
+        "cache_read_input_tokens": 48205,
+        "cache_creation_input_tokens": 306,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 306
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 14,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004023,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 56,
+      "outputTokens": 14255,
+      "cacheReadInputTokens": 816615,
+      "cacheCreationInputTokens": 43057,
+      "webSearchRequests": 0,
+      "costUSD": 0.4782130000000001,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 7463,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 28,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "The original repro passes now, and the full test suite (1419 tests) passes with no failures or resource warnings.\n\n## Summary\n\nThe issue: `CliRunner`'s `sys.stdout`/`sys.stderr` during isolation were backed by `io.BytesIO`, which has no real OS file descriptor. Code under test calling `subprocess.run(..., stdout=sys.stderr)` triggered `stdout.fileno()`, raising `io.UnsupportedOperation`.\n\n**Fix** in `src/click/testing.py`: reworked `BytesIOCopy` (used by `StreamMixer` to back `stdout`/`stderr`) to be backed by a real `tempfile.TemporaryFile()` instead of subclassing `io.BytesIO`. This gives it a genuine `fileno()` (delegated via `__getattr__`), so passing `sys.stdout`/`sys.stderr` to `subprocess.run` now works instead of raising. `write()`/`flush()` still mirror data into the combined `output` stream, and `getvalue()` is reimplemented to read the full temp-file contents. Added explicit `close()` calls when isolation tears down, plus a `__del__` fallback to avoid leaking unclosed OS file descriptors (which otherwise surfaced as `ResourceWarning`s under pytest).\n\nVerified with the reported reproduction case and the full `tests/` suite (1419 passed, 24 skipped, 1 xfailed \u2014 no regressions).",
+  "ttft_ms": 2801,
+  "type": "result",
+  "duration_ms": 166968,
+  "uuid": "0eeb5be2-d412-4d0a-a344-269a9872ae76",
+  "ttft_stream_ms": 1085,
+  "time_to_request_ms": 36,
+  "first_content_frame_ms": 1673,
+  "queued_turn_count": 0
+}

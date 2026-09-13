@@ -1,0 +1,9 @@
+These are test files (which we're not supposed to modify), and both already pass with the current implementation — confirmed above. The change is complete.
+
+## Summary
+
+The bug: `CliRunner`'s captured `sys.stdout`/`sys.stderr` were backed by `io.BytesIO`, which has no real file descriptor. Passing them to `subprocess.run(..., stdout=sys.stderr)` made `subprocess` call `.fileno()`, raising `io.UnsupportedOperation`.
+
+Fix in `src/click/testing.py`: `BytesIOCopy` (used by `StreamMixer` to back the isolated stdout/stderr streams) is now backed by a real `tempfile.TemporaryFile()` instead of `io.BytesIO`, so `fileno()` returns a valid file descriptor while still supporting `write`/`flush`/`getvalue` and mirroring writes into the combined `output` stream. Added an explicit `close()` call in `CliRunner.isolation()`'s cleanup and a `__del__` safety net on `BytesIOCopy` so the temp files are always released (avoiding descriptor/resource leaks).
+
+Verified: the original repro script now passes, and the full test suite (`tests/`) passes — 1420 passed, 24 skipped, 1 xfailed, no failures or resource warnings.

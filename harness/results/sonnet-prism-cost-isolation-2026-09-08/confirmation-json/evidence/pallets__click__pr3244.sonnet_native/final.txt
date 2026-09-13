@@ -1,0 +1,15 @@
+## Summary
+
+The bug was in `src/click/testing.py`'s `BytesIOCopy` class, used by `CliRunner.isolation()` to back `sys.stdout`/`sys.stderr` during test invocation. It subclassed `io.BytesIO`, an in-memory buffer with no real file descriptor. When code under test passed `sys.stdout`/`sys.stderr` to `subprocess.run(..., stdout=<stream>)`, `subprocess` needs `stream.fileno()`, which `io.BytesIO` doesn't support, raising `io.UnsupportedOperation`.
+
+**Fix:** Reworked `BytesIOCopy` to be backed by a real OS-level temporary file (`tempfile.TemporaryFile(buffering=0)`) instead of an in-memory `io.BytesIO`. It now:
+- Delegates attribute access (`fileno`, `readable`, `writable`, `seekable`, `closed`, etc.) to the real file via `__getattr__`.
+- Overrides `write`/`flush` to also copy into the combined output stream.
+- Overrides `getvalue()` to read back the full contents (which now also captures anything a child process wrote directly to the fd, e.g. subprocess output redirected to the captured stream).
+- Adds `__del__` to close the file automatically so it behaves like `io.BytesIO` when never explicitly closed (avoiding resource leaks/warnings).
+
+Also added explicit `close()` calls for `stream_mixer.stdout`/`stderr` in `CliRunner.isolation()`'s `finally` block, after output has been captured, to release the file descriptors promptly at the end of each invocation.
+
+Verified: the original reproduction (`subprocess.run(["echo", "foo"], stdout=sys.stderr)` inside a `CliRunner.invoke`) no longer raises `UnsupportedOperation`, and the subprocess's output is correctly captured in `result.stderr`. Ran the full test suite (`tests/`, 1419 passed) plus targeted `tests/test_testing.py` and `tests/test_stream_lifecycle.py` — all pass, including resource-lifecycle tests, with no `ResourceWarning`s.
+
+No test, doc, changelog, or config files were modified — only `src/click/testing.py`.

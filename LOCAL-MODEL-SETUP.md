@@ -8,7 +8,7 @@ tool reuses the same models in `~/.ollama/models` (global, not tied to any repo)
                  ┌─ VS Code (Continue.dev)   → Ollama  (chat + autocomplete)
    Ollama  ──────┼─ Codex   → codex --oss --local-provider ollama
  (autostart      ├─ Claude Code → LiteLLM (Anthropic-compat shim) → Ollama
-  service)       └─ Research   → harness/run_local.py (hard-gated agent loop)
+  service)       └─ Research   → harness/runners/run_local.py (hard-gated agent loop)
 ```
 
 ## What's installed
@@ -72,7 +72,7 @@ are smoother; the shim exists so you *can* keep the Claude Code UX offline.
 
 ## 4) Research harness — hard-gated local tier
 For the study we do **not** reuse a coding-agent CLI (their tool gate is soft and
-their scaffolds differ). `harness/run_local.py` is a minimal neutral agent loop
+their scaffolds differ). `harness/runners/run_local.py` is a minimal neutral agent loop
 that talks straight to Ollama with a **hard** arm gate (the T arm is never given
 the graph tool) and writes the same run records as the Claude/GPT tiers:
 ```bash
@@ -85,7 +85,7 @@ python3 run_local.py --task tasks/jackson-serialize.json --arms T G --trials 5 \
 python3 rescore_java.py --task tasks/jackson-serialize.json
 python3 agg_jackson.py     # local tier auto-appears next to haiku/sonnet/opus
 ```
-See `harness/run_local.py` header for the tool protocol and caveats. Expect lower
+See `harness/runners/run_local.py` header for the tool protocol and caveats. Expect lower
 task completion than the cloud tiers (the local model is a genuinely weak tier —
 which is exactly the low-capability end the paper's capability-equalizer predicts
 the graph should help most, *if* the model can drive the graph at all).

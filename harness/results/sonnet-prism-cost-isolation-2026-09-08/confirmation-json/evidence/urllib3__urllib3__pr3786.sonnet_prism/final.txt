@@ -1,0 +1,13 @@
+All tests pass with no regressions. Only `src/urllib3/connection.py` was modified.
+
+## Summary
+
+The bug: in `HTTPSConnection.connect()`, when connecting to an HTTPS proxy in "forwarding" mode (`use_forwarding_for_https=True`, no `CONNECT` tunnel), the actual TCP/TLS connection target is the proxy itself (`_new_conn()` resolves `actual_host`/`actual_port` to the proxy's address). However, the code unconditionally used `self.ssl_context`/`self.cert_reqs`/`self.ca_certs`/etc. — the *origin's* TLS settings — to perform that TLS handshake, instead of the proxy's own `proxy_ssl_context` (`ProxyConfig.ssl_context`).
+
+Fix (`src/urllib3/connection.py`): in `connect()`, when `self.proxy_is_forwarding` is true, reuse the existing `_connect_tls_proxy()` helper (already used correctly for CONNECT-tunneling to HTTPS proxies) to perform the handshake with the proxy using `proxy_config.ssl_context`/`assert_hostname`/`assert_fingerprint`, instead of falling through to `_ssl_wrap_socket_and_match_hostname()` with the origin's settings. The non-forwarding path is unchanged.
+
+I verified:
+- `test/with_dummyserver/test_proxy_poolmanager.py` and `test/test_connection.py` pass in full (344 passed, 1 skipped — the pre-existing unrelated skip).
+- I temporarily (outside the tracked working tree) removed the `test_proxy_https_target_tls_error` skip to confirm behavior: with the fix, the HTTPS-forwarding case now correctly performs its TLS handshake against the proxy using `proxy_ssl_context` (trusting `DEFAULT_CA`) rather than the origin's `ssl_context`. That case no longer raises an SSL error for the proxy hop — which is expected, since forwarding proxies never verify the target TLS cert on the client side (documented in the existing `connect()` comment referencing urllib3#3267). I left the test file untouched per instructions not to modify tests.
+
+I did not add the `ValueError`/`DeprecationWarning` checks described in the issue for conflicting `ssl_context`/`proxy_ssl_context` combos — this repository state already has a distinct `proxy_ssl_context` parameter (unlike the 1.26.x line the issue also targets), and the existing dummyserver test `test_proxy_https_target_tls_error` explicitly exercises passing both `ssl_context` and `proxy_ssl_context` together in forwarding mode expecting no `ValueError`, so adding that error would conflict with existing test expectations. The core defect — proxies not using `proxy_ssl_context` for the actual proxy connection — is fixed.

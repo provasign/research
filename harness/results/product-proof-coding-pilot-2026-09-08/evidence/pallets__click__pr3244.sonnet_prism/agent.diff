@@ -1,0 +1,72 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..3429f03 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -67,23 +67,54 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+         stream._paused = False
+ 
+ 
+-class BytesIOCopy(io.BytesIO):
++class BytesIOCopy:
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
++    Stays purely in-memory (like ``io.BytesIO``) until ``fileno()`` is
++    requested, at which point it transparently rolls over to a real,
++    on-disk file. This lets code under test pass ``sys.stdout``/
++    ``sys.stderr`` to APIs such as :func:`subprocess.run` without raising
++    ``io.UnsupportedOperation``, while avoiding real file descriptors (and
++    the finalization overhead that comes with them) for the common case
++    where none are needed.
++
+     .. versionadded:: 8.2
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+-        super().__init__()
++        self._file: t.Any = io.BytesIO()
+         self.copy_to = copy_to
+ 
++    def __getattr__(self, name: str) -> t.Any:
++        return getattr(self._file, name)
++
++    def fileno(self) -> int:
++        if isinstance(self._file, io.BytesIO):
++            pos = self._file.tell()
++            real_file = tempfile.TemporaryFile()
++            real_file.write(self._file.getvalue())
++            real_file.seek(pos)
++            self._file = real_file
++
++        return self._file.fileno()
++
+     def flush(self) -> None:
+-        super().flush()
++        self._file.flush()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+-        return super().write(b)
++        return self._file.write(b)
++
++    def close(self) -> None:
++        self._file.close()
++
++    def getvalue(self) -> bytes:
++        pos = self._file.tell()
++        self._file.seek(0)
++        data = self._file.read()
++        self._file.seek(pos)
++        return data
+ 
+ 
+ class StreamMixer:
+@@ -471,6 +502,8 @@ class CliRunner:
+             _compat.should_strip_ansi = old__compat_should_strip_ansi
+             formatting.FORCED_WIDTH = old_forced_width
+             pdb.Pdb.__init__ = old_pdb_init  # type: ignore[method-assign]
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
+ 
+     def invoke(
+         self,

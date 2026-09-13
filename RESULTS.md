@@ -51,7 +51,7 @@ The deterministic `QueryData` result contains the full local method family even 
 
 ## How the numbers are produced
 
-The scorer compares exact repository-relative sites with committed task ground truth. `harness/impact_oracle.py` validates task pins and repository identity, normalizes engine output, and fails when recall, precision, completeness, or payload crosses the task's configured floor. Agent run records include their model, invocation identifier, session identifier, transcript location, token accounting, cost, and scored answer.
+The scorer compares exact repository-relative sites with committed task ground truth. `harness/scoring/impact_oracle.py` validates task pins and repository identity, normalizes engine output, and fails when recall, precision, completeness, or payload crosses the task's configured floor. Agent run records include their model, invocation identifier, session identifier, transcript location, token accounting, cost, and scored answer.
 
 No product code contains task names or expected answers. Ground truth and thresholds live in this research repository, separate from Prism and Grove. Product behavior is implemented through general call, type, interface, and search operations.
 
@@ -67,7 +67,7 @@ No product code contains task names or expected answers. Ground truth and thresh
 
 - Harness guide: [harness/README.md](harness/README.md)
 - Task definitions: [`harness/tasks/`](harness/tasks/)
-- Impact-oracle reliability audit: [`harness/runs/impact-oracle-reliability-2026-09-07/`](harness/runs/impact-oracle-reliability-2026-09-07/)
-- Current accuracy and efficiency campaign: [`harness/runs/prism-accuracy-efficiency-2026-09-06/`](harness/runs/prism-accuracy-efficiency-2026-09-06/)
+- Impact-oracle reliability audit: [`harness/results/impact-oracle-reliability-2026-09-07/`](harness/results/impact-oracle-reliability-2026-09-07/)
+- Current accuracy and efficiency campaign: [`harness/results/prism-accuracy-efficiency-2026-09-06/`](harness/results/prism-accuracy-efficiency-2026-09-06/)
 - Historical multi-tier study: [harness/BENCH-MATRIX.md](harness/BENCH-MATRIX.md)
-- Invalid and negative experiments: [harness/SWEBENCH-AB-RESULTS.md](harness/SWEBENCH-AB-RESULTS.md), [harness/PR-REPLAY-FINDINGS.md](harness/PR-REPLAY-FINDINGS.md)
+- Invalid and negative experiments: [harness/docs/SWEBENCH-AB-RESULTS.md](harness/docs/SWEBENCH-AB-RESULTS.md), [harness/docs/PR-REPLAY-FINDINGS.md](harness/docs/PR-REPLAY-FINDINGS.md)

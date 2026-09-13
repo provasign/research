@@ -1,0 +1,14 @@
+## Summary
+
+Fixed the root cause in `src/click/testing.py`: `BytesIOCopy` (used by `CliRunner`'s `StreamMixer` to back `sys.stdout`/`sys.stderr` during test isolation) subclassed `io.BytesIO`, whose `fileno()` always raises `io.UnsupportedOperation`. This made it impossible to pass captured streams to APIs like `subprocess.run(..., stdout=sys.stderr)` that need a real file descriptor.
+
+The fix backs each `BytesIOCopy` with a real `tempfile.TemporaryFile()` (which has a genuine OS-level file descriptor) alongside the in-memory `io.BytesIO` buffer:
+- `fileno()` now returns the real file's descriptor, so subprocess (or anything else needing a raw fd) can write directly to it.
+- Any bytes written directly to that descriptor (bypassing Python's `write()`) are synced into the in-memory buffer and the mixed `output` stream whenever `write()` or `getvalue()` is called, so `result.stdout`/`stderr`/`output` still reflect subprocess output correctly.
+- `close()` also cleans up the temp file.
+
+Verified with:
+- A reproduction of the exact issue scenario (`subprocess.run(["echo", "foo"], stdout=sys.stderr)` inside a Click command invoked via `CliRunner`) — no longer raises, and captured output correctly contains `foo`.
+- Full existing test suite (`tests/`): 1419 passed, 24 skipped, 1 xfailed — no regressions.
+
+No test, doc, changelog, or config files were modified.

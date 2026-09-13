@@ -1,0 +1,38 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..6c77d1a 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -85,6 +85,33 @@ class BytesIOCopy(io.BytesIO):
+         self.copy_to.write(b)
+         return super().write(b)
+ 
++    def fileno(self) -> int:
++        """Lazily back this stream with a real, file descriptor backed
++        temporary file so it can be used by APIs (such as
++        :func:`subprocess.run`) that require a real ``fileno()``, e.g.
++        when a command under test does
++        ``subprocess.run(..., stdout=sys.stderr)``.
++
++        Once requested, further writes go directly to the temporary file
++        (mirrored, as before, to ``copy_to``), and its contents are
++        included when this stream is read via :meth:`getvalue`.
++        """
++        if not hasattr(self, "_fd_file"):
++            self._fd_file = tempfile.TemporaryFile()
++        return self._fd_file.fileno()
++
++    def getvalue(self) -> bytes:
++        fd_file = getattr(self, "_fd_file", None)
++        if fd_file is None:
++            return super().getvalue()
++        fd_file.flush()
++        pos = fd_file.tell()
++        fd_file.seek(0)
++        try:
++            return super().getvalue() + fd_file.read()
++        finally:
++            fd_file.seek(pos)
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.

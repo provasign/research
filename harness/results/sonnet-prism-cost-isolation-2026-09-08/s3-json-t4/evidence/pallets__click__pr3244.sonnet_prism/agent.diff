@@ -1,0 +1,78 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..0e0e239 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -70,21 +70,63 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+ class BytesIOCopy(io.BytesIO):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
++    Stays purely in-memory until :meth:`fileno` is requested, at which
++    point the contents are transparently moved to a real, file
++    descriptor-backed temporary file. This lets streams handed to invoked
++    commands be passed to APIs such as :class:`subprocess.Popen` that
++    require a real file descriptor, without paying the cost of an on-disk
++    file for the common case where one is never needed.
++
+     .. versionadded:: 8.2
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._file: t.IO[bytes] | None = None
++
++    def _rollover(self) -> t.IO[bytes]:
++        if self._file is None:
++            file = tempfile.TemporaryFile()
++            file.write(super().getvalue())
++            file.seek(super().tell())
++            self._file = file
++        return self._file
++
++    def fileno(self) -> int:
++        return self._rollover().fileno()
+ 
+     def flush(self) -> None:
+-        super().flush()
++        if self._file is not None:
++            self._file.flush()
++        else:
++            super().flush()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
++
++        if self._file is not None:
++            return self._file.write(b)
++
+         return super().write(b)
+ 
++    def getvalue(self) -> bytes:
++        if self._file is not None:
++            pos = self._file.tell()
++            self._file.seek(0)
++            try:
++                return self._file.read()
++            finally:
++                self._file.seek(pos)
++
++        return super().getvalue()
++
++    def close(self) -> None:
++        if self._file is not None:
++            self._file.close()
++        super().close()
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.
+@@ -471,6 +513,8 @@ class CliRunner:
+             _compat.should_strip_ansi = old__compat_should_strip_ansi
+             formatting.FORCED_WIDTH = old_forced_width
+             pdb.Pdb.__init__ = old_pdb_init  # type: ignore[method-assign]
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
+ 
+     def invoke(
+         self,

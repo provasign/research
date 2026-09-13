@@ -1,0 +1,110 @@
+{
+  "duration_api_ms": 101188,
+  "stop_reason": "end_turn",
+  "session_id": "f0cd2ea9-263f-418b-b310-32ca0ec0b3ad",
+  "total_cost_usd": 0.2837758,
+  "usage": {
+    "input_tokens": 36,
+    "cache_creation_input_tokens": 25814,
+    "cache_read_input_tokens": 427199,
+    "output_tokens": 9098,
+    "output_tokens_details": {
+      "thinking_tokens": 5293
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 25814,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 460,
+        "cache_read_input_tokens": 34379,
+        "cache_creation_input_tokens": 425,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 425
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 15,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004028,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 36,
+      "outputTokens": 9098,
+      "cacheReadInputTokens": 427199,
+      "cacheCreationInputTokens": 25814,
+      "webSearchRequests": 0,
+      "costUSD": 0.27974780000000005,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 5293,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 18,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "All tests pass (1419 passed, 24 skipped, 1 xfailed \u2014 none failed).\n\n## Summary\n\n**Root cause:** `CliRunner`'s isolation replaces `sys.stdin`/`sys.stdout`/`sys.stderr` with `_NamedTextIOWrapper` instances backed by in-memory `io.BytesIO` buffers. These have no real OS file descriptor, so calling `.fileno()` on them (as `subprocess.run`/`Popen` do when given a file-like `stdout`/`stderr`) raises `io.UnsupportedOperation`.\n\n**Fix** (`src/click/testing.py`): Added a `fileno()` override to `_NamedTextIOWrapper` that falls back to the real, non-captured terminal stream (`sys.__stdin__`/`sys.__stdout__`/`sys.__stderr__`) based on the wrapper's name, mirroring the existing pattern used for the `pdb` terminal fallback in the same file. This lets code that passes `sys.stdout`/`sys.stderr` to `subprocess.run` work under `CliRunner` just as it does outside of it (writing to the real stream instead of the captured buffer), instead of crashing with a confusing `UnsupportedOperation`.\n\nVerified with the exact SSCCE from the issue (now passes) plus the full existing test suite (no regressions).",
+  "ttft_ms": 1600,
+  "type": "result",
+  "duration_ms": 104080,
+  "uuid": "bf35a452-e706-455e-ae96-25a6d537b60c",
+  "ttft_stream_ms": 1015,
+  "time_to_request_ms": 23,
+  "first_content_frame_ms": 1599,
+  "queued_turn_count": 0
+}

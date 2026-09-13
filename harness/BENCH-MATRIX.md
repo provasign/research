@@ -1,6 +1,6 @@
 # Model × arm benchmark — does Prism help, per tier, and at what cost?
 
-9 change-impact tasks (Java/Go/TypeScript/Python, 8→310 sites), both arms steered, oracle-scored, medians across trials. Only the tool varies within a model row.
+39 change-impact tasks (Java/Go/TypeScript/Python, 8→310 sites), both arms steered, oracle-scored, medians across trials. Only the tool varies within a model row.
 
 ## Recall · turns · tokens · speed
 
@@ -12,7 +12,7 @@
 | haiku | with Prism | 1.000 | 5 | 127K | 6K | 59 |
 | sonnet | without Prism | 1.000 | 46 | 1225K | 22K | 234 |
 | sonnet | with Prism | 1.000 | 4 | 139K | 3K | 33 |
-| opus | without Prism | 1.000 | 20 | 475K | 12K | 133 |
+| opus | without Prism | 1.000 | 16 | 321K | 7K | 98 |
 | opus | with Prism | 1.000 | 4 | 85K | 3K | 30 |
 
 ## Precision & F1 (derived) — did an arm win recall by over-reporting?
@@ -25,7 +25,7 @@
 | haiku | with Prism | 1.000 | 0.759 | 0.863 |
 | sonnet | without Prism | 1.000 | 0.800 | 0.889 |
 | sonnet | with Prism | 1.000 | 0.745 | 0.854 |
-| opus | without Prism | 1.000 | 0.612 | 0.759 |
+| opus | without Prism | 1.000 | 0.875 | 0.933 |
 | opus | with Prism | 1.000 | 0.745 | 0.854 |
 
 Prism precision sits at ~0.74–0.92 (not ~0.1), so it is **not** inflating recall by dumping the blast radius. Two caveats: (1) derived from recall·gt/sites_submitted (n_sites may include a few test sites the exact scorer excludes, so this slightly *under*states precision); (2) ground truth is the sites the PR *actually changed* — a subset of the full caller set `change_impact` returns — so many "false positives" are real callers that specific PR didn't touch. The engine's precision against the true blast radius is 0.948 (see RESULTS.md).
@@ -37,29 +37,59 @@ Prism precision sits at ~0.74–0.92 (not ~0.1), so it is **not** inflating reca
 | local | 0.156 → 1.000 | 96% | 13 → 3 | 2.3× |
 | haiku | 0.843 → 1.000 | 90% | 31 → 5 | 2.5× |
 | sonnet | 1.000 → 1.000 | 89% | 46 → 4 | 7.2× |
-| opus | 1.000 → 1.000 | 82% | 20 → 4 | 4.4× |
+| opus | 1.000 → 1.000 | 73% | 16 → 4 | 3.2× |
 
 ## Recall by language (without → with Prism, all models pooled)
 
 | Language | without Prism | with Prism |
 |---|---:|---:|
 | go | 1.000 | 1.000 |
-| java | 0.941 | 1.000 |
-| python | 0.766 | 1.000 |
-| typescript | 0.946 | 0.946 |
+| java | 0.955 | 1.000 |
+| python | 1.000 | 1.000 |
+| typescript | 1.000 | 0.946 |
 
 ## Per task (recall, without → with Prism)
 
 | Task | sites | local | haiku | sonnet | opus |
 |---|---:|---|---|---|---|
+| flaskcov-frompyfile | 5 | —→— | —→— | —→— | 1.000→— |
+| flaskcov-tag | 5 | —→— | —→— | —→— | 1.000→— |
+| django-gettablelist | 6 | —→— | —→— | —→— | 0.833→— |
+| django-adaptdatetime | 7 | —→— | —→— | —→— | 1.000→— |
+| flaskcov-afterrequest | 7 | —→— | —→— | —→— | 1.000→— |
+| django-connparams | 8 | —→— | —→— | —→— | 1.000→— |
+| flaskcov-command | 8 | —→— | —→— | —→— | 1.000→— |
 | jackson-jsonnode-get | 8 | 0.000→1.000 | 1.000→1.000 | 1.000→1.000 | 1.000→1.000 |
+| flaskcov-setattr | 11 | —→— | —→— | —→— | 1.000→— |
+| django-dbtype | 12 | —→— | —→— | —→— | 1.000→— |
+| django-quotevalue | 13 | —→— | —→— | —→— | 1.000→— |
+| flaskcov-loadplugincommands | 13 | —→— | —→— | —→— | 1.000→— |
+| gin-render-impact | 13 | —→— | —→— | —→— | 1.000→— |
+| typeorm-escapequeryparams | 13 | —→— | —→— | —→— | 1.000→— |
+| flaskcov-untag | 15 | —→— | —→— | —→— | 1.000→— |
+| commons-collections-transformer-transform | 17 | —→— | —→— | —→— | 1.000→— |
+| flaskcov-addtemplatefilter | 17 | —→— | —→— | —→— | 1.000→— |
+| flaskcov-shouldsetcookie | 20 | —→— | —→— | —→— | 1.000→— |
+| flaskcov-check | 22 | —→— | —→— | —→— | 1.000→— |
 | jackson-settable-set | 22 | 0.000→1.000 | 0.955→1.000 | 0.955→1.000 | 1.000→1.000 |
+| typeorm-preparehydrated | 24 | —→— | —→— | —→— | 1.000→— |
+| grafana-securevalue-get | 26 | —→— | —→— | —→— | 0.000→— |
+| typeorm-createqueryrunner | 27 | —→— | —→— | —→— | 1.000→— |
+| grafana-session-delete | 29 | —→— | —→— | —→— | 0.000→— |
+| typeorm-obtainmaster | 29 | —→— | —→— | —→— | 1.000→— |
+| grafana-featuremanager-isenabled | 30 | —→— | —→— | —→— | 0.000→— |
 | django-quotename | 32 | 0.156→1.000 | 0.750→1.000 | 1.000→1.000 | 1.000→1.000 |
+| grafana-callresource-impact | 33 | —→— | —→— | —→— | 1.000→— |
 | typeorm-driver-escape | 37 | 0.351→0.946 | 0.460→0.946 | 1.000→0.946 | 1.000→0.946 |
 | jackson-writetypeprefix | 38 | 0.105→1.000 | 0.895→1.000 | 1.000→1.000 | 1.000→1.000 |
 | grafana-checkhealth-impact | 41 | 1.000→1.000 | 1.000→1.000 | 1.000→1.000 | 1.000→1.000 |
+| typeorm-normalizetype | 42 | —→— | —→— | —→— | 0.988→— |
 | grafana-querydata-impact | 51 | 0.843→0.843 | 0.843→0.137 | 0.980→1.000 | 0.902→0.980 |
+| jackson-serializewithtype | 58 | —→— | —→— | —→— | 1.000→— |
+| grafana-bigblast-txsession | 93 | —→— | —→— | —→— | 1.000→— |
+| jackson-deserialize | 104 | —→— | —→— | —→— | 1.000→— |
 | jackson-serialize | 108 | 0.556→0.556 | 0.556→0.982 | 0.982→0.982 | 1.000→0.982 |
+| commons-collections-mapiterator-next | 142 | —→— | —→— | —→— | 0.585→— |
 | guava-forwarding-delegate | 310 | 0.171→0.171 | 0.171→0.690 | 0.265→0.997 | 0.997→0.997 |
 
 ## Reading this

@@ -1,0 +1,110 @@
+{
+  "duration_api_ms": 168991,
+  "stop_reason": "end_turn",
+  "session_id": "3ff92ca7-2a4c-4abc-80e4-65334b7971ea",
+  "total_cost_usd": 0.44982099999999997,
+  "usage": {
+    "input_tokens": 46,
+    "cache_creation_input_tokens": 40639,
+    "cache_read_input_tokens": 682025,
+    "output_tokens": 14674,
+    "output_tokens_details": {
+      "thinking_tokens": 7605
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 40639,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 668,
+        "cache_read_input_tokens": 45599,
+        "cache_creation_input_tokens": 494,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 494
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 15,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004028,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 46,
+      "outputTokens": 14674,
+      "cacheReadInputTokens": 682025,
+      "cacheCreationInputTokens": 40639,
+      "webSearchRequests": 0,
+      "costUSD": 0.445793,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 7605,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 23,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "The issue is resolved: no more `UnsupportedOperation`, and the subprocess's output is captured correctly in `stderr`.\n\n## Summary\n\nThe bug was in `src/click/testing.py`'s `BytesIOCopy`, which subclassed `io.BytesIO` to back `sys.stdout`/`sys.stderr` during `CliRunner` isolation. In-memory `BytesIO` objects have no real file descriptor, so `BytesIO.fileno()` raises `io.UnsupportedOperation`. `subprocess.run(..., stdout=<file-like>)` calls `.fileno()` on any non-`PIPE`/`DEVNULL`/int stdout argument, so redirecting a subprocess's output to `sys.stdout`/`sys.stderr` inside a test invoked via `CliRunner` always crashed \u2014 even though it works fine outside of tests.\n\n**Fix**: `BytesIOCopy` now starts backed by an in-memory `io.BytesIO` (cheap, no open fd, preserving existing behavior/tests), but lazily \"materializes\" into a real `tempfile.TemporaryFile()` the first time `fileno()` is accessed, copying over any already-buffered bytes. This makes `fileno()` (and therefore `subprocess.run` redirection) work, while normal captured output continues to work as before. Added a `close()` method and call it from `CliRunner.isolation()`'s cleanup to avoid leaking the materialized file descriptor.\n\nVerified:\n- `python -m pytest` (full suite): **1419 passed, 24 skipped, 1 xfailed** (no failures).\n- The original reproduction script (`subprocess.run([\"echo\", \"foo\"], stdout=sys.stderr)` invoked via `CliRunner`) now succeeds with `exit_code == 0` and correctly captures `\"foo\\n\"` in `result.stderr`.\n\nNo tests, docs, or config were modified; only `src/click/testing.py` was changed. Nothing was committed.",
+  "ttft_ms": 2544,
+  "type": "result",
+  "duration_ms": 175578,
+  "uuid": "7c45f5b5-1829-4477-a2f2-ee7af04c3f09",
+  "ttft_stream_ms": 1826,
+  "time_to_request_ms": 32,
+  "first_content_frame_ms": 2543,
+  "queued_turn_count": 0
+}

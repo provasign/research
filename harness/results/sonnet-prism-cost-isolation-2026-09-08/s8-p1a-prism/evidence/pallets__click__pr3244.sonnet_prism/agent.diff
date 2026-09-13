@@ -1,0 +1,51 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..e1342e3 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -67,9 +67,15 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+         stream._paused = False
+ 
+ 
+-class BytesIOCopy(io.BytesIO):
++class BytesIOCopy(tempfile.SpooledTemporaryFile):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
++    This is backed by a :class:`tempfile.SpooledTemporaryFile` instead of
++    a plain :class:`io.BytesIO` so that it exposes a real file descriptor
++    (through ``fileno()``) once needed. This allows code under test to pass
++    ``sys.stdout``/``sys.stderr`` to APIs such as :func:`subprocess.run`
++    without raising ``io.UnsupportedOperation``.
++
+     .. versionadded:: 8.2
+     """
+ 
+@@ -85,6 +91,20 @@ class BytesIOCopy(io.BytesIO):
+         self.copy_to.write(b)
+         return super().write(b)
+ 
++    def getvalue(self) -> bytes:
++        pos = self.tell()
++        self.seek(0)
++        try:
++            return self.read()
++        finally:
++            self.seek(pos)
++
++    def __del__(self) -> None:
++        # Silently close instead of using SpooledTemporaryFile's default
++        # behavior of emitting a ResourceWarning, since instances of this
++        # class are commonly left for the garbage collector to clean up.
++        self.close()
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.
+@@ -471,6 +491,8 @@ class CliRunner:
+             _compat.should_strip_ansi = old__compat_should_strip_ansi
+             formatting.FORCED_WIDTH = old_forced_width
+             pdb.Pdb.__init__ = old_pdb_init  # type: ignore[method-assign]
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
+ 
+     def invoke(
+         self,

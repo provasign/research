@@ -1,0 +1,15 @@
+All 1419 tests pass, plus the reproducer from the issue.
+
+## Summary
+
+The problem: `CliRunner`'s isolated `sys.stdout`/`sys.stderr` were backed by `io.BytesIO`, which has no real file descriptor. `subprocess.run(..., stdout=sys.stderr)` calls `.fileno()` on the given stream, and `io.BytesIO.fileno()` raises `io.UnsupportedOperation`.
+
+Fix in `src/click/testing.py`: backed the mixed stdout/stderr/output streams with a new `SpooledBytesIO` class (subclass of `tempfile.SpooledTemporaryFile`) instead of `io.BytesIO`. `SpooledTemporaryFile.fileno()` transparently rolls the buffer over to a real on-disk file and returns a genuine file descriptor, so passing `sys.stdout`/`sys.stderr` to `subprocess.run` now works exactly as it does outside of `CliRunner`.
+
+Supporting changes:
+- `BytesIOCopy` now extends `SpooledBytesIO` (adding `getvalue()` since `SpooledTemporaryFile` doesn't provide one).
+- `StreamMixer` uses `SpooledBytesIO` for its `stdout`/`stderr`/`output` buffers.
+- `isolation()` explicitly closes the mixer's streams in its `finally` block (after `Result` has already captured their contents via `getvalue()`).
+- Overrode `SpooledBytesIO.__del__` to close silently instead of emitting `SpooledTemporaryFile`'s `ResourceWarning`, preserving `io.BytesIO`-like semantics for streams that aren't explicitly closed.
+
+Verified with the exact reproducer from the issue and the full existing test suite (`tests/` — 1419 passed).

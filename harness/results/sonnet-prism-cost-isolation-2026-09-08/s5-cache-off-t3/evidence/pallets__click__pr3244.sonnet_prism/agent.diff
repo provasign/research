@@ -1,0 +1,29 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..107acbe 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -85,6 +85,24 @@ class BytesIOCopy(io.BytesIO):
+         self.copy_to.write(b)
+         return super().write(b)
+ 
++    def fileno(self) -> int:
++        """Raise a clear error explaining why this stream can't be used
++        as a real file descriptor, instead of letting the caller hit a
++        confusing low-level traceback (e.g. from :mod:`subprocess`).
++
++        The streams ``CliRunner`` substitutes for ``sys.stdout`` and
++        ``sys.stderr`` are in-memory buffers, so they don't have an
++        underlying OS file descriptor.
++
++        .. versionadded:: 8.3.3
++            :issue:`2522`
++        """
++        raise io.UnsupportedOperation(
++            "This stream is captured by CliRunner and is not backed by a "
++            "real file descriptor, so it can't be used with APIs (such as "
++            "subprocess.run) that require one."
++        )
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.

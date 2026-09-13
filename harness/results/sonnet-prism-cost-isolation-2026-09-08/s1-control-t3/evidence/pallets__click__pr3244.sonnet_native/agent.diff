@@ -1,0 +1,81 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..b45f341 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -86,6 +86,65 @@ class BytesIOCopy(io.BytesIO):
+         return super().write(b)
+ 
+ 
++class _FileIOCopy(io.RawIOBase):
++    """Wrap a real, OS-backed temporary file so it behaves like
++    :class:`BytesIOCopy`, but exposes a working ``fileno()``.
++
++    This allows code under test to pass ``sys.stdout``/``sys.stderr``
++    directly to APIs that require a real file descriptor, such as
++    :class:`subprocess.Popen`.
++
++    .. versionadded:: 8.3
++    """
++
++    def __init__(self, copy_to: io.BytesIO) -> None:
++        self._file = tempfile.TemporaryFile()
++        self.copy_to = copy_to
++
++    def fileno(self) -> int:
++        return self._file.fileno()
++
++    def isatty(self) -> bool:
++        return False
++
++    def writable(self) -> bool:
++        return True
++
++    def readable(self) -> bool:
++        return True
++
++    def seekable(self) -> bool:
++        return True
++
++    def write(self, b: ReadableBuffer) -> int:
++        self.copy_to.write(b)
++        return self._file.write(b)
++
++    def flush(self) -> None:
++        self._file.flush()
++        self.copy_to.flush()
++
++    def seek(self, offset: int, whence: int = 0) -> int:
++        return self._file.seek(offset, whence)
++
++    def tell(self) -> int:
++        return self._file.tell()
++
++    def read(self, size: int = -1) -> bytes:
++        return self._file.read(size)
++
++    def getvalue(self) -> bytes:
++        pos = self._file.tell()
++        self._file.seek(0)
++        data = self._file.read()
++        self._file.seek(pos)
++        return data
++
++    def close(self) -> None:
++        self._file.close()
++        super().close()
++
++
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.
+ 
+@@ -96,8 +155,8 @@ class StreamMixer:
+ 
+     def __init__(self) -> None:
+         self.output: io.BytesIO = io.BytesIO()
+-        self.stdout: io.BytesIO = BytesIOCopy(copy_to=self.output)
+-        self.stderr: io.BytesIO = BytesIOCopy(copy_to=self.output)
++        self.stdout: _FileIOCopy = _FileIOCopy(copy_to=self.output)
++        self.stderr: _FileIOCopy = _FileIOCopy(copy_to=self.output)
+ 
+ 
+ class _NamedTextIOWrapper(io.TextIOWrapper):

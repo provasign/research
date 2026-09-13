@@ -1,0 +1,12 @@
+The issue is resolved — no exception, exit code 0.
+
+## Summary
+
+**Root cause:** `CliRunner`'s `isolation()` replaced `sys.stdout`/`sys.stderr` with `_NamedTextIOWrapper` objects backed by `io.BytesIO`. `io.BytesIO` has no real OS file descriptor, so calling `.fileno()` on it (as `subprocess.run(..., stdout=sys.stderr)` does) raised `io.UnsupportedOperation`.
+
+**Fix** (`src/click/testing.py`):
+- Changed `BytesIOCopy` to wrap a real `tempfile.TemporaryFile()` instead of subclassing `io.BytesIO`, so it has a genuine, subprocess-usable file descriptor. Delegates unknown attributes/methods (`fileno`, `closed`, `read`, `seek`, etc.) to the underlying file via `__getattr__`, keeps the existing `write`/`flush` copy-to-mixed-output behavior, and adds a `getvalue()` helper (temp files don't natively have one) plus a `__del__` to close the file quietly on garbage collection (avoiding `ResourceWarning`s).
+- `StreamMixer.stdout`/`stderr` now use this real-file-backed `BytesIOCopy`.
+- Added explicit `stream_mixer.stdout.close()` / `.stderr.close()` in the `isolation()` context manager's `finally` block to release the temp files deterministically after each invocation.
+
+Verified against the reported reproduction case (no more crash) and the full existing test suite (1419 passed, 0 failed).

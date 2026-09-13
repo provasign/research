@@ -1,0 +1,56 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..474d6b3 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -70,21 +70,51 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+ class BytesIOCopy(io.BytesIO):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
++    Backed by a real, file-descriptor-backed temporary file so that data
++    written directly to its ``fileno()`` (for example by a ``subprocess``
++    given this stream as ``stdout``/``stderr``) is captured as well.
++
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.3.3
++        Backed by a real temporary file so ``fileno()`` works, allowing
++        this stream to be passed to :class:`subprocess.Popen` as
++        ``stdout``/``stderr``. :issue:`3244`
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._file = tempfile.TemporaryFile()
++
++    def fileno(self) -> int:
++        return self._file.fileno()
+ 
+     def flush(self) -> None:
+         super().flush()
++        self._file.flush()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
++        self._file.write(b)
+         return super().write(b)
+ 
++    def getvalue(self) -> bytes:
++        # ``self._file`` receives everything written through ``write()``
++        # as well as anything written directly to its underlying file
++        # descriptor (e.g. by a subprocess), so it's always authoritative.
++        self._file.flush()
++        pos = self._file.tell()
++        self._file.seek(0)
++        data = self._file.read()
++        self._file.seek(pos)
++        return data
++
++    def close(self) -> None:
++        self._file.close()
++        super().close()
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.

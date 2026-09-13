@@ -1,0 +1,85 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..46b5697 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -70,21 +70,71 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+ class BytesIOCopy(io.BytesIO):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
++    Backed by a real, unnamed OS-level temporary file rather than purely
++    in-memory storage, so that :meth:`fileno` returns a valid file
++    descriptor. This lets the captured stream be passed directly to APIs
++    such as :func:`subprocess.run` (e.g. ``subprocess.run(stdout=sys.stdout)``).
++
+     .. versionadded:: 8.2
++    .. versionchanged:: 8.3.3
++        Backed by a real file so :meth:`fileno` works with :mod:`subprocess`.
++        :issue:`2296`
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._file = tempfile.TemporaryFile()
++        self._synced = 0
++
++    def fileno(self) -> int:
++        return self._file.fileno()
++
++    def _sync(self) -> None:
++        """Pull in anything written directly to the real file descriptor
++        (for example by a subprocess whose ``stdout``/``stderr`` was set
++        to this stream) so it also ends up in this ``BytesIO`` and in the
++        mixed output stream.
++        """
++        pos = self._file.tell()
++        self._file.seek(self._synced)
++        data = self._file.read()
++        self._file.seek(pos)
++        if data:
++            self._synced += len(data)
++            super().write(data)
++            self.copy_to.write(data)
+ 
+     def flush(self) -> None:
++        self._sync()
+         super().flush()
++        self._file.flush()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
++        self._sync()
++        self._file.write(b)
++        self._synced += len(b)
+         self.copy_to.write(b)
+         return super().write(b)
+ 
++    def getvalue(self) -> bytes:
++        self._sync()
++        return super().getvalue()
++
++    def close(self) -> None:
++        """Close the backing temporary file along with ``self``.
++
++        Note that :class:`_NamedTextIOWrapper` overrides its own
++        ``close()`` to a no-op so it doesn't tear down a shared buffer,
++        but that doesn't prevent this method (called directly, or via
++        garbage collection) from releasing the real file descriptor.
++
++        .. versionadded:: 8.3.3
++        """
++        self._file.close()
++        super().close()
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.
+@@ -471,6 +521,8 @@ class CliRunner:
+             _compat.should_strip_ansi = old__compat_should_strip_ansi
+             formatting.FORCED_WIDTH = old_forced_width
+             pdb.Pdb.__init__ = old_pdb_init  # type: ignore[method-assign]
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
+ 
+     def invoke(
+         self,

@@ -1,0 +1,72 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..e47dd66 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -67,23 +67,53 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+         stream._paused = False
+ 
+ 
+-class BytesIOCopy(io.BytesIO):
+-    """Patch ``io.BytesIO`` to let the written stream be copied to another.
++class BytesIOCopy:
++    """A binary stream, backed by a real file on disk, that copies
++    everything written to it into another stream.
++
++    Unlike :class:`io.BytesIO`, this is backed by an actual file
++    descriptor, so it can be passed as ``stdout``/``stderr`` to
++    :func:`subprocess.run`/:class:`subprocess.Popen`.
+ 
+     .. versionadded:: 8.2
++    .. versionchanged:: 8.3.3
++        Backed by a real temporary file instead of :class:`io.BytesIO` so
++        that it has a valid ``fileno()``, fixing ``UnsupportedOperation``
++        errors when used as ``stdout``/``stderr`` for :mod:`subprocess`.
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+-        super().__init__()
++        self._file = tempfile.TemporaryFile()
+         self.copy_to = copy_to
+ 
+     def flush(self) -> None:
+-        super().flush()
++        self._file.flush()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+-        return super().write(b)
++        return self._file.write(b)
++
++    def getvalue(self) -> bytes:
++        pos = self._file.tell()
++        self._file.seek(0)
++        data = self._file.read()
++        self._file.seek(pos)
++        return data
++
++    def fileno(self) -> int:
++        return self._file.fileno()
++
++    def __getattr__(self, name: str) -> t.Any:
++        return getattr(self._file, name)
++
++    def __del__(self) -> None:
++        # Make sure the backing temporary file is closed even if the
++        # instance is dropped without an explicit ``close()`` call, so it
++        # doesn't leak an open file descriptor.
++        file = self.__dict__.get("_file")
++        if file is not None:
++            file.close()
+ 
+ 
+ class StreamMixer:
+@@ -471,6 +501,8 @@ class CliRunner:
+             _compat.should_strip_ansi = old__compat_should_strip_ansi
+             formatting.FORCED_WIDTH = old_forced_width
+             pdb.Pdb.__init__ = old_pdb_init  # type: ignore[method-assign]
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
+ 
+     def invoke(
+         self,

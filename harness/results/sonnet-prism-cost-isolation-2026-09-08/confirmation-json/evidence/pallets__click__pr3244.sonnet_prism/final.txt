@@ -1,0 +1,11 @@
+The fix is complete and verified.
+
+## Summary
+
+The issue was that `CliRunner.isolation()` backed `sys.stdout`/`sys.stderr` with `io.BytesIO` (via `BytesIOCopy`), which has no real file descriptor. Calling `subprocess.run(..., stdout=sys.stderr)` inside a command invoked by `CliRunner` failed with `io.UnsupportedOperation: fileno` because `subprocess` calls `.fileno()` on non-`PIPE`/`DEVNULL` stream arguments.
+
+**Fix** (`src/click/testing.py`):
+- Reimplemented `BytesIOCopy` to be backed by a real OS-level `tempfile.TemporaryFile()` instead of subclassing `io.BytesIO`, so it exposes a genuine `fileno()` that `subprocess` (and similar APIs) can use, while still mirroring writes to the mixed `copy_to` stream and supporting `getvalue()`.
+- Added `close()`/`__del__` to release the underlying OS file (explicitly closed at the end of `CliRunner.isolation()`, and quietly finalized via `__del__` for any instances that go out of scope without explicit closing), avoiding file-descriptor leaks and `ResourceWarning`s now that a real file is involved.
+
+Verified with the reported reproduction case and the full test suite (`1419 passed, 24 skipped, 1 xfailed`).

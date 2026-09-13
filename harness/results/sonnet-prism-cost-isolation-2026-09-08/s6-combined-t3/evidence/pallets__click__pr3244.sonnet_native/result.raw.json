@@ -1,0 +1,110 @@
+{
+  "duration_api_ms": 158515,
+  "stop_reason": "end_turn",
+  "session_id": "ee19b4f4-c637-4704-8e55-d2d7060032ad",
+  "total_cost_usd": 0.4821175999999999,
+  "usage": {
+    "input_tokens": 60,
+    "cache_creation_input_tokens": 39260,
+    "cache_read_input_tokens": 879948,
+    "output_tokens": 14494,
+    "output_tokens_details": {
+      "thinking_tokens": 7586
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 39260,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 572,
+        "cache_read_input_tokens": 44119,
+        "cache_creation_input_tokens": 595,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 595
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 15,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004028,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 60,
+      "outputTokens": 14494,
+      "cacheReadInputTokens": 879948,
+      "cacheCreationInputTokens": 39260,
+      "webSearchRequests": 0,
+      "costUSD": 0.4780895999999999,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 7586,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 30,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "Works well: no crash, subprocess output correctly lands in `stderr_bytes` (as it wrote to `sys.stderr`'s fd), and click's own stdout writes are still captured normally. The `output` mix doesn't include the subprocess's direct fd write (a known limitation since it bypasses Python-level `write()`), but the core issue \u2014 the crash \u2014 is fixed and the primary streams (`stdout`/`stderr`) are correctly captured.\n\n## Summary\n\nThe bug: `CliRunner`'s isolated `stdout`/`stderr` were backed by plain `io.BytesIO`, which has no real file descriptor. Any code under test that passed `sys.stdout`/`sys.stderr` to `subprocess.run`/`Popen` (which need `.fileno()`) crashed with `io.UnsupportedOperation`.\n\nFix (`src/click/testing.py`, `BytesIOCopy`): added a `fileno()` method that lazily creates a real backing `tempfile.TemporaryFile()` on first access (preserving already-written data), and made `getvalue()`/`close()` aware of that backing file once it exists, so both the mixed stream and the individual `stdout`/`stderr` results still work. Also closed `stream_mixer.stdout`/`stderr` in `isolation()`'s `finally` block to avoid leaking file handles.\n\nVerified: the reported SSCCE no longer raises, `stdout_bytes`/`stderr_bytes` correctly capture subprocess output written to the real fd, and the full existing test suite (1419 passed) plus `tests/test_testing.py`/`tests/test_stream_lifecycle.py` pass with no regressions. No tests, docs, or config were modified.",
+  "ttft_ms": 1944,
+  "type": "result",
+  "duration_ms": 287584,
+  "uuid": "07ba540e-bbd4-4124-841b-14b3e5715a68",
+  "ttft_stream_ms": 1019,
+  "time_to_request_ms": 26,
+  "first_content_frame_ms": 1139,
+  "queued_turn_count": 0
+}

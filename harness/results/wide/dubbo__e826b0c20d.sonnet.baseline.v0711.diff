@@ -1,0 +1,1775 @@
+diff --git a/dubbo-compatible/pom.xml b/dubbo-compatible/pom.xml
+index f6948de..5d08919 100644
+--- a/dubbo-compatible/pom.xml
++++ b/dubbo-compatible/pom.xml
+@@ -45,7 +45,7 @@
+     </dependency>
+     <dependency>
+       <groupId>org.apache.dubbo</groupId>
+-      <artifactId>dubbo-remoting-zookeeper</artifactId>
++      <artifactId>dubbo-remoting-zookeeper-curator5</artifactId>
+       <version>${project.parent.version}</version>
+     </dependency>
+     <dependency>
+diff --git a/dubbo-distribution/dubbo-all-shaded/pom.xml b/dubbo-distribution/dubbo-all-shaded/pom.xml
+index a27f148..51f88f1 100644
+--- a/dubbo-distribution/dubbo-all-shaded/pom.xml
++++ b/dubbo-distribution/dubbo-all-shaded/pom.xml
+@@ -326,13 +326,6 @@
+       <scope>compile</scope>
+       <optional>true</optional>
+     </dependency>
+-    <dependency>
+-      <groupId>org.apache.dubbo</groupId>
+-      <artifactId>dubbo-remoting-zookeeper</artifactId>
+-      <version>${project.version}</version>
+-      <scope>compile</scope>
+-      <optional>true</optional>
+-    </dependency>
+     <dependency>
+       <groupId>org.apache.dubbo</groupId>
+       <artifactId>dubbo-remoting-zookeeper-curator5</artifactId>
+@@ -495,7 +488,6 @@
+                   <include>org.apache.dubbo:dubbo-remoting-http</include>
+                   <include>org.apache.dubbo:dubbo-remoting-netty4</include>
+                   <include>org.apache.dubbo:dubbo-remoting-netty</include>
+-                  <include>org.apache.dubbo:dubbo-remoting-zookeeper</include>
+                   <include>org.apache.dubbo:dubbo-remoting-zookeeper-curator5</include>
+                   <include>org.apache.dubbo:dubbo-rpc-api</include>
+                   <include>org.apache.dubbo:dubbo-rpc-dubbo</include>
+diff --git a/dubbo-distribution/dubbo-all/pom.xml b/dubbo-distribution/dubbo-all/pom.xml
+index efe16c5..8d59ee3 100644
+--- a/dubbo-distribution/dubbo-all/pom.xml
++++ b/dubbo-distribution/dubbo-all/pom.xml
+@@ -364,13 +364,6 @@
+       <scope>compile</scope>
+       <optional>true</optional>
+     </dependency>
+-    <dependency>
+-      <groupId>org.apache.dubbo</groupId>
+-      <artifactId>dubbo-remoting-zookeeper</artifactId>
+-      <version>${project.version}</version>
+-      <scope>compile</scope>
+-      <optional>true</optional>
+-    </dependency>
+     <dependency>
+       <groupId>org.apache.dubbo</groupId>
+       <artifactId>dubbo-remoting-zookeeper-curator5</artifactId>
+@@ -535,7 +528,6 @@
+                   <include>org.apache.dubbo:dubbo-remoting-netty4</include>
+                   <include>org.apache.dubbo:dubbo-remoting-netty</include>
+                   <include>org.apache.dubbo:dubbo-remoting-zookeeper-api</include>
+-                  <include>org.apache.dubbo:dubbo-remoting-zookeeper</include>
+                   <include>org.apache.dubbo:dubbo-remoting-zookeeper-curator5</include>
+                   <include>org.apache.dubbo:dubbo-rpc-api</include>
+                   <include>org.apache.dubbo:dubbo-rpc-dubbo</include>
+diff --git a/dubbo-distribution/dubbo-bom/pom.xml b/dubbo-distribution/dubbo-bom/pom.xml
+index 7e535f3..0b7366a 100644
+--- a/dubbo-distribution/dubbo-bom/pom.xml
++++ b/dubbo-distribution/dubbo-bom/pom.xml
+@@ -415,11 +415,6 @@
+         <artifactId>dubbo-remoting-zookeeper-api</artifactId>
+         <version>${project.version}</version>
+       </dependency>
+-      <dependency>
+-        <groupId>org.apache.dubbo</groupId>
+-        <artifactId>dubbo-remoting-zookeeper</artifactId>
+-        <version>${project.version}</version>
+-      </dependency>
+       <dependency>
+         <groupId>org.apache.dubbo</groupId>
+         <artifactId>dubbo-remoting-zookeeper-curator5</artifactId>
+diff --git a/dubbo-remoting/dubbo-remoting-zookeeper-api/src/main/java/org/apache/dubbo/remoting/zookeeper/ZookeeperTransporter.java b/dubbo-remoting/dubbo-remoting-zookeeper-api/src/main/java/org/apache/dubbo/remoting/zookeeper/ZookeeperTransporter.java
+index f73bc6b..06c48dd 100644
+--- a/dubbo-remoting/dubbo-remoting-zookeeper-api/src/main/java/org/apache/dubbo/remoting/zookeeper/ZookeeperTransporter.java
++++ b/dubbo-remoting/dubbo-remoting-zookeeper-api/src/main/java/org/apache/dubbo/remoting/zookeeper/ZookeeperTransporter.java
+@@ -27,8 +27,6 @@ public interface ZookeeperTransporter {
+ 
+     String CURATOR_5 = "curator5";
+ 
+-    String CURATOR = "curator";
+-
+     ZookeeperClient connect(URL url);
+ 
+     void destroy();
+@@ -36,15 +34,6 @@ public interface ZookeeperTransporter {
+     static ZookeeperTransporter getExtension(ApplicationModel applicationModel) {
+         ExtensionLoader<ZookeeperTransporter> extensionLoader =
+                 applicationModel.getExtensionLoader(ZookeeperTransporter.class);
+-        return isHighVersionCurator() ? extensionLoader.getExtension(CURATOR_5) : extensionLoader.getExtension(CURATOR);
+-    }
+-
+-    static boolean isHighVersionCurator() {
+-        try {
+-            Class.forName("org.apache.curator.framework.recipes.cache.CuratorCache");
+-            return true;
+-        } catch (ClassNotFoundException e) {
+-            return false;
+-        }
++        return extensionLoader.getExtension(CURATOR_5);
+     }
+ }
+diff --git a/dubbo-remoting/dubbo-remoting-zookeeper/pom.xml b/dubbo-remoting/dubbo-remoting-zookeeper/pom.xml
+deleted file mode 100644
+index ef9990c..0000000
+--- a/dubbo-remoting/dubbo-remoting-zookeeper/pom.xml
++++ /dev/null
+@@ -1,81 +0,0 @@
+-<?xml version="1.0" encoding="UTF-8"?>
+-<!--
+-  Licensed to the Apache Software Foundation (ASF) under one or more
+-  contributor license agreements.  See the NOTICE file distributed with
+-  this work for additional information regarding copyright ownership.
+-  The ASF licenses this file to You under the Apache License, Version 2.0
+-  (the "License"); you may not use this file except in compliance with
+-  the License.  You may obtain a copy of the License at
+-
+-      http://www.apache.org/licenses/LICENSE-2.0
+-
+-  Unless required by applicable law or agreed to in writing, software
+-  distributed under the License is distributed on an "AS IS" BASIS,
+-  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-  See the License for the specific language governing permissions and
+-  limitations under the License.
+--->
+-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+-  <modelVersion>4.0.0</modelVersion>
+-  <parent>
+-    <groupId>org.apache.dubbo</groupId>
+-    <artifactId>dubbo-remoting</artifactId>
+-    <version>${revision}</version>
+-    <relativePath>../pom.xml</relativePath>
+-  </parent>
+-  <artifactId>dubbo-remoting-zookeeper</artifactId>
+-  <packaging>jar</packaging>
+-  <name>${project.artifactId}</name>
+-  <description>The zookeeper remoting module of dubbo project</description>
+-  <properties>
+-    <skip_maven_deploy>false</skip_maven_deploy>
+-    <zookeeper_version>3.4.14</zookeeper_version>
+-    <curator_version>4.3.0</curator_version>
+-  </properties>
+-  <dependencies>
+-    <dependency>
+-      <groupId>org.apache.dubbo</groupId>
+-      <artifactId>dubbo-remoting-zookeeper-api</artifactId>
+-      <version>${project.parent.version}</version>
+-    </dependency>
+-    <dependency>
+-      <groupId>org.apache.dubbo</groupId>
+-      <artifactId>dubbo-common</artifactId>
+-      <version>${project.parent.version}</version>
+-    </dependency>
+-    <dependency>
+-      <groupId>org.apache.curator</groupId>
+-      <artifactId>curator-recipes</artifactId>
+-      <version>${curator_version}</version>
+-    </dependency>
+-    <dependency>
+-      <groupId>org.apache.curator</groupId>
+-      <artifactId>curator-framework</artifactId>
+-      <version>${curator_version}</version>
+-    </dependency>
+-    <dependency>
+-      <groupId>org.apache.curator</groupId>
+-      <artifactId>curator-x-discovery</artifactId>
+-      <version>${curator_version}</version>
+-    </dependency>
+-
+-    <dependency>
+-      <groupId>org.apache.dubbo</groupId>
+-      <artifactId>dubbo-native</artifactId>
+-      <version>${project.parent.version}</version>
+-    </dependency>
+-
+-    <dependency>
+-      <groupId>org.apache.zookeeper</groupId>
+-      <artifactId>zookeeper</artifactId>
+-      <version>${zookeeper_version}</version>
+-    </dependency>
+-
+-    <dependency>
+-      <groupId>org.apache.dubbo</groupId>
+-      <artifactId>dubbo-test-common</artifactId>
+-      <version>${project.parent.version}</version>
+-      <scope>test</scope>
+-    </dependency>
+-  </dependencies>
+-</project>
+diff --git a/dubbo-remoting/dubbo-remoting-zookeeper/src/main/java/org/apache/dubbo/remoting/zookeeper/curator/CuratorZookeeperClient.java b/dubbo-remoting/dubbo-remoting-zookeeper/src/main/java/org/apache/dubbo/remoting/zookeeper/curator/CuratorZookeeperClient.java
+deleted file mode 100644
+index e9a99f3..0000000
+--- a/dubbo-remoting/dubbo-remoting-zookeeper/src/main/java/org/apache/dubbo/remoting/zookeeper/curator/CuratorZookeeperClient.java
++++ /dev/null
+@@ -1,591 +0,0 @@
+-/*
+- * Licensed to the Apache Software Foundation (ASF) under one or more
+- * contributor license agreements.  See the NOTICE file distributed with
+- * this work for additional information regarding copyright ownership.
+- * The ASF licenses this file to You under the Apache License, Version 2.0
+- * (the "License"); you may not use this file except in compliance with
+- * the License.  You may obtain a copy of the License at
+- *
+- *     http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-package org.apache.dubbo.remoting.zookeeper.curator;
+-
+-import org.apache.dubbo.common.URL;
+-import org.apache.dubbo.common.config.configcenter.ConfigItem;
+-import org.apache.dubbo.common.logger.ErrorTypeAwareLogger;
+-import org.apache.dubbo.common.logger.LoggerFactory;
+-import org.apache.dubbo.common.utils.NamedThreadFactory;
+-import org.apache.dubbo.common.utils.StringUtils;
+-import org.apache.dubbo.remoting.zookeeper.AbstractZookeeperClient;
+-import org.apache.dubbo.remoting.zookeeper.ChildListener;
+-import org.apache.dubbo.remoting.zookeeper.DataListener;
+-import org.apache.dubbo.remoting.zookeeper.EventType;
+-import org.apache.dubbo.remoting.zookeeper.StateListener;
+-
+-import java.nio.charset.Charset;
+-import java.nio.charset.StandardCharsets;
+-import java.util.List;
+-import java.util.Map;
+-import java.util.Optional;
+-import java.util.concurrent.ConcurrentHashMap;
+-import java.util.concurrent.Executor;
+-import java.util.concurrent.ExecutorService;
+-import java.util.concurrent.Executors;
+-import java.util.concurrent.TimeUnit;
+-
+-import org.apache.curator.framework.CuratorFramework;
+-import org.apache.curator.framework.CuratorFrameworkFactory;
+-import org.apache.curator.framework.api.ACLProvider;
+-import org.apache.curator.framework.api.CuratorWatcher;
+-import org.apache.curator.framework.recipes.cache.ChildData;
+-import org.apache.curator.framework.recipes.cache.NodeCache;
+-import org.apache.curator.framework.recipes.cache.NodeCacheListener;
+-import org.apache.curator.framework.state.ConnectionState;
+-import org.apache.curator.framework.state.ConnectionStateListener;
+-import org.apache.curator.retry.RetryNTimes;
+-import org.apache.zookeeper.CreateMode;
+-import org.apache.zookeeper.KeeperException.NoNodeException;
+-import org.apache.zookeeper.KeeperException.NodeExistsException;
+-import org.apache.zookeeper.WatchedEvent;
+-import org.apache.zookeeper.Watcher;
+-import org.apache.zookeeper.ZooDefs;
+-import org.apache.zookeeper.data.ACL;
+-import org.apache.zookeeper.data.Stat;
+-
+-import static org.apache.dubbo.common.constants.CommonConstants.SESSION_KEY;
+-import static org.apache.dubbo.common.constants.CommonConstants.TIMEOUT_KEY;
+-import static org.apache.dubbo.common.constants.LoggerCodeConstants.CONFIG_FAILED_CONNECT_REGISTRY;
+-import static org.apache.dubbo.common.constants.LoggerCodeConstants.REGISTRY_ZOOKEEPER_EXCEPTION;
+-
+-public class CuratorZookeeperClient
+-        extends AbstractZookeeperClient<
+-                CuratorZookeeperClient.NodeCacheListenerImpl, CuratorZookeeperClient.CuratorWatcherImpl> {
+-
+-    protected static final ErrorTypeAwareLogger logger =
+-            LoggerFactory.getErrorTypeAwareLogger(CuratorZookeeperClient.class);
+-
+-    private static final Charset CHARSET = StandardCharsets.UTF_8;
+-    private final CuratorFramework client;
+-    private static final Map<String, NodeCache> nodeCacheMap = new ConcurrentHashMap<>();
+-
+-    public CuratorZookeeperClient(URL url) {
+-        super(url);
+-        try {
+-            int timeout = url.getParameter(TIMEOUT_KEY, DEFAULT_CONNECTION_TIMEOUT_MS);
+-            int sessionExpireMs = url.getParameter(SESSION_KEY, DEFAULT_SESSION_TIMEOUT_MS);
+-            CuratorFrameworkFactory.Builder builder = CuratorFrameworkFactory.builder()
+-                    .connectString(url.getBackupAddress())
+-                    .retryPolicy(new RetryNTimes(1, 1000))
+-                    .connectionTimeoutMs(timeout)
+-                    .sessionTimeoutMs(sessionExpireMs);
+-            String userInformation = url.getUserInformation();
+-            if (StringUtils.isNotEmpty(userInformation)) {
+-                builder = builder.authorization("digest", userInformation.getBytes());
+-                builder.aclProvider(new ACLProvider() {
+-                    @Override
+-                    public List<ACL> getDefaultAcl() {
+-                        return ZooDefs.Ids.CREATOR_ALL_ACL;
+-                    }
+-
+-                    @Override
+-                    public List<ACL> getAclForPath(String path) {
+-                        return ZooDefs.Ids.CREATOR_ALL_ACL;
+-                    }
+-                });
+-            }
+-            client = builder.build();
+-            client.getConnectionStateListenable().addListener(new CuratorConnectionStateListener(url));
+-            client.start();
+-
+-            boolean connected = client.blockUntilConnected(timeout, TimeUnit.MILLISECONDS);
+-            if (!connected) {
+-                IllegalStateException illegalStateException =
+-                        new IllegalStateException("zookeeper not connected, the address is: " + url);
+-
+-                // 5-1 Failed to connect to configuration center.
+-                logger.error(
+-                        CONFIG_FAILED_CONNECT_REGISTRY,
+-                        "Zookeeper server offline",
+-                        "",
+-                        "Failed to connect with zookeeper",
+-                        illegalStateException);
+-
+-                throw illegalStateException;
+-            }
+-
+-            CuratorWatcherImpl.closed = false;
+-        } catch (Exception e) {
+-            close();
+-            throw new IllegalStateException(e.getMessage(), e);
+-        }
+-    }
+-
+-    @Override
+-    public void createPersistent(String path, boolean faultTolerant) {
+-        try {
+-            client.create().forPath(path);
+-        } catch (NodeExistsException e) {
+-            if (!faultTolerant) {
+-                logger.warn(REGISTRY_ZOOKEEPER_EXCEPTION, "", "", "ZNode " + path + " already exists.", e);
+-                throw new IllegalStateException(e.getMessage(), e);
+-            }
+-        } catch (Exception e) {
+-            throw new IllegalStateException(e.getMessage(), e);
+-        }
+-    }
+-
+-    @Override
+-    public void createEphemeral(String path, boolean faultTolerant) {
+-        try {
+-            client.create().withMode(CreateMode.EPHEMERAL).forPath(path);
+-        } catch (NodeExistsException e) {
+-            if (faultTolerant) {
+-                logger.info("ZNode " + path
+-                        + " already exists, since we will only try to recreate a node on a session expiration"
+-                        + ", this duplication might be caused by a delete delay from the zk server, which means the old expired session"
+-                        + " may still holds this ZNode and the server just hasn't got time to do the deletion. In this case, "
+-                        + "we can just try to delete and create again.");
+-                deletePath(path);
+-                createEphemeral(path, true);
+-            } else {
+-                logger.warn(REGISTRY_ZOOKEEPER_EXCEPTION, "", "", "ZNode " + path + " already exists.", e);
+-                throw new IllegalStateException(e.getMessage(), e);
+-            }
+-        } catch (Exception e) {
+-            throw new IllegalStateException(e.getMessage(), e);
+-        }
+-    }
+-
+-    @Override
+-    protected void createPersistent(String path, String data, boolean faultTolerant) {
+-        byte[] dataBytes = data.getBytes(CHARSET);
+-        try {
+-            client.create().forPath(path, dataBytes);
+-        } catch (NodeExistsException e) {
+-            if (faultTolerant) {
+-                logger.info("ZNode " + path + " already exists. Will be override with new data.");
+-                try {
+-                    client.setData().forPath(path, dataBytes);
+-                } catch (Exception e1) {
+-                    throw new IllegalStateException(e.getMessage(), e1);
+-                }
+-            } else {
+-                logger.warn(REGISTRY_ZOOKEEPER_EXCEPTION, "", "", "ZNode " + path + " already exists.", e);
+-                throw new IllegalStateException(e.getMessage(), e);
+-            }
+-        } catch (Exception e) {
+-            throw new IllegalStateException(e.getMessage(), e);
+-        }
+-    }
+-
+-    @Override
+-    protected void createEphemeral(String path, String data, boolean faultTolerant) {
+-        byte[] dataBytes = data.getBytes(CHARSET);
+-        try {
+-            client.create().withMode(CreateMode.EPHEMERAL).forPath(path, dataBytes);
+-        } catch (NodeExistsException e) {
+-            if (faultTolerant) {
+-                logger.info("ZNode " + path
+-                        + " already exists, since we will only try to recreate a node on a session expiration"
+-                        + ", this duplication might be caused by a delete delay from the zk server, which means the old expired session"
+-                        + " may still holds this ZNode and the server just hasn't got time to do the deletion. In this case, "
+-                        + "we can just try to delete and create again.");
+-                deletePath(path);
+-                createEphemeral(path, data, true);
+-            } else {
+-                logger.warn(REGISTRY_ZOOKEEPER_EXCEPTION, "", "", "ZNode " + path + " already exists.", e);
+-                throw new IllegalStateException(e.getMessage(), e);
+-            }
+-        } catch (Exception e) {
+-            throw new IllegalStateException(e.getMessage(), e);
+-        }
+-    }
+-
+-    @Override
+-    protected void update(String path, String data, int version) {
+-        byte[] dataBytes = data.getBytes(CHARSET);
+-        try {
+-            client.setData().withVersion(version).forPath(path, dataBytes);
+-        } catch (Exception e) {
+-            throw new IllegalStateException(e.getMessage(), e);
+-        }
+-    }
+-
+-    @Override
+-    protected void update(String path, String data) {
+-        byte[] dataBytes = data.getBytes(CHARSET);
+-        try {
+-            client.setData().forPath(path, dataBytes);
+-        } catch (Exception e) {
+-            throw new IllegalStateException(e.getMessage(), e);
+-        }
+-    }
+-
+-    @Override
+-    protected void createOrUpdatePersistent(String path, String data) {
+-        try {
+-            if (checkExists(path)) {
+-                update(path, data);
+-            } else {
+-                createPersistent(path, data, true);
+-            }
+-        } catch (Exception e) {
+-            throw new IllegalStateException(e.getMessage(), e);
+-        }
+-    }
+-
+-    @Override
+-    protected void createOrUpdateEphemeral(String path, String data) {
+-        try {
+-            if (checkExists(path)) {
+-                update(path, data);
+-            } else {
+-                createEphemeral(path, data, true);
+-            }
+-        } catch (Exception e) {
+-            throw new IllegalStateException(e.getMessage(), e);
+-        }
+-    }
+-
+-    @Override
+-    protected void createOrUpdatePersistent(String path, String data, Integer version) {
+-        try {
+-            if (checkExists(path) && version != null) {
+-                update(path, data, version);
+-            } else {
+-                createPersistent(path, data, false);
+-            }
+-        } catch (Exception e) {
+-            throw new IllegalStateException(e.getMessage(), e);
+-        }
+-    }
+-
+-    @Override
+-    protected void createOrUpdateEphemeral(String path, String data, Integer version) {
+-        try {
+-            if (checkExists(path) && version != null) {
+-                update(path, data, version);
+-            } else {
+-                createEphemeral(path, data, false);
+-            }
+-        } catch (Exception e) {
+-            throw new IllegalStateException(e.getMessage(), e);
+-        }
+-    }
+-
+-    @Override
+-    protected void deletePath(String path) {
+-        try {
+-            client.delete().deletingChildrenIfNeeded().forPath(path);
+-        } catch (NoNodeException ignored) {
+-        } catch (Exception e) {
+-            throw new IllegalStateException(e.getMessage(), e);
+-        }
+-    }
+-
+-    @Override
+-    public List<String> getChildren(String path) {
+-        try {
+-            return client.getChildren().forPath(path);
+-        } catch (NoNodeException e) {
+-            return null;
+-        } catch (Exception e) {
+-            throw new IllegalStateException(e.getMessage(), e);
+-        }
+-    }
+-
+-    @Override
+-    public boolean checkExists(String path) {
+-        try {
+-            if (client.checkExists().forPath(path) != null) {
+-                return true;
+-            }
+-        } catch (Exception ignored) {
+-        }
+-        return false;
+-    }
+-
+-    @Override
+-    public boolean isConnected() {
+-        return client.getZookeeperClient().isConnected();
+-    }
+-
+-    @Override
+-    public String doGetContent(String path) {
+-        try {
+-            byte[] dataBytes = client.getData().forPath(path);
+-            return (dataBytes == null || dataBytes.length == 0) ? null : new String(dataBytes, CHARSET);
+-        } catch (NoNodeException e) {
+-            // ignore NoNode Exception.
+-        } catch (Exception e) {
+-            throw new IllegalStateException(e.getMessage(), e);
+-        }
+-        return null;
+-    }
+-
+-    @Override
+-    public ConfigItem doGetConfigItem(String path) {
+-        String content;
+-        Stat stat;
+-        try {
+-            stat = new Stat();
+-            byte[] dataBytes = client.getData().storingStatIn(stat).forPath(path);
+-            content = (dataBytes == null || dataBytes.length == 0) ? null : new String(dataBytes, CHARSET);
+-        } catch (NoNodeException e) {
+-            return new ConfigItem();
+-        } catch (Exception e) {
+-            throw new IllegalStateException(e.getMessage(), e);
+-        }
+-        return new ConfigItem(content, stat);
+-    }
+-
+-    @Override
+-    public void doClose() {
+-        super.close();
+-        client.close();
+-        CuratorWatcherImpl.closed = true;
+-        synchronized (CuratorWatcherImpl.class) {
+-            if (CuratorWatcherImpl.CURATOR_WATCHER_EXECUTOR_SERVICE != null) {
+-                CuratorWatcherImpl.CURATOR_WATCHER_EXECUTOR_SERVICE.shutdown();
+-                CuratorWatcherImpl.CURATOR_WATCHER_EXECUTOR_SERVICE = null;
+-            }
+-        }
+-    }
+-
+-    @Override
+-    public CuratorZookeeperClient.CuratorWatcherImpl createTargetChildListener(String path, ChildListener listener) {
+-        return new CuratorZookeeperClient.CuratorWatcherImpl(client, listener, path);
+-    }
+-
+-    @Override
+-    public List<String> addTargetChildListener(String path, CuratorWatcherImpl listener) {
+-        try {
+-            return client.getChildren().usingWatcher(listener).forPath(path);
+-        } catch (NoNodeException e) {
+-            return null;
+-        } catch (Exception e) {
+-            throw new IllegalStateException(e.getMessage(), e);
+-        }
+-    }
+-
+-    @Override
+-    protected CuratorZookeeperClient.NodeCacheListenerImpl createTargetDataListener(
+-            String path, DataListener listener) {
+-        return new NodeCacheListenerImpl(listener, path);
+-    }
+-
+-    @Override
+-    protected void addTargetDataListener(String path, CuratorZookeeperClient.NodeCacheListenerImpl nodeCacheListener) {
+-        this.addTargetDataListener(path, nodeCacheListener, null);
+-    }
+-
+-    @Override
+-    protected void addTargetDataListener(
+-            String path, CuratorZookeeperClient.NodeCacheListenerImpl nodeCacheListener, Executor executor) {
+-        try {
+-            NodeCache nodeCache = new NodeCache(client, path);
+-            if (nodeCacheMap.putIfAbsent(path, nodeCache) != null) {
+-                return;
+-            }
+-            if (executor == null) {
+-                nodeCache.getListenable().addListener(nodeCacheListener);
+-            } else {
+-                nodeCache.getListenable().addListener(nodeCacheListener, executor);
+-            }
+-
+-            nodeCache.start();
+-        } catch (Exception e) {
+-            throw new IllegalStateException("Add nodeCache listener for path:" + path, e);
+-        }
+-    }
+-
+-    @Override
+-    protected void removeTargetDataListener(
+-            String path, CuratorZookeeperClient.NodeCacheListenerImpl nodeCacheListener) {
+-        NodeCache nodeCache = nodeCacheMap.get(path);
+-        if (nodeCache != null) {
+-            nodeCache.getListenable().removeListener(nodeCacheListener);
+-        }
+-        nodeCacheListener.dataListener = null;
+-    }
+-
+-    @Override
+-    public void removeTargetChildListener(String path, CuratorWatcherImpl listener) {
+-        listener.unwatch();
+-    }
+-
+-    static class NodeCacheListenerImpl implements NodeCacheListener {
+-
+-        private volatile DataListener dataListener;
+-
+-        private String path;
+-
+-        protected NodeCacheListenerImpl() {}
+-
+-        public NodeCacheListenerImpl(DataListener dataListener, String path) {
+-            this.dataListener = dataListener;
+-            this.path = path;
+-        }
+-
+-        @Override
+-        public void nodeChanged() throws Exception {
+-            ChildData childData = nodeCacheMap.get(path).getCurrentData();
+-            String content = null;
+-            EventType eventType;
+-            if (childData == null) {
+-                eventType = EventType.NodeDeleted;
+-            } else if (childData.getStat().getVersion() == 0) {
+-                content = new String(childData.getData(), CHARSET);
+-                eventType = EventType.NodeCreated;
+-            } else {
+-                content = new String(childData.getData(), CHARSET);
+-                eventType = EventType.NodeDataChanged;
+-            }
+-            dataListener.dataChanged(path, content, eventType);
+-        }
+-    }
+-
+-    static class CuratorWatcherImpl implements CuratorWatcher {
+-
+-        private static volatile ExecutorService CURATOR_WATCHER_EXECUTOR_SERVICE;
+-
+-        private static volatile boolean closed = false;
+-
+-        private CuratorFramework client;
+-        private volatile ChildListener childListener;
+-        private String path;
+-
+-        private static void initExecutorIfNecessary() {
+-            if (!closed && CURATOR_WATCHER_EXECUTOR_SERVICE == null) {
+-                synchronized (CuratorWatcherImpl.class) {
+-                    if (!closed && CURATOR_WATCHER_EXECUTOR_SERVICE == null) {
+-                        CURATOR_WATCHER_EXECUTOR_SERVICE =
+-                                Executors.newSingleThreadExecutor(new NamedThreadFactory("Dubbo-CuratorWatcher"));
+-                    }
+-                }
+-            }
+-        }
+-
+-        public CuratorWatcherImpl(CuratorFramework client, ChildListener listener, String path) {
+-            this.client = client;
+-            this.childListener = listener;
+-            this.path = path;
+-        }
+-
+-        protected CuratorWatcherImpl() {}
+-
+-        public void unwatch() {
+-            this.childListener = null;
+-        }
+-
+-        @Override
+-        public void process(WatchedEvent event) throws Exception {
+-            // if client connect or disconnect to server, zookeeper will queue
+-            // watched event(Watcher.Event.EventType.None, .., path = null).
+-            if (event.getType() == Watcher.Event.EventType.None) {
+-                return;
+-            }
+-
+-            if (childListener != null) {
+-                Runnable task = () -> Optional.ofNullable(childListener).ifPresent(c -> {
+-                    try {
+-                        c.childChanged(
+-                                path,
+-                                client.getChildren()
+-                                        .usingWatcher(CuratorWatcherImpl.this)
+-                                        .forPath(path));
+-                    } catch (Exception e) {
+-                        logger.warn(REGISTRY_ZOOKEEPER_EXCEPTION, "", "", "client get children error", e);
+-                    }
+-                });
+-                initExecutorIfNecessary();
+-                if (!closed && CURATOR_WATCHER_EXECUTOR_SERVICE != null) {
+-                    CURATOR_WATCHER_EXECUTOR_SERVICE.execute(task);
+-                }
+-            }
+-        }
+-    }
+-
+-    private class CuratorConnectionStateListener implements ConnectionStateListener {
+-        private final long UNKNOWN_SESSION_ID = -1L;
+-        private long lastSessionId;
+-        private int timeout;
+-        private int sessionExpireMs;
+-
+-        public CuratorConnectionStateListener(URL url) {
+-            this.timeout = url.getParameter(TIMEOUT_KEY, DEFAULT_CONNECTION_TIMEOUT_MS);
+-            this.sessionExpireMs = url.getParameter(SESSION_KEY, DEFAULT_SESSION_TIMEOUT_MS);
+-        }
+-
+-        @Override
+-        public void stateChanged(CuratorFramework client, ConnectionState state) {
+-            long sessionId = UNKNOWN_SESSION_ID;
+-            try {
+-                sessionId = client.getZookeeperClient().getZooKeeper().getSessionId();
+-            } catch (Exception e) {
+-                logger.warn(
+-                        REGISTRY_ZOOKEEPER_EXCEPTION,
+-                        "",
+-                        "",
+-                        "Curator client state changed, but failed to get the related zk session instance.");
+-            }
+-
+-            if (state == ConnectionState.LOST) {
+-                logger.warn(
+-                        REGISTRY_ZOOKEEPER_EXCEPTION,
+-                        "",
+-                        "",
+-                        "Curator zookeeper session " + Long.toHexString(lastSessionId) + " expired.");
+-                CuratorZookeeperClient.this.stateChanged(StateListener.SESSION_LOST);
+-            } else if (state == ConnectionState.SUSPENDED) {
+-                logger.warn(
+-                        REGISTRY_ZOOKEEPER_EXCEPTION,
+-                        "",
+-                        "",
+-                        "Curator zookeeper connection of session " + Long.toHexString(sessionId) + " timed out. "
+-                                + "connection timeout value is " + timeout + ", session expire timeout value is "
+-                                + sessionExpireMs);
+-                CuratorZookeeperClient.this.stateChanged(StateListener.SUSPENDED);
+-            } else if (state == ConnectionState.CONNECTED) {
+-                lastSessionId = sessionId;
+-                logger.info("Curator zookeeper client instance initiated successfully, session id is "
+-                        + Long.toHexString(sessionId));
+-                CuratorZookeeperClient.this.stateChanged(StateListener.CONNECTED);
+-            } else if (state == ConnectionState.RECONNECTED) {
+-                if (lastSessionId == sessionId && sessionId != UNKNOWN_SESSION_ID) {
+-                    logger.warn(
+-                            REGISTRY_ZOOKEEPER_EXCEPTION,
+-                            "",
+-                            "",
+-                            "Curator zookeeper connection recovered from connection lose, " + "reuse the old session "
+-                                    + Long.toHexString(sessionId));
+-                    CuratorZookeeperClient.this.stateChanged(StateListener.RECONNECTED);
+-                } else {
+-                    logger.warn(
+-                            REGISTRY_ZOOKEEPER_EXCEPTION,
+-                            "",
+-                            "",
+-                            "New session created after old session lost, " + "old session "
+-                                    + Long.toHexString(lastSessionId) + ", new session " + Long.toHexString(sessionId));
+-                    lastSessionId = sessionId;
+-                    CuratorZookeeperClient.this.stateChanged(StateListener.NEW_SESSION_CREATED);
+-                }
+-            }
+-        }
+-    }
+-
+-    /**
+-     * just for unit test
+-     *
+-     * @return
+-     */
+-    CuratorFramework getClient() {
+-        return client;
+-    }
+-}
+diff --git a/dubbo-remoting/dubbo-remoting-zookeeper/src/main/java/org/apache/dubbo/remoting/zookeeper/curator/CuratorZookeeperTransporter.java b/dubbo-remoting/dubbo-remoting-zookeeper/src/main/java/org/apache/dubbo/remoting/zookeeper/curator/CuratorZookeeperTransporter.java
+deleted file mode 100644
+index c69ab90..0000000
+--- a/dubbo-remoting/dubbo-remoting-zookeeper/src/main/java/org/apache/dubbo/remoting/zookeeper/curator/CuratorZookeeperTransporter.java
++++ /dev/null
+@@ -1,28 +0,0 @@
+-/*
+- * Licensed to the Apache Software Foundation (ASF) under one or more
+- * contributor license agreements.  See the NOTICE file distributed with
+- * this work for additional information regarding copyright ownership.
+- * The ASF licenses this file to You under the Apache License, Version 2.0
+- * (the "License"); you may not use this file except in compliance with
+- * the License.  You may obtain a copy of the License at
+- *
+- *     http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-package org.apache.dubbo.remoting.zookeeper.curator;
+-
+-import org.apache.dubbo.common.URL;
+-import org.apache.dubbo.remoting.zookeeper.AbstractZookeeperTransporter;
+-import org.apache.dubbo.remoting.zookeeper.ZookeeperClient;
+-
+-public class CuratorZookeeperTransporter extends AbstractZookeeperTransporter {
+-    @Override
+-    public ZookeeperClient createZookeeperClient(URL url) {
+-        return new CuratorZookeeperClient(url);
+-    }
+-}
+diff --git a/dubbo-remoting/dubbo-remoting-zookeeper/src/main/java/org/apache/dubbo/remoting/zookeeper/curator/aot/CuratorZookeeperReflectionTypeDescriberRegistrar.java b/dubbo-remoting/dubbo-remoting-zookeeper/src/main/java/org/apache/dubbo/remoting/zookeeper/curator/aot/CuratorZookeeperReflectionTypeDescriberRegistrar.java
+deleted file mode 100644
+index 7e37b47..0000000
+--- a/dubbo-remoting/dubbo-remoting-zookeeper/src/main/java/org/apache/dubbo/remoting/zookeeper/curator/aot/CuratorZookeeperReflectionTypeDescriberRegistrar.java
++++ /dev/null
+@@ -1,52 +0,0 @@
+-/*
+- * Licensed to the Apache Software Foundation (ASF) under one or more
+- * contributor license agreements.  See the NOTICE file distributed with
+- * this work for additional information regarding copyright ownership.
+- * The ASF licenses this file to You under the Apache License, Version 2.0
+- * (the "License"); you may not use this file except in compliance with
+- * the License.  You may obtain a copy of the License at
+- *
+- *     http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-package org.apache.dubbo.remoting.zookeeper.curator.aot;
+-
+-import org.apache.dubbo.aot.api.MemberCategory;
+-import org.apache.dubbo.aot.api.ReflectionTypeDescriberRegistrar;
+-import org.apache.dubbo.aot.api.TypeDescriber;
+-
+-import java.util.ArrayList;
+-import java.util.HashSet;
+-import java.util.List;
+-import java.util.Set;
+-
+-import org.apache.zookeeper.ClientCnxnSocketNIO;
+-
+-public class CuratorZookeeperReflectionTypeDescriberRegistrar implements ReflectionTypeDescriberRegistrar {
+-
+-    @Override
+-    public List<TypeDescriber> getTypeDescribers() {
+-        List<TypeDescriber> typeDescribers = new ArrayList<>();
+-        typeDescribers.add(buildTypeDescriberWithDeclaredConstructors(ClientCnxnSocketNIO.class));
+-        return typeDescribers;
+-    }
+-
+-    private TypeDescriber buildTypeDescriberWithDeclaredMethods(Class<?> c) {
+-        Set<MemberCategory> memberCategories = new HashSet<>();
+-        memberCategories.add(MemberCategory.INVOKE_DECLARED_METHODS);
+-        return new TypeDescriber(
+-                c.getName(), null, new HashSet<>(), new HashSet<>(), new HashSet<>(), memberCategories);
+-    }
+-
+-    private TypeDescriber buildTypeDescriberWithDeclaredConstructors(Class<?> c) {
+-        Set<MemberCategory> memberCategories = new HashSet<>();
+-        memberCategories.add(MemberCategory.INVOKE_DECLARED_CONSTRUCTORS);
+-        return new TypeDescriber(
+-                c.getName(), null, new HashSet<>(), new HashSet<>(), new HashSet<>(), memberCategories);
+-    }
+-}
+diff --git a/dubbo-remoting/dubbo-remoting-zookeeper/src/main/resources/META-INF/dubbo/internal/org.apache.dubbo.aot.api.ReflectionTypeDescriberRegistrar b/dubbo-remoting/dubbo-remoting-zookeeper/src/main/resources/META-INF/dubbo/internal/org.apache.dubbo.aot.api.ReflectionTypeDescriberRegistrar
+deleted file mode 100644
+index 5312e63..0000000
+--- a/dubbo-remoting/dubbo-remoting-zookeeper/src/main/resources/META-INF/dubbo/internal/org.apache.dubbo.aot.api.ReflectionTypeDescriberRegistrar
++++ /dev/null
+@@ -1 +0,0 @@
+-curatorZookeeper=org.apache.dubbo.remoting.zookeeper.curator.aot.CuratorZookeeperReflectionTypeDescriberRegistrar
+diff --git a/dubbo-remoting/dubbo-remoting-zookeeper/src/main/resources/META-INF/dubbo/internal/org.apache.dubbo.remoting.zookeeper.ZookeeperTransporter b/dubbo-remoting/dubbo-remoting-zookeeper/src/main/resources/META-INF/dubbo/internal/org.apache.dubbo.remoting.zookeeper.ZookeeperTransporter
+deleted file mode 100644
+index 44f9374..0000000
+--- a/dubbo-remoting/dubbo-remoting-zookeeper/src/main/resources/META-INF/dubbo/internal/org.apache.dubbo.remoting.zookeeper.ZookeeperTransporter
++++ /dev/null
+@@ -1 +0,0 @@
+-curator=org.apache.dubbo.remoting.zookeeper.curator.CuratorZookeeperTransporter
+diff --git a/dubbo-remoting/dubbo-remoting-zookeeper/src/test/java/org/apache/dubbo/remoting/zookeeper/curator/CuratorZookeeperClientTest.java b/dubbo-remoting/dubbo-remoting-zookeeper/src/test/java/org/apache/dubbo/remoting/zookeeper/curator/CuratorZookeeperClientTest.java
+deleted file mode 100644
+index 818b3f9..0000000
+--- a/dubbo-remoting/dubbo-remoting-zookeeper/src/test/java/org/apache/dubbo/remoting/zookeeper/curator/CuratorZookeeperClientTest.java
++++ /dev/null
+@@ -1,515 +0,0 @@
+-/*
+- * Licensed to the Apache Software Foundation (ASF) under one or more
+- * contributor license agreements.  See the NOTICE file distributed with
+- * this work for additional information regarding copyright ownership.
+- * The ASF licenses this file to You under the Apache License, Version 2.0
+- * (the "License"); you may not use this file except in compliance with
+- * the License.  You may obtain a copy of the License at
+- *
+- *     http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-package org.apache.dubbo.remoting.zookeeper.curator;
+-
+-import org.apache.dubbo.common.URL;
+-import org.apache.dubbo.common.config.configcenter.ConfigItem;
+-import org.apache.dubbo.remoting.zookeeper.ChildListener;
+-
+-import java.nio.charset.StandardCharsets;
+-import java.util.List;
+-import java.util.concurrent.CountDownLatch;
+-import java.util.concurrent.atomic.AtomicInteger;
+-import java.util.concurrent.atomic.AtomicReference;
+-
+-import org.apache.curator.framework.CuratorFramework;
+-import org.apache.curator.framework.CuratorFrameworkFactory;
+-import org.apache.curator.retry.ExponentialBackoffRetry;
+-import org.apache.zookeeper.WatchedEvent;
+-import org.apache.zookeeper.data.Stat;
+-import org.junit.jupiter.api.AfterEach;
+-import org.junit.jupiter.api.Assertions;
+-import org.junit.jupiter.api.BeforeAll;
+-import org.junit.jupiter.api.BeforeEach;
+-import org.junit.jupiter.api.Disabled;
+-import org.junit.jupiter.api.Test;
+-import org.junit.jupiter.api.condition.DisabledForJreRange;
+-import org.junit.jupiter.api.condition.JRE;
+-
+-import static org.awaitility.Awaitility.await;
+-import static org.hamcrest.MatcherAssert.assertThat;
+-import static org.hamcrest.core.Is.is;
+-import static org.junit.jupiter.api.Assertions.assertEquals;
+-import static org.junit.jupiter.api.Assertions.assertNull;
+-import static org.mockito.Mockito.mock;
+-
+-@DisabledForJreRange(min = JRE.JAVA_16)
+-class CuratorZookeeperClientTest {
+-    private CuratorZookeeperClient curatorClient;
+-    CuratorFramework client = null;
+-
+-    private static int zookeeperServerPort1;
+-    private static String zookeeperConnectionAddress1;
+-
+-    @BeforeAll
+-    public static void beforeAll() {
+-        zookeeperConnectionAddress1 = System.getProperty("zookeeper.connection.address.1");
+-        zookeeperServerPort1 = Integer.parseInt(
+-                zookeeperConnectionAddress1.substring(zookeeperConnectionAddress1.lastIndexOf(":") + 1));
+-    }
+-
+-    @BeforeEach
+-    public void setUp() throws Exception {
+-        curatorClient = new CuratorZookeeperClient(
+-                URL.valueOf(zookeeperConnectionAddress1 + "/org.apache.dubbo.registry.RegistryService"));
+-        client = CuratorFrameworkFactory.newClient(
+-                "127.0.0.1:" + zookeeperServerPort1, new ExponentialBackoffRetry(1000, 3));
+-        client.start();
+-    }
+-
+-    @Test
+-    void testCheckExists() {
+-        String path = "/dubbo/org.apache.dubbo.demo.DemoService/providers";
+-        curatorClient.create(path, false, true);
+-        assertThat(curatorClient.checkExists(path), is(true));
+-        assertThat(curatorClient.checkExists(path + "/noneexits"), is(false));
+-    }
+-
+-    @Test
+-    void testChildrenPath() {
+-        String path = "/dubbo/org.apache.dubbo.demo.DemoService/providers";
+-        curatorClient.create(path, false, true);
+-        curatorClient.create(path + "/provider1", false, true);
+-        curatorClient.create(path + "/provider2", false, true);
+-
+-        List<String> children = curatorClient.getChildren(path);
+-        assertThat(children.size(), is(2));
+-    }
+-
+-    @Test
+-    @Disabled("Global registry center")
+-    public void testChildrenListener() throws InterruptedException {
+-        String path = "/dubbo/org.apache.dubbo.demo.DemoService/providers";
+-        curatorClient.create(path, false, true);
+-        final CountDownLatch countDownLatch = new CountDownLatch(1);
+-        curatorClient.addTargetChildListener(path, new CuratorZookeeperClient.CuratorWatcherImpl() {
+-
+-            @Override
+-            public void process(WatchedEvent watchedEvent) {
+-                countDownLatch.countDown();
+-            }
+-        });
+-        curatorClient.createPersistent(path + "/provider1", true);
+-        countDownLatch.await();
+-    }
+-
+-    @Test
+-    void testWithInvalidServer() {
+-        Assertions.assertThrows(IllegalStateException.class, () -> {
+-            curatorClient = new CuratorZookeeperClient(URL.valueOf("zookeeper://127.0.0.1:1/service"));
+-            curatorClient.create("/testPath", true, true);
+-        });
+-    }
+-
+-    @Test
+-    @Disabled("Global registry center cannot stop")
+-    public void testWithStoppedServer() {
+-        Assertions.assertThrows(IllegalStateException.class, () -> {
+-            curatorClient.create("/testPath", true, true);
+-            curatorClient.delete("/testPath");
+-        });
+-    }
+-
+-    @Test
+-    void testRemoveChildrenListener() {
+-        ChildListener childListener = mock(ChildListener.class);
+-        curatorClient.addChildListener("/children", childListener);
+-        curatorClient.removeChildListener("/children", childListener);
+-    }
+-
+-    @Test
+-    void testCreateExistingPath() {
+-        curatorClient.create("/pathOne", false, true);
+-        curatorClient.create("/pathOne", false, true);
+-    }
+-
+-    @Test
+-    void testConnectedStatus() {
+-        curatorClient.createEphemeral("/testPath", true);
+-        boolean connected = curatorClient.isConnected();
+-        assertThat(connected, is(true));
+-    }
+-
+-    @Test
+-    void testCreateContent4Persistent() {
+-        String path = "/curatorTest4CrContent/content.data";
+-        String content = "createContentTest";
+-        curatorClient.delete(path);
+-        assertThat(curatorClient.checkExists(path), is(false));
+-        assertNull(curatorClient.getContent(path));
+-
+-        curatorClient.createOrUpdate(path, content, false);
+-        assertThat(curatorClient.checkExists(path), is(true));
+-        assertEquals(curatorClient.getContent(path), content);
+-    }
+-
+-    @Test
+-    void testCreateContent4Temp() {
+-        String path = "/curatorTest4CrContent/content.data";
+-        String content = "createContentTest";
+-        curatorClient.delete(path);
+-        assertThat(curatorClient.checkExists(path), is(false));
+-        assertNull(curatorClient.getContent(path));
+-
+-        curatorClient.createOrUpdate(path, content, true);
+-        assertThat(curatorClient.checkExists(path), is(true));
+-        assertEquals(curatorClient.getContent(path), content);
+-    }
+-
+-    @Test
+-    void testCreatePersistentFailed() {
+-        String path = "/dubbo/test/path";
+-        curatorClient.delete(path);
+-        curatorClient.create(path, false, true);
+-        Assertions.assertTrue(curatorClient.checkExists(path));
+-
+-        curatorClient.createPersistent(path, true);
+-        Assertions.assertTrue(curatorClient.checkExists(path));
+-
+-        curatorClient.createPersistent(path, true);
+-        Assertions.assertTrue(curatorClient.checkExists(path));
+-
+-        Assertions.assertThrows(IllegalStateException.class, () -> {
+-            curatorClient.createPersistent(path, false);
+-        });
+-        Assertions.assertTrue(curatorClient.checkExists(path));
+-    }
+-
+-    @Test
+-    void testCreateEphemeralFailed() {
+-        String path = "/dubbo/test/path";
+-        curatorClient.delete(path);
+-        curatorClient.create(path, true, true);
+-        Assertions.assertTrue(curatorClient.checkExists(path));
+-
+-        curatorClient.createEphemeral(path, true);
+-        Assertions.assertTrue(curatorClient.checkExists(path));
+-
+-        curatorClient.createEphemeral(path, true);
+-        Assertions.assertTrue(curatorClient.checkExists(path));
+-
+-        Assertions.assertThrows(IllegalStateException.class, () -> {
+-            curatorClient.createEphemeral(path, false);
+-        });
+-        Assertions.assertTrue(curatorClient.checkExists(path));
+-    }
+-
+-    @AfterEach
+-    public void tearDown() throws Exception {
+-        curatorClient.close();
+-    }
+-
+-    @Test
+-    void testAddTargetDataListener() throws Exception {
+-        String listenerPath = "/dubbo/service.name/configuration";
+-        String path = listenerPath + "/dat/data";
+-        String value = "vav";
+-
+-        curatorClient.createOrUpdate(path + "/d.json", value, true);
+-        String valueFromCache = curatorClient.getContent(path + "/d.json");
+-        Assertions.assertEquals(value, valueFromCache);
+-        final AtomicInteger atomicInteger = new AtomicInteger(0);
+-        curatorClient.addTargetDataListener(path + "/d.json", new CuratorZookeeperClient.NodeCacheListenerImpl() {
+-
+-            @Override
+-            public void nodeChanged() {
+-                atomicInteger.incrementAndGet();
+-            }
+-        });
+-
+-        valueFromCache = curatorClient.getContent(path + "/d.json");
+-        Assertions.assertNotNull(valueFromCache);
+-
+-        int currentCount1 = atomicInteger.get();
+-        curatorClient.getClient().setData().forPath(path + "/d.json", "foo".getBytes());
+-        await().until(() -> atomicInteger.get() > currentCount1);
+-        int currentCount2 = atomicInteger.get();
+-        curatorClient.getClient().setData().forPath(path + "/d.json", "bar".getBytes());
+-        await().until(() -> atomicInteger.get() > currentCount2);
+-        int currentCount3 = atomicInteger.get();
+-        curatorClient.delete(path + "/d.json");
+-        valueFromCache = curatorClient.getContent(path + "/d.json");
+-        Assertions.assertNull(valueFromCache);
+-        await().until(() -> atomicInteger.get() > currentCount3);
+-    }
+-
+-    @Test
+-    void testPersistentCas1() throws Exception {
+-        // test create failed when others create success
+-        String path = "/dubbo/mapping/org.apache.dubbo.demo.DemoService";
+-        AtomicReference<Runnable> runnable = new AtomicReference<>();
+-        CuratorZookeeperClient curatorClient =
+-                new CuratorZookeeperClient(
+-                        URL.valueOf(zookeeperConnectionAddress1 + "/org.apache.dubbo.registry.RegistryService")) {
+-                    @Override
+-                    protected void createPersistent(String path, String data, boolean faultTolerant) {
+-                        if (runnable.get() != null) {
+-                            runnable.get().run();
+-                        }
+-                        super.createPersistent(path, data, faultTolerant);
+-                    }
+-
+-                    @Override
+-                    protected void update(String path, String data, int version) {
+-                        if (runnable.get() != null) {
+-                            runnable.get().run();
+-                        }
+-                        super.update(path, data, version);
+-                    }
+-                };
+-        curatorClient.delete(path);
+-
+-        runnable.set(() -> {
+-            try {
+-                client.create().forPath(path, "version x".getBytes(StandardCharsets.UTF_8));
+-            } catch (Exception e) {
+-                throw new RuntimeException(e);
+-            }
+-        });
+-        Assertions.assertThrows(
+-                IllegalStateException.class, () -> curatorClient.createOrUpdate(path, "version 1", false, 0));
+-        Assertions.assertEquals("version x", curatorClient.getContent(path));
+-
+-        client.setData().forPath(path, "version 1".getBytes(StandardCharsets.UTF_8));
+-
+-        ConfigItem configItem = curatorClient.getConfigItem(path);
+-        runnable.set(() -> {
+-            try {
+-                client.setData().forPath(path, "version x".getBytes(StandardCharsets.UTF_8));
+-            } catch (Exception e) {
+-                throw new RuntimeException(e);
+-            }
+-        });
+-        int version1 = ((Stat) configItem.getTicket()).getVersion();
+-        Assertions.assertThrows(
+-                IllegalStateException.class, () -> curatorClient.createOrUpdate(path, "version 2", false, version1));
+-        Assertions.assertEquals("version x", curatorClient.getContent(path));
+-
+-        runnable.set(null);
+-        configItem = curatorClient.getConfigItem(path);
+-        int version2 = ((Stat) configItem.getTicket()).getVersion();
+-        curatorClient.createOrUpdate(path, "version 2", false, version2);
+-        Assertions.assertEquals("version 2", curatorClient.getContent(path));
+-
+-        curatorClient.close();
+-    }
+-
+-    @Test
+-    void testPersistentCas2() {
+-        // test update failed when others create success
+-        String path = "/dubbo/mapping/org.apache.dubbo.demo.DemoService";
+-        CuratorZookeeperClient curatorClient = new CuratorZookeeperClient(
+-                URL.valueOf(zookeeperConnectionAddress1 + "/org.apache.dubbo.registry.RegistryService"));
+-        curatorClient.delete(path);
+-
+-        curatorClient.createOrUpdate(path, "version x", false);
+-        Assertions.assertThrows(
+-                IllegalStateException.class, () -> curatorClient.createOrUpdate(path, "version 1", false, null));
+-        Assertions.assertEquals("version x", curatorClient.getContent(path));
+-
+-        curatorClient.close();
+-    }
+-
+-    @Test
+-    void testPersistentNonVersion() {
+-        String path = "/dubbo/metadata/org.apache.dubbo.demo.DemoService";
+-        AtomicReference<Runnable> runnable = new AtomicReference<>();
+-        CuratorZookeeperClient curatorClient =
+-                new CuratorZookeeperClient(
+-                        URL.valueOf(zookeeperConnectionAddress1 + "/org.apache.dubbo.registry.RegistryService")) {
+-                    @Override
+-                    protected void createPersistent(String path, String data, boolean faultTolerant) {
+-                        if (runnable.get() != null) {
+-                            runnable.get().run();
+-                        }
+-                        super.createPersistent(path, data, faultTolerant);
+-                    }
+-
+-                    @Override
+-                    protected void update(String path, String data, int version) {
+-                        if (runnable.get() != null) {
+-                            runnable.get().run();
+-                        }
+-                        super.update(path, data, version);
+-                    }
+-                };
+-        curatorClient.delete(path);
+-
+-        curatorClient.createOrUpdate(path, "version 0", false);
+-        Assertions.assertEquals("version 0", curatorClient.getContent(path));
+-        curatorClient.delete(path);
+-
+-        runnable.set(() -> {
+-            try {
+-                client.create().forPath(path, "version x".getBytes(StandardCharsets.UTF_8));
+-            } catch (Exception e) {
+-                throw new RuntimeException(e);
+-            }
+-        });
+-        curatorClient.createOrUpdate(path, "version 1", false);
+-        Assertions.assertEquals("version 1", curatorClient.getContent(path));
+-
+-        runnable.set(() -> {
+-            try {
+-                client.setData().forPath(path, "version x".getBytes(StandardCharsets.UTF_8));
+-            } catch (Exception e) {
+-                throw new RuntimeException(e);
+-            }
+-        });
+-        curatorClient.createOrUpdate(path, "version 2", false);
+-        Assertions.assertEquals("version 2", curatorClient.getContent(path));
+-
+-        runnable.set(null);
+-        curatorClient.createOrUpdate(path, "version 3", false);
+-        Assertions.assertEquals("version 3", curatorClient.getContent(path));
+-
+-        curatorClient.close();
+-    }
+-
+-    @Test
+-    void testEphemeralCas1() throws Exception {
+-        // test create failed when others create success
+-        String path = "/dubbo/mapping/org.apache.dubbo.demo.DemoService";
+-        AtomicReference<Runnable> runnable = new AtomicReference<>();
+-        CuratorZookeeperClient curatorClient =
+-                new CuratorZookeeperClient(
+-                        URL.valueOf(zookeeperConnectionAddress1 + "/org.apache.dubbo.registry.RegistryService")) {
+-                    @Override
+-                    protected void createEphemeral(String path, String data, boolean faultTolerant) {
+-                        if (runnable.get() != null) {
+-                            runnable.get().run();
+-                        }
+-                        super.createPersistent(path, data, faultTolerant);
+-                    }
+-
+-                    @Override
+-                    protected void update(String path, String data, int version) {
+-                        if (runnable.get() != null) {
+-                            runnable.get().run();
+-                        }
+-                        super.update(path, data, version);
+-                    }
+-                };
+-        curatorClient.delete(path);
+-
+-        runnable.set(() -> {
+-            try {
+-                client.create().forPath(path, "version x".getBytes(StandardCharsets.UTF_8));
+-            } catch (Exception e) {
+-                throw new RuntimeException(e);
+-            }
+-        });
+-        Assertions.assertThrows(
+-                IllegalStateException.class, () -> curatorClient.createOrUpdate(path, "version 1", true, 0));
+-        Assertions.assertEquals("version x", curatorClient.getContent(path));
+-
+-        client.setData().forPath(path, "version 1".getBytes(StandardCharsets.UTF_8));
+-
+-        ConfigItem configItem = curatorClient.getConfigItem(path);
+-        runnable.set(() -> {
+-            try {
+-                client.setData().forPath(path, "version x".getBytes(StandardCharsets.UTF_8));
+-            } catch (Exception e) {
+-                throw new RuntimeException(e);
+-            }
+-        });
+-        int version1 = ((Stat) configItem.getTicket()).getVersion();
+-        Assertions.assertThrows(
+-                IllegalStateException.class, () -> curatorClient.createOrUpdate(path, "version 2", true, version1));
+-        Assertions.assertEquals("version x", curatorClient.getContent(path));
+-
+-        runnable.set(null);
+-        configItem = curatorClient.getConfigItem(path);
+-        int version2 = ((Stat) configItem.getTicket()).getVersion();
+-        curatorClient.createOrUpdate(path, "version 2", true, version2);
+-        Assertions.assertEquals("version 2", curatorClient.getContent(path));
+-
+-        curatorClient.close();
+-    }
+-
+-    @Test
+-    void testEphemeralCas2() {
+-        // test update failed when others create success
+-        String path = "/dubbo/mapping/org.apache.dubbo.demo.DemoService";
+-        CuratorZookeeperClient curatorClient = new CuratorZookeeperClient(
+-                URL.valueOf(zookeeperConnectionAddress1 + "/org.apache.dubbo.registry.RegistryService"));
+-        curatorClient.delete(path);
+-
+-        curatorClient.createOrUpdate(path, "version x", true);
+-        Assertions.assertThrows(
+-                IllegalStateException.class, () -> curatorClient.createOrUpdate(path, "version 1", true, null));
+-        Assertions.assertEquals("version x", curatorClient.getContent(path));
+-
+-        curatorClient.close();
+-    }
+-
+-    @Test
+-    void testEphemeralNonVersion() {
+-        String path = "/dubbo/metadata/org.apache.dubbo.demo.DemoService";
+-        AtomicReference<Runnable> runnable = new AtomicReference<>();
+-        CuratorZookeeperClient curatorClient =
+-                new CuratorZookeeperClient(
+-                        URL.valueOf(zookeeperConnectionAddress1 + "/org.apache.dubbo.registry.RegistryService")) {
+-                    @Override
+-                    protected void createPersistent(String path, String data, boolean faultTolerant) {
+-                        if (runnable.get() != null) {
+-                            runnable.get().run();
+-                        }
+-                        super.createPersistent(path, data, faultTolerant);
+-                    }
+-
+-                    @Override
+-                    protected void update(String path, String data, int version) {
+-                        if (runnable.get() != null) {
+-                            runnable.get().run();
+-                        }
+-                        super.update(path, data, version);
+-                    }
+-                };
+-        curatorClient.delete(path);
+-
+-        curatorClient.createOrUpdate(path, "version 0", true);
+-        Assertions.assertEquals("version 0", curatorClient.getContent(path));
+-        curatorClient.delete(path);
+-
+-        runnable.set(() -> {
+-            try {
+-                client.create().forPath(path, "version x".getBytes(StandardCharsets.UTF_8));
+-            } catch (Exception e) {
+-                throw new RuntimeException(e);
+-            }
+-        });
+-        curatorClient.createOrUpdate(path, "version 1", true);
+-        Assertions.assertEquals("version 1", curatorClient.getContent(path));
+-
+-        runnable.set(() -> {
+-            try {
+-                client.setData().forPath(path, "version x".getBytes(StandardCharsets.UTF_8));
+-            } catch (Exception e) {
+-                throw new RuntimeException(e);
+-            }
+-        });
+-        curatorClient.createOrUpdate(path, "version 2", true);
+-        Assertions.assertEquals("version 2", curatorClient.getContent(path));
+-
+-        runnable.set(null);
+-        curatorClient.createOrUpdate(path, "version 3", true);
+-        Assertions.assertEquals("version 3", curatorClient.getContent(path));
+-
+-        curatorClient.close();
+-    }
+-}
+diff --git a/dubbo-remoting/dubbo-remoting-zookeeper/src/test/java/org/apache/dubbo/remoting/zookeeper/curator/CuratorZookeeperTransporterTest.java b/dubbo-remoting/dubbo-remoting-zookeeper/src/test/java/org/apache/dubbo/remoting/zookeeper/curator/CuratorZookeeperTransporterTest.java
+deleted file mode 100644
+index 328107a..0000000
+--- a/dubbo-remoting/dubbo-remoting-zookeeper/src/test/java/org/apache/dubbo/remoting/zookeeper/curator/CuratorZookeeperTransporterTest.java
++++ /dev/null
+@@ -1,55 +0,0 @@
+-/*
+- * Licensed to the Apache Software Foundation (ASF) under one or more
+- * contributor license agreements.  See the NOTICE file distributed with
+- * this work for additional information regarding copyright ownership.
+- * The ASF licenses this file to You under the Apache License, Version 2.0
+- * (the "License"); you may not use this file except in compliance with
+- * the License.  You may obtain a copy of the License at
+- *
+- *     http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-package org.apache.dubbo.remoting.zookeeper.curator;
+-
+-import org.apache.dubbo.common.URL;
+-import org.apache.dubbo.remoting.zookeeper.ZookeeperClient;
+-
+-import org.junit.jupiter.api.BeforeAll;
+-import org.junit.jupiter.api.BeforeEach;
+-import org.junit.jupiter.api.Test;
+-import org.junit.jupiter.api.condition.DisabledForJreRange;
+-import org.junit.jupiter.api.condition.JRE;
+-
+-import static org.hamcrest.MatcherAssert.assertThat;
+-import static org.hamcrest.core.IsNot.not;
+-import static org.hamcrest.core.IsNull.nullValue;
+-
+-@DisabledForJreRange(min = JRE.JAVA_16)
+-class CuratorZookeeperTransporterTest {
+-    private ZookeeperClient zookeeperClient;
+-    private CuratorZookeeperTransporter curatorZookeeperTransporter;
+-    private static String zookeeperConnectionAddress1;
+-
+-    @BeforeAll
+-    public static void beforeAll() {
+-        zookeeperConnectionAddress1 = System.getProperty("zookeeper.connection.address.1");
+-    }
+-
+-    @BeforeEach
+-    public void setUp() throws Exception {
+-        zookeeperClient =
+-                new CuratorZookeeperTransporter().connect(URL.valueOf(zookeeperConnectionAddress1 + "/service"));
+-        curatorZookeeperTransporter = new CuratorZookeeperTransporter();
+-    }
+-
+-    @Test
+-    void testZookeeperClient() {
+-        assertThat(zookeeperClient, not(nullValue()));
+-        zookeeperClient.close();
+-    }
+-}
+diff --git a/dubbo-remoting/dubbo-remoting-zookeeper/src/test/java/org/apache/dubbo/remoting/zookeeper/curator/support/AbstractZookeeperTransporterTest.java b/dubbo-remoting/dubbo-remoting-zookeeper/src/test/java/org/apache/dubbo/remoting/zookeeper/curator/support/AbstractZookeeperTransporterTest.java
+deleted file mode 100644
+index 37cc93c..0000000
+--- a/dubbo-remoting/dubbo-remoting-zookeeper/src/test/java/org/apache/dubbo/remoting/zookeeper/curator/support/AbstractZookeeperTransporterTest.java
++++ /dev/null
+@@ -1,250 +0,0 @@
+-/*
+- * Licensed to the Apache Software Foundation (ASF) under one or more
+- * contributor license agreements.  See the NOTICE file distributed with
+- * this work for additional information regarding copyright ownership.
+- * The ASF licenses this file to You under the Apache License, Version 2.0
+- * (the "License"); you may not use this file except in compliance with
+- * the License.  You may obtain a copy of the License at
+- *
+- *     http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-package org.apache.dubbo.remoting.zookeeper.curator.support;
+-
+-import org.apache.dubbo.common.URL;
+-import org.apache.dubbo.remoting.zookeeper.AbstractZookeeperTransporter;
+-import org.apache.dubbo.remoting.zookeeper.ZookeeperClient;
+-import org.apache.dubbo.remoting.zookeeper.curator.CuratorZookeeperTransporter;
+-
+-import java.util.List;
+-
+-import org.junit.jupiter.api.Assertions;
+-import org.junit.jupiter.api.BeforeAll;
+-import org.junit.jupiter.api.BeforeEach;
+-import org.junit.jupiter.api.Test;
+-import org.junit.jupiter.api.condition.DisabledForJreRange;
+-import org.junit.jupiter.api.condition.JRE;
+-
+-import static org.hamcrest.MatcherAssert.assertThat;
+-import static org.hamcrest.core.IsNot.not;
+-import static org.hamcrest.core.IsNull.nullValue;
+-
+-/**
+- * AbstractZookeeperTransporterTest
+- */
+-@DisabledForJreRange(min = JRE.JAVA_16)
+-class AbstractZookeeperTransporterTest {
+-    private ZookeeperClient zookeeperClient;
+-    private AbstractZookeeperTransporter abstractZookeeperTransporter;
+-
+-    private static int zookeeperServerPort1, zookeeperServerPort2;
+-    private static String zookeeperConnectionAddress1, zookeeperConnectionAddress2;
+-
+-    @BeforeAll
+-    public static void beforeAll() {
+-        zookeeperConnectionAddress1 = System.getProperty("zookeeper.connection.address.1");
+-        zookeeperConnectionAddress2 = System.getProperty("zookeeper.connection.address.2");
+-        zookeeperServerPort1 = Integer.parseInt(
+-                zookeeperConnectionAddress1.substring(zookeeperConnectionAddress1.lastIndexOf(":") + 1));
+-        zookeeperServerPort2 = Integer.parseInt(
+-                zookeeperConnectionAddress2.substring(zookeeperConnectionAddress2.lastIndexOf(":") + 1));
+-    }
+-
+-    @BeforeEach
+-    public void setUp() throws Exception {
+-        zookeeperClient = new CuratorZookeeperTransporter()
+-                .connect(URL.valueOf("zookeeper://127.0.0.1:" + zookeeperServerPort1 + "/service"));
+-        abstractZookeeperTransporter = new CuratorZookeeperTransporter();
+-    }
+-
+-    @Test
+-    void testZookeeperClient() {
+-        assertThat(zookeeperClient, not(nullValue()));
+-        zookeeperClient.close();
+-    }
+-
+-    @Test
+-    void testGetURLBackupAddress() {
+-        URL url = URL.valueOf(
+-                zookeeperConnectionAddress1 + "/org.apache.dubbo.registry.RegistryService?backup=127.0.0.1:" + 9099
+-                        + "&application=metadatareport-local-xml-provider2&dubbo=2.0.2&interface=org.apache.dubbo.registry.RegistryService&pid=47418&specVersion=2.7.0-SNAPSHOT&timestamp=1547102428828");
+-        List<String> stringList = abstractZookeeperTransporter.getURLBackupAddress(url);
+-        Assertions.assertEquals(stringList.size(), 2);
+-        Assertions.assertEquals(stringList.get(0), "127.0.0.1:" + zookeeperServerPort1);
+-        Assertions.assertEquals(stringList.get(1), "127.0.0.1:9099");
+-    }
+-
+-    @Test
+-    void testGetURLBackupAddressNoBack() {
+-        URL url = URL.valueOf(
+-                zookeeperConnectionAddress1
+-                        + "/org.apache.dubbo.registry.RegistryService?application=metadatareport-local-xml-provider2&dubbo=2.0.2&interface=org.apache.dubbo.registry.RegistryService&pid=47418&specVersion=2.7.0-SNAPSHOT&timestamp=1547102428828");
+-        List<String> stringList = abstractZookeeperTransporter.getURLBackupAddress(url);
+-        Assertions.assertEquals(stringList.size(), 1);
+-        Assertions.assertEquals(stringList.get(0), "127.0.0.1:" + zookeeperServerPort1);
+-    }
+-
+-    @Test
+-    void testFetchAndUpdateZookeeperClientCache() {
+-        URL url = URL.valueOf(
+-                zookeeperConnectionAddress1 + "/org.apache.dubbo.registry.RegistryService?backup=127.0.0.1:"
+-                        + zookeeperServerPort1 + ",127.0.0.1:" + zookeeperServerPort2
+-                        + "&application=metadatareport-local-xml-provider2&dubbo=2.0.2&interface=org.apache.dubbo.registry.RegistryService&pid=47418&specVersion=2.7.0-SNAPSHOT&timestamp=1547102428828");
+-        ZookeeperClient newZookeeperClient = abstractZookeeperTransporter.connect(url);
+-        // just for connected
+-        newZookeeperClient.getContent("/dubbo/test");
+-        Assertions.assertEquals(
+-                abstractZookeeperTransporter.getZookeeperClientMap().size(), 2);
+-        Assertions.assertEquals(
+-                abstractZookeeperTransporter.getZookeeperClientMap().get("127.0.0.1:" + zookeeperServerPort1),
+-                newZookeeperClient);
+-
+-        URL url2 = URL.valueOf(
+-                "zookeeper://127.0.0.1:" + zookeeperServerPort1
+-                        + "/org.apache.dubbo.metadata.store.MetadataReport?address=zookeeper://127.0.0.1:2181&application=metadatareport-local-xml-provider2&cycle-report=false&interface=org.apache.dubbo.metadata.store.MetadataReport&retry-period=4590&retry-times=23&sync-report=true");
+-        checkFetchAndUpdateCacheNotNull(url2);
+-        URL url3 = URL.valueOf(
+-                "zookeeper://127.0.0.1:8778/org.apache.dubbo.metadata.store.MetadataReport?backup=127.0.0.1:"
+-                        + zookeeperServerPort2
+-                        + "&address=zookeeper://127.0.0.1:2181&application=metadatareport-local-xml-provider2&cycle-report=false&interface=org.apache.dubbo.metadata.store.MetadataReport&retry-period=4590&retry-times=23&sync-report=true");
+-        checkFetchAndUpdateCacheNotNull(url3);
+-    }
+-
+-    private void checkFetchAndUpdateCacheNotNull(URL url) {
+-        List<String> addressList = abstractZookeeperTransporter.getURLBackupAddress(url);
+-        ZookeeperClient zookeeperClient = abstractZookeeperTransporter.fetchAndUpdateZookeeperClientCache(addressList);
+-        Assertions.assertNotNull(zookeeperClient);
+-    }
+-
+-    @Test
+-    void testRepeatConnect() {
+-        URL url = URL.valueOf(
+-                zookeeperConnectionAddress1
+-                        + "/org.apache.dubbo.registry.RegistryService?application=metadatareport-local-xml-provider2&dubbo=2.0.2&interface=org.apache.dubbo.registry.RegistryService&pid=47418&specVersion=2.7.0-SNAPSHOT&timestamp=1547102428828");
+-        URL url2 = URL.valueOf(
+-                zookeeperConnectionAddress1
+-                        + "/org.apache.dubbo.metadata.store.MetadataReport?address=zookeeper://127.0.0.1:2181&application=metadatareport-local-xml-provider2&cycle-report=false&interface=org.apache.dubbo.metadata.store.MetadataReport&retry-period=4590&retry-times=23&sync-report=true");
+-        ZookeeperClient newZookeeperClient = abstractZookeeperTransporter.connect(url);
+-        // just for connected
+-        newZookeeperClient.getContent("/dubbo/test");
+-        Assertions.assertEquals(
+-                abstractZookeeperTransporter.getZookeeperClientMap().size(), 1);
+-        Assertions.assertEquals(
+-                abstractZookeeperTransporter.getZookeeperClientMap().get("127.0.0.1:" + zookeeperServerPort1),
+-                newZookeeperClient);
+-        Assertions.assertTrue(newZookeeperClient.isConnected());
+-
+-        ZookeeperClient newZookeeperClient2 = abstractZookeeperTransporter.connect(url2);
+-        // just for connected
+-        newZookeeperClient2.getContent("/dubbo/test");
+-        Assertions.assertEquals(newZookeeperClient, newZookeeperClient2);
+-        Assertions.assertEquals(
+-                abstractZookeeperTransporter.getZookeeperClientMap().size(), 1);
+-        Assertions.assertEquals(
+-                abstractZookeeperTransporter.getZookeeperClientMap().get("127.0.0.1:" + zookeeperServerPort1),
+-                newZookeeperClient);
+-    }
+-
+-    @Test
+-    void testNotRepeatConnect() {
+-        URL url = URL.valueOf(
+-                zookeeperConnectionAddress1
+-                        + "/org.apache.dubbo.registry.RegistryService?application=metadatareport-local-xml-provider2&dubbo=2.0.2&interface=org.apache.dubbo.registry.RegistryService&pid=47418&specVersion=2.7.0-SNAPSHOT&timestamp=1547102428828");
+-        URL url2 = URL.valueOf(
+-                zookeeperConnectionAddress2
+-                        + "/org.apache.dubbo.metadata.store.MetadataReport?address=zookeeper://127.0.0.1:2181&application=metadatareport-local-xml-provider2&cycle-report=false&interface=org.apache.dubbo.metadata.store.MetadataReport&retry-period=4590&retry-times=23&sync-report=true");
+-        ZookeeperClient newZookeeperClient = abstractZookeeperTransporter.connect(url);
+-        // just for connected
+-        newZookeeperClient.getContent("/dubbo/test");
+-        Assertions.assertEquals(
+-                abstractZookeeperTransporter.getZookeeperClientMap().size(), 1);
+-        Assertions.assertEquals(
+-                abstractZookeeperTransporter.getZookeeperClientMap().get("127.0.0.1:" + zookeeperServerPort1),
+-                newZookeeperClient);
+-
+-        ZookeeperClient newZookeeperClient2 = abstractZookeeperTransporter.connect(url2);
+-        // just for connected
+-        newZookeeperClient2.getContent("/dubbo/test");
+-        Assertions.assertNotEquals(newZookeeperClient, newZookeeperClient2);
+-        Assertions.assertEquals(
+-                abstractZookeeperTransporter.getZookeeperClientMap().size(), 2);
+-        Assertions.assertEquals(
+-                abstractZookeeperTransporter.getZookeeperClientMap().get("127.0.0.1:" + zookeeperServerPort2),
+-                newZookeeperClient2);
+-    }
+-
+-    @Test
+-    void testRepeatConnectForBackUpAdd() {
+-
+-        URL url = URL.valueOf(
+-                zookeeperConnectionAddress1 + "/org.apache.dubbo.registry.RegistryService?backup=127.0.0.1:"
+-                        + zookeeperServerPort1
+-                        + "&application=metadatareport-local-xml-provider2&dubbo=2.0.2&interface=org.apache.dubbo.registry.RegistryService&pid=47418&specVersion=2.7.0-SNAPSHOT&timestamp=1547102428828");
+-        URL url2 = URL.valueOf(
+-                zookeeperConnectionAddress1 + "/org.apache.dubbo.metadata.store.MetadataReport?backup=127.0.0.1:"
+-                        + zookeeperServerPort2
+-                        + "&address=zookeeper://127.0.0.1:2181&application=metadatareport-local-xml-provider2&cycle-report=false&interface=org.apache.dubbo.metadata.store.MetadataReport&retry-period=4590&retry-times=23&sync-report=true");
+-        ZookeeperClient newZookeeperClient = abstractZookeeperTransporter.connect(url);
+-        // just for connected
+-        newZookeeperClient.getContent("/dubbo/test");
+-        Assertions.assertEquals(
+-                abstractZookeeperTransporter.getZookeeperClientMap().size(), 1);
+-        Assertions.assertEquals(
+-                abstractZookeeperTransporter.getZookeeperClientMap().get("127.0.0.1:" + zookeeperServerPort1),
+-                newZookeeperClient);
+-
+-        ZookeeperClient newZookeeperClient2 = abstractZookeeperTransporter.connect(url2);
+-        // just for connected
+-        newZookeeperClient2.getContent("/dubbo/test");
+-        Assertions.assertEquals(newZookeeperClient, newZookeeperClient2);
+-        Assertions.assertEquals(
+-                abstractZookeeperTransporter.getZookeeperClientMap().size(), 2);
+-        Assertions.assertEquals(
+-                abstractZookeeperTransporter.getZookeeperClientMap().get("127.0.0.1:" + zookeeperServerPort2),
+-                newZookeeperClient2);
+-    }
+-
+-    @Test
+-    void testRepeatConnectForNoMatchBackUpAdd() {
+-
+-        URL url = URL.valueOf(
+-                zookeeperConnectionAddress1 + "/org.apache.dubbo.registry.RegistryService?backup=127.0.0.1:"
+-                        + zookeeperServerPort1
+-                        + "&application=metadatareport-local-xml-provider2&dubbo=2.0.2&interface=org.apache.dubbo.registry.RegistryService&pid=47418&specVersion=2.7.0-SNAPSHOT&timestamp=1547102428828");
+-        URL url2 = URL.valueOf(
+-                zookeeperConnectionAddress2
+-                        + "/org.apache.dubbo.metadata.store.MetadataReport?address=zookeeper://127.0.0.1:2181&application=metadatareport-local-xml-provider2&cycle-report=false&interface=org.apache.dubbo.metadata.store.MetadataReport&retry-period=4590&retry-times=23&sync-report=true");
+-        ZookeeperClient newZookeeperClient = abstractZookeeperTransporter.connect(url);
+-        // just for connected
+-        newZookeeperClient.getContent("/dubbo/test");
+-        Assertions.assertEquals(
+-                abstractZookeeperTransporter.getZookeeperClientMap().size(), 1);
+-        Assertions.assertEquals(
+-                abstractZookeeperTransporter.getZookeeperClientMap().get("127.0.0.1:" + zookeeperServerPort1),
+-                newZookeeperClient);
+-
+-        ZookeeperClient newZookeeperClient2 = abstractZookeeperTransporter.connect(url2);
+-        // just for connected
+-        newZookeeperClient2.getContent("/dubbo/test");
+-        Assertions.assertNotEquals(newZookeeperClient, newZookeeperClient2);
+-        Assertions.assertEquals(
+-                abstractZookeeperTransporter.getZookeeperClientMap().size(), 2);
+-        Assertions.assertEquals(
+-                abstractZookeeperTransporter.getZookeeperClientMap().get("127.0.0.1:" + zookeeperServerPort2),
+-                newZookeeperClient2);
+-    }
+-
+-    @Test
+-    void testSameHostWithDifferentUser() {
+-        URL url1 = URL.valueOf("zookeeper://us1:pw1@127.0.0.1:" + zookeeperServerPort1 + "/path1");
+-        URL url2 = URL.valueOf("zookeeper://us2:pw2@127.0.0.1:" + zookeeperServerPort1 + "/path2");
+-        ZookeeperClient client1 = abstractZookeeperTransporter.connect(url1);
+-        ZookeeperClient client2 = abstractZookeeperTransporter.connect(url2);
+-        assertThat(client1, not(client2));
+-    }
+-}
+diff --git a/dubbo-remoting/dubbo-remoting-zookeeper/src/test/resources/dubbo.properties b/dubbo-remoting/dubbo-remoting-zookeeper/src/test/resources/dubbo.properties
+deleted file mode 100644
+index 1aade88..0000000
+--- a/dubbo-remoting/dubbo-remoting-zookeeper/src/test/resources/dubbo.properties
++++ /dev/null
+@@ -1,2 +0,0 @@
+-dubbo.application.enable-file-cache=false
+-dubbo.service.shutdown.wait=200
+diff --git a/dubbo-remoting/pom.xml b/dubbo-remoting/pom.xml
+index e7aca36..cb65a40 100644
+--- a/dubbo-remoting/pom.xml
++++ b/dubbo-remoting/pom.xml
+@@ -31,7 +31,6 @@
+     <module>dubbo-remoting-api</module>
+     <module>dubbo-remoting-netty</module>
+     <module>dubbo-remoting-zookeeper-api</module>
+-    <module>dubbo-remoting-zookeeper</module>
+     <module>dubbo-remoting-zookeeper-curator5</module>
+     <module>dubbo-remoting-netty4</module>
+     <module>dubbo-remoting-http12</module>
+diff --git a/dubbo-test/dubbo-dependencies-all/pom.xml b/dubbo-test/dubbo-dependencies-all/pom.xml
+index 307a81e..3d79f94 100644
+--- a/dubbo-test/dubbo-dependencies-all/pom.xml
++++ b/dubbo-test/dubbo-dependencies-all/pom.xml
+@@ -315,11 +315,6 @@
+       <artifactId>dubbo-remoting-zookeeper-api</artifactId>
+       <version>${project.version}</version>
+     </dependency>
+-    <dependency>
+-      <groupId>org.apache.dubbo</groupId>
+-      <artifactId>dubbo-remoting-zookeeper</artifactId>
+-      <version>${project.version}</version>
+-    </dependency>
+     <dependency>
+       <groupId>org.apache.dubbo</groupId>
+       <artifactId>dubbo-remoting-zookeeper-curator5</artifactId>

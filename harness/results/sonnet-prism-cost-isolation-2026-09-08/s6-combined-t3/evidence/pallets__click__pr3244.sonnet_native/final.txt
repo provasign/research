@@ -1,0 +1,9 @@
+Works well: no crash, subprocess output correctly lands in `stderr_bytes` (as it wrote to `sys.stderr`'s fd), and click's own stdout writes are still captured normally. The `output` mix doesn't include the subprocess's direct fd write (a known limitation since it bypasses Python-level `write()`), but the core issue — the crash — is fixed and the primary streams (`stdout`/`stderr`) are correctly captured.
+
+## Summary
+
+The bug: `CliRunner`'s isolated `stdout`/`stderr` were backed by plain `io.BytesIO`, which has no real file descriptor. Any code under test that passed `sys.stdout`/`sys.stderr` to `subprocess.run`/`Popen` (which need `.fileno()`) crashed with `io.UnsupportedOperation`.
+
+Fix (`src/click/testing.py`, `BytesIOCopy`): added a `fileno()` method that lazily creates a real backing `tempfile.TemporaryFile()` on first access (preserving already-written data), and made `getvalue()`/`close()` aware of that backing file once it exists, so both the mixed stream and the individual `stdout`/`stderr` results still work. Also closed `stream_mixer.stdout`/`stderr` in `isolation()`'s `finally` block to avoid leaking file handles.
+
+Verified: the reported SSCCE no longer raises, `stdout_bytes`/`stderr_bytes` correctly capture subprocess output written to the real fd, and the full existing test suite (1419 passed) plus `tests/test_testing.py`/`tests/test_stream_lifecycle.py` pass with no regressions. No tests, docs, or config were modified.

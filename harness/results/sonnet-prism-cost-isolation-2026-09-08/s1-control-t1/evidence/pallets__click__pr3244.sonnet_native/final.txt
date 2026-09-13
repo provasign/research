@@ -1,0 +1,9 @@
+Confirmed passing. The full test suite (1419 passed, 24 skipped, 1 xfailed, stress tests deselected) is green, and the original reproduction case no longer raises `UnsupportedOperation`.
+
+## Summary
+
+**Root cause**: `CliRunner.isolation()` backed `sys.stdout`/`sys.stderr` with `io.BytesIO`-based objects. `io.BytesIO.fileno()` always raises `io.UnsupportedOperation`, so any code under test that passed `sys.stdout`/`sys.stderr` to APIs needing a real file descriptor (e.g. `subprocess.run(..., stdout=sys.stderr)`) crashed only when run under `CliRunner`, not when run directly.
+
+**Fix** (`src/click/testing.py`): Reworked `BytesIOCopy` to be backed by a real OS-level file (`tempfile.TemporaryFile()`) instead of `io.BytesIO`, while still duck-typing the `io.BytesIO` interface (`write`, `flush`, `getvalue`, and delegating everything else via `__getattr__`, including `fileno()`). This gives `sys.stdout`/`sys.stderr` inside `CliRunner.invoke()` a genuine file descriptor, so `subprocess.run(stdout=sys.stderr)` and similar calls work. Added a `__del__` to close the underlying temp file on garbage collection, and explicit closes in `isolation()`'s `finally` block, to avoid leaking file descriptors/`ResourceWarning`s.
+
+Note: since `subprocess` writes to the real fd directly (bypassing Python-level buffering), a child process's output isn't mixed into `result.output`/`result.stdout` — this is an inherent limitation of capturing real OS-level subprocess output via Python buffers, not something the fix could avoid, and it doesn't affect the reported issue (which was about the crash, not about capturing subprocess output).

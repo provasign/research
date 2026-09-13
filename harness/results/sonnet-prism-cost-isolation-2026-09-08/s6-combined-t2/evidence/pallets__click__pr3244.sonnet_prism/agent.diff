@@ -1,0 +1,55 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..34582e9 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -68,7 +68,11 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+ 
+ 
+ class BytesIOCopy(io.BytesIO):
+-    """Patch ``io.BytesIO`` to let the written stream be copied to another.
++    """Patch ``io.BytesIO`` to let the written stream be copied to another,
++    while also being backed by a real file so it has a valid file
++    descriptor. This lets code under test pass these streams to things like
++    ``subprocess.run(..., stdout=sys.stdout)``, which requires ``fileno()``
++    to work.
+ 
+     .. versionadded:: 8.2
+     """
+@@ -76,15 +80,28 @@ class BytesIOCopy(io.BytesIO):
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._file = tempfile.TemporaryFile()
+ 
+     def flush(self) -> None:
+         super().flush()
++        self._file.flush()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
++        self._file.write(b)
+         return super().write(b)
+ 
++    def fileno(self) -> int:
++        return self._file.fileno()
++
++    def close(self) -> None:
++        self._file.close()
++        super().close()
++
++    def __del__(self) -> None:
++        self._file.close()
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.
+@@ -471,6 +488,8 @@ class CliRunner:
+             _compat.should_strip_ansi = old__compat_should_strip_ansi
+             formatting.FORCED_WIDTH = old_forced_width
+             pdb.Pdb.__init__ = old_pdb_init  # type: ignore[method-assign]
++            stream_mixer.stdout._file.close()
++            stream_mixer.stderr._file.close()
+ 
+     def invoke(
+         self,

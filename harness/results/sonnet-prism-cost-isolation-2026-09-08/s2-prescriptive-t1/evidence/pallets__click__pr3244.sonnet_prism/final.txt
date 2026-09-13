@@ -1,0 +1,7 @@
+Full test suite passes (1419 passed, no failures). 
+
+## Summary
+
+The bug was in `src/click/testing.py`'s `BytesIOCopy` class, used by `CliRunner` to back `sys.stdout`/`sys.stderr` during `invoke()`. It was a plain `io.BytesIO`, which doesn't have a real file descriptor — calling `.fileno()` on it (as `subprocess.run` does when given a file-like `stdout=`/`stderr=` argument) always raises `io.UnsupportedOperation`.
+
+Fix: `BytesIOCopy` now lazily creates a real, file-descriptor-backed `tempfile.TemporaryFile()` the first time `fileno()` is called, and returns that descriptor. Regular buffered `write()` calls still go to both the in-memory `BytesIO` and the mirrored `copy_to` stream as before, while `getvalue()` now also incorporates any bytes written directly to the fd-backed temp file (e.g. by a subprocess), preserving existing capture behavior for the common (non-fd) case and fixing the crash for the fd case.
