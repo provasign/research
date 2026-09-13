@@ -1,0 +1,68 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..2b11612 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -71,20 +71,54 @@ class BytesIOCopy(io.BytesIO):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.3.3
++        :meth:`fileno` lazily spills the buffer to a real, temporary
++        file on first use instead of always raising
++        :exc:`io.UnsupportedOperation`. This lets APIs that require an
++        actual file descriptor, such as passing a captured stream as
++        ``stdout``/``stderr`` to :class:`subprocess.Popen`, work with
++        ``CliRunner``. :issue:`2522`
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._spill: t.BinaryIO | None = None
+ 
+     def flush(self) -> None:
+         super().flush()
+         self.copy_to.flush()
++        if self._spill is not None:
++            self._spill.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
++        if self._spill is not None:
++            return self._spill.write(b)
+         return super().write(b)
+ 
++    def fileno(self) -> int:
++        if self._spill is None:
++            self._spill = tempfile.TemporaryFile()
++            self._spill.write(super().getvalue())
++            self._spill.flush()
++        return self._spill.fileno()
++
++    def getvalue(self) -> bytes:
++        if self._spill is not None:
++            pos = self._spill.tell()
++            self._spill.seek(0)
++            data = self._spill.read()
++            self._spill.seek(pos)
++            return data
++        return super().getvalue()
++
++    def close(self) -> None:
++        if self._spill is not None:
++            self._spill.close()
++        super().close()
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.
+@@ -464,6 +498,8 @@ class CliRunner:
+             sys.stdout = old_stdout
+             sys.stderr = old_stderr
+             sys.stdin = old_stdin
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
+             termui.visible_prompt_func = old_visible_prompt_func
+             termui.hidden_prompt_func = old_hidden_prompt_func
+             termui._getchar = old__getchar_func

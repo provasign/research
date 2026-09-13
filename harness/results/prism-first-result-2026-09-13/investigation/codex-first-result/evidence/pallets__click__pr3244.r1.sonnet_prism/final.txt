@@ -1,0 +1,12 @@
+## Summary
+
+**Root cause:** `CliRunner`'s `isolation()` backs `sys.stdout`/`sys.stderr` with `BytesIOCopy`, a subclass of `io.BytesIO`. `io.BytesIO` has no real OS file descriptor, so `stream.fileno()` raises `io.UnsupportedOperation`. Anything under test that calls `subprocess.run(..., stdout=sys.stderr)` (or similar) fails because `subprocess` needs a real fd for non-`PIPE`/`DEVNULL` file-like stdout/stderr arguments.
+
+**Fix** (`src/click/testing.py`): reimplemented `BytesIOCopy` on top of a real `tempfile.TemporaryFile()` instead of `io.BytesIO`, so `fileno()` returns a genuine file descriptor usable by `subprocess`. It still overrides `write()`/`flush()` to mirror everything written into the existing mixed `copy_to` output stream, and adds a `getvalue()` helper (reading from the temp file) so the rest of `CliRunner.invoke()` keeps working unchanged.
+
+Verified:
+- The reported reproduction (`subprocess.run(["echo", "foo"], stdout=sys.stderr)` inside a `CliRunner().invoke(...)`) now passes.
+- `tests/test_testing.py` (29 tests) passes.
+- Full suite: `python -m pytest tests/` → 1419 passed, 24 skipped, 1 xfailed, no failures.
+
+No tests, docs, or config were modified; only `src/click/testing.py` was changed. Nothing was committed, per instructions.

@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 161778,
+  "stop_reason": "end_turn",
+  "session_id": "52d4411f-e297-4a0d-b026-708014200cfe",
+  "total_cost_usd": 0.48253680000000004,
+  "usage": {
+    "input_tokens": 50,
+    "cache_creation_input_tokens": 42082,
+    "cache_read_input_tokens": 800684,
+    "output_tokens": 15240,
+    "output_tokens_details": {
+      "thinking_tokens": 8726
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 42082,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 641,
+        "cache_read_input_tokens": 48613,
+        "cache_creation_input_tokens": 304,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 304
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 1487,
+      "outputTokens": 17,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.001572,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 50,
+      "outputTokens": 15240,
+      "cacheReadInputTokens": 800684,
+      "cacheCreationInputTokens": 42082,
+      "webSearchRequests": 0,
+      "costUSD": 0.4809648,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 8726,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 25,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "All passing. Summary of the fix:\n\n**`src/urllib3/connection.py`** (`HTTPSConnection.connect`): When directly connecting (forwarding, not tunneling) to an HTTPS proxy, the TLS handshake performed in `connect()` was using `self.ssl_context`/`assert_hostname`/`assert_fingerprint` \u2014 i.e. the *origin's* TLS config \u2014 even though that handshake is actually with the proxy. Now it detects `self.proxy.scheme == \"https\" and self.proxy_is_forwarding` and uses the connection's `proxy_config` (`proxy_ssl_context`, `proxy_assert_hostname`, `proxy_assert_fingerprint`) instead, and records `proxy_is_verified` from that handshake's result.\n\n**`src/urllib3/poolmanager.py`** (`ProxyManager.__init__`): Added validation \u2014 if `use_forwarding_for_https=True` and an `ssl_context` (origin TLS config) is supplied, raise `ValueError` since it would be silently ignored/misapplied; message differs slightly depending on whether `proxy_ssl_context` was also given, per the issue's requirements for the 2.x line.\n\nVerified with the existing non-network unit tests (`test_proxymanager.py`, `test_poolmanager.py`, `test_connection.py`, `test_util.py`, `test_connectionpool.py`) and the dummy-server proxy tests not requiring external network \u2014 all pass (50/50, 85/85, etc.), plus manual checks that the new `ValueError` cases fire correctly and normal (non-conflicting) configs still work.\n\nI left the test file (`test/with_dummyserver/test_proxy_poolmanager.py`) untouched, including the `pytest.skip` in `test_proxy_https_target_tls_error`, per the instruction not to modify tests \u2014 even though the issue's checklist asked for that skip's removal.",
+  "ttft_ms": 1603,
+  "type": "result",
+  "duration_ms": 199825,
+  "uuid": "28c6b664-bc2d-43dd-a7ce-ff51ee3c7ad2",
+  "ttft_stream_ms": 681,
+  "time_to_request_ms": 23,
+  "first_content_frame_ms": 682,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

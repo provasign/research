@@ -1,0 +1,7 @@
+## Summary
+
+Fixed the issue where `CliRunner`-captured `sys.stdout`/`sys.stderr` couldn't be passed to `subprocess.run(...)` because their underlying buffer (`io.BytesIO`) has no real file descriptor.
+
+**Change** (`src/click/testing.py`, `BytesIOCopy`): the write buffer used for `stdout`/`stderr` during isolation is now backed by a real `tempfile.TemporaryFile()` in addition to mirroring writes to `copy_to`. This gives it a genuine OS-level file descriptor, so `fileno()` (called by `subprocess.Popen` when a stream is neither `PIPE`/`DEVNULL`/`int`) succeeds instead of raising `io.UnsupportedOperation`. Added `getvalue()`, `fileno()`, and `close()` overrides to keep the existing `getvalue()`-based result capture and cleanup working correctly with the temp-file backing.
+
+Verified with the reported reproduction script (now passes) and the full existing test suite (`1419 passed, 24 skipped, 1 xfailed`, no regressions). No tests, docs, or config were modified. Did not commit, per instructions.

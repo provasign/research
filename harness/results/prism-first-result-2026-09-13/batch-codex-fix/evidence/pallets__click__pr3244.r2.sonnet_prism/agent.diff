@@ -1,0 +1,77 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..4fabeb4 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -70,20 +70,60 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+ class BytesIOCopy(io.BytesIO):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
++    Backed by a real (anonymous) OS-level file rather than purely
++    in-memory storage, so that :meth:`fileno` returns a usable file
++    descriptor. This allows code under test to pass these streams to
++    things like :func:`subprocess.run`, which requires a real file
++    descriptor to redirect a child process's output to.
++
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.3.2
++        Backed by a real file so :meth:`fileno` works, fixing
++        compatibility with :func:`subprocess.run`.
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._file = tempfile.TemporaryFile()
+ 
+     def flush(self) -> None:
+         super().flush()
++        self._file.flush()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
++        self._file.write(b)
+         self.copy_to.write(b)
+-        return super().write(b)
++        return len(b)
++
++    def fileno(self) -> int:
++        return self._file.fileno()
++
++    def isatty(self) -> bool:
++        return False
++
++    def getvalue(self) -> bytes:
++        # Read from the backing file rather than the in-memory buffer,
++        # since writes made through the file descriptor (for example by
++        # a child process started with ``subprocess.run(stdout=...)``)
++        # bypass ``write`` above and only reach the backing file.
++        self._file.flush()
++        pos = self._file.tell()
++        self._file.seek(0)
++        data = self._file.read()
++        self._file.seek(pos)
++        return data
++
++    def close(self) -> None:
++        # ``_NamedTextIOWrapper.close`` intentionally avoids closing this
++        # object while the CLI is still running, so the buffer contents
++        # remain available for ``getvalue()``. Once explicitly closed
++        # (after the result has been captured), release the backing
++        # file descriptor.
++        self._file.close()
++        super().close()
+ 
+ 
+ class StreamMixer:
+@@ -573,6 +613,10 @@ class CliRunner:
+                 stdout = outstreams[0].getvalue()
+                 stderr = outstreams[1].getvalue()
+                 output = outstreams[2].getvalue()
++                # Release the real file descriptors backing stdout/stderr
++                # now that their contents have been captured above.
++                outstreams[0].close()
++                outstreams[1].close()
+ 
+         return Result(
+             runner=self,

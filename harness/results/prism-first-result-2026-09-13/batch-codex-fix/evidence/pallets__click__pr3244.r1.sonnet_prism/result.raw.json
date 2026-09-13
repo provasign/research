@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 122366,
+  "stop_reason": "end_turn",
+  "session_id": "505b5dbd-59f1-46b2-b1cd-d1f574807e83",
+  "total_cost_usd": 0.3112756,
+  "usage": {
+    "input_tokens": 42,
+    "cache_creation_input_tokens": 27770,
+    "cache_read_input_tokens": 523568,
+    "output_tokens": 9137,
+    "output_tokens_details": {
+      "thinking_tokens": 4305
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 27770,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 658,
+        "cache_read_input_tokens": 34471,
+        "cache_creation_input_tokens": 253,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 253
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 15,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004028,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 42,
+      "outputTokens": 9137,
+      "cacheReadInputTokens": 523568,
+      "cacheCreationInputTokens": 27770,
+      "webSearchRequests": 0,
+      "costUSD": 0.3072476,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 4305,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 21,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "## Summary\n\n**Root cause:** `CliRunner.isolation()` backs `sys.stdout`/`sys.stderr` with `_NamedTextIOWrapper` wrapping a `BytesIOCopy(io.BytesIO)` buffer. Plain `io.BytesIO` has no real OS file descriptor, so `BytesIO.fileno()` (inherited, unoverridden) raises `io.UnsupportedOperation`. Anything that needs `stdout.fileno()` \u2014 like `subprocess.run(..., stdout=sys.stderr)` when the file-like object isn't `PIPE`/`DEVNULL`/an int \u2014 blows up during tests even though it works fine outside `CliRunner`.\n\n**Fix** (`src/click/testing.py`): Reworked `BytesIOCopy` to be backed by a real `tempfile.TemporaryFile()` instead of subclassing `io.BytesIO`, while still mirroring every write into the shared `copy_to` buffer used for combined output. It implements `fileno()`, `seek()`/`tell()`, `flush()`, `write()`, and a `getvalue()` compatible with existing call sites (`outstreams[0].getvalue()` etc. in `invoke()`), so `stdout`/`stderr` streams now expose genuine file descriptors that `subprocess.run` (and similar fd-based APIs) can use.\n\n**Verification:**\n- Reproduced the issue's `sscce.py`/`test_sscce.py` scenario \u2014 failed before the fix (`io.UnsupportedOperation: fileno`), passes after.\n- `python -m pytest tests/test_testing.py -q` \u2192 29 passed.\n- Full suite `python -m pytest tests/ -q` \u2192 1419 passed, 24 skipped, 1 xfailed, no failures.\n\nNo tests, docs, or config were modified \u2014 only the `BytesIOCopy`/`StreamMixer` implementation in `src/click/testing.py`.",
+  "ttft_ms": 3866,
+  "type": "result",
+  "duration_ms": 125650,
+  "uuid": "717c6a1f-9e8f-4005-81e9-7a9aa0f6bbb0",
+  "ttft_stream_ms": 1512,
+  "time_to_request_ms": 23,
+  "first_content_frame_ms": 1512,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

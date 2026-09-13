@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 137604,
+  "stop_reason": "end_turn",
+  "session_id": "d7883aa2-9772-4a0d-bf7d-1991004f0ec1",
+  "total_cost_usd": 0.2675888,
+  "usage": {
+    "input_tokens": 40,
+    "cache_creation_input_tokens": 22702,
+    "cache_read_input_tokens": 383914,
+    "output_tokens": 9589,
+    "output_tokens_details": {
+      "thinking_tokens": 5900
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 22702,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 407,
+        "cache_read_input_tokens": 29333,
+        "cache_creation_input_tokens": 204,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 204
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 15,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004028,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 40,
+      "outputTokens": 9589,
+      "cacheReadInputTokens": 383914,
+      "cacheCreationInputTokens": 22702,
+      "webSearchRequests": 0,
+      "costUSD": 0.2635608,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 5900,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 20,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "## Summary\n\nFixed the issue where `CliRunner`-captured `sys.stdout`/`sys.stderr` couldn't be passed to `subprocess.run(...)` because their underlying buffer (`io.BytesIO`) has no real file descriptor.\n\n**Change** (`src/click/testing.py`, `BytesIOCopy`): the write buffer used for `stdout`/`stderr` during isolation is now backed by a real `tempfile.TemporaryFile()` in addition to mirroring writes to `copy_to`. This gives it a genuine OS-level file descriptor, so `fileno()` (called by `subprocess.Popen` when a stream is neither `PIPE`/`DEVNULL`/`int`) succeeds instead of raising `io.UnsupportedOperation`. Added `getvalue()`, `fileno()`, and `close()` overrides to keep the existing `getvalue()`-based result capture and cleanup working correctly with the temp-file backing.\n\nVerified with the reported reproduction script (now passes) and the full existing test suite (`1419 passed, 24 skipped, 1 xfailed`, no regressions). No tests, docs, or config were modified. Did not commit, per instructions.",
+  "ttft_ms": 3375,
+  "type": "result",
+  "duration_ms": 261367,
+  "uuid": "a17122c8-1ebd-4cde-96fd-5923a0350052",
+  "ttft_stream_ms": 1376,
+  "time_to_request_ms": 22,
+  "first_content_frame_ms": 1376,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

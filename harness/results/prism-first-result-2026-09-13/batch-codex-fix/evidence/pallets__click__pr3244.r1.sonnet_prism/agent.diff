@@ -1,0 +1,82 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..a9e9ea0 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -67,8 +67,15 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+         stream._paused = False
+ 
+ 
+-class BytesIOCopy(io.BytesIO):
+-    """Patch ``io.BytesIO`` to let the written stream be copied to another.
++class BytesIOCopy(io.RawIOBase):
++    """A binary stream backed by a real file, whose written content is
++    also copied to another buffer.
++
++    Being backed by a real file (rather than :class:`io.BytesIO`) means
++    the stream exposes a genuine ``fileno()``, so it (and the
++    :class:`io.TextIOWrapper` built on top of it, e.g. ``sys.stdout``
++    during :meth:`CliRunner.isolation`) can be passed to APIs such as
++    :func:`subprocess.run` that require a real file descriptor.
+ 
+     .. versionadded:: 8.2
+     """
+@@ -76,14 +83,45 @@ class BytesIOCopy(io.BytesIO):
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._file = tempfile.TemporaryFile()
++
++    def readable(self) -> bool:
++        return True
++
++    def writable(self) -> bool:
++        return True
++
++    def seekable(self) -> bool:
++        return True
++
++    def fileno(self) -> int:
++        return self._file.fileno()
++
++    def seek(self, offset: int, whence: int = 0) -> int:
++        return self._file.seek(offset, whence)
++
++    def tell(self) -> int:
++        return self._file.tell()
+ 
+     def flush(self) -> None:
+-        super().flush()
++        self._file.flush()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+-        self.copy_to.write(b)
+-        return super().write(b)
++        self.copy_to.write(bytes(b))
++        return self._file.write(b)
++
++    def getvalue(self) -> bytes:
++        self.flush()
++        pos = self._file.tell()
++        self._file.seek(0)
++        data = self._file.read()
++        self._file.seek(pos)
++        return data
++
++    def close(self) -> None:
++        self._file.close()
++        super().close()
+ 
+ 
+ class StreamMixer:
+@@ -96,8 +134,8 @@ class StreamMixer:
+ 
+     def __init__(self) -> None:
+         self.output: io.BytesIO = io.BytesIO()
+-        self.stdout: io.BytesIO = BytesIOCopy(copy_to=self.output)
+-        self.stderr: io.BytesIO = BytesIOCopy(copy_to=self.output)
++        self.stdout: BytesIOCopy = BytesIOCopy(copy_to=self.output)
++        self.stderr: BytesIOCopy = BytesIOCopy(copy_to=self.output)
+ 
+ 
+ class _NamedTextIOWrapper(io.TextIOWrapper):

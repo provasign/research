@@ -1,0 +1,81 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..d0b9a26 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -9,6 +9,7 @@ import shlex
+ import sys
+ import tempfile
+ import typing as t
++import weakref
+ from types import TracebackType
+ 
+ from . import _compat
+@@ -67,23 +68,54 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+         stream._paused = False
+ 
+ 
+-class BytesIOCopy(io.BytesIO):
+-    """Patch ``io.BytesIO`` to let the written stream be copied to another.
++class BytesIOCopy:
++    """A binary stream that copies everything written to it to another
++    stream, while being backed by a real (temporary) file.
++
++    Being backed by a real file, rather than plain ``io.BytesIO``, means
++    it has a working ``fileno()``. This allows it to be used as
++    ``stdout``/``stderr`` for :func:`subprocess.run` and similar APIs
++    that need a real file descriptor.
+ 
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.3.1
++        Backed by a temporary file instead of ``io.BytesIO`` so that
++        ``fileno()`` works.
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+-        super().__init__()
++        self._file: t.IO[bytes] = tempfile.TemporaryFile()
+         self.copy_to = copy_to
++        # Ensure the backing file descriptor is released even if this
++        # object is never explicitly closed.
++        self._finalizer = weakref.finalize(self, self._file.close)
+ 
+     def flush(self) -> None:
+-        super().flush()
++        self._file.flush()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+-        return super().write(b)
++        return self._file.write(b)
++
++    def getvalue(self) -> bytes:
++        pos = self._file.tell()
++        self._file.seek(0)
++        data = self._file.read()
++        self._file.seek(pos)
++        return data
++
++    def fileno(self) -> int:
++        return self._file.fileno()
++
++    def close(self) -> None:
++        # Only close the backing temporary file. ``copy_to`` is a
++        # shared stream that may still be needed by other consumers.
++        self._file.close()
++
++    def __getattr__(self, name: str) -> t.Any:
++        return getattr(self._file, name)
+ 
+ 
+ class StreamMixer:
+@@ -464,6 +496,8 @@ class CliRunner:
+             sys.stdout = old_stdout
+             sys.stderr = old_stderr
+             sys.stdin = old_stdin
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
+             termui.visible_prompt_func = old_visible_prompt_func
+             termui.hidden_prompt_func = old_hidden_prompt_func
+             termui._getchar = old__getchar_func

@@ -1,0 +1,72 @@
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 84e1dab..be24152 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -680,6 +680,31 @@ class HTTPSConnection(HTTPConnection):
+         self.cert_reqs = cert_reqs
+         self._connect_callback = None
+ 
++        # 'ssl_context' is used for the connection to the origin, however when
++        # forwarding through an HTTPS proxy the TLS connection is actually made
++        # to the proxy, so 'proxy_ssl_context' should be used instead.
++        if (
++            self.ssl_context is not None
++            and self.proxy is not None
++            and self.proxy.scheme == "https"
++            and self.proxy_config is not None
++            and self.proxy_config.use_forwarding_for_https
++        ):
++            if self.proxy_config.ssl_context is not None:
++                raise ValueError(
++                    "Cannot specify both 'ssl_context' and 'proxy_ssl_context' "
++                    "when 'use_forwarding_for_https' is True. The connection "
++                    "to the proxy is made using 'proxy_ssl_context', so "
++                    "'ssl_context' shouldn't be specified in this case."
++                )
++            else:
++                raise ValueError(
++                    "'ssl_context' shouldn't be used to configure the "
++                    "connection to an HTTPS proxy when "
++                    "'use_forwarding_for_https' is True, use "
++                    "'proxy_ssl_context' instead."
++                )
++
+     def set_cert(
+         self,
+         key_file: str | None = None,
+@@ -793,6 +818,21 @@ class HTTPSConnection(HTTPConnection):
+             # Remove trailing '.' from fqdn hostnames to allow certificate validation
+             server_hostname_rm_dot = server_hostname.rstrip(".")
+ 
++            # If we're forwarding through an HTTPS proxy (as opposed to tunneling
++            # or connecting directly to the origin) then this TLS connection is
++            # actually being made to the proxy, not the origin. In that case we
++            # must use the proxy's SSL context/verification settings rather than
++            # the ones configured for the origin.
++            if self.proxy_is_forwarding:
++                proxy_config = typing.cast(ProxyConfig, self.proxy_config)
++                connect_ssl_context = proxy_config.ssl_context
++                connect_assert_hostname = proxy_config.assert_hostname
++                connect_assert_fingerprint = proxy_config.assert_fingerprint
++            else:
++                connect_ssl_context = self.ssl_context
++                connect_assert_hostname = self.assert_hostname
++                connect_assert_fingerprint = self.assert_fingerprint
++
+             sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+                 sock=sock,
+                 cert_reqs=self.cert_reqs,
+@@ -806,10 +846,10 @@ class HTTPSConnection(HTTPConnection):
+                 key_file=self.key_file,
+                 key_password=self.key_password,
+                 server_hostname=server_hostname_rm_dot,
+-                ssl_context=self.ssl_context,
++                ssl_context=connect_ssl_context,
+                 tls_in_tls=tls_in_tls,
+-                assert_hostname=self.assert_hostname,
+-                assert_fingerprint=self.assert_fingerprint,
++                assert_hostname=connect_assert_hostname,
++                assert_fingerprint=connect_assert_fingerprint,
+             )
+             self.sock = sock_and_verified.socket
+ 

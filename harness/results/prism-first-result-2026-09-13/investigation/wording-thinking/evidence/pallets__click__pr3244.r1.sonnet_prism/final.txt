@@ -1,0 +1,12 @@
+## Summary
+
+The issue was that `CliRunner`'s captured `sys.stdout`/`sys.stderr` streams are `_NamedTextIOWrapper` objects wrapping an `io.BytesIO` subclass (`BytesIOCopy`), which has no real OS file descriptor. `subprocess.run(..., stdout=sys.stderr)` calls `.fileno()` on the passed stream when it's not `PIPE`/`DEVNULL`/an `int`, and `BytesIO.fileno()` raises `io.UnsupportedOperation`.
+
+**Fix** (`src/click/testing.py`):
+- `BytesIOCopy` now supports `fileno()`: on first call it lazily creates a real `os.pipe()`, spawns a daemon thread that relays bytes read from the pipe into the buffer (via the existing `write()`, which also mirrors into the combined output stream), and returns the write end's fd. This gives subprocess a genuine OS fd to write to while output still ends up captured in `result.output`/`result.stdout`/`result.stderr` as before.
+- Added `close_fd_relay()` to shut the pipe down and join the relay thread cleanly.
+- `CliRunner.isolation()`'s `finally` block now calls `close_fd_relay()` on both mixer streams to avoid leaking pipe fds/threads across invocations.
+
+Verified with the reported reproduction case (`subprocess.run(["echo", "foo"], stdout=sys.stderr)` inside a Click command invoked via `CliRunner`) — it now succeeds and captures `"foo\n"` in `result.output`. Ran `tests/test_testing.py` (29 passed) and the full suite (1419 passed, 24 skipped, 1 xfailed) with no regressions.
+
+No files were committed, per instructions.

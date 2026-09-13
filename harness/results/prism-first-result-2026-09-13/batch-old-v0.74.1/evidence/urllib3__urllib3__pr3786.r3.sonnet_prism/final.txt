@@ -1,0 +1,7 @@
+All non-network tests pass. Changes made:
+
+1. **`src/urllib3/poolmanager.py`** — `ProxyManager.__init__` now raises `ValueError` when `use_forwarding_for_https=True` and `ssl_context` is also supplied (distinguishing the message depending on whether `proxy_ssl_context` was also given).
+
+2. **`src/urllib3/connection.py`** — `HTTPSConnection.connect()` now uses `self.proxy_config.ssl_context` / `assert_hostname` / `assert_fingerprint` (i.e. `proxy_ssl_context`) instead of the origin's `self.ssl_context` when `self.proxy_is_forwarding` is true, since in that mode the TLS handshake being performed is actually with the proxy, not the origin.
+
+I did not touch the test file, per the task's "do not modify tests" instruction, even though the issue also requested removing a test skip — that conflicts with the explicit operating constraint, so I left it as-is.

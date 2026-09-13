@@ -1,0 +1,98 @@
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 84e1dab..630806b 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -793,24 +793,50 @@ class HTTPSConnection(HTTPConnection):
+             # Remove trailing '.' from fqdn hostnames to allow certificate validation
+             server_hostname_rm_dot = server_hostname.rstrip(".")
+ 
+-            sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+-                sock=sock,
+-                cert_reqs=self.cert_reqs,
+-                ssl_version=self.ssl_version,
+-                ssl_minimum_version=self.ssl_minimum_version,
+-                ssl_maximum_version=self.ssl_maximum_version,
+-                ca_certs=self.ca_certs,
+-                ca_cert_dir=self.ca_cert_dir,
+-                ca_cert_data=self.ca_cert_data,
+-                cert_file=self.cert_file,
+-                key_file=self.key_file,
+-                key_password=self.key_password,
+-                server_hostname=server_hostname_rm_dot,
+-                ssl_context=self.ssl_context,
+-                tls_in_tls=tls_in_tls,
+-                assert_hostname=self.assert_hostname,
+-                assert_fingerprint=self.assert_fingerprint,
+-            )
++            # If we're forwarding to an HTTPS proxy (as opposed to tunneling
++            # through it) then the TLS connection we're about to make is
++            # actually to the proxy, not the origin. In that case we must use
++            # the proxy's TLS settings (`proxy_ssl_context`, etc.) rather than
++            # the ones meant for the origin server.
++            if self.proxy_is_forwarding and self.proxy is not None:
++                proxy_config = typing.cast(ProxyConfig, self.proxy_config)
++                sock_and_verified = _ssl_wrap_socket_and_match_hostname(
++                    sock=sock,
++                    cert_reqs=self.cert_reqs,
++                    ssl_version=self.ssl_version,
++                    ssl_minimum_version=self.ssl_minimum_version,
++                    ssl_maximum_version=self.ssl_maximum_version,
++                    ca_certs=self.ca_certs,
++                    ca_cert_dir=self.ca_cert_dir,
++                    ca_cert_data=self.ca_cert_data,
++                    cert_file=self.cert_file,
++                    key_file=self.key_file,
++                    key_password=self.key_password,
++                    server_hostname=server_hostname_rm_dot,
++                    ssl_context=proxy_config.ssl_context,
++                    tls_in_tls=tls_in_tls,
++                    assert_hostname=proxy_config.assert_hostname,
++                    assert_fingerprint=proxy_config.assert_fingerprint,
++                )
++            else:
++                sock_and_verified = _ssl_wrap_socket_and_match_hostname(
++                    sock=sock,
++                    cert_reqs=self.cert_reqs,
++                    ssl_version=self.ssl_version,
++                    ssl_minimum_version=self.ssl_minimum_version,
++                    ssl_maximum_version=self.ssl_maximum_version,
++                    ca_certs=self.ca_certs,
++                    ca_cert_dir=self.ca_cert_dir,
++                    ca_cert_data=self.ca_cert_data,
++                    cert_file=self.cert_file,
++                    key_file=self.key_file,
++                    key_password=self.key_password,
++                    server_hostname=server_hostname_rm_dot,
++                    ssl_context=self.ssl_context,
++                    tls_in_tls=tls_in_tls,
++                    assert_hostname=self.assert_hostname,
++                    assert_fingerprint=self.assert_fingerprint,
++                )
+             self.sock = sock_and_verified.socket
+ 
+         # If an error occurs during connection/handshake we may need to release
+diff --git a/src/urllib3/poolmanager.py b/src/urllib3/poolmanager.py
+index 3914dec..b8e5815 100644
+--- a/src/urllib3/poolmanager.py
++++ b/src/urllib3/poolmanager.py
+@@ -585,6 +585,20 @@ class ProxyManager(PoolManager):
+             port = port_by_scheme.get(proxy.scheme, 80)
+             proxy = proxy._replace(port=port)
+ 
++        if use_forwarding_for_https and "ssl_context" in connection_pool_kw:
++            if proxy_ssl_context is not None:
++                raise ValueError(
++                    "Cannot specify both 'proxy_ssl_context' and 'ssl_context' "
++                    "when 'use_forwarding_for_https=True'. The proxy connection "
++                    "always uses 'proxy_ssl_context', please remove the "
++                    "'ssl_context' argument."
++                )
++            raise ValueError(
++                "'ssl_context' should not be used when "
++                "'use_forwarding_for_https=True', use 'proxy_ssl_context' "
++                "instead to configure the TLS connection to the proxy."
++            )
++
+         self.proxy = proxy
+         self.proxy_headers = proxy_headers or {}
+         self.proxy_ssl_context = proxy_ssl_context

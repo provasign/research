@@ -1,0 +1,9 @@
+All passing. Summary of the fix:
+
+**`src/urllib3/connection.py`** (`HTTPSConnection.connect`): When directly connecting (forwarding, not tunneling) to an HTTPS proxy, the TLS handshake performed in `connect()` was using `self.ssl_context`/`assert_hostname`/`assert_fingerprint` — i.e. the *origin's* TLS config — even though that handshake is actually with the proxy. Now it detects `self.proxy.scheme == "https" and self.proxy_is_forwarding` and uses the connection's `proxy_config` (`proxy_ssl_context`, `proxy_assert_hostname`, `proxy_assert_fingerprint`) instead, and records `proxy_is_verified` from that handshake's result.
+
+**`src/urllib3/poolmanager.py`** (`ProxyManager.__init__`): Added validation — if `use_forwarding_for_https=True` and an `ssl_context` (origin TLS config) is supplied, raise `ValueError` since it would be silently ignored/misapplied; message differs slightly depending on whether `proxy_ssl_context` was also given, per the issue's requirements for the 2.x line.
+
+Verified with the existing non-network unit tests (`test_proxymanager.py`, `test_poolmanager.py`, `test_connection.py`, `test_util.py`, `test_connectionpool.py`) and the dummy-server proxy tests not requiring external network — all pass (50/50, 85/85, etc.), plus manual checks that the new `ValueError` cases fire correctly and normal (non-conflicting) configs still work.
+
+I left the test file (`test/with_dummyserver/test_proxy_poolmanager.py`) untouched, including the `pytest.skip` in `test_proxy_https_target_tls_error`, per the instruction not to modify tests — even though the issue's checklist asked for that skip's removal.

@@ -1,0 +1,31 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..159d2cc 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -85,6 +85,26 @@ class BytesIOCopy(io.BytesIO):
+         self.copy_to.write(b)
+         return super().write(b)
+ 
++    def fileno(self) -> int:
++        """Raise a clear error instead of the confusing one from the
++        base ``io.BytesIO`` implementation.
++
++        Code invoked through :class:`CliRunner` sometimes passes
++        ``sys.stdout``/``sys.stderr`` to APIs such as
++        :func:`subprocess.run`, which require a real file descriptor.
++        Since these streams are captured in memory during testing,
++        there is no file descriptor available.
++
++        .. versionadded:: 8.3.2
++        """
++        raise io.UnsupportedOperation(
++            "The stream does not have a file descriptor because it is"
++            " captured in memory by the test runner. To pass it to an"
++            " API that needs a real file descriptor, such as"
++            " subprocess.run(), use subprocess.PIPE or an open file"
++            " instead of sys.stdout / sys.stderr."
++        )
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.

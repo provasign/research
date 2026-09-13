@@ -1,0 +1,7 @@
+All source-side changes are complete and verified. Summary of the fix:
+
+1. **`src/urllib3/connection.py`** — `HTTPSConnection.connect()`: when the connection is in forwarding mode to an HTTPS proxy (`proxy_is_forwarding`), it was wrapping the socket with the *origin's* `ssl_context`/`assert_hostname`/`assert_fingerprint` even though the socket is actually connecting to the proxy. Now it uses the proxy's settings (`proxy_config.ssl_context`, i.e. `proxy_ssl_context`, plus `proxy_config.assert_hostname`/`assert_fingerprint`) in that case, matching the tunnel-mode path (`_connect_tls_proxy`).
+
+2. **`src/urllib3/poolmanager.py`** — `PoolManager.__init__` (used for `ProxyManager`): added validation so that when `use_forwarding_for_https=True` and `ssl_context` is also passed, a `ValueError` is raised — with a distinct message depending on whether `proxy_ssl_context` was also specified (conflicting settings) or not (wrong parameter used for the proxy TLS connection).
+
+I left tests, docs, and config untouched per the task constraints, even though the issue mentions removing a test skip — that would require modifying a test file which is outside the source-only scope given here. All non-network unit tests (1460 passed) and the dummyserver proxy pool manager tests (65 passed, 1 pre-existing skip) pass with the change.

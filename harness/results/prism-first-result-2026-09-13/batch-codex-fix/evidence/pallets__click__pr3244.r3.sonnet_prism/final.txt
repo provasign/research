@@ -1,0 +1,5 @@
+All tests pass. Summary of fix:
+
+In `src/click/testing.py`, `BytesIOCopy` (used for `CliRunner`'s captured stdout/stderr) previously subclassed plain `io.BytesIO`, which has no real OS-level file descriptor. When code under test passed `sys.stdout`/`sys.stderr` to `subprocess.run(...)`, `Popen` tried to call `.fileno()` on it and raised `io.UnsupportedOperation`.
+
+I backed `BytesIOCopy` with a real `tempfile.TemporaryFile()` in addition to the in-memory buffer, added a `fileno()` method delegating to that real file, and closed it properly in `close()`. This lets `subprocess.run(stdout=sys.stderr)` (and similar fd-based redirection) work inside `CliRunner.invoke()` without crashing, while preserving all existing capture/mixing behavior for normal `click.echo`/`print` output (verified: existing `tests/test_testing.py` suite — 29 tests — and full test suite — 1419 passed — still pass).

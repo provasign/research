@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 143995,
+  "stop_reason": "end_turn",
+  "session_id": "a0958f54-e27e-4386-95a6-01702316287f",
+  "total_cost_usd": 0.45348459999999996,
+  "usage": {
+    "input_tokens": 56,
+    "cache_creation_input_tokens": 44939,
+    "cache_read_input_tokens": 783693,
+    "output_tokens": 11285,
+    "output_tokens_details": {
+      "thinking_tokens": 5515
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 44939,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 559,
+        "cache_read_input_tokens": 44627,
+        "cache_creation_input_tokens": 312,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 312
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 15,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004028,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 56,
+      "outputTokens": 11285,
+      "cacheReadInputTokens": 783693,
+      "cacheCreationInputTokens": 44939,
+      "webSearchRequests": 0,
+      "costUSD": 0.4494566,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 5515,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 28,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "The `UnsupportedOperation: fileno` crash is gone and the full test suite (1419 tests) passes.\n\n## Summary\n\nThe root cause: `CliRunner`'s isolation replaced `sys.stdout`/`sys.stderr` with a `TextIOWrapper` around a `BytesIOCopy(io.BytesIO)` buffer. `io.BytesIO` has no real OS file descriptor, so any code that passed `sys.stdout`/`sys.stderr` to `subprocess.run(...)` (which calls `.fileno()` on non-special values) raised `io.UnsupportedOperation`.\n\nFix in `src/click/testing.py`:\n- Reimplemented `BytesIOCopy` to back its buffer with a real `tempfile.TemporaryFile()` (which has a genuine file descriptor) instead of `io.BytesIO`, while preserving the `write()`/`flush()`/`getvalue()` API the rest of `testing.py` relies on, plus a working `fileno()`.\n- Added `__del__` to close the backing temp file when a standalone `BytesIOCopy` is garbage collected (avoiding resource leaks/warnings when it's not owned by a `CliRunner` isolation session).\n- Added explicit cleanup of the `StreamMixer`'s stdout/stderr temp files in `CliRunner.isolation`'s `finally` block.\n\nI did not modify any tests \u2014 `tests/test_stream_lifecycle.py` (which exercises `BytesIOCopy` directly and via `StreamMixer`) passes unchanged, confirming the fix preserves existing captured-output semantics while fixing the `fileno()` crash.",
+  "ttft_ms": 3361,
+  "type": "result",
+  "duration_ms": 152508,
+  "uuid": "dc1c918d-2766-4d1c-99d8-067608a76540",
+  "ttft_stream_ms": 2609,
+  "time_to_request_ms": 25,
+  "first_content_frame_ms": 3054,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

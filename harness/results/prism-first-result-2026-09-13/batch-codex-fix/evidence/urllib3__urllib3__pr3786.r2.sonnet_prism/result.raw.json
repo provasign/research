@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 106018,
+  "stop_reason": "end_turn",
+  "session_id": "c566ab87-c7a5-4515-a98e-7bd027eb253f",
+  "total_cost_usd": 0.416061,
+  "usage": {
+    "input_tokens": 50,
+    "cache_creation_input_tokens": 37813,
+    "cache_read_input_tokens": 815135,
+    "output_tokens": 10008,
+    "output_tokens_details": {
+      "thinking_tokens": 3896
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 37813,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 509,
+        "cache_read_input_tokens": 44382,
+        "cache_creation_input_tokens": 385,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 385
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 1487,
+      "outputTokens": 23,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.0016020000000000001,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 50,
+      "outputTokens": 10008,
+      "cacheReadInputTokens": 815135,
+      "cacheCreationInputTokens": 37813,
+      "webSearchRequests": 0,
+      "costUSD": 0.414459,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 3896,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 25,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "All source-side changes are complete and verified. Summary of the fix:\n\n1. **`src/urllib3/connection.py`** \u2014 `HTTPSConnection.connect()`: when the connection is in forwarding mode to an HTTPS proxy (`proxy_is_forwarding`), it was wrapping the socket with the *origin's* `ssl_context`/`assert_hostname`/`assert_fingerprint` even though the socket is actually connecting to the proxy. Now it uses the proxy's settings (`proxy_config.ssl_context`, i.e. `proxy_ssl_context`, plus `proxy_config.assert_hostname`/`assert_fingerprint`) in that case, matching the tunnel-mode path (`_connect_tls_proxy`).\n\n2. **`src/urllib3/poolmanager.py`** \u2014 `PoolManager.__init__` (used for `ProxyManager`): added validation so that when `use_forwarding_for_https=True` and `ssl_context` is also passed, a `ValueError` is raised \u2014 with a distinct message depending on whether `proxy_ssl_context` was also specified (conflicting settings) or not (wrong parameter used for the proxy TLS connection).\n\nI left tests, docs, and config untouched per the task constraints, even though the issue mentions removing a test skip \u2014 that would require modifying a test file which is outside the source-only scope given here. All non-network unit tests (1460 passed) and the dummyserver proxy pool manager tests (65 passed, 1 pre-existing skip) pass with the change.",
+  "ttft_ms": 1607,
+  "type": "result",
+  "duration_ms": 194578,
+  "uuid": "3350d0d2-9dde-405e-ac36-36aee8b16f2e",
+  "ttft_stream_ms": 622,
+  "time_to_request_ms": 27,
+  "first_content_frame_ms": 622,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

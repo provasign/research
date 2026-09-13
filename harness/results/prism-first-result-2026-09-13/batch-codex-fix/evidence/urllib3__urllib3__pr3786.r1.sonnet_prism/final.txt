@@ -1,0 +1,7 @@
+All tests pass. Summary of the fix in `src/urllib3/connection.py`:
+
+1. **`HTTPSConnection.connect()`**: when the connection is being made to a forwarding HTTPS proxy (`proxy_is_forwarding`), the TLS handshake is actually with the proxy, not the origin — so it now uses `proxy_config.ssl_context`/`assert_hostname`/`assert_fingerprint` (i.e. `proxy_ssl_context` and friends) instead of the origin's `self.ssl_context`/`assert_hostname`/`assert_fingerprint`.
+
+2. **`HTTPSConnection.__init__()`**: added validation so that when `use_forwarding_for_https=True` and an origin `ssl_context` is supplied for an HTTPS proxy, a `ValueError` is raised — telling the caller to use `proxy_ssl_context` instead (and specifically calling out the conflict if both are given).
+
+I left tests, docs, and config untouched per the task instructions (including the existing `pytest.skip` in `test_proxy_https_target_tls_error`, even though the issue asked for its removal — that would count as modifying a test file, which I was told not to do).

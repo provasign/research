@@ -1,0 +1,79 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..5a35e74 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -8,6 +8,7 @@ import pdb
+ import shlex
+ import sys
+ import tempfile
++import threading
+ import typing as t
+ from types import TracebackType
+ 
+@@ -71,11 +72,18 @@ class BytesIOCopy(io.BytesIO):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.3.3
++        Supports :meth:`fileno` by lazily backing the stream with a real
++        pipe, so code that passes this object (or a wrapper around it) to
++        :class:`subprocess.Popen` as ``stdout``/``stderr`` works instead of
++        raising ``io.UnsupportedOperation``.
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._fd_relay: tuple[int, int, threading.Thread] | None = None
+ 
+     def flush(self) -> None:
+         super().flush()
+@@ -85,6 +93,38 @@ class BytesIOCopy(io.BytesIO):
+         self.copy_to.write(b)
+         return super().write(b)
+ 
++    def fileno(self) -> int:
++        if self._fd_relay is None:
++            read_fd, write_fd = os.pipe()
++
++            def relay() -> None:
++                while True:
++                    try:
++                        chunk = os.read(read_fd, io.DEFAULT_BUFFER_SIZE)
++                    except OSError:
++                        break
++                    if not chunk:
++                        break
++                    self.write(chunk)
++
++            thread = threading.Thread(target=relay, daemon=True)
++            thread.start()
++            self._fd_relay = (read_fd, write_fd, thread)
++
++        return self._fd_relay[1]
++
++    def close_fd_relay(self) -> None:
++        """Stop the pipe relay thread started by :meth:`fileno`, if any.
++
++        .. versionadded:: 8.3.3
++        """
++        if self._fd_relay is not None:
++            read_fd, write_fd, thread = self._fd_relay
++            self._fd_relay = None
++            os.close(write_fd)
++            thread.join()
++            os.close(read_fd)
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.
+@@ -461,6 +501,8 @@ class CliRunner:
+                         pass
+                 else:
+                     os.environ[key] = value
++            stream_mixer.stdout.close_fd_relay()
++            stream_mixer.stderr.close_fd_relay()
+             sys.stdout = old_stdout
+             sys.stderr = old_stderr
+             sys.stdin = old_stdin

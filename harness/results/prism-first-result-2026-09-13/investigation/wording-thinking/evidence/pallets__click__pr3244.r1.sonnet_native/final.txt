@@ -1,0 +1,12 @@
+## Summary
+
+**Root cause:** `CliRunner` captured `sys.stdout`/`sys.stderr` using in-memory `io.BytesIO`-backed streams (`BytesIOCopy`). `io.BytesIO` has no real OS file descriptor, so calling `.fileno()` on it (as `subprocess.run(stdout=sys.stderr)` does internally) raised `io.UnsupportedOperation`.
+
+**Fix** (`src/click/testing.py`): Reimplemented `BytesIOCopy` on top of a real `tempfile.TemporaryFile()` instead of `io.BytesIO`, so it exposes a genuine file descriptor via `fileno()`. Writes are still mirrored into the mixed `output` stream as before, and a `getvalue()` method reads the full contents back via `os.pread`/`os.fstat` so `Result.stdout`/`Result.stderr` continue to work unchanged.
+
+**Verification:**
+- Reproduced the issue's `sscce.py`/`test_sscce.py` against the patched source — test now passes instead of raising `UnsupportedOperation`.
+- `python -m pytest tests/test_testing.py` — 29 passed.
+- Full suite `python -m pytest` — 1419 passed, 24 skipped, 1 xfailed (no regressions).
+
+No test, doc, or config files were modified; only `src/click/testing.py` was changed. Nothing was committed, per instructions.

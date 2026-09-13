@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 123370,
+  "stop_reason": "end_turn",
+  "session_id": "ba6b1bd4-24e7-4e44-a1a0-0b9eb842b4fb",
+  "total_cost_usd": 0.23586219999999997,
+  "usage": {
+    "input_tokens": 28,
+    "cache_creation_input_tokens": 20144,
+    "cache_read_input_tokens": 238011,
+    "output_tokens": 10357,
+    "output_tokens_details": {
+      "thinking_tokens": 7375
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 20144,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 487,
+        "cache_read_input_tokens": 25400,
+        "cache_creation_input_tokens": 201,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 201
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 21,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004058,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 28,
+      "outputTokens": 10357,
+      "cacheReadInputTokens": 238011,
+      "cacheCreationInputTokens": 20144,
+      "webSearchRequests": 0,
+      "costUSD": 0.23180419999999996,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 7375,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 14,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "## Summary\n\n**Root cause:** `CliRunner` captured `sys.stdout`/`sys.stderr` using in-memory `io.BytesIO`-backed streams (`BytesIOCopy`). `io.BytesIO` has no real OS file descriptor, so calling `.fileno()` on it (as `subprocess.run(stdout=sys.stderr)` does internally) raised `io.UnsupportedOperation`.\n\n**Fix** (`src/click/testing.py`): Reimplemented `BytesIOCopy` on top of a real `tempfile.TemporaryFile()` instead of `io.BytesIO`, so it exposes a genuine file descriptor via `fileno()`. Writes are still mirrored into the mixed `output` stream as before, and a `getvalue()` method reads the full contents back via `os.pread`/`os.fstat` so `Result.stdout`/`Result.stderr` continue to work unchanged.\n\n**Verification:**\n- Reproduced the issue's `sscce.py`/`test_sscce.py` against the patched source \u2014 test now passes instead of raising `UnsupportedOperation`.\n- `python -m pytest tests/test_testing.py` \u2014 29 passed.\n- Full suite `python -m pytest` \u2014 1419 passed, 24 skipped, 1 xfailed (no regressions).\n\nNo test, doc, or config files were modified; only `src/click/testing.py` was changed. Nothing was committed, per instructions.",
+  "ttft_ms": 3278,
+  "type": "result",
+  "duration_ms": 126212,
+  "uuid": "245b2cc7-9218-4097-a861-d7ccb664d24d",
+  "ttft_stream_ms": 1390,
+  "time_to_request_ms": 31,
+  "first_content_frame_ms": 1390,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

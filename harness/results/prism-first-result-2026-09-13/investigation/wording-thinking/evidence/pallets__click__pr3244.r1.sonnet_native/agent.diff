@@ -1,0 +1,57 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..a89b8d7 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -67,23 +67,48 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+         stream._paused = False
+ 
+ 
+-class BytesIOCopy(io.BytesIO):
+-    """Patch ``io.BytesIO`` to let the written stream be copied to another.
++class BytesIOCopy(io.RawIOBase):
++    """A binary stream backed by a real (temporary) file, so it has a
++    valid file descriptor and can be used with things like
++    :func:`subprocess.run`, while everything written to it is also
++    copied to another stream.
+ 
+     .. versionadded:: 8.2
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
++        self._file = tempfile.TemporaryFile()
+         self.copy_to = copy_to
+ 
++    def readable(self) -> bool:
++        return False
++
++    def writable(self) -> bool:
++        return True
++
++    def seekable(self) -> bool:
++        return False
++
++    def fileno(self) -> int:
++        return self._file.fileno()
++
+     def flush(self) -> None:
+-        super().flush()
++        self._file.flush()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+-        return super().write(b)
++        return self._file.write(b)
++
++    def getvalue(self) -> bytes:
++        self._file.flush()
++        size = os.fstat(self._file.fileno()).st_size
++        return os.pread(self._file.fileno(), size, 0)
++
++    def close(self) -> None:
++        self._file.close()
++        super().close()
+ 
+ 
+ class StreamMixer:

@@ -1,0 +1,13 @@
+All 1420 tests pass (plus the SSCCE reproduction test), with no skipped/failed regressions and no resource warnings.
+
+## Summary
+
+The bug: `CliRunner.isolation()` replaced `sys.stdout`/`sys.stderr` with `TextIOWrapper` instances backed by pure `io.BytesIO` objects (via `BytesIOCopy`). `io.BytesIO` has no real OS file descriptor, so any code doing `subprocess.run(..., stdout=sys.stderr)` failed with `io.UnsupportedOperation: fileno` when `subprocess` tried to call `.fileno()` on it.
+
+Fix (`src/click/testing.py`): changed `BytesIOCopy` to back its buffer with a real `tempfile.TemporaryFile()` instead of `io.BytesIO`, while still mirroring every `write()` into the `copy_to` stream (used for the combined `output` capture) and exposing a `getvalue()` compatible with the old `io.BytesIO` API via delegation (`__getattr__`) to the real file. Since a real file now has a genuine OS-level fd, `.fileno()` works and `subprocess.run` no longer raises.
+
+To avoid leaking file descriptors (which would trip `ResourceWarning`-as-error), the real file is:
+- explicitly closed in `CliRunner.isolation()`'s `finally` block, and
+- also closed via a `__del__` on `BytesIOCopy` as a safety net for any direct/standalone use.
+
+Updated the `StreamMixer`/`isolation()` type annotations to reflect the new `BytesIOCopy` type where they previously said `io.BytesIO`.

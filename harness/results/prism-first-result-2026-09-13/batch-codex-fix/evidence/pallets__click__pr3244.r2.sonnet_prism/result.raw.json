@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 186921,
+  "stop_reason": "end_turn",
+  "session_id": "8a312d0f-f0e0-4273-b2ab-2d88b56c8c5e",
+  "total_cost_usd": 0.4471648,
+  "usage": {
+    "input_tokens": 42,
+    "cache_creation_input_tokens": 36632,
+    "cache_read_input_tokens": 622049,
+    "output_tokens": 17207,
+    "output_tokens_details": {
+      "thinking_tokens": 10873
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 36632,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 638,
+        "cache_read_input_tokens": 43139,
+        "cache_creation_input_tokens": 447,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 447
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 24,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004073,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 42,
+      "outputTokens": 17207,
+      "cacheReadInputTokens": 622049,
+      "cacheCreationInputTokens": 36632,
+      "webSearchRequests": 0,
+      "costUSD": 0.4430918,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 10873,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 21,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "The crash from the issue is resolved: `CliRunner().invoke()` no longer raises `io.UnsupportedOperation` when the invoked command calls `subprocess.run(..., stdout=sys.stderr)`, and the subprocess's output is correctly captured (`result.stderr == 'foo\\n'`).\n\n## Summary\n\nThe root cause: `CliRunner`'s isolation replaced `sys.stdout`/`sys.stderr` with `io.TextIOWrapper` objects backed by pure `io.BytesIO` streams (`BytesIOCopy`). `io.BytesIO` has no real OS file descriptor, so `.fileno()` raises `io.UnsupportedOperation`, which broke any code passing `sys.stdout`/`sys.stderr` to `subprocess.run` for output redirection (subprocess needs a real fd to `dup2` into the child process).\n\nFix (`src/click/testing.py`):\n- `BytesIOCopy` now also backs itself with a real `tempfile.TemporaryFile()`, exposing a working `fileno()` so `subprocess.run` (and similar fd-based redirection) works under `CliRunner`.\n- `write()`/`flush()` mirror to this real file; `getvalue()` reads from the real file (instead of the in-memory buffer) so bytes written directly through the file descriptor by a child process are captured too.\n- `close()` releases the backing file descriptor, and `CliRunner.invoke()` explicitly closes the stdout/stderr streams after capturing their contents, avoiding fd leaks/`ResourceWarning`s.\n\nVerified: the reported reproduction no longer crashes and correctly captures subprocess output; the full existing test suite (1419 passed, 24 skipped, 1 xfailed) and `tests/test_testing.py` (29 passed) pass with no regressions or resource warnings.\n\nNo files were committed, per instructions.",
+  "ttft_ms": 2171,
+  "type": "result",
+  "duration_ms": 190509,
+  "uuid": "90247d2f-c2b0-4fe3-8779-6a62952f89bf",
+  "ttft_stream_ms": 638,
+  "time_to_request_ms": 24,
+  "first_content_frame_ms": 638,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

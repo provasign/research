@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 93415,
+  "stop_reason": "end_turn",
+  "session_id": "0314d905-e553-4a8e-9f4e-7b8fed26e67f",
+  "total_cost_usd": 0.216578,
+  "usage": {
+    "input_tokens": 26,
+    "cache_creation_input_tokens": 20815,
+    "cache_read_input_tokens": 241790,
+    "output_tokens": 8088,
+    "output_tokens_details": {
+      "thinking_tokens": 2961
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 20815,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 485,
+        "cache_read_input_tokens": 27392,
+        "cache_creation_input_tokens": 258,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 258
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 3953,
+      "outputTokens": 15,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004028,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 26,
+      "outputTokens": 8088,
+      "cacheReadInputTokens": 241790,
+      "cacheCreationInputTokens": 20815,
+      "webSearchRequests": 0,
+      "costUSD": 0.21255000000000002,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 2961,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 13,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "All 29 existing tests in `test_testing.py` pass.\n\n## Summary\n\n**Issue:** `CliRunner` captures `sys.stdout`/`sys.stderr` in in-memory `BytesIOCopy` (an `io.BytesIO` subclass) buffers. When user code passes these streams to `subprocess.run(..., stdout=sys.stderr)`, `subprocess` calls `.fileno()` on the stream to get a real file descriptor, which `io.BytesIO` doesn't support \u2014 raising a cryptic `io.UnsupportedOperation: fileno` deep in `subprocess.py` with no indication of what went wrong or how to fix it.\n\n**Fix:** Added an explicit `fileno()` override to `BytesIOCopy` in `src/click/testing.py` that raises `io.UnsupportedOperation` with a clear, actionable message explaining that the stream is captured in memory during testing and has no real file descriptor, and suggesting `subprocess.PIPE` or an open file as alternatives.\n\nThis keeps the behavior correct (the operation genuinely isn't supported, since there's no real underlying OS-level fd), but turns a confusing failure deep in `subprocess` internals into a clear, actionable error surfaced from Click's own testing utilities.\n\nVerified with a reproduction of the reported script/test, plus the full `tests/test_testing.py` suite (29 passed). No files outside `src/click/testing.py` were modified.",
+  "ttft_ms": 3373,
+  "type": "result",
+  "duration_ms": 93013,
+  "uuid": "91cfe0ba-5184-469e-92b1-fe2428103a94",
+  "ttft_stream_ms": 1734,
+  "time_to_request_ms": 25,
+  "first_content_frame_ms": 1734,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

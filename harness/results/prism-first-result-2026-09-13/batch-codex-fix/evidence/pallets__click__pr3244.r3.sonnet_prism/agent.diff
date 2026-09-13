@@ -1,0 +1,44 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..ac10c94 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -70,21 +70,39 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+ class BytesIOCopy(io.BytesIO):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
++    Backed by a real (temporary) file rather than pure memory so that
++    ``fileno()`` is available. This allows code under test to pass
++    ``sys.stdout``/``sys.stderr`` to APIs such as :func:`subprocess.run`
++    that need an OS-level file descriptor.
++
+     .. versionadded:: 8.2
++
++    .. versionchanged:: 8.3.2
++        Backed by a real file so ``fileno()`` is supported.
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
++        self._file = tempfile.TemporaryFile()
+         self.copy_to = copy_to
+ 
+     def flush(self) -> None:
+         super().flush()
++        self._file.flush()
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
++        self._file.write(b)
+         return super().write(b)
+ 
++    def fileno(self) -> int:
++        return self._file.fileno()
++
++    def close(self) -> None:
++        super().close()
++        self._file.close()
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.

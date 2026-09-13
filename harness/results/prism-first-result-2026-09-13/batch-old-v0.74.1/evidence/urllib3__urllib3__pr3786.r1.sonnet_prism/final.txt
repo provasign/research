@@ -1,0 +1,6 @@
+This change:
+
+1. **Fixes the actual bug**: When `use_forwarding_for_https=True` with an HTTPS proxy, `HTTPSConnection.connect()` now uses the `ProxyConfig`'s `ssl_context` (i.e., `proxy_ssl_context`), `assert_hostname`, and `assert_fingerprint` to perform the TLS handshake with the proxy, instead of the origin's `ssl_context`/`assert_hostname`/`assert_fingerprint` — since in forwarding mode the connection host actually *is* the proxy (see `connectionpool.py`'s `_new_conn`, which swaps `actual_host` to the proxy when a proxy is configured).
+2. **Adds the required validation**: raises `ValueError` in the `HTTPSConnection` constructor when both `ssl_context` and forwarding to an HTTPS proxy are configured — with a distinct message when `proxy_ssl_context` is also set vs. not, per the issue's 2.x requirement.
+
+I verified the file parses and ran the relevant non-network unit tests (`test_proxymanager.py`, `test_connection.py`, `test_poolmanager.py`, `test_util.py`) — all 361+287+324 pass. Network-dependent dummyserver proxy tests (e.g. `test_proxy_poolmanager.py`) weren't run since network access isn't permitted in this environment; per the task constraints, I did not modify tests (including the skip mentioned in the issue).

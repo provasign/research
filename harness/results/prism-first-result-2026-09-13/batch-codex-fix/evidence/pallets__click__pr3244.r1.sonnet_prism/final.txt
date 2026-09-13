@@ -1,0 +1,12 @@
+## Summary
+
+**Root cause:** `CliRunner.isolation()` backs `sys.stdout`/`sys.stderr` with `_NamedTextIOWrapper` wrapping a `BytesIOCopy(io.BytesIO)` buffer. Plain `io.BytesIO` has no real OS file descriptor, so `BytesIO.fileno()` (inherited, unoverridden) raises `io.UnsupportedOperation`. Anything that needs `stdout.fileno()` — like `subprocess.run(..., stdout=sys.stderr)` when the file-like object isn't `PIPE`/`DEVNULL`/an int — blows up during tests even though it works fine outside `CliRunner`.
+
+**Fix** (`src/click/testing.py`): Reworked `BytesIOCopy` to be backed by a real `tempfile.TemporaryFile()` instead of subclassing `io.BytesIO`, while still mirroring every write into the shared `copy_to` buffer used for combined output. It implements `fileno()`, `seek()`/`tell()`, `flush()`, `write()`, and a `getvalue()` compatible with existing call sites (`outstreams[0].getvalue()` etc. in `invoke()`), so `stdout`/`stderr` streams now expose genuine file descriptors that `subprocess.run` (and similar fd-based APIs) can use.
+
+**Verification:**
+- Reproduced the issue's `sscce.py`/`test_sscce.py` scenario — failed before the fix (`io.UnsupportedOperation: fileno`), passes after.
+- `python -m pytest tests/test_testing.py -q` → 29 passed.
+- Full suite `python -m pytest tests/ -q` → 1419 passed, 24 skipped, 1 xfailed, no failures.
+
+No tests, docs, or config were modified — only the `BytesIOCopy`/`StreamMixer` implementation in `src/click/testing.py`.

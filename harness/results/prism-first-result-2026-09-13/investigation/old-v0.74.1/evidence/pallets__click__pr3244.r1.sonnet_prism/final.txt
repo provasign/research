@@ -1,0 +1,13 @@
+The fix is complete and verified.
+
+## Summary
+
+The bug: `CliRunner` replaces `sys.stdout`/`sys.stderr` with `_NamedTextIOWrapper` objects backed by in-memory `io.BytesIO` buffers. Calling `subprocess.run(..., stdout=sys.stderr)` makes `subprocess` call `.fileno()` on that stream, which `io.BytesIO` doesn't support, raising `io.UnsupportedOperation`.
+
+Fix in `src/click/testing.py`: `BytesIOCopy` now lazily "spills" its contents to a real `tempfile.TemporaryFile()` the first time `fileno()` is actually requested, so `subprocess` (or any other consumer needing a real file descriptor) gets a working fd. Ordinary usage (no `fileno()` call) is unaffected and stays purely in-memory. `getvalue()`/`write()`/`flush()`/`close()` were updated to stay consistent whether or not the spill has happened, and `CliRunner.isolation()` now closes the stream buffers on teardown to avoid leaking the temp file descriptor when it is created.
+
+Verified:
+- The reported reproduction (`subprocess.run(["echo", "foo"], stdout=sys.stderr)` inside a `CliRunner`-invoked command) no longer raises and captures `"foo\n"` in `result.stderr`.
+- Full existing test suite: `1419 passed, 24 skipped, 1 xfailed` (including `tests/test_stream_lifecycle.py` and `tests/test_testing.py`, which directly exercise `BytesIOCopy`/`StreamMixer` lifecycle semantics).
+
+No tests, docs, or config were modified.

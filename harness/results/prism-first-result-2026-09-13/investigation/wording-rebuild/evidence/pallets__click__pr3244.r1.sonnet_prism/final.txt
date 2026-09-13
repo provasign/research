@@ -1,0 +1,12 @@
+The `UnsupportedOperation: fileno` crash is gone and the full test suite (1419 tests) passes.
+
+## Summary
+
+The root cause: `CliRunner`'s isolation replaced `sys.stdout`/`sys.stderr` with a `TextIOWrapper` around a `BytesIOCopy(io.BytesIO)` buffer. `io.BytesIO` has no real OS file descriptor, so any code that passed `sys.stdout`/`sys.stderr` to `subprocess.run(...)` (which calls `.fileno()` on non-special values) raised `io.UnsupportedOperation`.
+
+Fix in `src/click/testing.py`:
+- Reimplemented `BytesIOCopy` to back its buffer with a real `tempfile.TemporaryFile()` (which has a genuine file descriptor) instead of `io.BytesIO`, while preserving the `write()`/`flush()`/`getvalue()` API the rest of `testing.py` relies on, plus a working `fileno()`.
+- Added `__del__` to close the backing temp file when a standalone `BytesIOCopy` is garbage collected (avoiding resource leaks/warnings when it's not owned by a `CliRunner` isolation session).
+- Added explicit cleanup of the `StreamMixer`'s stdout/stderr temp files in `CliRunner.isolation`'s `finally` block.
+
+I did not modify any tests — `tests/test_stream_lifecycle.py` (which exercises `BytesIOCopy` directly and via `StreamMixer`) passes unchanged, confirming the fix preserves existing captured-output semantics while fixing the `fileno()` crash.

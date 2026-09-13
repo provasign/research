@@ -361,9 +361,22 @@ def summarize_sonnet(events: list[dict], out: Path) -> tuple[dict, str, list[dic
     call_names = {}
     tool_result_bytes = {}
     tool_errors = []
+    call_outcomes: dict = {}
+    permission_denials: list[str] = []
     thinking_blocks = thinking_chars = 0
     for event in events:
-        for block in (event.get("message") or {}).get("content", []):
+        # Not every event carries a dict `message`: a deny-list refusal is
+        # `{"type":"system","subtype":"permission_denied","message":"<str>"}`.
+        # That string once crashed a whole 6-cell run before scoring
+        # (2026-09-13), losing the very evidence it should have recorded.
+        if event.get("type") == "system" and event.get("subtype") == "permission_denied":
+            permission_denials.append(str(event.get("message") or ""))
+        message = event.get("message")
+        if not isinstance(message, dict):
+            continue
+        for block in message.get("content", []) or []:
+            if not isinstance(block, dict):
+                continue
             if block.get("type") == "tool_use":
                 identity = block.get("id")
                 call_names[identity] = block.get("name", "")
@@ -373,6 +386,7 @@ def summarize_sonnet(events: list[dict], out: Path) -> tuple[dict, str, list[dic
             elif block.get("type") == "tool_result":
                 identity = block.get("tool_use_id")
                 tool_result_bytes[identity] = result_bytes(block.get("content"))
+                call_outcomes[identity] = not block.get("is_error")
                 if block.get("is_error"):
                     tool_errors.append({"tool": call_names.get(identity, ""),
                                         "content": block.get("content")})
@@ -380,6 +394,12 @@ def summarize_sonnet(events: list[dict], out: Path) -> tuple[dict, str, list[dic
                 thinking_blocks += 1
                 thinking_chars += len(block.get("thinking") or "")
     rec["tool_errors"] = tool_errors
+    # Per-call success, keyed by tool_use id, so the audit can tell an
+    # executed network fetch (violation) from one the deny list refused
+    # (recorded attempt). Denial messages are kept verbatim: they show what
+    # the model tried, which is evidence in its own right.
+    rec["call_outcomes"] = call_outcomes
+    rec["permission_denials"] = permission_denials
     # Reasoning-capture check (see AgentConfig.thinking_display): blocks
     # present but zero chars means the API returned signature-only thinking
     # -- the flag was dropped or unsupported, and "why did the agent do X"
@@ -476,6 +496,8 @@ def audit_calls(rec: dict, calls: list[dict], arm: str) -> None:
     own_calls: list[str] = []
     other_tool_hits: dict[str, int] = {}
     native_commands: list[str] = []
+    native_ok: list[bool] = []  # parallel to native_commands: did the shell call succeed?
+    outcomes = rec.get("call_outcomes") or {}
     signatures: list[str] = []
     violations: list[str] = []
     if arm.startswith("sonnet"):
@@ -492,6 +514,7 @@ def audit_calls(rec: dict, calls: list[dict], arm: str) -> None:
                     other_tool_hits[matched] = other_tool_hits.get(matched, 0) + 1
             elif name == "Bash":
                 native_commands.append(value.get("command", ""))
+                native_ok.append(bool(outcomes.get(call.get("id"), True)))
             elif name in ("Agent", "Task", "WebFetch", "WebSearch"):
                 violations.append("delegation or network tool used")
     else:
@@ -509,11 +532,19 @@ def audit_calls(rec: dict, calls: list[dict], arm: str) -> None:
                         other_tool_hits[server] = other_tool_hits.get(server, 0) + 1
             elif kind == "command_execution":
                 native_commands.append(call.get("command", ""))
+                native_ok.append(call.get("status") == "completed" and call.get("exit_code") == 0)
             elif kind in ("collab_tool_call", "web_search"):
                 violations.append("delegation or network tool used")
             elif kind == "file_change" and not rec.get("allow_source_edits"):
                 violations.append("edit used in read-only cell")
-    network_commands = [v for v in native_commands if classify_network(v) == "definite"]
+    # A definite fetch that EXECUTED is a violation. One the deny list or the
+    # Codex sandbox refused is recorded as an attempt: nothing reached the
+    # network, so the cell is not contaminated, and the turns it cost are a
+    # fair charge for the model's own behavior (the same in every arm).
+    definite = [(v, ok) for v, ok in zip(native_commands, native_ok)
+                if classify_network(v) == "definite"]
+    network_commands = [v for v, ok in definite if ok]
+    network_attempts_blocked = [v for v, ok in definite if not ok]
     network_suspects = [v for v in native_commands if classify_network(v) == "suspect"]
     if network_commands:
         violations.append("network access via shell")
@@ -547,6 +578,7 @@ def audit_calls(rec: dict, calls: list[dict], arm: str) -> None:
         own_tool_cli_commands=own_cli_commands,
         cross_tool_violations=cross_tool_violations,
         network_commands=network_commands,
+        network_attempts_blocked=network_attempts_blocked,
         network_suspects=network_suspects,
     )
 
@@ -560,8 +592,11 @@ def successful_own_tool_actions(events: list[dict], calls: list[dict], arm: str)
     if arm.startswith("sonnet"):
         results = {}
         for event in events:
-            for block in (event.get("message") or {}).get("content", []):
-                if block.get("type") == "tool_result":
+            message = event.get("message")
+            if not isinstance(message, dict):
+                continue
+            for block in message.get("content", []) or []:
+                if isinstance(block, dict) and block.get("type") == "tool_result":
                     results[block.get("tool_use_id")] = not block.get("is_error")
         return sum(
             bool(results.get(call.get("id"))) and (

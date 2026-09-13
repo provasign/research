@@ -13,6 +13,9 @@ Subcommands:
   bench.py list-suites
   bench.py list-tasks   --suite <name>
   bench.py index        [--results-dir DIR] [--out FILE]
+  bench.py rescore      --out DIR [--concurrency N]
+                         (rebuild/score cells from an existing run dir's
+                         transcripts after a crash; no agents run)
 """
 from __future__ import annotations
 
@@ -22,6 +25,7 @@ import hashlib
 import json
 import os
 import random
+import re
 import shutil
 import subprocess
 import sys
@@ -189,6 +193,166 @@ def cmd_index(args: argparse.Namespace) -> int:
     return 0
 
 
+# --- shared by `run` and `rescore` -------------------------------------------
+
+CELL_KEY_RE = re.compile(r"^(?P<task>.+)\.r(?P<trial>\d+)\.(?P<arm>[a-z0-9]+_[a-z0-9]+)$")
+
+
+def cell_key_parts(key: str) -> tuple[str, int, str]:
+    """`<task>.r<trial>.<arm>` -> (task, trial, arm)."""
+    m = CELL_KEY_RE.match(key)
+    if not m:
+        raise ValueError(f"not a cell key: {key!r}")
+    return m.group("task"), int(m.group("trial")), m.group("arm")
+
+
+def planned_cell_keys(manifest: dict) -> list[str]:
+    tasks = [t["task"] for t in manifest.get("tasks", [])]
+    return [f"{task}.r{trial}.{arm}"
+            for trial in range(1, int(manifest.get("trials", 1)) + 1)
+            for task in tasks for arm in manifest.get("arms", [])]
+
+
+def finalize_coding(cell: rc.Cell, rec: dict, final: str) -> dict:
+    """Coding-suite finalize hook for rc.run_cell: the source-only diff
+    against the pinned baseline, excluding dependency-setup files."""
+    if cell.arm.startswith("gpt55"):
+        add_gpt55_cost(rec)
+    diff, changed_files, non_source = rc.source_diff(
+        cell.work, cell.extra["baseline"], cell.extra["setup_files"])
+    (cell.out / "agent.diff").write_text(diff)
+    rec["task"] = cell.extra["task_id"]
+    return {
+        "task": cell.extra["task_id"], "trial": cell.extra["trial"],
+        "changed_files": changed_files,
+        "non_source_changes": non_source, "diff_lines": diff.count("\n"),
+        "has_diff": bool(diff.strip()),
+    }
+
+
+def harness_error_row(cell: rc.Cell, exc: BaseException) -> dict:
+    """A cell whose summarize/audit/finalize raised. Keep the run alive, mark
+    the cell invalid, record the error; `bench.py rescore` rebuilds it from
+    the transcript once the cause is fixed. (A permission_denied event with a
+    string `message` killed a 6-cell run before scoring on 2026-09-13.)"""
+    row = {"cell_id": cell.key, "arm": cell.arm, "task": cell.extra.get("task_id"),
+           "trial": cell.extra.get("trial"), "audited_valid": False, "resolved": False,
+           "violations": [], "harness_error": repr(exc), "measurement_complete": False}
+    rc.dump(cell.out / "measurement.json", row)
+    return row
+
+
+def score_and_summarize(root: Path, rows: list[dict], tasks: dict, manifest: dict,
+                        concurrency: int) -> str:
+    """Docker-score every row without a verdict, write summary.json, update
+    the manifest, return the run status. Shared by `run` and `rescore`."""
+    pending = [r for r in rows if r.get("resolved") is None and not r.get("harness_error")]
+    print(f"SCORING {len(pending)} cells with held-out tests", flush=True)
+
+    def score_one(row):
+        diff = sc.read_diff(root / "evidence" / row["cell_id"])
+        t0 = time.monotonic()
+        result = sc.score_coding_cell(tasks[row["task"]], diff)
+        row["score_wall_s"] = round(time.monotonic() - t0, 3)
+        row["score"] = result
+        row["resolved"] = bool(result.get("resolved"))
+        rc.dump(root / "evidence" / row["cell_id"] / "measurement.json", row)
+        return row
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as pool:
+        for future in concurrent.futures.as_completed([pool.submit(score_one, r) for r in pending]):
+            future.result()
+    valid = sum(bool(r.get("audited_valid")) for r in rows)
+    harness_errors = sum(bool(r.get("harness_error") or (r.get("score") or {}).get("harness_error"))
+                         for r in rows)
+    protocol_violations = sum(bool(r.get("violations")) for r in rows)
+    status = run_status(rows, manifest["planned_cells"])
+    rc.dump(root / "summary.json", {
+        "status": status, "completed": len(rows), "valid": valid,
+        "timeouts": sum(bool(r.get("timed_out")) for r in rows),
+        "measurement_incomplete": sum(not bool(r.get("measurement_complete")) for r in rows),
+        "agent_errors": sum(bool(r.get("agent_error")) for r in rows),
+        "protocol_violations": protocol_violations, "harness_errors": harness_errors,
+        "resolved": sum(bool(r.get("resolved")) for r in rows), "rows": rows,
+    })
+    manifest.update(status=status, finished_utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+    rc.dump(root / "manifest.json", manifest)
+    print(f"FINISHED {status}: {root}", flush=True)
+    return status
+
+
+def cmd_rescore(args: argparse.Namespace) -> int:
+    """Rebuild measurement.json for any cell whose transcript exists but was
+    never summarized (a crash mid-run), then score every unscored cell and
+    rewrite summary.json -- all from what is already on disk, no agents run.
+    Missing planned cells are reported, not started."""
+    root = Path(args.out).resolve()
+    manifest = json.loads((root / "manifest.json").read_text())
+    tasks = {p.stem: json.loads(p.read_text()) for p in (root / "tasks").glob("*.json")}
+    models = manifest.get("models", {})
+    gpt_model = models.get("codex", rc.AgentConfig.gpt_model)
+    rows, recovered = [], []
+    for out in sorted((root / "evidence").iterdir()):
+        if not (out / "stdout.jsonl").exists():
+            continue
+        key = out.name
+        mpath = out / "measurement.json"
+        if mpath.exists():
+            rows.append(json.loads(mpath.read_text()))
+            continue
+        task_id, trial, arm = cell_key_parts(key)
+        tool = rc.active_tool(arm)
+        work = root / "work" / key
+        template = root / "templates" / task_id / ("base" if tool == "native" else tool)
+        # The work copy was cloned from the template, whose only commit is the
+        # pinned baseline; the agent is told not to commit, so the root commit
+        # is the baseline either way.
+        baseline = rc.command(["git", "rev-list", "--max-parents=0", "HEAD"], work).decode().split()[0]
+        cell = rc.Cell(key=key, out=out, work=work,
+                       cmd=json.loads((out / "command.json").read_text()), arm=arm,
+                       invocation_id="recovered",
+                       extra={"task_id": task_id, "trial": trial, "baseline": baseline,
+                              "setup_files": rc.template_setup_files(template),
+                              "allow_source_edits": True})
+        events = rc.read_events(out / "stdout.jsonl")
+        if arm.startswith("sonnet"):
+            rec, final, calls = rc.summarize_sonnet(events, out)
+        else:
+            rec, final, calls = rc.summarize_codex(events, out, gpt_model)
+        (out / "final.txt").write_text(final)
+        rec["allow_source_edits"] = True
+        rc.audit_calls(rec, calls, arm)
+        rec["successful_own_tool_actions"] = rc.successful_own_tool_actions(events, calls, arm)
+        if tool != "native" and not rec["successful_own_tool_actions"]:
+            rec["violations"].append("own tool had no successful calls")
+        if any("requires approval" in str(err.get("error") or err.get("content") or "")
+               for err in rec.get("tool_errors", [])):
+            rec["violations"].append("tool call blocked by approval policy")
+        rec.update(finalize_coding(cell, rec, final))
+        rec.update(
+            cell_id=key, arm=arm, invocation_id="recovered", started_at=None, wall_s=None,
+            exit_code=None, timed_out=False, recovered=True,
+            audited_valid_basis=("recovered from transcript after a harness crash; CLI exit code "
+                                 "unknown -- validity rests on a complete result event, no agent "
+                                 "error, and no violations"),
+        )
+        rec["audited_valid"] = bool(rec.get("measurement_complete") and not rec.get("agent_error")
+                                    and not rec["violations"])
+        rc.dump(mpath, rec)
+        rows.append(rec)
+        recovered.append(key)
+    rows.sort(key=lambda r: r.get("cell_id", ""))
+    present = {r.get("cell_id") for r in rows}
+    missing = [k for k in planned_cell_keys(manifest) if k not in present]
+    print(f"RESCORE: {len(rows)} cells on disk, {len(recovered)} rebuilt from transcript: {recovered}",
+          flush=True)
+    if missing:
+        print(f"MISSING planned cells (never ran; rescore does not start agents): {missing}", flush=True)
+    manifest["rescored_utc"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    status = score_and_summarize(root, rows, tasks, manifest, args.concurrency)
+    return 0 if status == "complete" else 1
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     kind = suites.suite_kind(args.suite)
     if kind != "coding":
@@ -344,21 +508,6 @@ def cmd_run(args: argparse.Namespace) -> int:
     manifest["status"] = "running"
     rc.dump(root / "manifest.json", manifest)
 
-    def finalize_coding(cell: rc.Cell, rec: dict, final: str) -> dict:
-        if cell.arm.startswith("gpt55"):
-            add_gpt55_cost(rec)
-        baseline = cell.extra["baseline"]
-        setup_files = cell.extra["setup_files"]
-        diff, changed_files, non_source = rc.source_diff(cell.work, baseline, setup_files)
-        (cell.out / "agent.diff").write_text(diff)
-        rec["task"] = cell.extra["task_id"]
-        return {
-            "task": cell.extra["task_id"], "trial": cell.extra["trial"],
-            "changed_files": changed_files,
-            "non_source_changes": non_source, "diff_lines": diff.count("\n"),
-            "has_diff": bool(diff.strip()),
-        }
-
     # One wave per (task, trial): each trial gets its own freshly-shuffled
     # task order and its own arm-rotation offset, matching
     # product_impact_suite.py's scheme, so --trials N actually schedules N
@@ -388,43 +537,21 @@ def cmd_run(args: argparse.Namespace) -> int:
                                           "setup_files": setup_files, "allow_source_edits": True})
             cells.append(cell)
         with concurrent.futures.ThreadPoolExecutor(max_workers=args.concurrency) as pool:
-            futures = [pool.submit(rc.run_cell, cell, cfg, finalize_coding) for cell in cells]
+            futures = {pool.submit(rc.run_cell, cell, cfg, finalize_coding): cell for cell in cells}
             for future in concurrent.futures.as_completed(futures):
-                rows.append(future.result())
+                try:
+                    rows.append(future.result())
+                except Exception as exc:  # a summarize/audit/finalize bug must not kill the run
+                    cell = futures[future]
+                    print(f"HARNESS ERROR in {cell.key}: {exc!r} -- cell marked invalid; "
+                          f"rebuild with `bench.py rescore --out {root}` once fixed", flush=True)
+                    rows.append(harness_error_row(cell, exc))
         rc.dump(root / "summary.json", {"status": "agents_complete", "rows": rows})
         if any(not row.get("audited_valid") for row in rows[-len(cells):]):
             print("STOP: invalid agent cell; later waves will not run", flush=True)
             break
 
-    print(f"SCORING {len(rows)} cells with held-out tests", flush=True)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=args.concurrency) as pool:
-        def score_one(row):
-            diff = sc.read_diff(root / "evidence" / row["cell_id"])
-            t0 = time.monotonic()
-            result = sc.score_coding_cell(tasks[row["task"]], diff)
-            row["score_wall_s"] = round(time.monotonic() - t0, 3)
-            row["score"] = result
-            row["resolved"] = bool(result.get("resolved"))
-            rc.dump(root / "evidence" / row["cell_id"] / "measurement.json", row)
-            return row
-        rows = [f.result() for f in concurrent.futures.as_completed(
-            [pool.submit(score_one, row) for row in rows])]
-
-    valid = sum(bool(r.get("audited_valid")) for r in rows)
-    harness_errors = sum(bool((r.get("score") or {}).get("harness_error")) for r in rows)
-    protocol_violations = sum(bool(r.get("violations")) for r in rows)
-    status = run_status(rows, manifest["planned_cells"])
-    rc.dump(root / "summary.json", {
-        "status": status, "completed": len(rows), "valid": valid,
-        "timeouts": sum(bool(r.get("timed_out")) for r in rows),
-        "measurement_incomplete": sum(not bool(r.get("measurement_complete")) for r in rows),
-        "agent_errors": sum(bool(r.get("agent_error")) for r in rows),
-        "protocol_violations": protocol_violations, "harness_errors": harness_errors,
-        "resolved": sum(r["resolved"] for r in rows), "rows": rows,
-    })
-    manifest.update(status=status, finished_utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
-    rc.dump(root / "manifest.json", manifest)
-    print(f"FINISHED {status}: {root}", flush=True)
+    status = score_and_summarize(root, rows, tasks, manifest, args.concurrency)
     return 0 if status == "complete" else 1
 
 
@@ -462,6 +589,12 @@ def main() -> int:
                        help="run directory (default: harness/results/bench-<suite>-<timestamp>)")
     run_p.add_argument("--preflight-only", action="store_true")
     run_p.set_defaults(func=cmd_run)
+
+    rs_p = sub.add_parser("rescore", help="rebuild/score cells from an existing run dir's "
+                                          "transcripts after a crash (no agents run)")
+    rs_p.add_argument("--out", required=True, help="run directory to rescore")
+    rs_p.add_argument("--concurrency", type=int, default=4)
+    rs_p.set_defaults(func=cmd_rescore)
 
     ls_p = sub.add_parser("list-suites", help="list available suites")
     ls_p.set_defaults(func=cmd_list_suites)

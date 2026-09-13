@@ -537,5 +537,77 @@ class BuildCommandCodexSandboxTests(unittest.TestCase):
         self.assertEqual(cmd[cmd.index("sandbox_workspace_write.network_access=false") - 1], "-c")
 
 
+class PermissionDeniedEventTests(unittest.TestCase):
+    """The exact event shape that crashed a 6-cell run on 2026-09-13: the
+    deny list refused `pip download`, Claude Code emitted a system event with
+    a STRING message, and summarize_sonnet called .get() on it."""
+
+    DENIED = "Permission to use Bash with command pip download click --no-deps -d /tmp/x has been denied."
+
+    def _denied_events(self):
+        return [
+            {"type": "assistant", "message": {"content": [
+                {"type": "tool_use", "id": "t1", "name": "Bash",
+                 "input": {"command": "pip download click --no-deps -d /tmp/x"}}]}},
+            {"type": "system", "subtype": "permission_denied", "message": self.DENIED},
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "t1", "is_error": True, "content": self.DENIED}]}},
+        ]
+
+    def test_string_message_event_does_not_crash_and_is_recorded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rec, _final, calls = rc.summarize_sonnet(self._denied_events(), Path(tmp))
+        self.assertEqual(rec["permission_denials"], [self.DENIED])
+        self.assertIs(rec["call_outcomes"]["t1"], False)
+        rc.audit_calls(rec, calls, "sonnet_prism")
+        # Blocked: nothing reached the network -- recorded, not a violation.
+        self.assertEqual(rec["network_commands"], [])
+        self.assertEqual(len(rec["network_attempts_blocked"]), 1)
+        self.assertNotIn("network access via shell", rec["violations"])
+
+    def test_successful_own_tool_actions_tolerates_string_messages(self):
+        events = self._denied_events()
+        self.assertEqual(rc.successful_own_tool_actions(events, [], "sonnet_prism"), 0)
+
+    def test_executed_fetch_is_still_a_violation(self):
+        events = [
+            {"type": "assistant", "message": {"content": [
+                {"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "pip download click"}}]}},
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "t1", "content": "Successfully downloaded click"}]}},
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            rec, _f, calls = rc.summarize_sonnet(events, Path(tmp))
+        rc.audit_calls(rec, calls, "sonnet_native")
+        self.assertEqual(len(rec["network_commands"]), 1)
+        self.assertIn("network access via shell", rec["violations"])
+
+    def test_codex_sandboxed_curl_is_a_blocked_attempt(self):
+        rec = {}
+        calls = [{"type": "command_execution", "command": "/bin/zsh -lc 'curl -sI https://example.com'",
+                  "status": "completed", "exit_code": 6}]
+        rc.audit_calls(rec, calls, "gpt55_native")
+        self.assertEqual(rec["network_commands"], [])
+        self.assertEqual(len(rec["network_attempts_blocked"]), 1)
+        self.assertNotIn("network access via shell", rec["violations"])
+
+
+class BenchCellKeyTests(unittest.TestCase):
+    def test_round_trip(self):
+        import bench
+        self.assertEqual(bench.cell_key_parts("pallets__click__pr3244.r3.sonnet_prism"),
+                         ("pallets__click__pr3244", 3, "sonnet_prism"))
+        self.assertEqual(bench.cell_key_parts("urllib3__urllib3__pr3786.r12.gpt55_codegraph"),
+                         ("urllib3__urllib3__pr3786", 12, "gpt55_codegraph"))
+        with self.assertRaises(ValueError):
+            bench.cell_key_parts("not-a-key")
+
+    def test_planned_keys_follow_trial_then_task_then_arm(self):
+        import bench
+        manifest = {"tasks": [{"task": "a"}, {"task": "b"}], "arms": ["sonnet_prism"], "trials": 2}
+        self.assertEqual(bench.planned_cell_keys(manifest),
+                         ["a.r1.sonnet_prism", "b.r1.sonnet_prism", "a.r2.sonnet_prism", "b.r2.sonnet_prism"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,74 @@
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 84e1dab..d8699e1 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -657,6 +657,29 @@ class HTTPSConnection(HTTPConnection):
+             proxy_config=proxy_config,
+         )
+ 
++        # Check whether the ssl_context and proxy_config are in conflict when
++        # forwarding requests to an HTTPS proxy, in which case the proxy
++        # should be using proxy_ssl_context instead.
++        if (
++            proxy_config is not None
++            and proxy_config.use_forwarding_for_https
++            and proxy is not None
++            and proxy.scheme == "https"
++            and ssl_context is not None
++        ):
++            if proxy_config.ssl_context is not None:
++                raise ValueError(
++                    "Cannot specify both 'ssl_context' and 'proxy_ssl_context' "
++                    "when using 'use_forwarding_for_https=True'. Only "
++                    "'proxy_ssl_context' should be used to configure the "
++                    "connection to the HTTPS proxy."
++                )
++            raise ValueError(
++                "'ssl_context' should not be used to configure the "
++                "connection to an HTTPS proxy when 'use_forwarding_for_https=True'. "
++                "Use 'proxy_ssl_context' instead."
++            )
++
+         self.key_file = key_file
+         self.cert_file = cert_file
+         self.key_password = key_password
+@@ -793,6 +816,25 @@ class HTTPSConnection(HTTPConnection):
+             # Remove trailing '.' from fqdn hostnames to allow certificate validation
+             server_hostname_rm_dot = server_hostname.rstrip(".")
+ 
++            # If we're forwarding requests to an HTTPS proxy (rather than
++            # tunneling to the origin) then the TLS handshake we're about to
++            # perform is actually with the proxy, not the origin. In that
++            # case only 'proxy_ssl_context' (and the other proxy_* settings)
++            # should be used to establish the connection.
++            if (
++                self.proxy_is_forwarding
++                and self.proxy is not None
++                and self.proxy.scheme == "https"
++            ):
++                proxy_config = typing.cast(ProxyConfig, self.proxy_config)
++                ssl_context = proxy_config.ssl_context
++                assert_hostname = proxy_config.assert_hostname
++                assert_fingerprint = proxy_config.assert_fingerprint
++            else:
++                ssl_context = self.ssl_context
++                assert_hostname = self.assert_hostname
++                assert_fingerprint = self.assert_fingerprint
++
+             sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+                 sock=sock,
+                 cert_reqs=self.cert_reqs,
+@@ -806,10 +848,10 @@ class HTTPSConnection(HTTPConnection):
+                 key_file=self.key_file,
+                 key_password=self.key_password,
+                 server_hostname=server_hostname_rm_dot,
+-                ssl_context=self.ssl_context,
++                ssl_context=ssl_context,
+                 tls_in_tls=tls_in_tls,
+-                assert_hostname=self.assert_hostname,
+-                assert_fingerprint=self.assert_fingerprint,
++                assert_hostname=assert_hostname,
++                assert_fingerprint=assert_fingerprint,
+             )
+             self.sock = sock_and_verified.socket
+ 

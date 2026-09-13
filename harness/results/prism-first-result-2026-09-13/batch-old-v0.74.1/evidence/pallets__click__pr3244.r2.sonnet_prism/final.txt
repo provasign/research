@@ -1,0 +1,11 @@
+All 29 existing tests in `test_testing.py` pass.
+
+## Summary
+
+**Issue:** `CliRunner` captures `sys.stdout`/`sys.stderr` in in-memory `BytesIOCopy` (an `io.BytesIO` subclass) buffers. When user code passes these streams to `subprocess.run(..., stdout=sys.stderr)`, `subprocess` calls `.fileno()` on the stream to get a real file descriptor, which `io.BytesIO` doesn't support — raising a cryptic `io.UnsupportedOperation: fileno` deep in `subprocess.py` with no indication of what went wrong or how to fix it.
+
+**Fix:** Added an explicit `fileno()` override to `BytesIOCopy` in `src/click/testing.py` that raises `io.UnsupportedOperation` with a clear, actionable message explaining that the stream is captured in memory during testing and has no real file descriptor, and suggesting `subprocess.PIPE` or an open file as alternatives.
+
+This keeps the behavior correct (the operation genuinely isn't supported, since there's no real underlying OS-level fd), but turns a confusing failure deep in `subprocess` internals into a clear, actionable error surfaced from Click's own testing utilities.
+
+Verified with a reproduction of the reported script/test, plus the full `tests/test_testing.py` suite (29 passed). No files outside `src/click/testing.py` were modified.
