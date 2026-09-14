@@ -1,0 +1,14 @@
+Confirmed pre-existing, unrelated to my change (fails identically on baseline main due to Rust's `PhantomData` Debug format differing by toolchain version).
+
+## Summary
+
+The bug: when an arg required via `requires()` was also a member of an already-satisfied `ArgGroup`, `Usage::get_required_usage_from` filtered it out of the missing-required-args list entirely (since group members are normally omitted because the group's own usage notation, e.g. `<--first|--second>`, already covers them). This produced an empty header even though the error still fired.
+
+Fix in `src/parser/validator.rs` (`Validator::missing_required_error`): after computing the usual `req_args`, add back any argument from `self.required` (or explicitly `incl`uded) that is a plain `Arg` (not a group), still missing, and not already listed — covering the case where an arg is required independently of its group membership.
+
+Verified:
+- The reported repro now produces the expected error header (`--first`) with an unchanged usage line.
+- Full `cargo test --test builder` suite: 1583 passed, 0 failed.
+- The one doctest failure (`PhantomData` Debug formatting) is pre-existing on `main`, unrelated to this change.
+
+No test/doc/config files were modified.

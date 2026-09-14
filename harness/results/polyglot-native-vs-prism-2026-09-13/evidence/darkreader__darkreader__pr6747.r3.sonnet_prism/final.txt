@@ -1,0 +1,10 @@
+No type errors in the edited file. The fix is complete.
+
+## Summary
+
+Fixed `src/generators/dynamic-theme.ts` in `getDynamicThemeFixesFor`: the generic `*` (non-qualified domain) fix is the **first** entry returned by `getSitesFixesFor`, not the last. The code was checking/using `fixes[fixes.length - 1]` instead of `fixes[0]`, causing valid fixes to be discarded when a more specific fix happened to be returned last in the array. Updated:
+- The guard check `fixes[0].url[0] !== '*'`
+- `genericFix = fixes[0]`
+- `sortedBySpecificity` now slices off the first element (`fixes.slice(1)`) instead of the last
+
+No other files contained the same pattern. TypeScript compiles cleanly for this file; the existing jest test suite for injected fixes fails to run due to an unrelated pre-existing environment/mocking issue (`globalThis.chrome.runtime.getManifest` not mocked), not caused by this change.

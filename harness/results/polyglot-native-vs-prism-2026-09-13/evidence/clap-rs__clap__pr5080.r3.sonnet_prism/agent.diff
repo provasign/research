@@ -1,0 +1,79 @@
+diff --git a/clap_builder/src/parser/parser.rs b/clap_builder/src/parser/parser.rs
+index 81eddc9..79f13fc 100644
+--- a/clap_builder/src/parser/parser.rs
++++ b/clap_builder/src/parser/parser.rs
+@@ -1032,6 +1032,7 @@ impl<'cmd> Parser<'cmd> {
+         &self,
+         arg: &Arg,
+         raw_vals: Vec<OsString>,
++        source: ValueSource,
+         matcher: &mut ArgMatcher,
+     ) -> ClapResult<()> {
+         debug!("Parser::push_arg_values: {raw_vals:?}");
+@@ -1043,7 +1044,20 @@ impl<'cmd> Parser<'cmd> {
+                 "Parser::add_single_val_to_arg: cur_idx:={}",
+                 self.cur_idx.get()
+             );
+-            let value_parser = arg.get_value_parser();
++            // Flag-like actions (`SetTrue`, `SetFalse`, `Count`) synthesize their own
++            // internal, non-user-facing values when the argument wasn't present on the
++            // command line (e.g. the implicit `false` default for `SetTrue`).  Route these
++            // through the action's own parser rather than the user's `value_parser`, as the
++            // latter may be intended purely for validating real command-line input (see
++            // `UnknownArgumentValueParser`) and shouldn't be run against synthetic values.
++            let value_parser = if source == ValueSource::DefaultValue && !arg.is_takes_value_set()
++            {
++                arg.get_action()
++                    .default_value_parser()
++                    .unwrap_or_else(|| arg.get_value_parser().clone())
++            } else {
++                arg.get_value_parser().clone()
++            };
+             let val = ok!(value_parser.parse_ref(self.cmd, Some(arg), &raw_val));
+ 
+             matcher.add_val_to(arg.get_id(), val, raw_val);
+@@ -1153,7 +1167,7 @@ impl<'cmd> Parser<'cmd> {
+                     ));
+                 }
+                 self.start_custom_arg(matcher, arg, source);
+-                ok!(self.push_arg_values(arg, raw_vals, matcher));
++                ok!(self.push_arg_values(arg, raw_vals, source, matcher));
+                 if cfg!(debug_assertions) && matcher.needs_more_vals(arg) {
+                     debug!(
+                         "Parser::react not enough values passed in, leaving it to the validator to complain",
+@@ -1170,7 +1184,7 @@ impl<'cmd> Parser<'cmd> {
+                     debug!("Parser::react: cur_idx:={}", self.cur_idx.get());
+                 }
+                 self.start_custom_arg(matcher, arg, source);
+-                ok!(self.push_arg_values(arg, raw_vals, matcher));
++                ok!(self.push_arg_values(arg, raw_vals, source, matcher));
+                 if cfg!(debug_assertions) && matcher.needs_more_vals(arg) {
+                     debug!(
+                         "Parser::react not enough values passed in, leaving it to the validator to complain",
+@@ -1196,7 +1210,7 @@ impl<'cmd> Parser<'cmd> {
+                     ));
+                 }
+                 self.start_custom_arg(matcher, arg, source);
+-                ok!(self.push_arg_values(arg, raw_vals, matcher));
++                ok!(self.push_arg_values(arg, raw_vals, source, matcher));
+                 Ok(ParseResult::ValuesDone)
+             }
+             ArgAction::SetFalse => {
+@@ -1217,7 +1231,7 @@ impl<'cmd> Parser<'cmd> {
+                     ));
+                 }
+                 self.start_custom_arg(matcher, arg, source);
+-                ok!(self.push_arg_values(arg, raw_vals, matcher));
++                ok!(self.push_arg_values(arg, raw_vals, source, matcher));
+                 Ok(ParseResult::ValuesDone)
+             }
+             ArgAction::Count => {
+@@ -1233,7 +1247,7 @@ impl<'cmd> Parser<'cmd> {
+ 
+                 matcher.remove(arg.get_id());
+                 self.start_custom_arg(matcher, arg, source);
+-                ok!(self.push_arg_values(arg, raw_vals, matcher));
++                ok!(self.push_arg_values(arg, raw_vals, source, matcher));
+                 Ok(ParseResult::ValuesDone)
+             }
+             ArgAction::Help => {

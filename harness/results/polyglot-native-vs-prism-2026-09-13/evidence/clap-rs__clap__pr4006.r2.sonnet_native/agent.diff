@@ -1,0 +1,23 @@
+diff --git a/src/output/usage.rs b/src/output/usage.rs
+index 7adaf58..5222853 100644
+--- a/src/output/usage.rs
++++ b/src/output/usage.rs
+@@ -386,6 +386,18 @@ impl<'help, 'cmd> Usage<'help, 'cmd> {
+             .cmd
+             .get_groups()
+             .filter(|gn| required.contains(&gn.id))
++            .filter(|group| {
++                // If the group's requirement is already satisfied, don't hide its
++                // members from being listed individually for other reasons (e.g.
++                // an explicit `requires` link to one specific member of the group).
++                matcher.map_or(true, |m| {
++                    !self
++                        .cmd
++                        .unroll_args_in_group(&group.id)
++                        .iter()
++                        .any(|arg| m.check_explicit(arg, ArgPredicate::IsPresent))
++                })
++            })
+             .flat_map(|g| self.cmd.unroll_args_in_group(&g.id))
+             .collect::<Vec<_>>();
+ 

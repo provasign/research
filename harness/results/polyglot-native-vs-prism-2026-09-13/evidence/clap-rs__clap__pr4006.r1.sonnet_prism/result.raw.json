@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 159781,
+  "stop_reason": "end_turn",
+  "session_id": "7a177ad1-7f26-458f-9c2b-6a6637766590",
+  "total_cost_usd": 0.5288958,
+  "usage": {
+    "input_tokens": 64,
+    "cache_creation_input_tokens": 43115,
+    "cache_read_input_tokens": 1077284,
+    "output_tokens": 13568,
+    "output_tokens_details": {
+      "thinking_tokens": 6815
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 43115,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 436,
+        "cache_read_input_tokens": 49057,
+        "cache_creation_input_tokens": 1083,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 1083
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 5091,
+      "outputTokens": 16,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.005171,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 64,
+      "outputTokens": 13568,
+      "cacheReadInputTokens": 1077284,
+      "cacheCreationInputTokens": 43115,
+      "webSearchRequests": 0,
+      "costUSD": 0.5237248,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 6815,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 32,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "The fix is minimal, targeted, and localized to `src/parser/validator.rs`. Summary:\n\n**Root cause**: When a required arg (e.g. `first`, required via another arg's `requires(\"first\")`) is a member of an `ArgGroup`, `Validator::validate_required` correctly detected it was missing and called `missing_required_error`, but passed an empty `incl` list. Since `get_required_usage_from` filters out any arg that's a member of a required group (because the group's own placeholder like `<--first|--second>` normally covers it), the specifically-missing arg silently vanished from the error's \"not provided\" list \u2014 producing an empty message.\n\n**Fix**: \n1. When the missing arg belongs to a group, pass its id via `incl` so it's explicitly flagged.\n2. In `missing_required_error`, after building `req_args`, ensure any `incl` args are always present in the reported list (bypassing the group-membership filtering that would otherwise hide them), while leaving the usage-string (`used`) computation untouched to avoid regressions in unrelated cases.\n\nVerified: reproduces the exact expected output from the issue, and the full test suite (`cargo test`) passes except one pre-existing, unrelated doctest failure caused by a `PhantomData` Debug-formatting difference across Rust versions (not related to this change).",
+  "ttft_ms": 1841,
+  "type": "result",
+  "duration_ms": 271328,
+  "uuid": "1f3fdbfe-964d-4238-91dd-b0d938a691a6",
+  "ttft_stream_ms": 723,
+  "time_to_request_ms": 22,
+  "first_content_frame_ms": 723,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

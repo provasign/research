@@ -1,0 +1,114 @@
+diff --git a/src/app.rs b/src/app.rs
+index 7a10b35..c89d21e 100644
+--- a/src/app.rs
++++ b/src/app.rs
+@@ -147,6 +147,7 @@ pub fn app() -> App<'static, 'static> {
+              .set(ArgSettings::AllowLeadingHyphen)
+              .multiple(true).number_of_values(1))
+         .arg(flag("follow").short("L"))
++        .arg(flag("fixed-width-line-numbers"))
+         .arg(flag("max-count")
+              .short("m").value_name("NUM").takes_value(true)
+              .validator(validate_number))
+@@ -370,6 +371,13 @@ lazy_static! {
+               numbers for the first match on each line. This does not try \
+               to account for Unicode. One byte is equal to one column. This \
+               implies --line-number.");
++        doc!(h, "fixed-width-line-numbers",
++             "Left-pad line numbers to a fixed width.",
++             "Left-pad line numbers with spaces so that they occupy a fixed \
++              width. This makes it easier to visually line up the \
++              indentation of matches shown from the same file. Line numbers \
++              that exceed the fixed width are shown in full without \
++              truncation.");
+         doc!(h, "context-separator",
+              "Set the context separator string. [default: --]",
+              "The string used to separate non-contiguous context lines in the \
+diff --git a/src/args.rs b/src/args.rs
+index 106762c..15513ea 100644
+--- a/src/args.rs
++++ b/src/args.rs
+@@ -45,6 +45,7 @@ pub struct Args {
+     files_without_matches: bool,
+     eol: u8,
+     files: bool,
++    fixed_width_line_numbers: bool,
+     follow: bool,
+     glob_overrides: Override,
+     grep: Grep,
+@@ -138,6 +139,7 @@ impl Args {
+             .column(self.column)
+             .context_separator(self.context_separator.clone())
+             .eol(self.eol)
++            .fixed_width_line_numbers(self.fixed_width_line_numbers)
+             .heading(self.heading)
+             .line_per_match(self.line_per_match)
+             .null(self.null)
+@@ -328,6 +330,7 @@ impl<'a> ArgMatches<'a> {
+             files_without_matches: self.is_present("files-without-match"),
+             eol: b'\n',
+             files: self.is_present("files"),
++            fixed_width_line_numbers: self.is_present("fixed-width-line-numbers"),
+             follow: self.is_present("follow"),
+             glob_overrides: try!(self.overrides()),
+             grep: try!(self.grep()),
+diff --git a/src/printer.rs b/src/printer.rs
+index 37680f9..86f24cc 100644
+--- a/src/printer.rs
++++ b/src/printer.rs
+@@ -9,6 +9,11 @@ use termcolor::{Color, ColorSpec, ParseColorError, WriteColor};
+ use pathutil::strip_prefix;
+ use ignore::types::FileTypeDef;
+ 
++/// The minimum width used to left-pad line numbers when
++/// `--fixed-width-line-numbers` is enabled. Line numbers that exceed this
++/// width are printed in full (i.e., they are not truncated).
++const LINE_NUMBER_WIDTH: usize = 6;
++
+ /// Track the start and end of replacements to allow coloring them on output.
+ #[derive(Debug)]
+ struct Offset {
+@@ -78,6 +83,8 @@ pub struct Printer<W> {
+     eol: u8,
+     /// A file separator to show before any matches are printed.
+     file_separator: Option<Vec<u8>>,
++    /// Whether to left-pad line numbers to a fixed width.
++    fixed_width_line_numbers: bool,
+     /// Whether to show file name as a heading or not.
+     ///
+     /// N.B. If with_filename is false, then this setting has no effect.
+@@ -111,6 +118,7 @@ impl<W: WriteColor> Printer<W> {
+             context_separator: "--".to_string().into_bytes(),
+             eol: b'\n',
+             file_separator: None,
++            fixed_width_line_numbers: false,
+             heading: false,
+             line_per_match: false,
+             null: false,
+@@ -155,6 +163,12 @@ impl<W: WriteColor> Printer<W> {
+         self
+     }
+ 
++    /// When set, line numbers are left-padded with spaces to a fixed width.
++    pub fn fixed_width_line_numbers(mut self, yes: bool) -> Printer<W> {
++        self.fixed_width_line_numbers = yes;
++        self
++    }
++
+     /// Whether to show file name as a heading or not.
+     ///
+     /// N.B. If with_filename is false, then this setting has no effect.
+@@ -457,7 +471,12 @@ impl<W: WriteColor> Printer<W> {
+     }
+ 
+     fn line_number(&mut self, n: u64, sep: u8) {
+-        self.write_colored(n.to_string().as_bytes(), |colors| colors.line());
++        let line = if self.fixed_width_line_numbers {
++            format!("{:>1$}", n, LINE_NUMBER_WIDTH)
++        } else {
++            n.to_string()
++        };
++        self.write_colored(line.as_bytes(), |colors| colors.line());
+         self.separator(&[sep]);
+     }
+ 

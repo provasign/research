@@ -1,0 +1,46 @@
+diff --git a/src/parser/validator.rs b/src/parser/validator.rs
+index ebf2b23..e78ea92 100644
+--- a/src/parser/validator.rs
++++ b/src/parser/validator.rs
+@@ -483,7 +483,15 @@ impl<'help, 'cmd> Validator<'help, 'cmd> {
+             if let Some(arg) = self.cmd.find(arg_or_group) {
+                 debug!("Validator::validate_required:iter: This is an arg");
+                 if !is_exclusive_present && !self.is_missing_required_ok(arg, matcher, conflicts) {
+-                    return self.missing_required_error(matcher, vec![]);
++                    // If this required arg is a member of a group, the group's own required
++                    // usage may hide it (e.g. the group as a whole looks satisfied), so make
++                    // sure the specific arg is still called out in the error.
++                    let incl = if self.cmd.groups_for_arg(&arg.id).next().is_some() {
++                        vec![arg.id.clone()]
++                    } else {
++                        vec![]
++                    };
++                    return self.missing_required_error(matcher, incl);
+                 }
+             } else if let Some(group) = self.cmd.find_group(arg_or_group) {
+                 debug!("Validator::validate_required:iter: This is a group");
+@@ -573,11 +581,23 @@ impl<'help, 'cmd> Validator<'help, 'cmd> {
+ 
+         let usg = Usage::new(self.cmd).required(&self.required);
+ 
+-        let req_args = usg
++        let mut req_args = usg
+             .get_required_usage_from(&incl, Some(matcher), true)
+             .into_iter()
+             .collect::<Vec<_>>();
+ 
++        // The above filters out args that are part of a satisfied group, but `incl` is used
++        // to force specific args to be reported (e.g. an arg required via `requires`), so make
++        // sure they're always present in the error even if their group is otherwise satisfied.
++        for id in &incl {
++            if let Some(arg) = self.cmd.find(id) {
++                let arg_str = arg.to_string();
++                if !req_args.contains(&arg_str) {
++                    req_args.push(arg_str);
++                }
++            }
++        }
++
+         debug!(
+             "Validator::missing_required_error: req_args={:#?}",
+             req_args

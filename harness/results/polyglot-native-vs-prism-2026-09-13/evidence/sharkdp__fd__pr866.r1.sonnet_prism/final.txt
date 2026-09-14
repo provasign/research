@@ -1,0 +1,12 @@
+## Summary
+
+Fixed the `-X`/`--exec-batch` "Argument list too long" error by batching search results into multiple command invocations instead of passing them all to a single command.
+
+**Change in `src/exec/mod.rs`:**
+- `CommandTemplate::generate_and_execute_batch` now splits the collected paths into chunks sized to fit within the OS's command-line length limit, running the command once per chunk (merging the resulting exit codes via the existing `merge_exitcodes` helper) instead of appending every path to one `Command`.
+- Added `max_command_line_length()`, which queries `sysconf(_SC_ARG_MAX)` on Unix (falling back to a conservative default on Redox/Windows), then subtracts the size of the current environment (which also counts against the OS limit) plus a small headroom margin.
+- Per-argument accounting includes the string length, NUL terminator, and pointer-table overhead so the estimate matches what the kernel actually enforces.
+
+Verified with a directory of ~70k files that `fd -tf . -X wc -l`, which previously failed with `Argument list too long (os error 7)`, now succeeds by transparently issuing multiple `wc -l` invocations. `cargo test` (61 integration tests + unit tests including `tokens_single_batch`/`tokens_multiple_batch`/`test_exec_batch`) all pass.
+
+No changes were made to tests, docs, or config; nothing was committed, per instructions.

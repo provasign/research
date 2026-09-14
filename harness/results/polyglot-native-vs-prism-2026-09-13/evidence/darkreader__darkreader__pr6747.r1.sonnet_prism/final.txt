@@ -1,0 +1,11 @@
+All tests pass.
+
+## Summary
+
+Fixed the incorrect "generic fix" (`*`) detection in `src/generators/dynamic-theme.ts`. The generic fix that matches all domains (`url[0] === '*'`) is actually the **first** record returned by `getSitesFixesFor`, not the last. The code was incorrectly checking/using `fixes[fixes.length - 1]`, causing site-specific fixes to be silently dropped (as reported) whenever a non-generic domain fix wasn't literally the last entry.
+
+Changes:
+- Check `fixes[0].url[0] !== '*'` (was `fixes[fixes.length - 1]`) and use `fixes[0]` as `genericFix`.
+- Updated the specificity-sorting slice to skip the generic entry at index `0` via `fixes.slice(1)` (was `fixes.slice(0, fixes.length - 1)`).
+
+Verified with `npx jest --config=tests/jest.config.js` and `npx jest --config=tests/config/jest.config.js` — all 31+5 tests pass, including the "Dynamic Theme Fixes config" test that validates the real fixes data file.

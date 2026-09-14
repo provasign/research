@@ -1,0 +1,10 @@
+That pre-existing vet warning is unrelated to our change. All tests pass.
+
+## Summary
+
+I resolved the feature request by adding an interactive "Repository owner" prompt to `gh repo create`:
+
+- **`api/queries_user.go`**: Added `CurrentLoginNameAndOrgs`, a GraphQL query that fetches the authenticated user's login and the organizations they belong to.
+- **`pkg/cmd/repo/create/create.go`**: Added `interactiveRepoOwner`, called from `interactiveRepoInfo` right after the repo name is entered. If the entered name isn't already owner-prefixed (`org/name`), it looks up the user's orgs; when there's at least one, it presents a `Select` prompt ("Repository owner") listing the personal account (default) plus each organization, and prefixes the chosen owner onto the repo name. If there are no orgs, or the lookup fails, it silently falls back to the un-prefixed name so the flow isn't blocked.
+
+Verified with `go build ./...`, `go vet ./...`, and `go test ./api/... ./pkg/cmd/repo/...` — all pass, and no test files were modified.

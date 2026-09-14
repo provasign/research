@@ -1,0 +1,111 @@
+diff --git a/api/queries_repo.go b/api/queries_repo.go
+index 1ca7a92..72edb4a 100644
+--- a/api/queries_repo.go
++++ b/api/queries_repo.go
+@@ -457,6 +457,26 @@ func (m *RepoMetadataResult) ProjectsToIDs(names []string) ([]string, error) {
+ 	return ids, nil
+ }
+ 
++// ProjectsToPaths resolves project names to their resource paths, as expected by GitHub's
++// web UI query parameters.
++func (m *RepoMetadataResult) ProjectsToPaths(names []string) ([]string, error) {
++	var paths []string
++	for _, projectName := range names {
++		found := false
++		for _, p := range m.Projects {
++			if strings.EqualFold(projectName, p.Name) {
++				paths = append(paths, strings.TrimPrefix(p.ResourcePath, "/"))
++				found = true
++				break
++			}
++		}
++		if !found {
++			return nil, fmt.Errorf("'%s' not found", projectName)
++		}
++	}
++	return paths, nil
++}
++
+ func (m *RepoMetadataResult) MilestoneToID(title string) (string, error) {
+ 	for _, m := range m.Milestones {
+ 		if strings.EqualFold(title, m.Title) {
+@@ -682,8 +702,9 @@ func RepoResolveMetadataIDs(client *Client, repo ghrepo.Interface, input RepoRes
+ }
+ 
+ type RepoProject struct {
+-	ID   string
+-	Name string
++	ID           string
++	Name         string
++	ResourcePath string
+ }
+ 
+ // RepoProjects fetches all open projects for a repository
+diff --git a/pkg/cmd/issue/create/create.go b/pkg/cmd/issue/create/create.go
+index 03581d3..003b2f6 100644
+--- a/pkg/cmd/issue/create/create.go
++++ b/pkg/cmd/issue/create/create.go
+@@ -143,7 +143,7 @@ func createRun(opts *CreateOptions) (err error) {
+ 	if opts.WebMode {
+ 		openURL := ghrepo.GenerateRepoURL(baseRepo, "issues/new")
+ 		if opts.Title != "" || opts.Body != "" || len(opts.Assignees) > 0 {
+-			openURL, err = prShared.WithPrAndIssueQueryParams(openURL, tb)
++			openURL, err = prShared.WithPrAndIssueQueryParams(apiClient, baseRepo, openURL, tb)
+ 			if err != nil {
+ 				return
+ 			}
+@@ -244,7 +244,7 @@ func createRun(opts *CreateOptions) (err error) {
+ 
+ 	if action == prShared.PreviewAction {
+ 		openURL := ghrepo.GenerateRepoURL(baseRepo, "issues/new")
+-		openURL, err = prShared.WithPrAndIssueQueryParams(openURL, tb)
++		openURL, err = prShared.WithPrAndIssueQueryParams(apiClient, baseRepo, openURL, tb)
+ 		if err != nil {
+ 			return
+ 		}
+diff --git a/pkg/cmd/pr/create/create.go b/pkg/cmd/pr/create/create.go
+index 0925914..c19cb1b 100644
+--- a/pkg/cmd/pr/create/create.go
++++ b/pkg/cmd/pr/create/create.go
+@@ -714,7 +714,7 @@ func generateCompareURL(ctx CreateContext, state shared.IssueMetadataState) (str
+ 		ctx.BaseRepo,
+ 		"compare/%s...%s?expand=1",
+ 		url.QueryEscape(ctx.BaseBranch), url.QueryEscape(ctx.HeadBranchLabel))
+-	url, err := shared.WithPrAndIssueQueryParams(u, state)
++	url, err := shared.WithPrAndIssueQueryParams(ctx.Client, ctx.BaseRepo, u, state)
+ 	if err != nil {
+ 		return "", err
+ 	}
+diff --git a/pkg/cmd/pr/shared/params.go b/pkg/cmd/pr/shared/params.go
+index 722a981..1bb0ac5 100644
+--- a/pkg/cmd/pr/shared/params.go
++++ b/pkg/cmd/pr/shared/params.go
+@@ -9,7 +9,11 @@ import (
+ 	"github.com/cli/cli/internal/ghrepo"
+ )
+ 
+-func WithPrAndIssueQueryParams(baseURL string, state IssueMetadataState) (string, error) {
++// WithPrAndIssueQueryParams builds a URL for creating an issue or pull request via GitHub's web
++// UI, encoding the provided metadata as query parameters. Note that the web UI expects projects
++// to be identified by their resource path (e.g. "OWNER/REPO/projects/1"), unlike the GraphQL API
++// which accepts project names, so project names are resolved to paths here.
++func WithPrAndIssueQueryParams(client *api.Client, baseRepo ghrepo.Interface, baseURL string, state IssueMetadataState) (string, error) {
+ 	u, err := url.Parse(baseURL)
+ 	if err != nil {
+ 		return "", err
+@@ -28,7 +32,14 @@ func WithPrAndIssueQueryParams(baseURL string, state IssueMetadataState) (string
+ 		q.Set("labels", strings.Join(state.Labels, ","))
+ 	}
+ 	if len(state.Projects) > 0 {
+-		q.Set("projects", strings.Join(state.Projects, ","))
++		if err := fillMetadata(client, baseRepo, &state); err != nil {
++			return "", err
++		}
++		projectPaths, err := state.MetadataResult.ProjectsToPaths(state.Projects)
++		if err != nil {
++			return "", err
++		}
++		q.Set("projects", strings.Join(projectPaths, ","))
+ 	}
+ 	if len(state.Milestones) > 0 {
+ 		q.Set("milestone", state.Milestones[0])

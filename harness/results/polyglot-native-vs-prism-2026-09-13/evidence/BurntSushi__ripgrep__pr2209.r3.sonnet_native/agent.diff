@@ -1,0 +1,63 @@
+diff --git a/crates/printer/src/util.rs b/crates/printer/src/util.rs
+index 434deec..b645765 100644
+--- a/crates/printer/src/util.rs
++++ b/crates/printer/src/util.rs
+@@ -82,26 +82,40 @@ impl<M: Matcher> Replacer<M> {
+             dst.clear();
+             matches.clear();
+ 
++            // We cannot use Matcher::replace_with_captures_at directly here
++            // because, in multi-line mode, 'subject' has been extended with
++            // some extra data beyond 'range.end' (for handling look-ahead
++            // assertions). If we let the default implementation append
++            // everything following the final match to 'dst', then that
++            // extra look-ahead data would incorrectly end up in the
++            // replacement output. So we do our own version of the search
++            // and replace loop, being careful to only ever consider matches
++            // and unmatched text up to (and not beyond) 'range.end'.
++            let mut last_match = range.start;
+             matcher
+-                .replace_with_captures_at(
+-                    subject,
+-                    range.start,
+-                    caps,
+-                    dst,
+-                    |caps, dst| {
+-                        let start = dst.len();
+-                        caps.interpolate(
+-                            |name| matcher.capture_index(name),
+-                            subject,
+-                            replacement,
+-                            dst,
+-                        );
+-                        let end = dst.len();
+-                        matches.push(Match::new(start, end));
+-                        true
+-                    },
+-                )
++                .captures_iter_at(subject, range.start, caps, |caps| {
++                    let m = caps.get(0).unwrap();
++                    if m.start() >= range.end {
++                        return false;
++                    }
++                    dst.extend_from_slice(&subject[last_match..m.start()]);
++                    last_match = m.end();
++
++                    let start = dst.len();
++                    caps.interpolate(
++                        |name| matcher.capture_index(name),
++                        subject,
++                        replacement,
++                        dst,
++                    );
++                    let end = dst.len();
++                    matches.push(Match::new(start, end));
++                    true
++                })
+                 .map_err(io::Error::error_message)?;
++            let tail_end =
++                std::cmp::max(last_match, range.end).min(subject.len());
++            dst.extend_from_slice(&subject[last_match..tail_end]);
+         }
+         Ok(())
+     }

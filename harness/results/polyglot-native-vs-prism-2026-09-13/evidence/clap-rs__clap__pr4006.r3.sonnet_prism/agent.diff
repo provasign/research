@@ -1,0 +1,35 @@
+diff --git a/src/parser/validator.rs b/src/parser/validator.rs
+index ebf2b23..c42e16e 100644
+--- a/src/parser/validator.rs
++++ b/src/parser/validator.rs
+@@ -573,11 +573,29 @@ impl<'help, 'cmd> Validator<'help, 'cmd> {
+ 
+         let usg = Usage::new(self.cmd).required(&self.required);
+ 
+-        let req_args = usg
++        let mut req_args = usg
+             .get_required_usage_from(&incl, Some(matcher), true)
+             .into_iter()
+             .collect::<Vec<_>>();
+ 
++        // `get_required_usage_from` skips args that belong to an already-satisfied
++        // `ArgGroup`, since the group's usage entry already conveys they're needed.
++        // However, an arg can also be required directly (e.g. via another arg's
++        // `requires`), independent of the group being satisfied, in which case it
++        // still needs to be called out explicitly.
++        for id in incl.iter().chain(self.required.iter()) {
++            if self.cmd.find_group(id).is_none()
++                && !matcher.check_explicit(id, ArgPredicate::IsPresent)
++            {
++                if let Some(arg) = self.cmd.find(id) {
++                    let arg = arg.to_string();
++                    if !req_args.contains(&arg) {
++                        req_args.push(arg);
++                    }
++                }
++            }
++        }
++
+         debug!(
+             "Validator::missing_required_error: req_args={:#?}",
+             req_args

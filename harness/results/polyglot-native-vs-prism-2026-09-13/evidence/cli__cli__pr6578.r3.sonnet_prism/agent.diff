@@ -1,0 +1,115 @@
+diff --git a/api/queries_user.go b/api/queries_user.go
+index 3822f20..3c8cfde 100644
+--- a/api/queries_user.go
++++ b/api/queries_user.go
+@@ -10,6 +10,32 @@ func CurrentLoginName(client *Client, hostname string) (string, error) {
+ 	return query.Viewer.Login, err
+ }
+ 
++// CurrentLoginNameAndOrgs returns the login name of the authenticated user and
++// the names of the organizations they belong to.
++func CurrentLoginNameAndOrgs(client *Client, hostname string) (string, []string, error) {
++	var query struct {
++		Viewer struct {
++			Login         string
++			Organizations struct {
++				Nodes []struct {
++					Login string
++				}
++			} `graphql:"organizations(first: 100)"`
++		}
++	}
++	err := client.Query(hostname, "UserCurrent", &query, nil)
++	if err != nil {
++		return "", nil, err
++	}
++
++	orgs := make([]string, 0, len(query.Viewer.Organizations.Nodes))
++	for _, node := range query.Viewer.Organizations.Nodes {
++		orgs = append(orgs, node.Login)
++	}
++
++	return query.Viewer.Login, orgs, nil
++}
++
+ func CurrentUserID(client *Client, hostname string) (string, error) {
+ 	var query struct {
+ 		Viewer struct {
+diff --git a/pkg/cmd/repo/create/create.go b/pkg/cmd/repo/create/create.go
+index 8e1ae0b..510092a 100644
+--- a/pkg/cmd/repo/create/create.go
++++ b/pkg/cmd/repo/create/create.go
+@@ -273,7 +273,7 @@ func createFromScratch(opts *CreateOptions) error {
+ 	host, _ := cfg.DefaultHost()
+ 
+ 	if opts.Interactive {
+-		opts.Name, opts.Description, opts.Visibility, err = interactiveRepoInfo(opts.Prompter, "")
++		opts.Name, opts.Description, opts.Visibility, err = interactiveRepoInfo(httpClient, host, opts.Prompter, "")
+ 		if err != nil {
+ 			return err
+ 		}
+@@ -467,7 +467,7 @@ func createFromLocal(opts *CreateOptions) error {
+ 	}
+ 
+ 	if opts.Interactive {
+-		opts.Name, opts.Description, opts.Visibility, err = interactiveRepoInfo(opts.Prompter, filepath.Base(absPath))
++		opts.Name, opts.Description, opts.Visibility, err = interactiveRepoInfo(httpClient, host, opts.Prompter, filepath.Base(absPath))
+ 		if err != nil {
+ 			return err
+ 		}
+@@ -699,12 +699,22 @@ func interactiveLicense(client *http.Client, hostname string, prompter iprompter
+ }
+ 
+ // name, description, and visibility
+-func interactiveRepoInfo(prompter iprompter, defaultName string) (string, string, string, error) {
++func interactiveRepoInfo(client *http.Client, hostname string, prompter iprompter, defaultName string) (string, string, string, error) {
+ 	name, err := prompter.Input("Repository name", defaultName)
+ 	if err != nil {
+ 		return "", "", "", err
+ 	}
+ 
++	if !strings.Contains(name, "/") {
++		owner, err := interactiveOwner(client, hostname, prompter)
++		if err != nil {
++			return "", "", "", err
++		}
++		if owner != "" {
++			name = fmt.Sprintf("%s/%s", owner, name)
++		}
++	}
++
+ 	description, err := prompter.Input("Description", defaultName)
+ 	if err != nil {
+ 		return "", "", "", err
+@@ -719,6 +729,31 @@ func interactiveRepoInfo(prompter iprompter, defaultName string) (string, string
+ 	return name, description, strings.ToUpper(visibilityOptions[selected]), nil
+ }
+ 
++// interactiveOwner prompts the user to choose the owner (their personal
++// account or one of the organizations they belong to) for the repository
++// being created. It returns an empty string (with no error) if the owner
++// list could not be determined or the user has no organizations, in which
++// case the caller should leave the repository name unprefixed.
++func interactiveOwner(client *http.Client, hostname string, prompter iprompter) (string, error) {
++	apiClient := api.NewClientFromHTTP(client)
++	login, orgs, err := api.CurrentLoginNameAndOrgs(apiClient, hostname)
++	if err != nil || len(orgs) == 0 {
++		return "", nil
++	}
++
++	options := append([]string{login}, orgs...)
++	selected, err := prompter.Select("Repository owner", login, options)
++	if err != nil {
++		return "", err
++	}
++
++	owner := options[selected]
++	if owner == login {
++		return "", nil
++	}
++	return owner, nil
++}
++
+ func cloneGitClient(c *git.Client) *git.Client {
+ 	return &git.Client{
+ 		GhPath:  c.GhPath,

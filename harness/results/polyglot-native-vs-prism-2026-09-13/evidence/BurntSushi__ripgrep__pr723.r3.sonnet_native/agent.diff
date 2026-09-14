@@ -1,0 +1,116 @@
+diff --git a/src/app.rs b/src/app.rs
+index 7a10b35..a165eaf 100644
+--- a/src/app.rs
++++ b/src/app.rs
+@@ -180,6 +180,9 @@ pub fn app() -> App<'static, 'static> {
+         .arg(flag("max-columns").short("M")
+              .value_name("NUM").takes_value(true)
+              .validator(validate_number))
++        .arg(flag("fixed-width-line-numbers")
++             .value_name("NUM").takes_value(true)
++             .validator(validate_number))
+         .arg(flag("type-add")
+              .value_name("TYPE").takes_value(true)
+              .multiple(true).number_of_values(1))
+@@ -541,6 +544,12 @@ lazy_static! {
+              "Don't print lines longer than this limit in bytes. Longer lines \
+               are omitted, and only the number of matches in that line is \
+               printed.");
++        doc!(h, "fixed-width-line-numbers",
++             "Left-pad line numbers to this width.",
++             "Left-pad line numbers with spaces so that they are at least \
++              this many characters wide. Line numbers wider than this width \
++              are not truncated. Has no effect unless line numbers are \
++              shown.");
+ 
+         doc!(h, "type-add",
+              "Add a new glob for a file type.",
+diff --git a/src/args.rs b/src/args.rs
+index 106762c..f0ea13c 100644
+--- a/src/args.rs
++++ b/src/args.rs
+@@ -55,6 +55,7 @@ pub struct Args {
+     line_number: bool,
+     line_per_match: bool,
+     max_columns: Option<usize>,
++    max_line_number_width: Option<usize>,
+     max_count: Option<u64>,
+     max_filesize: Option<u64>,
+     maxdepth: Option<usize>,
+@@ -144,7 +145,8 @@ impl Args {
+             .only_matching(self.only_matching)
+             .path_separator(self.path_separator)
+             .with_filename(self.with_filename)
+-            .max_columns(self.max_columns);
++            .max_columns(self.max_columns)
++            .max_line_number_width(self.max_line_number_width);
+         if let Some(ref rep) = self.replace {
+             p = p.replace(rep.clone());
+         }
+@@ -338,6 +340,8 @@ impl<'a> ArgMatches<'a> {
+             line_number: line_number,
+             line_per_match: self.is_present("vimgrep"),
+             max_columns: try!(self.usize_of("max-columns")),
++            max_line_number_width:
++                try!(self.usize_of("fixed-width-line-numbers")),
+             max_count: try!(self.usize_of("max-count")).map(|max| max as u64),
+             max_filesize: try!(self.max_filesize()),
+             maxdepth: try!(self.usize_of("maxdepth")),
+diff --git a/src/printer.rs b/src/printer.rs
+index 37680f9..682bef8 100644
+--- a/src/printer.rs
++++ b/src/printer.rs
+@@ -98,7 +98,9 @@ pub struct Printer<W> {
+     /// The separator to use for file paths. If empty, this is ignored.
+     path_separator: Option<u8>,
+     /// Restrict lines to this many columns.
+-    max_columns: Option<usize>
++    max_columns: Option<usize>,
++    /// When set, line numbers are left-padded with spaces to this width.
++    max_line_number_width: Option<usize>,
+ }
+ 
+ impl<W: WriteColor> Printer<W> {
+@@ -120,6 +122,7 @@ impl<W: WriteColor> Printer<W> {
+             colors: ColorSpecs::default(),
+             path_separator: None,
+             max_columns: None,
++            max_line_number_width: None,
+         }
+     }
+ 
+@@ -208,6 +211,17 @@ impl<W: WriteColor> Printer<W> {
+         self
+     }
+ 
++    /// When set, line numbers are left-padded with spaces so that they all
++    /// occupy the given width. Line numbers wider than this width are not
++    /// truncated.
++    pub fn max_line_number_width(
++        mut self,
++        max_line_number_width: Option<usize>,
++    ) -> Printer<W> {
++        self.max_line_number_width = max_line_number_width;
++        self
++    }
++
+     /// Returns true if and only if something has been printed.
+     pub fn has_printed(&self) -> bool {
+         self.has_printed
+@@ -457,7 +471,15 @@ impl<W: WriteColor> Printer<W> {
+     }
+ 
+     fn line_number(&mut self, n: u64, sep: u8) {
+-        self.write_colored(n.to_string().as_bytes(), |colors| colors.line());
++        let n = n.to_string();
++        if let Some(width) = self.max_line_number_width {
++            if n.len() < width {
++                let padding = width - n.len();
++                self.write_colored(
++                    &vec![b' '; padding], |colors| colors.line());
++            }
++        }
++        self.write_colored(n.as_bytes(), |colors| colors.line());
+         self.separator(&[sep]);
+     }
+ 

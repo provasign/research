@@ -1,0 +1,15 @@
+## Summary
+
+The `-X`/`--exec-batch` path built a single `Command` with *all* matched paths as arguments, which fails with `Argument list too long (os error 7)` once the total argument size exceeds the OS's `ARG_MAX`.
+
+**Fix** (`src/exec/mod.rs`, `CommandTemplate::generate_and_execute_batch`):
+- Compute a safe maximum command-line length via `sysconf(_SC_ARG_MAX)` on Unix (with headroom reserved for the environment and per-argument pointer-table overhead), falling back to a fixed default on other platforms.
+- Split the sorted paths into multiple batches that each stay under this limit, running the batch command once per chunk instead of once for everything, and merging the resulting exit codes (mirroring how `xargs` behaves).
+- Extracted the per-batch `Command` construction into a small `execute_batch` helper reused across chunks.
+
+Verified with:
+- `cargo test --bin fd` (127 unit tests) — all pass.
+- `cargo test --test tests exec` (integration tests incl. `test_exec_batch`) — all pass.
+- Manual repro: created 200,000 files and ran `fd -IH . -tf -X wc -l`, which previously failed immediately with the `os error 7`; it now completes successfully across multiple internal batches.
+
+No tests, docs, or config were modified.

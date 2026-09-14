@@ -1,0 +1,11 @@
+All 94 tests pass. The fix is complete.
+
+## Summary
+
+The bug was in `Replacer::replace_all` in `crates/printer/src/util.rs`. When `--replace` is combined with `--multiline`, the subject buffer is intentionally extended past the match's line range (up to `MAX_LOOK_AHEAD` bytes) so the regex engine can evaluate look-around correctly. However, the code used the matcher trait's default `replace_with_captures_at`, which unconditionally appends *all* remaining unmatched bytes in the (extended) subject to the output (`dst.extend(&haystack[last_match..])`). This let extra file content beyond the intended match leak into the replacement output.
+
+The fix replaces that call with a manual loop using `captures_iter_at` that:
+- stops considering matches once they start at or beyond the original `range.end`,
+- only copies unmatched "passthrough" bytes up to `min(range.end, subject.len())`, never past the true end of the match's range or the (possibly trimmed) subject.
+
+Verified against the exact reproduction from the issue and confirmed all existing `grep-printer` tests (94) still pass.

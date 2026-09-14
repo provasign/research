@@ -1,0 +1,9 @@
+Clean. Summary of the change:
+
+- **`api/queries_user.go`**: Added `CurrentLoginNameAndOrgs`, a GraphQL query that returns the current user's login and the list of organizations they belong to.
+- **`pkg/cmd/repo/create/create.go`**: 
+  - `interactiveRepoInfo` now takes the HTTP client and hostname, and after the user enters an un-prefixed repository name, calls a new `interactiveOwner` helper.
+  - `interactiveOwner` fetches the user's login/orgs; if there are no orgs (or the lookup fails), it silently returns no owner, preserving the old un-prefixed behavior. Otherwise it shows a `Select` prompt "Repository owner" listing the personal account (default) plus each organization; picking an org prefixes the repo name with `org/`, picking the personal account leaves it unprefixed.
+  - Updated both call sites (`createFromScratch`, `createFromLocal`) to pass `httpClient`/`host` through.
+
+Verified with `go build ./...`, `go vet`, and `go test ./pkg/cmd/repo/create/... ./api/...` — all pass, existing interactive tests unaffected since the org lookup gracefully no-ops when unstubbed/failing.

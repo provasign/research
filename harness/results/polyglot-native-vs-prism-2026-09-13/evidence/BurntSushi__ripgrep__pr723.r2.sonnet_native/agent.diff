@@ -1,0 +1,130 @@
+diff --git a/src/app.rs b/src/app.rs
+index 7a10b35..31a739c 100644
+--- a/src/app.rs
++++ b/src/app.rs
+@@ -126,6 +126,7 @@ pub fn app() -> App<'static, 'static> {
+              .value_name("NUM").takes_value(true)
+              .validator(validate_number))
+         .arg(flag("column"))
++        .arg(flag("fixed-width-line-numbers"))
+         .arg(flag("context-separator")
+              .value_name("SEPARATOR").takes_value(true))
+         .arg(flag("dfa-size-limit")
+@@ -370,6 +371,11 @@ lazy_static! {
+               numbers for the first match on each line. This does not try \
+               to account for Unicode. One byte is equal to one column. This \
+               implies --line-number.");
++        doc!(h, "fixed-width-line-numbers",
++             "Left-pad line numbers to a fixed width.",
++             "Left-pad line numbers with spaces so that they align to a \
++              fixed width. Line numbers wider than this width are not \
++              truncated.");
+         doc!(h, "context-separator",
+              "Set the context separator string. [default: --]",
+              "The string used to separate non-contiguous context lines in the \
+diff --git a/src/args.rs b/src/args.rs
+index 106762c..844b95a 100644
+--- a/src/args.rs
++++ b/src/args.rs
+@@ -52,6 +52,7 @@ pub struct Args {
+     hidden: bool,
+     ignore_files: Vec<PathBuf>,
+     invert_match: bool,
++    fixed_width_line_number: Option<usize>,
+     line_number: bool,
+     line_per_match: bool,
+     max_columns: Option<usize>,
+@@ -144,7 +145,8 @@ impl Args {
+             .only_matching(self.only_matching)
+             .path_separator(self.path_separator)
+             .with_filename(self.with_filename)
+-            .max_columns(self.max_columns);
++            .max_columns(self.max_columns)
++            .fixed_width_line_number(self.fixed_width_line_number);
+         if let Some(ref rep) = self.replace {
+             p = p.replace(rep.clone());
+         }
+@@ -327,6 +329,7 @@ impl<'a> ArgMatches<'a> {
+             files_with_matches: self.is_present("files-with-matches"),
+             files_without_matches: self.is_present("files-without-match"),
+             eol: b'\n',
++            fixed_width_line_number: self.fixed_width_line_number(),
+             files: self.is_present("files"),
+             follow: self.is_present("follow"),
+             glob_overrides: try!(self.overrides()),
+@@ -617,6 +620,16 @@ impl<'a> ArgMatches<'a> {
+         self.is_present("column") || self.is_present("vimgrep")
+     }
+ 
++    /// Returns the width that line numbers should be left-padded to, if
++    /// fixed-width line numbers were requested.
++    fn fixed_width_line_number(&self) -> Option<usize> {
++        if self.is_present("fixed-width-line-numbers") {
++            Some(6)
++        } else {
++            None
++        }
++    }
++
+     /// Returns true if and only if matches should be grouped with file name
+     /// headings.
+     fn heading(&self) -> bool {
+diff --git a/src/printer.rs b/src/printer.rs
+index 37680f9..6c80701 100644
+--- a/src/printer.rs
++++ b/src/printer.rs
+@@ -98,7 +98,9 @@ pub struct Printer<W> {
+     /// The separator to use for file paths. If empty, this is ignored.
+     path_separator: Option<u8>,
+     /// Restrict lines to this many columns.
+-    max_columns: Option<usize>
++    max_columns: Option<usize>,
++    /// When set, line numbers are left-padded with spaces to this width.
++    fixed_width_line_number: Option<usize>,
+ }
+ 
+ impl<W: WriteColor> Printer<W> {
+@@ -120,6 +122,7 @@ impl<W: WriteColor> Printer<W> {
+             colors: ColorSpecs::default(),
+             path_separator: None,
+             max_columns: None,
++            fixed_width_line_number: None,
+         }
+     }
+ 
+@@ -208,6 +211,17 @@ impl<W: WriteColor> Printer<W> {
+         self
+     }
+ 
++    /// When set, line numbers are left-padded with spaces so that they line
++    /// up to the given width. Line numbers wider than this are not
++    /// truncated.
++    pub fn fixed_width_line_number(
++        mut self,
++        width: Option<usize>,
++    ) -> Printer<W> {
++        self.fixed_width_line_number = width;
++        self
++    }
++
+     /// Returns true if and only if something has been printed.
+     pub fn has_printed(&self) -> bool {
+         self.has_printed
+@@ -457,7 +471,16 @@ impl<W: WriteColor> Printer<W> {
+     }
+ 
+     fn line_number(&mut self, n: u64, sep: u8) {
+-        self.write_colored(n.to_string().as_bytes(), |colors| colors.line());
++        let n = n.to_string();
++        if let Some(width) = self.fixed_width_line_number {
++            if n.len() < width {
++                let padding: String =
++                    ::std::iter::repeat(' ').take(width - n.len()).collect();
++                self.write_colored(
++                    padding.as_bytes(), |colors| colors.line());
++            }
++        }
++        self.write_colored(n.as_bytes(), |colors| colors.line());
+         self.separator(&[sep]);
+     }
+ 

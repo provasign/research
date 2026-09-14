@@ -1,0 +1,61 @@
+diff --git a/crates/printer/src/util.rs b/crates/printer/src/util.rs
+index 434deec..2c7aeb3 100644
+--- a/crates/printer/src/util.rs
++++ b/crates/printer/src/util.rs
+@@ -82,26 +82,38 @@ impl<M: Matcher> Replacer<M> {
+             dst.clear();
+             matches.clear();
+ 
++            // We can't use 'replace_with_captures_at' directly since it
++            // will happily copy any trailing bytes beyond 'range.end' (up
++            // to the end of 'subject', which may have been extended beyond
++            // 'range.end' above to account for multi-line look-ahead) into
++            // 'dst'. Instead, we iterate over matches ourselves, bail out
++            // once a match starts beyond 'range.end' and only copy the
++            // trailing non-matching bytes up to 'range.end'.
++            let end = std::cmp::min(range.end, subject.len());
++            let mut last_match = range.start;
+             matcher
+-                .replace_with_captures_at(
+-                    subject,
+-                    range.start,
+-                    caps,
+-                    dst,
+-                    |caps, dst| {
+-                        let start = dst.len();
+-                        caps.interpolate(
+-                            |name| matcher.capture_index(name),
+-                            subject,
+-                            replacement,
+-                            dst,
+-                        );
+-                        let end = dst.len();
+-                        matches.push(Match::new(start, end));
+-                        true
+-                    },
+-                )
++                .captures_iter_at(subject, range.start, caps, |caps| {
++                    let m = caps.get(0).unwrap();
++                    if m.start() >= end {
++                        return false;
++                    }
++                    dst.extend(&subject[last_match..m.start()]);
++                    last_match = m.end();
++
++                    let start = dst.len();
++                    caps.interpolate(
++                        |name| matcher.capture_index(name),
++                        subject,
++                        replacement,
++                        dst,
++                    );
++                    let end = dst.len();
++                    matches.push(Match::new(start, end));
++                    true
++                })
+                 .map_err(io::Error::error_message)?;
++            let last_match = std::cmp::min(last_match, end);
++            dst.extend(&subject[last_match..end]);
+         }
+         Ok(())
+     }

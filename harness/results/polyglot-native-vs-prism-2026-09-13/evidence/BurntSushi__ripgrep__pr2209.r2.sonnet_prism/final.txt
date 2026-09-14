@@ -1,0 +1,12 @@
+Fix confirmed and matches expected behavior. Also ran full `grep-printer` test suite (94/94 passed). Not committing per instructions.
+
+## Summary
+
+**Root cause**: `Replacer::replace_all` in `crates/printer/src/util.rs` handled multi-line replacements by extending the searched `subject` slice past `range.end` with extra look-ahead bytes (`MAX_LOOK_AHEAD`) so regex look-around could see beyond the current match. It then delegated to `Matcher::replace_with_captures_at`, which iterates *all* matches in that extended subject and, at the end, blindly copies everything from the last match to the end of `subject` into the output. Since `subject` included the look-ahead bytes, this trailing copy leaked unrelated content (and any additional matches found in the look-ahead region) into the replacement output.
+
+**Fix**: Replaced the call to `replace_with_captures_at` with a manual loop using `captures_iter_at` that:
+- keeps replacing all matches whose start is within `range` (preserving existing multi-match-per-line behavior),
+- stops as soon as a match starts at or beyond `range.end` (i.e., it only exists because of the look-ahead bytes), and
+- bounds the final trailing unmatched-byte copy to `range.end` instead of the full (look-ahead-extended) `subject`.
+
+This is scoped to `crates/printer/src/util.rs` only.

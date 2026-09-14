@@ -1,0 +1,13 @@
+Clean. Let me quickly summarize the change.
+
+## Summary
+
+The bug: with `--web`, the `--project`/`-p` flag values were passed straight through to the GitHub web query string as project *names*, but GitHub's web UI expects project *paths* (e.g. `OWNER/REPO/1`) for that query parameter. This meant `--project "My Project" --web` silently failed to preselect the project.
+
+Fix (option 1 from the issue: keep accepting project names everywhere, convert to path only for web mode):
+
+- `api/queries_repo.go`: added `ResourcePath` to `RepoProject` (now fetched from the GraphQL API), a `ProjectNameToURLPath` helper to convert a GraphQL `resourcePath` (`/OWNER/REPO/projects/N`) into the web query-param format (`OWNER/REPO/N`), and a `RepoMetadataResult.ProjectsToPaths` method that resolves project names to that path format.
+- `pkg/cmd/pr/shared/params.go`: `WithPrAndIssueQueryParams` now converts `state.Projects` (names) to paths via `state.MetadataResult.ProjectsToPaths` when metadata has been resolved, falling back to the raw names otherwise.
+- `pkg/cmd/issue/create/create.go` and `pkg/cmd/pr/create/create.go`: in `--web` mode, resolve project names to metadata (fetching `RepoResolveMetadataIDs`/projects) before building the browser URL, so the query string now contains the correct project path.
+
+Verified with `go build ./...` and the existing test suites for `api`, `pkg/cmd/issue/create`, `pkg/cmd/pr/create`, and `pkg/cmd/pr/shared` — all pass. No tests, docs, or config were modified.

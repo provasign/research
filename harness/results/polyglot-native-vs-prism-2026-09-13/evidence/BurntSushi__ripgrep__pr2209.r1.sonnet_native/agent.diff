@@ -1,0 +1,66 @@
+diff --git a/crates/printer/src/util.rs b/crates/printer/src/util.rs
+index 434deec..a6c257c 100644
+--- a/crates/printer/src/util.rs
++++ b/crates/printer/src/util.rs
+@@ -82,26 +82,43 @@ impl<M: Matcher> Replacer<M> {
+             dst.clear();
+             matches.clear();
+ 
++            // Bound how far we copy unmatched bytes into `dst`. `subject`
++            // may have been extended beyond `range.end` (multi-line mode) or
++            // truncated below it (line terminator trimming), so we can't
++            // just use `range.end` or `subject.len()` on their own.
++            let end = std::cmp::min(range.end, subject.len());
++            let mut last_match = range.start;
+             matcher
+-                .replace_with_captures_at(
+-                    subject,
+-                    range.start,
+-                    caps,
+-                    dst,
+-                    |caps, dst| {
+-                        let start = dst.len();
+-                        caps.interpolate(
+-                            |name| matcher.capture_index(name),
+-                            subject,
+-                            replacement,
+-                            dst,
+-                        );
+-                        let end = dst.len();
+-                        matches.push(Match::new(start, end));
+-                        true
+-                    },
+-                )
++                .captures_iter_at(subject, range.start, caps, |caps| {
++                    let m = caps.get(0).unwrap();
++                    // Don't consider any matches that start beyond the
++                    // requested range, even if the subject (for the sake of
++                    // permitting look-ahead in multi-line mode) extends
++                    // beyond it.
++                    if m.start() >= end {
++                        return false;
++                    }
++                    dst.extend(&subject[last_match..m.start()]);
++                    last_match = m.end();
++
++                    let start = dst.len();
++                    caps.interpolate(
++                        |name| matcher.capture_index(name),
++                        subject,
++                        replacement,
++                        dst,
++                    );
++                    let end = dst.len();
++                    matches.push(Match::new(start, end));
++                    true
++                })
+                 .map_err(io::Error::error_message)?;
++            // Only append the remainder of the subject up to the end of the
++            // requested range. (The subject may have been extended beyond
++            // `range.end` to permit look-ahead in multi-line mode, and we
++            // must not let that extra data leak into the replacement.)
++            let last_match = std::cmp::min(last_match, end);
++            dst.extend(&subject[last_match..end]);
+         }
+         Ok(())
+     }

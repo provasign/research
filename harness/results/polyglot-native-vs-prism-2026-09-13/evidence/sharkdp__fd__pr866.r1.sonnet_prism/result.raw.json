@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 115300,
+  "stop_reason": "end_turn",
+  "session_id": "e6a5ef97-e4f6-4335-aaa5-2befe16b926c",
+  "total_cost_usd": 0.429983,
+  "usage": {
+    "input_tokens": 50,
+    "cache_creation_input_tokens": 38356,
+    "cache_read_input_tokens": 808985,
+    "output_tokens": 11346,
+    "output_tokens_details": {
+      "thinking_tokens": 3569
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 38356,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 484,
+        "cache_read_input_tokens": 45186,
+        "cache_creation_input_tokens": 195,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 195
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 1122,
+      "outputTokens": 16,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.001202,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 50,
+      "outputTokens": 11346,
+      "cacheReadInputTokens": 808985,
+      "cacheCreationInputTokens": 38356,
+      "webSearchRequests": 0,
+      "costUSD": 0.42878099999999997,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 3569,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 25,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "## Summary\n\nFixed the `-X`/`--exec-batch` \"Argument list too long\" error by batching search results into multiple command invocations instead of passing them all to a single command.\n\n**Change in `src/exec/mod.rs`:**\n- `CommandTemplate::generate_and_execute_batch` now splits the collected paths into chunks sized to fit within the OS's command-line length limit, running the command once per chunk (merging the resulting exit codes via the existing `merge_exitcodes` helper) instead of appending every path to one `Command`.\n- Added `max_command_line_length()`, which queries `sysconf(_SC_ARG_MAX)` on Unix (falling back to a conservative default on Redox/Windows), then subtracts the size of the current environment (which also counts against the OS limit) plus a small headroom margin.\n- Per-argument accounting includes the string length, NUL terminator, and pointer-table overhead so the estimate matches what the kernel actually enforces.\n\nVerified with a directory of ~70k files that `fd -tf . -X wc -l`, which previously failed with `Argument list too long (os error 7)`, now succeeds by transparently issuing multiple `wc -l` invocations. `cargo test` (61 integration tests + unit tests including `tokens_single_batch`/`tokens_multiple_batch`/`test_exec_batch`) all pass.\n\nNo changes were made to tests, docs, or config; nothing was committed, per instructions.",
+  "ttft_ms": 1564,
+  "type": "result",
+  "duration_ms": 259978,
+  "uuid": "95784ac2-dca7-45a0-8228-32b77b60be9c",
+  "ttft_stream_ms": 764,
+  "time_to_request_ms": 20,
+  "first_content_frame_ms": 764,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

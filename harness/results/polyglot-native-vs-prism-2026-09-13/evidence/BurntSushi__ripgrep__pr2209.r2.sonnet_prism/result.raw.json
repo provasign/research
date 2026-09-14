@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 132641,
+  "stop_reason": "end_turn",
+  "session_id": "f75e409b-cd1e-4bb7-9bd6-40fd0326ba93",
+  "total_cost_usd": 0.27191099999999996,
+  "usage": {
+    "input_tokens": 34,
+    "cache_creation_input_tokens": 25074,
+    "cache_read_input_tokens": 369140,
+    "output_tokens": 9506,
+    "output_tokens_details": {
+      "thinking_tokens": 4707
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 25074,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 474,
+        "cache_read_input_tokens": 31450,
+        "cache_creation_input_tokens": 649,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 649
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 2569,
+      "outputTokens": 18,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.002659,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 34,
+      "outputTokens": 9506,
+      "cacheReadInputTokens": 369140,
+      "cacheCreationInputTokens": 25074,
+      "webSearchRequests": 0,
+      "costUSD": 0.269252,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 4707,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 17,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "Fix confirmed and matches expected behavior. Also ran full `grep-printer` test suite (94/94 passed). Not committing per instructions.\n\n## Summary\n\n**Root cause**: `Replacer::replace_all` in `crates/printer/src/util.rs` handled multi-line replacements by extending the searched `subject` slice past `range.end` with extra look-ahead bytes (`MAX_LOOK_AHEAD`) so regex look-around could see beyond the current match. It then delegated to `Matcher::replace_with_captures_at`, which iterates *all* matches in that extended subject and, at the end, blindly copies everything from the last match to the end of `subject` into the output. Since `subject` included the look-ahead bytes, this trailing copy leaked unrelated content (and any additional matches found in the look-ahead region) into the replacement output.\n\n**Fix**: Replaced the call to `replace_with_captures_at` with a manual loop using `captures_iter_at` that:\n- keeps replacing all matches whose start is within `range` (preserving existing multi-match-per-line behavior),\n- stops as soon as a match starts at or beyond `range.end` (i.e., it only exists because of the look-ahead bytes), and\n- bounds the final trailing unmatched-byte copy to `range.end` instead of the full (look-ahead-extended) `subject`.\n\nThis is scoped to `crates/printer/src/util.rs` only.",
+  "ttft_ms": 3610,
+  "type": "result",
+  "duration_ms": 143544,
+  "uuid": "649b2065-18d6-4767-b4ec-7b254a2e9b9b",
+  "ttft_stream_ms": 1699,
+  "time_to_request_ms": 20,
+  "first_content_frame_ms": 1700,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

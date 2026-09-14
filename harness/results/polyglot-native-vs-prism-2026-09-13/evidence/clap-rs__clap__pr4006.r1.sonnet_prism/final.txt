@@ -1,0 +1,9 @@
+The fix is minimal, targeted, and localized to `src/parser/validator.rs`. Summary:
+
+**Root cause**: When a required arg (e.g. `first`, required via another arg's `requires("first")`) is a member of an `ArgGroup`, `Validator::validate_required` correctly detected it was missing and called `missing_required_error`, but passed an empty `incl` list. Since `get_required_usage_from` filters out any arg that's a member of a required group (because the group's own placeholder like `<--first|--second>` normally covers it), the specifically-missing arg silently vanished from the error's "not provided" list — producing an empty message.
+
+**Fix**: 
+1. When the missing arg belongs to a group, pass its id via `incl` so it's explicitly flagged.
+2. In `missing_required_error`, after building `req_args`, ensure any `incl` args are always present in the reported list (bypassing the group-membership filtering that would otherwise hide them), while leaving the usage-string (`used`) computation untouched to avoid regressions in unrelated cases.
+
+Verified: reproduces the exact expected output from the issue, and the full test suite (`cargo test`) passes except one pre-existing, unrelated doctest failure caused by a `PhantomData` Debug-formatting difference across Rust versions (not related to this change).

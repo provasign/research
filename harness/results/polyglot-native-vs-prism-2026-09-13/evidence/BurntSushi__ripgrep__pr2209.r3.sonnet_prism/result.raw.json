@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 212371,
+  "stop_reason": "end_turn",
+  "session_id": "c32afe53-e09e-4e76-9edf-662d89f15bfc",
+  "total_cost_usd": 0.42151579999999994,
+  "usage": {
+    "input_tokens": 42,
+    "cache_creation_input_tokens": 36998,
+    "cache_read_input_tokens": 574029,
+    "output_tokens": 15598,
+    "output_tokens_details": {
+      "thinking_tokens": 10777
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 36998,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 411,
+        "cache_read_input_tokens": 43408,
+        "cache_creation_input_tokens": 615,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 615
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 2569,
+      "outputTokens": 17,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.002654,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 42,
+      "outputTokens": 15598,
+      "cacheReadInputTokens": 574029,
+      "cacheCreationInputTokens": 36998,
+      "webSearchRequests": 0,
+      "costUSD": 0.4188617999999999,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 10777,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 21,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "All tests pass and the reported issue is fixed. Summary of the fix in `crates/printer/src/util.rs` (`Replacer::replace_all`):\n\n- **Root cause**: For multiline matches, `subject` is extended past `range.end` (by up to `MAX_LOOK_AHEAD` bytes) to give the regex engine enough context for look-ahead. But `Matcher::replace_with_captures_at`'s default implementation *unconditionally* appends everything from the end of the last processed match to the end of the haystack (`dst.extend(&haystack[last_match..])`), even when the `append` callback stops iteration early. That caused all the extra look-ahead content to leak into the final replacement output.\n- **Fix**: after the replace call, truncate `dst` by exactly the number of extra bytes (`subject.len() - range.end`) that were appended due to the look-ahead extension. Also added a guard in the `append` callback to stop as soon as a match starts at or beyond `range.end`, mirroring the existing logic in `find_iter_at_in_context`.\n\nVerified with the exact reproduction from the issue \u2014 output now matches the expected single line, and all 94 existing `grep-printer` tests (including the multiline replacement tests) still pass.",
+  "ttft_ms": 3248,
+  "type": "result",
+  "duration_ms": 224858,
+  "uuid": "545b1bc4-31ae-4855-adfa-ffc9169a4153",
+  "ttft_stream_ms": 1542,
+  "time_to_request_ms": 21,
+  "first_content_frame_ms": 1542,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

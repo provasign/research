@@ -1,0 +1,11 @@
+Confirmed pre-existing failure, unrelated to my fix.
+
+## Summary
+
+The bug: in `getDynamicThemeFixesFor` (`src/generators/dynamic-theme.ts`), the code checked `fixes[fixes.length - 1].url[0] !== '*'` to find the generic (`*`) fix, assuming it was the last entry in the `fixes` array. But the generic `*` fix is always the **first** record in the fixes config file, and `getSitesFixesFor` builds the result array based on record insertion order (domain patterns are indexed in file order), so the generic fix actually ends up first, not last — causing the check to fail and valid fixes to be dropped.
+
+**Fix:** Check/use `fixes[0]` instead of `fixes[fixes.length - 1]`, and adjust the specificity-sorting slice to skip the first element (`slice(1)`) instead of the last.
+
+Verified with the existing `tests/generators/utils/parse.tests.ts` suite (4/4 passing) which covers the indexing/ordering logic this fix relies on. The `tests/inject/dynamic/fixes.tests.ts` suite fails to run due to a pre-existing unrelated environment issue (missing `chrome.runtime.getManifest` mock), confirmed present on the unmodified baseline as well.
+
+No changes were made to tests, docs, or config — only the source fix in `src/generators/dynamic-theme.ts`.

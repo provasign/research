@@ -1,0 +1,13 @@
+The fix works as expected and outputs only the intended single line.
+
+## Summary
+
+The bug was in `Replacer::replace_all` in `crates/printer/src/util.rs`. For multi-line searches, the `subject` byte slice was intentionally extended past `range.end` (up to `MAX_LOOK_AHEAD` bytes) so the regex engine could satisfy look-ahead assertions. However, the code then called `matcher.replace_with_captures_at(subject, ...)`, whose default implementation unconditionally appends the entire remainder of `subject` after the last match (`dst.extend(&haystack[last_match..])`) — including all that extra look-ahead content that was never actually supposed to be part of the match's replacement output.
+
+Fixed by replacing the call with a manual loop over `captures_iter_at` that mirrors the bounding logic already used in `find_iter_at_in_context`: it stops considering matches once they start at or beyond `range.end`, and only copies trailing non-matched bytes up to `range.end` (clamped to `subject.len()` to handle the line-terminator-trimming case in non-multiline mode).
+
+Verified:
+- `cargo test -p grep-printer` passes (94 passed, including all `replacement_*` tests).
+- Manually reproduced the issue from the bug report and confirmed the `--replace` output now matches the non-replace output (single line), instead of leaking extra file content.
+
+No tests, docs, or config were modified — only `crates/printer/src/util.rs`.

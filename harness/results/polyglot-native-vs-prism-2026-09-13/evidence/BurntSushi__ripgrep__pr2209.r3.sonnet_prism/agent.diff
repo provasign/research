@@ -1,0 +1,43 @@
+diff --git a/crates/printer/src/util.rs b/crates/printer/src/util.rs
+index 434deec..656b2ad 100644
+--- a/crates/printer/src/util.rs
++++ b/crates/printer/src/util.rs
+@@ -89,6 +89,17 @@ impl<M: Matcher> Replacer<M> {
+                     caps,
+                     dst,
+                     |caps, dst| {
++                        // See the giant comment in 'find_iter_at_in_context'
++                        // above for context. Since we may have searched
++                        // beyond the end of the given range (to account for
++                        // look-ahead in multi-line mode), we need to ensure
++                        // we don't let a match starting beyond the range
++                        // get replaced (or included in the output at all).
++                        let m = caps.get(0).unwrap();
++                        if m.start() >= range.end {
++                            return false;
++                        }
++
+                         let start = dst.len();
+                         caps.interpolate(
+                             |name| matcher.capture_index(name),
+@@ -102,6 +113,20 @@ impl<M: Matcher> Replacer<M> {
+                     },
+                 )
+                 .map_err(io::Error::error_message)?;
++
++            // `replace_with_captures_at` above unconditionally appends
++            // whatever is left over in `subject` (starting from the end of
++            // the last match) to `dst`, even when our `append` callback
++            // above stops iteration early. Since `subject` may have been
++            // extended past `range.end` above (to account for possible
++            // look-ahead in the regex), that trailing bit needs to be
++            // stripped back off of `dst` so that we don't include any
++            // content past `range.end` in the replacement.
++            let extra = subject.len().saturating_sub(range.end);
++            if extra > 0 {
++                let newlen = dst.len().saturating_sub(extra);
++                dst.truncate(newlen);
++            }
+         }
+         Ok(())
+     }

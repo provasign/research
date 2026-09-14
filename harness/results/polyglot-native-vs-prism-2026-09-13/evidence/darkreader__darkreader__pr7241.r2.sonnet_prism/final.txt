@@ -1,0 +1,9 @@
+The fix works, and existing tests still pass. Scratch test file removed.
+
+## Summary
+
+**Root cause:** `src/generators/utils/parse.ts:146` used `/\s*={2,}\s*/gm` as a delimiter regex to split theme config blocks. Since this pattern isn't anchored to line boundaries, it matches the `==` padding at the end of any base64-encoded string (e.g., in `data:image/png;base64,...==`) embedded anywhere in the text, incorrectly treating it as a block delimiter. This corrupted the parsed CSS text and leaked fragments like `') !important;` into `domainPatterns`, which later crashed `new RegExp(...)` with "Unmatched )".
+
+**Fix:** Anchored the delimiter regex to whole lines: `/^\s*={2,}\s*$/gm`. Now only lines that consist entirely of `=` characters (optionally surrounded by whitespace) are treated as block delimiters, so `==` occurring inside a base64 string on a CSS line is no longer misinterpreted as a delimiter.
+
+Verified with the existing test suite (`tests/generators/utils/parse.tests.ts`, 7/7 passing) and a scratch reproduction of the exact issue scenario, which now correctly ignores the base64-containing block without corrupting `domainPatterns`.

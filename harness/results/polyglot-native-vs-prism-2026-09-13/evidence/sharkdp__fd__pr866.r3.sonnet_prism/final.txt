@@ -1,0 +1,6 @@
+The fix is complete:
+
+- `src/exec/mod.rs`: `CommandTemplate::generate_and_execute_batch` now splits the collected, sorted paths into multiple invocations of the batch command, keeping each invocation's total argument length under a computed limit, instead of appending every path onto a single `Command`. Exit codes from all invocations are merged via `merge_exitcodes`.
+- Added `max_batch_command_length()`, which uses `libc::sysconf(_SC_ARG_MAX)` on Unix (minus a safety margin for env vars/overhead) to determine the max length, falling back to a conservative constant on other platforms or if the syscall fails.
+
+Verified with `cargo build`, the existing `exec` unit tests (`cargo test --bin fd exec`), and a manual test running `fd -tf -X wc -l` over 2000 files, which previously would have overflowed a single `wc -l` invocation's argument list but now correctly batches (verified the summed line counts equal 2000).

@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 92408,
+  "stop_reason": "end_turn",
+  "session_id": "3c04d849-d012-429b-8606-e94d97af4524",
+  "total_cost_usd": 0.22158899999999998,
+  "usage": {
+    "input_tokens": 38,
+    "cache_creation_input_tokens": 21261,
+    "cache_read_input_tokens": 330700,
+    "output_tokens": 6767,
+    "output_tokens_details": {
+      "thinking_tokens": 1481
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 21261,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 494,
+        "cache_read_input_tokens": 26111,
+        "cache_creation_input_tokens": 607,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 607
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 2569,
+      "outputTokens": 18,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.002659,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 38,
+      "outputTokens": 6767,
+      "cacheReadInputTokens": 330700,
+      "cacheCreationInputTokens": 21261,
+      "webSearchRequests": 0,
+      "costUSD": 0.21892999999999996,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 1481,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 19,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "The fix works as expected and outputs only the intended single line.\n\n## Summary\n\nThe bug was in `Replacer::replace_all` in `crates/printer/src/util.rs`. For multi-line searches, the `subject` byte slice was intentionally extended past `range.end` (up to `MAX_LOOK_AHEAD` bytes) so the regex engine could satisfy look-ahead assertions. However, the code then called `matcher.replace_with_captures_at(subject, ...)`, whose default implementation unconditionally appends the entire remainder of `subject` after the last match (`dst.extend(&haystack[last_match..])`) \u2014 including all that extra look-ahead content that was never actually supposed to be part of the match's replacement output.\n\nFixed by replacing the call with a manual loop over `captures_iter_at` that mirrors the bounding logic already used in `find_iter_at_in_context`: it stops considering matches once they start at or beyond `range.end`, and only copies trailing non-matched bytes up to `range.end` (clamped to `subject.len()` to handle the line-terminator-trimming case in non-multiline mode).\n\nVerified:\n- `cargo test -p grep-printer` passes (94 passed, including all `replacement_*` tests).\n- Manually reproduced the issue from the bug report and confirmed the `--replace` output now matches the non-replace output (single line), instead of leaking extra file content.\n\nNo tests, docs, or config were modified \u2014 only `crates/printer/src/util.rs`.",
+  "ttft_ms": 3546,
+  "type": "result",
+  "duration_ms": 111612,
+  "uuid": "a02b7c65-8697-4fd9-bed7-aae158d9ed86",
+  "ttft_stream_ms": 1258,
+  "time_to_request_ms": 18,
+  "first_content_frame_ms": 1258,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

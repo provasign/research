@@ -1,0 +1,6 @@
+Fix summary:
+
+- `src/exec/mod.rs`: `generate_and_execute_batch` now chunks the collected/sorted paths into multiple invocations of the command instead of appending all of them to a single `Command`, tracking a running byte-size estimate and splitting into a new invocation before exceeding the max argument list length. Exit codes across invocations are merged via `merge_exitcodes`.
+- Added `max_arg_list_length()`, which queries `sysconf(_SC_ARG_MAX)` via `libc` on Unix (with headroom subtracted for environment/overhead) and falls back to a conservative 128 KiB constant elsewhere.
+
+Verified `cargo build` succeeds and all `exec::` unit tests pass, plus a manual run of `fd . -tf -X wc -l` over 2000 files completed without the previous "Argument list too long" error.

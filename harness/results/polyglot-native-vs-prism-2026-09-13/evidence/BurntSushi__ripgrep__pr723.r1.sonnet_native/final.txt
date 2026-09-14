@@ -1,0 +1,7 @@
+I've implemented the `--fixed-width-line-numbers` flag requested in the issue:
+
+- **`src/app.rs`**: Added the `fixed-width-line-numbers` CLI flag with help text.
+- **`src/args.rs`**: Wired the flag through `Args` and into `Printer` construction.
+- **`src/printer.rs`**: Added a `fixed_width_line_numbers` field/builder method to `Printer`, and updated `line_number()` to right-pad (space-pad) line numbers to a fixed width of 6 columns when enabled, so indentation aligns across matches within a file (numbers wider than 6 digits simply overflow, as suggested in the issue).
+
+Verified manually that `rg needle file --fixed-width-line-numbers -n` right-aligns line numbers (e.g. `     3:needle`, `    14:needle`) while normal output is unaffected. `cargo build` succeeds; the pre-existing integration test failures (74/142, confirmed identical on the unmodified baseline) are unrelated to this change. No test, doc, or config files were modified, and I left `Cargo.lock` untouched (only reverted incidental regeneration from local builds). I did not commit.

@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 162510,
+  "stop_reason": "end_turn",
+  "session_id": "99039b85-ea2c-4df2-a7a5-c0611fa99dba",
+  "total_cost_usd": 0.41437539999999995,
+  "usage": {
+    "input_tokens": 44,
+    "cache_creation_input_tokens": 38912,
+    "cache_read_input_tokens": 683777,
+    "output_tokens": 11922,
+    "output_tokens_details": {
+      "thinking_tokens": 6146
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 38912,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 541,
+        "cache_read_input_tokens": 44447,
+        "cache_creation_input_tokens": 1490,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 1490
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 2569,
+      "outputTokens": 19,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.002664,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 44,
+      "outputTokens": 11922,
+      "cacheReadInputTokens": 683777,
+      "cacheCreationInputTokens": 38912,
+      "webSearchRequests": 0,
+      "costUSD": 0.41171139999999995,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 6146,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 22,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "The change is minimal and targeted. Summary:\n\n## Root cause\nIn `Replacer::replace_all` (`crates/printer/src/util.rs`), when `-U`/`--multiline` is active, the subject buffer passed to the matcher is deliberately extended past the actual match's end (`range.end`) by up to `MAX_LOOK_AHEAD` bytes, so look-around assertions can be resolved correctly. However, it then called `matcher.replace_with_captures_at`, whose default behavior unconditionally appends everything from the last match to the *end of the given haystack* into the output buffer. That meant the extra look-ahead bytes \u2014 potentially many lines beyond the intended match \u2014 leaked into the replacement output.\n\n## Fix\nReplaced the call to `replace_with_captures_at` with a manual loop using `captures_iter_at` that:\n- Stops considering matches whose start is at or past the intended `subject_end` (mirroring the existing bound check in `find_iter_at_in_context`).\n- Appends the final trailing bytes only up to `subject_end`, not to the full (possibly extended) subject buffer.\n\n## Verification\n- `cargo build -p grep-printer` \u2014 clean.\n- `cargo test -p grep-printer --lib` \u2014 all 94 tests pass, including the pre-existing multiline replacement tests.\n- Reproduced the exact issue scenario with the built `rg` binary \u2014 the reported over-matching is gone, and the output now matches the expected behavior described in the issue.\n\nNo tests, docs, or config were modified \u2014 only the source fix in `crates/printer/src/util.rs`. The patch has not been committed, per your instructions.",
+  "ttft_ms": 4105,
+  "type": "result",
+  "duration_ms": 172023,
+  "uuid": "ba815010-4311-4047-a96f-2929c5300bb4",
+  "ttft_stream_ms": 1534,
+  "time_to_request_ms": 19,
+  "first_content_frame_ms": 1534,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

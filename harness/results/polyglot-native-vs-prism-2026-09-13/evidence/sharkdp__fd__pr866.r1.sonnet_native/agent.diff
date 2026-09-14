@@ -1,0 +1,117 @@
+diff --git a/src/exec/mod.rs b/src/exec/mod.rs
+index a364e86..8e305eb 100644
+--- a/src/exec/mod.rs
++++ b/src/exec/mod.rs
+@@ -13,7 +13,7 @@ use anyhow::{anyhow, Result};
+ use lazy_static::lazy_static;
+ use regex::Regex;
+ 
+-use crate::exit_codes::ExitCode;
++use crate::exit_codes::{merge_exitcodes, ExitCode};
+ use crate::filesystem::strip_current_dir;
+ 
+ use self::command::execute_command;
+@@ -163,35 +163,83 @@ impl CommandTemplate {
+     where
+         I: Iterator<Item = PathBuf>,
+     {
+-        let mut cmd = Command::new(self.args[0].generate("", None));
+-        cmd.stdin(Stdio::inherit());
+-        cmd.stdout(Stdio::inherit());
+-        cmd.stderr(Stdio::inherit());
+-
+         let mut paths: Vec<_> = paths.collect();
+-        let mut has_path = false;
++        paths.sort();
++        let mut paths = paths.into_iter().peekable();
++
++        // Maximum length (in bytes) of the argument list that we build up for a single
++        // invocation of the command, so that we don't exceed the operating system's limit
++        // (as returned by e.g. `getconf ARG_MAX`).
++        let max_args_size = max_arg_list_length();
++
++        let mut results: Vec<ExitCode> = Vec::new();
++
++        while paths.peek().is_some() {
++            let executable = self.args[0].generate("", None);
++            let mut cmd = Command::new(&executable);
++            cmd.stdin(Stdio::inherit());
++            cmd.stdout(Stdio::inherit());
++            cmd.stderr(Stdio::inherit());
++
++            let mut has_path = false;
++            // Rough estimate of the number of bytes used so far, to avoid exceeding the
++            // maximum argument length supported by the operating system/shell.
++            let mut cmd_size = executable.len() + 1;
++
++            'outer: for arg in &self.args[1..] {
++                if arg.has_tokens() {
++                    // A single `Tokens` is expected, so we can directly consume the
++                    // iterator here.
++                    while let Some(path) = paths.peek() {
++                        let path = strip_current_dir(path);
++                        let generated = arg.generate(path, self.path_separator.as_deref());
++                        let arg_size = generated.len() + 1;
++
++                        if has_path && cmd_size + arg_size > max_args_size {
++                            break 'outer;
++                        }
+ 
+-        for arg in &self.args[1..] {
+-            if arg.has_tokens() {
+-                paths.sort();
+-
+-                // A single `Tokens` is expected
+-                // So we can directly consume the iterator once and for all
+-                for path in &mut paths {
+-                    cmd.arg(arg.generate(strip_current_dir(path), self.path_separator.as_deref()));
+-                    has_path = true;
++                        cmd.arg(generated);
++                        cmd_size += arg_size;
++                        has_path = true;
++                        paths.next();
++                    }
++                } else {
++                    let generated = arg.generate("", None);
++                    cmd_size += generated.len() + 1;
++                    cmd.arg(generated);
+                 }
++            }
++
++            if has_path {
++                results.push(execute_command(cmd, &Mutex::new(()), buffer_output));
+             } else {
+-                cmd.arg(arg.generate("", None));
++                // No paths were consumed (e.g. because a single path already exceeds the
++                // maximum argument length), avoid looping forever.
++                break;
+             }
+         }
+ 
+-        if has_path {
+-            execute_command(cmd, &Mutex::new(()), buffer_output)
+-        } else {
+-            ExitCode::Success
++        merge_exitcodes(results)
++    }
++}
++
++/// Returns a conservative estimate (in bytes) of the maximum combined length of the
++/// arguments that can be passed to a single invocation of a command, leaving some room
++/// for the environment and other overhead.
++fn max_arg_list_length() -> usize {
++    #[cfg(all(unix, not(target_os = "redox")))]
++    {
++        let arg_max = unsafe { libc::sysconf(libc::_SC_ARG_MAX) };
++        if arg_max > 0 {
++            // Leave some headroom for the environment variables that get passed along
++            // with the command, and for other overhead that the shell/OS might add.
++            return (arg_max as usize).saturating_sub(2048).max(4096);
+         }
+     }
++
++    // A conservative, portable fallback value.
++    128 * 1024
+ }
+ 
+ /// Represents a template for a single command argument.

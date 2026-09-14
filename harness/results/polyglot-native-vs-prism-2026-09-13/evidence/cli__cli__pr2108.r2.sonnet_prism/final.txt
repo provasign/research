@@ -1,0 +1,6 @@
+All relevant tests pass; the `issue/view` failures are pre-existing date-computation flakiness unrelated to this change (confirmed by unaffected `Projects:` fields in those test outputs).
+
+The fix:
+- `api/queries_repo.go`: added `ResourcePath` to `RepoProject`, and a new `ProjectsToPaths` method to convert project names to their web-usable paths.
+- `pkg/cmd/pr/shared/params.go`: `WithPrAndIssueQueryParams` now resolves project names to paths via `MetadataResult` when available, falling back to raw names otherwise.
+- `pkg/cmd/pr/create/create.go` and `pkg/cmd/issue/create/create.go`: when generating a `--web` URL with projects specified, fetch project metadata first so names can be resolved to the paths GitHub's web form expects.

@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 74296,
+  "stop_reason": "end_turn",
+  "session_id": "b59041b9-2d9c-4069-ba22-ea4f7980f790",
+  "total_cost_usd": 0.15881580000000003,
+  "usage": {
+    "input_tokens": 36,
+    "cache_creation_input_tokens": 15038,
+    "cache_read_input_tokens": 246929,
+    "output_tokens": 4761,
+    "output_tokens_details": {
+      "thinking_tokens": 1509
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 15038,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 477,
+        "cache_read_input_tokens": 19634,
+        "cache_creation_input_tokens": 861,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 861
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 1511,
+      "outputTokens": 17,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.001596,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 36,
+      "outputTokens": 4761,
+      "cacheReadInputTokens": 246929,
+      "cacheCreationInputTokens": 15038,
+      "webSearchRequests": 0,
+      "costUSD": 0.15721980000000005,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 1509,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 18,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "Confirmed pre-existing failure, unrelated to my fix.\n\n## Summary\n\nThe bug: in `getDynamicThemeFixesFor` (`src/generators/dynamic-theme.ts`), the code checked `fixes[fixes.length - 1].url[0] !== '*'` to find the generic (`*`) fix, assuming it was the last entry in the `fixes` array. But the generic `*` fix is always the **first** record in the fixes config file, and `getSitesFixesFor` builds the result array based on record insertion order (domain patterns are indexed in file order), so the generic fix actually ends up first, not last \u2014 causing the check to fail and valid fixes to be dropped.\n\n**Fix:** Check/use `fixes[0]` instead of `fixes[fixes.length - 1]`, and adjust the specificity-sorting slice to skip the first element (`slice(1)`) instead of the last.\n\nVerified with the existing `tests/generators/utils/parse.tests.ts` suite (4/4 passing) which covers the indexing/ordering logic this fix relies on. The `tests/inject/dynamic/fixes.tests.ts` suite fails to run due to a pre-existing unrelated environment issue (missing `chrome.runtime.getManifest` mock), confirmed present on the unmodified baseline as well.\n\nNo changes were made to tests, docs, or config \u2014 only the source fix in `src/generators/dynamic-theme.ts`.",
+  "ttft_ms": 2295,
+  "type": "result",
+  "duration_ms": 79989,
+  "uuid": "9c08f63c-ecb1-474c-924c-6ae44b831427",
+  "ttft_stream_ms": 1691,
+  "time_to_request_ms": 22,
+  "first_content_frame_ms": 1691,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

@@ -1,0 +1,81 @@
+diff --git a/crates/printer/src/util.rs b/crates/printer/src/util.rs
+index 434deec..422cb65 100644
+--- a/crates/printer/src/util.rs
++++ b/crates/printer/src/util.rs
+@@ -63,6 +63,12 @@ impl<M: Matcher> Replacer<M> {
+         // See the giant comment in 'find_iter_at_in_context' below for why we
+         // do this dance.
+         let is_multi_line = searcher.multi_line_with_matcher(&matcher);
++        // This is the point at which the replacement output should stop.
++        // In multi line mode, `subject` may be extended below to include
++        // extra trailing context that the regex engine needs to see in
++        // order to resolve look-around, but that extra context must not
++        // itself end up in the replacement output.
++        let mut subject_end = range.end;
+         if is_multi_line {
+             if subject[range.end..].len() >= MAX_LOOK_AHEAD {
+                 subject = &subject[..range.end + MAX_LOOK_AHEAD];
+@@ -75,6 +81,7 @@ impl<M: Matcher> Replacer<M> {
+             let mut m = Match::new(0, range.end);
+             trim_line_terminator(searcher, subject, &mut m);
+             subject = &subject[..m.end()];
++            subject_end = m.end();
+         }
+         {
+             let &mut Space { ref mut dst, ref mut caps, ref mut matches } =
+@@ -82,26 +89,37 @@ impl<M: Matcher> Replacer<M> {
+             dst.clear();
+             matches.clear();
+ 
++            let mut last_match = range.start;
+             matcher
+-                .replace_with_captures_at(
+-                    subject,
+-                    range.start,
+-                    caps,
+-                    dst,
+-                    |caps, dst| {
+-                        let start = dst.len();
+-                        caps.interpolate(
+-                            |name| matcher.capture_index(name),
+-                            subject,
+-                            replacement,
+-                            dst,
+-                        );
+-                        let end = dst.len();
+-                        matches.push(Match::new(start, end));
+-                        true
+-                    },
+-                )
++                .captures_iter_at(subject, range.start, caps, |caps| {
++                    let m = caps.get(0).unwrap();
++                    // Don't let a match that only exists because of the
++                    // extra look-ahead context (added above for multi line
++                    // mode) bleed into the replacement output.
++                    if m.start() >= subject_end {
++                        return false;
++                    }
++                    dst.extend(&subject[last_match..m.start()]);
++                    last_match = m.end();
++
++                    let start = dst.len();
++                    caps.interpolate(
++                        |name| matcher.capture_index(name),
++                        subject,
++                        replacement,
++                        dst,
++                    );
++                    let end = dst.len();
++                    matches.push(Match::new(start, end));
++                    true
++                })
+                 .map_err(io::Error::error_message)?;
++            // Push the remaining bytes, but never past the point where the
++            // replacement output is supposed to end.
++            let end = std::cmp::min(subject_end, subject.len());
++            if last_match <= end {
++                dst.extend(&subject[last_match..end]);
++            }
+         }
+         Ok(())
+     }

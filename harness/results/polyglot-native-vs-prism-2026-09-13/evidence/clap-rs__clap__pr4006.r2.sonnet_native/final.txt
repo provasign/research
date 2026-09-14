@@ -1,0 +1,7 @@
+Fixed the issue in `src/output/usage.rs`. 
+
+**Root cause:** In `Usage::get_required_usage_from`, args belonging to any required `ArgGroup` were unconditionally excluded from the individually-listed missing-required-args (`args_in_groups`), on the assumption the group's own summary (`<--first|--second>`) would cover them. But when the group's requirement was already satisfied by another present member (e.g. `--second`), the group summary is correctly skipped — yet an individually required member (`first`, required via `require_first`'s `.requires("first")`) was still being filtered out by the `args_in_groups` check, leaving the error message with no argument names at all.
+
+**Fix:** Only exclude a group's members from the individual listing when that group's requirement is *not already satisfied*. If the group is satisfied, its members remain eligible to be listed individually for other reasons (like an explicit `requires` link), so the error message correctly reports `--first` as missing.
+
+Verified with a standalone repro matching the issue (now correctly prints `--first`) and the full `builder` test suite (1583 tests passing, no regressions). Left uncommitted per instructions.

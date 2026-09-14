@@ -1,0 +1,101 @@
+diff --git a/src/app.rs b/src/app.rs
+index 7a10b35..aea4909 100644
+--- a/src/app.rs
++++ b/src/app.rs
+@@ -92,6 +92,7 @@ pub fn app() -> App<'static, 'static> {
+         .arg(flag("encoding").short("E").value_name("ENCODING")
+              .takes_value(true).number_of_values(1))
+         .arg(flag("fixed-strings").short("F"))
++        .arg(flag("fixed-width-line-numbers"))
+         .arg(flag("glob").short("g")
+              .takes_value(true).multiple(true).number_of_values(1)
+              .set(ArgSettings::AllowLeadingHyphen)
+@@ -296,6 +297,11 @@ lazy_static! {
+              "Treat the pattern as a literal string instead of a regular \
+               expression. When this flag is used, special regular expression \
+               meta characters such as (){}*+. do not need to be escaped.");
++        doc!(h, "fixed-width-line-numbers",
++             "Left-pad line numbers to a fixed width.",
++             "Left-pad line numbers with spaces so that they are printed \
++              with a fixed width. This is useful for aligning the \
++              indentation of matched lines when line numbers are shown.");
+         doc!(h, "glob",
+              "Include or exclude files/directories.",
+              "Include or exclude files/directories for searching that \
+diff --git a/src/args.rs b/src/args.rs
+index 106762c..c8f73ab 100644
+--- a/src/args.rs
++++ b/src/args.rs
+@@ -45,6 +45,7 @@ pub struct Args {
+     files_without_matches: bool,
+     eol: u8,
+     files: bool,
++    fixed_width_line_numbers: bool,
+     follow: bool,
+     glob_overrides: Override,
+     grep: Grep,
+@@ -140,6 +141,7 @@ impl Args {
+             .eol(self.eol)
+             .heading(self.heading)
+             .line_per_match(self.line_per_match)
++            .fixed_width_line_numbers(self.fixed_width_line_numbers)
+             .null(self.null)
+             .only_matching(self.only_matching)
+             .path_separator(self.path_separator)
+@@ -328,6 +330,8 @@ impl<'a> ArgMatches<'a> {
+             files_without_matches: self.is_present("files-without-match"),
+             eol: b'\n',
+             files: self.is_present("files"),
++            fixed_width_line_numbers:
++                self.is_present("fixed-width-line-numbers"),
+             follow: self.is_present("follow"),
+             glob_overrides: try!(self.overrides()),
+             grep: try!(self.grep()),
+diff --git a/src/printer.rs b/src/printer.rs
+index 37680f9..2e9cd91 100644
+--- a/src/printer.rs
++++ b/src/printer.rs
+@@ -84,6 +84,8 @@ pub struct Printer<W> {
+     heading: bool,
+     /// Whether to show every match on its own line.
+     line_per_match: bool,
++    /// Whether to left-pad line numbers to a fixed width.
++    fixed_width_line_numbers: bool,
+     /// Whether to print NUL bytes after a file path instead of new lines
+     /// or `:`.
+     null: bool,
+@@ -113,6 +115,7 @@ impl<W: WriteColor> Printer<W> {
+             file_separator: None,
+             heading: false,
+             line_per_match: false,
++            fixed_width_line_numbers: false,
+             null: false,
+             only_matching: false,
+             replace: None,
+@@ -169,6 +172,12 @@ impl<W: WriteColor> Printer<W> {
+         self
+     }
+ 
++    /// Whether to left-pad line numbers to a fixed width.
++    pub fn fixed_width_line_numbers(mut self, yes: bool) -> Printer<W> {
++        self.fixed_width_line_numbers = yes;
++        self
++    }
++
+     /// Whether to cause NUL bytes to follow file paths instead of other
+     /// visual separators (like `:`, `-` and `\n`).
+     pub fn null(mut self, yes: bool) -> Printer<W> {
+@@ -457,7 +466,12 @@ impl<W: WriteColor> Printer<W> {
+     }
+ 
+     fn line_number(&mut self, n: u64, sep: u8) {
+-        self.write_colored(n.to_string().as_bytes(), |colors| colors.line());
++        let line_number = if self.fixed_width_line_numbers {
++            format!("{:>6}", n)
++        } else {
++            n.to_string()
++        };
++        self.write_colored(line_number.as_bytes(), |colors| colors.line());
+         self.separator(&[sep]);
+     }
+ 

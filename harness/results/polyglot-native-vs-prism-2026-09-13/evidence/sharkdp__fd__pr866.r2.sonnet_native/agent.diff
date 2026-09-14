@@ -1,0 +1,123 @@
+diff --git a/src/exec/mod.rs b/src/exec/mod.rs
+index a364e86..a902242 100644
+--- a/src/exec/mod.rs
++++ b/src/exec/mod.rs
+@@ -13,7 +13,7 @@ use anyhow::{anyhow, Result};
+ use lazy_static::lazy_static;
+ use regex::Regex;
+ 
+-use crate::exit_codes::ExitCode;
++use crate::exit_codes::{merge_exitcodes, ExitCode};
+ use crate::filesystem::strip_current_dir;
+ 
+ use self::command::execute_command;
+@@ -163,37 +163,95 @@ impl CommandTemplate {
+     where
+         I: Iterator<Item = PathBuf>,
+     {
++        let mut paths: Vec<_> = paths.collect();
++        let has_path = self.args[1..].iter().any(ArgumentTemplate::has_tokens);
++
++        if !has_path {
++            return ExitCode::Success;
++        }
++
++        paths.sort();
++
++        // Determine the base length of the command (the executable and any fixed
++        // arguments), so we know how much space is left over for the paths.
++        let mut base_len = self.args[0].generate("", None).len() + 1;
++        for arg in &self.args[1..] {
++            if !arg.has_tokens() {
++                base_len += arg.generate("", None).len() + 1;
++            }
++        }
++
++        // Leave some slack for the environment and other overhead the OS/shell
++        // needs, so we don't run right up against the limit.
++        let max_arg_length = get_arg_max()
++            .saturating_sub(base_len)
++            .saturating_sub(2048)
++            .max(4096);
++
++        let mut results: Vec<ExitCode> = Vec::new();
++        let mut chunk: Vec<PathBuf> = Vec::new();
++        let mut chunk_len = 0usize;
++
++        for path in paths {
++            let path_len = strip_current_dir(&path).as_os_str().len() + 1;
++
++            if !chunk.is_empty() && chunk_len + path_len > max_arg_length {
++                results.push(self.execute_batch_chunk(&chunk, buffer_output));
++                chunk.clear();
++                chunk_len = 0;
++            }
++
++            chunk_len += path_len;
++            chunk.push(path);
++        }
++
++        if !chunk.is_empty() {
++            results.push(self.execute_batch_chunk(&chunk, buffer_output));
++        }
++
++        merge_exitcodes(results)
++    }
++
++    /// Generate and execute a single command for a chunk (batch) of paths.
++    fn execute_batch_chunk(&self, paths: &[PathBuf], buffer_output: bool) -> ExitCode {
+         let mut cmd = Command::new(self.args[0].generate("", None));
+         cmd.stdin(Stdio::inherit());
+         cmd.stdout(Stdio::inherit());
+         cmd.stderr(Stdio::inherit());
+ 
+-        let mut paths: Vec<_> = paths.collect();
+-        let mut has_path = false;
+-
+         for arg in &self.args[1..] {
+             if arg.has_tokens() {
+-                paths.sort();
+-
+-                // A single `Tokens` is expected
+-                // So we can directly consume the iterator once and for all
+-                for path in &mut paths {
++                // A single `Tokens` is expected, so we can directly consume the
++                // paths for this chunk.
++                for path in paths {
+                     cmd.arg(arg.generate(strip_current_dir(path), self.path_separator.as_deref()));
+-                    has_path = true;
+                 }
+             } else {
+                 cmd.arg(arg.generate("", None));
+             }
+         }
+ 
+-        if has_path {
+-            execute_command(cmd, &Mutex::new(()), buffer_output)
+-        } else {
+-            ExitCode::Success
+-        }
++        execute_command(cmd, &Mutex::new(()), buffer_output)
+     }
+ }
+ 
++/// Returns the maximum argument length supported by the current platform, as reported by
++/// the operating system where possible. Falls back to a conservative value otherwise.
++#[cfg(all(unix, not(target_os = "redox")))]
++fn get_arg_max() -> usize {
++    let arg_max = unsafe { libc::sysconf(libc::_SC_ARG_MAX) };
++    if arg_max > 0 {
++        arg_max as usize
++    } else {
++        262_144
++    }
++}
++
++#[cfg(any(not(unix), target_os = "redox"))]
++fn get_arg_max() -> usize {
++    262_144
++}
++
+ /// Represents a template for a single command argument.
+ ///
+ /// The argument is either a collection of `Token`s including at least one placeholder variant, or

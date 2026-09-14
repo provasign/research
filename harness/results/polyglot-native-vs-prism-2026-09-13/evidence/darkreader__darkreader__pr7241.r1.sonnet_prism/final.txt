@@ -1,0 +1,15 @@
+All existing tests pass with the fix.
+
+## Summary
+
+The bug was in `indexSitesFixesConfig()` in `src/generators/utils/parse.ts`. The delimiter regex `/\s*={2,}\s*/gm` matched any run of `==` (2+ equals signs) anywhere in the text, including inside base64-encoded data URLs embedded in custom CSS (e.g. `...ErkJggg==')`). This caused the parser to incorrectly split a CSS block mid-string, treating text after the base64 padding as the start of a new record — which then got misinterpreted as a domain pattern and later crashed `createUrlRegex` when compiled as regex.
+
+Fixed by anchoring the delimiter regex to match only when `==...` occupies an entire line by itself (as the format intends, e.g. a line of just `====`):
+
+```js
+const delimiterRegex = /^\s*={2,}\s*$/gm;
+```
+
+This preserves detection of legitimate delimiter lines while no longer matching `==` padding that appears embedded within other content on a line (like a base64 string followed by `')  !important;`).
+
+Verified with the existing test suite (`tests/generators/utils/parse.tests.ts`), all 7 tests pass.

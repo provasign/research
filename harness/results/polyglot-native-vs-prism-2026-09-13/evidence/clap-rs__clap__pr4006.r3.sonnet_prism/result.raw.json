@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 180315,
+  "stop_reason": "end_turn",
+  "session_id": "aeb21945-6c9b-43e2-b66e-61ea9d719c01",
+  "total_cost_usd": 0.5354322000000001,
+  "usage": {
+    "input_tokens": 58,
+    "cache_creation_input_tokens": 44599,
+    "cache_read_input_tokens": 972971,
+    "output_tokens": 15714,
+    "output_tokens_details": {
+      "thinking_tokens": 8964
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 44599,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 415,
+        "cache_read_input_tokens": 50806,
+        "cache_creation_input_tokens": 818,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 818
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 5091,
+      "outputTokens": 19,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.005186,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 58,
+      "outputTokens": 15714,
+      "cacheReadInputTokens": 972971,
+      "cacheCreationInputTokens": 44599,
+      "webSearchRequests": 0,
+      "costUSD": 0.5302462000000001,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 8964,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 29,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "Confirmed pre-existing, unrelated to my change (fails identically on baseline main due to Rust's `PhantomData` Debug format differing by toolchain version).\n\n## Summary\n\nThe bug: when an arg required via `requires()` was also a member of an already-satisfied `ArgGroup`, `Usage::get_required_usage_from` filtered it out of the missing-required-args list entirely (since group members are normally omitted because the group's own usage notation, e.g. `<--first|--second>`, already covers them). This produced an empty header even though the error still fired.\n\nFix in `src/parser/validator.rs` (`Validator::missing_required_error`): after computing the usual `req_args`, add back any argument from `self.required` (or explicitly `incl`uded) that is a plain `Arg` (not a group), still missing, and not already listed \u2014 covering the case where an arg is required independently of its group membership.\n\nVerified:\n- The reported repro now produces the expected error header (`--first`) with an unchanged usage line.\n- Full `cargo test --test builder` suite: 1583 passed, 0 failed.\n- The one doctest failure (`PhantomData` Debug formatting) is pre-existing on `main`, unrelated to this change.\n\nNo test/doc/config files were modified.",
+  "ttft_ms": 1656,
+  "type": "result",
+  "duration_ms": 292017,
+  "uuid": "326d6b57-dae7-4610-8b2c-111b04192d27",
+  "ttft_stream_ms": 692,
+  "time_to_request_ms": 21,
+  "first_content_frame_ms": 692,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

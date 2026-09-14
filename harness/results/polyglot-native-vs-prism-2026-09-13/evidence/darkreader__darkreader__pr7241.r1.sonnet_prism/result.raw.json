@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 29174,
+  "stop_reason": "end_turn",
+  "session_id": "307cfbdf-57b5-480a-86b8-37e981a5cf65",
+  "total_cost_usd": 0.061440400000000006,
+  "usage": {
+    "input_tokens": 14,
+    "cache_creation_input_tokens": 6998,
+    "cache_read_input_tokens": 80452,
+    "output_tokens": 1516,
+    "output_tokens_details": {
+      "thinking_tokens": 127
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 6998,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 408,
+        "cache_read_input_tokens": 13563,
+        "cache_creation_input_tokens": 460,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 460
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 2095,
+      "outputTokens": 15,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.00217,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 14,
+      "outputTokens": 1516,
+      "cacheReadInputTokens": 80452,
+      "cacheCreationInputTokens": 6998,
+      "webSearchRequests": 0,
+      "costUSD": 0.05927040000000001,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 127,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 7,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "All existing tests pass with the fix.\n\n## Summary\n\nThe bug was in `indexSitesFixesConfig()` in `src/generators/utils/parse.ts`. The delimiter regex `/\\s*={2,}\\s*/gm` matched any run of `==` (2+ equals signs) anywhere in the text, including inside base64-encoded data URLs embedded in custom CSS (e.g. `...ErkJggg==')`). This caused the parser to incorrectly split a CSS block mid-string, treating text after the base64 padding as the start of a new record \u2014 which then got misinterpreted as a domain pattern and later crashed `createUrlRegex` when compiled as regex.\n\nFixed by anchoring the delimiter regex to match only when `==...` occupies an entire line by itself (as the format intends, e.g. a line of just `====`):\n\n```js\nconst delimiterRegex = /^\\s*={2,}\\s*$/gm;\n```\n\nThis preserves detection of legitimate delimiter lines while no longer matching `==` padding that appears embedded within other content on a line (like a base64 string followed by `')  !important;`).\n\nVerified with the existing test suite (`tests/generators/utils/parse.tests.ts`), all 7 tests pass.",
+  "ttft_ms": 3908,
+  "type": "result",
+  "duration_ms": 31384,
+  "uuid": "f428549a-19e5-4871-8d28-5b854363542e",
+  "ttft_stream_ms": 1689,
+  "time_to_request_ms": 41,
+  "first_content_frame_ms": 1689,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

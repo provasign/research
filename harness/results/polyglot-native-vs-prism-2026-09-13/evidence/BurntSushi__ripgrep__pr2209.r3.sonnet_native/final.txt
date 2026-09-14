@@ -1,0 +1,11 @@
+All tests pass. 
+
+## Summary
+
+**Root cause:** In `crates/printer/src/util.rs`, `Replacer::replace_all` extends the `subject` buffer past the match's actual end (`range.end`) by up to `MAX_LOOK_AHEAD` (128) bytes in multi-line mode, so the regex engine can correctly evaluate look-ahead assertions. It then called `Matcher::replace_with_captures_at`, whose generic implementation unconditionally appends everything after the last match (`&haystack[last_match..]`) to the output — including that extra look-ahead data that was never meant to be part of the actual matched/replaced text.
+
+**Fix:** Replaced the call to `replace_with_captures_at` with a manual search-and-replace loop using `captures_iter_at` that:
+- stops considering matches once they start at or beyond `range.end` (mirroring the existing bound used in `find_iter_at_in_context`), and
+- appends only the trailing unmatched text up to `range.end` (clamped to the buffer length), not the whole extended lookahead buffer.
+
+Verified against the reproduction case from the issue — output now matches the expected single line, and the full `grep-printer`, `grep-matcher`, and `grep-searcher` test suites (94 + 76 tests) still pass.

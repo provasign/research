@@ -1,0 +1,15 @@
+Those are pre-existing unrelated issues, not from my change.
+
+## Summary
+
+The bug: `--web` mode passed project **names** straight into the `projects` URL query parameter, but GitHub's web UI expects project **paths** (e.g. `OWNER/REPO/1`) there, while the API-based (non-web) path correctly resolves names to IDs via `ProjectsToIDs`.
+
+Fix (in `api/queries_repo.go` and `pkg/cmd/pr/shared/params.go`):
+- Added `ResourcePath` to `api.RepoProject` (fetched automatically by the existing GraphQL query as an extra field).
+- Added `RepoMetadataResult.ProjectsToPaths` to resolve project names to their GitHub path form by normalizing `resourcePath` (e.g. `/OWNER/REPO/projects/1` → `OWNER/REPO/1`).
+- `prShared.WithPrAndIssueQueryParams` now takes an `*api.Client` and the base repo, and when `Projects` are set, resolves the names to paths via a new `ProjectNamesToPaths` helper before building the `projects` query param.
+- Updated the two call sites in `pkg/cmd/issue/create/create.go` and the one in `pkg/cmd/pr/create/create.go` (`generateCompareURL`) to pass the client/repo.
+
+Now `-p "My Project"` works identically whether or not `--web` is used — the project name is resolved to the correct path internally.
+
+Verified with `go build ./...` and `go test ./pkg/cmd/issue/create/... ./pkg/cmd/pr/create/... ./pkg/cmd/pr/shared/... ./api/...`, all passing. No files were committed, per instructions.

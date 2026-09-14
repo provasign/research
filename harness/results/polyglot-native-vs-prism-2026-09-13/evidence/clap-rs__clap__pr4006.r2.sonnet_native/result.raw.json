@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 55543,
+  "stop_reason": "end_turn",
+  "session_id": "fdf0b004-68a1-400b-a299-b8d2d228ecb7",
+  "total_cost_usd": 0.151062,
+  "usage": {
+    "input_tokens": 20,
+    "cache_creation_input_tokens": 18069,
+    "cache_read_input_tokens": 162975,
+    "output_tokens": 4098,
+    "output_tokens_details": {
+      "thinking_tokens": 1593
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 18069,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 383,
+        "cache_read_input_tokens": 23243,
+        "cache_creation_input_tokens": 283,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 283
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 5091,
+      "outputTokens": 16,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.005171,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 20,
+      "outputTokens": 4098,
+      "cacheReadInputTokens": 162975,
+      "cacheCreationInputTokens": 18069,
+      "webSearchRequests": 0,
+      "costUSD": 0.145891,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 1593,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 10,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "Fixed the issue in `src/output/usage.rs`. \n\n**Root cause:** In `Usage::get_required_usage_from`, args belonging to any required `ArgGroup` were unconditionally excluded from the individually-listed missing-required-args (`args_in_groups`), on the assumption the group's own summary (`<--first|--second>`) would cover them. But when the group's requirement was already satisfied by another present member (e.g. `--second`), the group summary is correctly skipped \u2014 yet an individually required member (`first`, required via `require_first`'s `.requires(\"first\")`) was still being filtered out by the `args_in_groups` check, leaving the error message with no argument names at all.\n\n**Fix:** Only exclude a group's members from the individual listing when that group's requirement is *not already satisfied*. If the group is satisfied, its members remain eligible to be listed individually for other reasons (like an explicit `requires` link), so the error message correctly reports `--first` as missing.\n\nVerified with a standalone repro matching the issue (now correctly prints `--first`) and the full `builder` test suite (1583 tests passing, no regressions). Left uncommitted per instructions.",
+  "ttft_ms": 3729,
+  "type": "result",
+  "duration_ms": 102237,
+  "uuid": "39f200c3-c26c-448b-8932-676f0e4f71a7",
+  "ttft_stream_ms": 1661,
+  "time_to_request_ms": 18,
+  "first_content_frame_ms": 1661,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 35505,
+  "stop_reason": "end_turn",
+  "session_id": "84053428-5968-42d8-8502-4b051a1b9b4f",
+  "total_cost_usd": 0.08184200000000001,
+  "usage": {
+    "input_tokens": 20,
+    "cache_creation_input_tokens": 8444,
+    "cache_read_input_tokens": 106730,
+    "output_tokens": 2451,
+    "output_tokens_details": {
+      "thinking_tokens": 774
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 8444,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 338,
+        "cache_read_input_tokens": 13447,
+        "cache_creation_input_tokens": 454,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 454
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 2095,
+      "outputTokens": 15,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.00217,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 20,
+      "outputTokens": 2451,
+      "cacheReadInputTokens": 106730,
+      "cacheCreationInputTokens": 8444,
+      "webSearchRequests": 0,
+      "costUSD": 0.079672,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 774,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 10,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "All existing tests pass with the fix.\n\n## Summary\n\nThe bug was in `src/generators/utils/parse.ts:146`. The delimiter regex `/\\s*={2,}\\s*/gm` used to split theme-fix records was matching *any* run of 2+ `=` characters anywhere in the text \u2014 including the `==` padding at the end of base64-encoded data URLs embedded in custom CSS. This caused the parser to incorrectly split records mid-line, leaking trailing CSS fragments (like `') !important;`) into `domainPatterns`, which later crashed `createUrlRegex` with an \"Unmatched )\" error.\n\nFix: anchor the delimiter regex to whole lines (`^\\s*={2,}\\s*$`) so it only matches lines that consist solely of `=` characters (optionally surrounded by whitespace), not incidental `==` sequences within CSS/base64 content.\n\nRan the relevant narrow test suites (`tests/config` and `tests/generators/utils`) \u2014 all 13 tests pass.",
+  "ttft_ms": 3956,
+  "type": "result",
+  "duration_ms": 39597,
+  "uuid": "2192d022-d032-4c37-a89d-5585e7f898ac",
+  "ttft_stream_ms": 1113,
+  "time_to_request_ms": 18,
+  "first_content_frame_ms": 1113,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

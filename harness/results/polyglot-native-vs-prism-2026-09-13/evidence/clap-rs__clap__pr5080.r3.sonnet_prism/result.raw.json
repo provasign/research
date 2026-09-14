@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 196257,
+  "stop_reason": "end_turn",
+  "session_id": "27db3b42-13d3-4d47-a5fb-cbe5a3c4e34c",
+  "total_cost_usd": 0.5761343999999998,
+  "usage": {
+    "input_tokens": 62,
+    "cache_creation_input_tokens": 49116,
+    "cache_read_input_tokens": 1137202,
+    "output_tokens": 15044,
+    "output_tokens_details": {
+      "thinking_tokens": 8811
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 49116,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 562,
+        "cache_read_input_tokens": 54929,
+        "cache_creation_input_tokens": 1212,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 1212
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 1586,
+      "outputTokens": 16,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.001666,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 62,
+      "outputTokens": 15044,
+      "cacheReadInputTokens": 1137202,
+      "cacheCreationInputTokens": 49116,
+      "webSearchRequests": 0,
+      "costUSD": 0.5744683999999999,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 8811,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 31,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "All 83 library tests and all 820 builder integration tests pass.\n\n## Summary\n\n**Root cause:** `UnknownArgumentValueParser` (and any custom `value_parser` set on a flag-like arg using `ArgAction::SetTrue`/`SetFalse`/`Count`) was being invoked not only when the user actually supplied the argument, but also whenever clap auto-filled the argument's *implicit* default value (e.g. `\"false\"` for an unset `SetTrue` flag) during `Parser::add_default_value`. Since these implicit defaults are synthetic internal values (not real command-line input), running them through a user-supplied `value_parser` \u2014 especially one designed to always error, like `UnknownArgumentValueParser` \u2014 caused `get_matches()` to fail even when the flag was never used on the command line.\n\n**Fix** (`clap_builder/src/parser/parser.rs`): `Parser::push_arg_values` now takes the `ValueSource`. When populating a flag-like argument's value from an internally-synthesized default (`ValueSource::DefaultValue` and the argument doesn't actually take values), it uses the action's own built-in parser (`ArgAction::default_value_parser`, e.g. `bool`/`u8`) instead of the argument's configured `value_parser`. Real command-line values, and any `Set`/`Append` argument's default values, are unaffected and continue to go through the user's `value_parser` as before.\n\nVerified with the existing `unknown_argument_flag`/`unknown_argument_option` tests (still pass, confirming the parser still errors when the hidden flag is genuinely used) and a manual repro confirming `get_matches()` no longer fails when the flag is absent.",
+  "ttft_ms": 3101,
+  "type": "result",
+  "duration_ms": 218958,
+  "uuid": "a1a79b25-0ddb-45ee-a10d-da4cf687ba12",
+  "ttft_stream_ms": 1246,
+  "time_to_request_ms": 22,
+  "first_content_frame_ms": 1247,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

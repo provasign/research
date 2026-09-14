@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 149928,
+  "stop_reason": "end_turn",
+  "session_id": "6071453c-7a4d-4bc7-9d27-9e31421a9ed3",
+  "total_cost_usd": 0.40809979999999996,
+  "usage": {
+    "input_tokens": 68,
+    "cache_creation_input_tokens": 33044,
+    "cache_read_input_tokens": 840024,
+    "output_tokens": 10642,
+    "output_tokens_details": {
+      "thinking_tokens": 3583
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 33044,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 527,
+        "cache_read_input_tokens": 39665,
+        "cache_creation_input_tokens": 404,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 404
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 1293,
+      "outputTokens": 14,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.001363,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 68,
+      "outputTokens": 10642,
+      "cacheReadInputTokens": 840024,
+      "cacheCreationInputTokens": 33044,
+      "webSearchRequests": 0,
+      "costUSD": 0.40673679999999995,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 3583,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 34,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "All tests pass and the build is clean.\n\n## Summary\n\nThe bug: `gh issue create -w -p \"Project Name\"` (and the equivalent `pr create -w`) put the raw project **name** into the `projects` query parameter of the web URL, but GitHub's web UI expects a project **path** (e.g. `/owner/repo/projects/1`) there. The non-web path worked because it resolves project names to GraphQL IDs via the API instead.\n\nFix (in `api/queries_repo.go` and `pkg/cmd/pr/shared/params.go`):\n- Added `ResourcePath` to `api.RepoProject` (already fetched via existing GraphQL queries \u2014 the graphql-go client auto-derives the field name).\n- Added `RepoMetadataResult.ProjectsToPaths`, mirroring the existing `ProjectsToIDs`.\n- Added `shared.ProjectsToPaths(client, baseRepo, names)`, which fetches repo/org project metadata and resolves names to resource paths.\n- In `pkg/cmd/issue/create/create.go` and `pkg/cmd/pr/create/create.go`, before building the web URL, project names are now resolved to resource paths via this helper, so `--web` and non-`--web` both accept the same project **name** input (option 1 from the issue, non-breaking).\n\nVerified with `go build ./...` and `go test ./pkg/cmd/issue/create/... ./pkg/cmd/pr/create/... ./pkg/cmd/pr/shared/... ./api/...` \u2014 all passing. No test/doc/config files were modified.",
+  "ttft_ms": 3198,
+  "type": "result",
+  "duration_ms": 153666,
+  "uuid": "2a6215ae-ea60-4bb0-9ce5-5a223ad419d5",
+  "ttft_stream_ms": 1520,
+  "time_to_request_ms": 20,
+  "first_content_frame_ms": 1520,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

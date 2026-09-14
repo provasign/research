@@ -1,0 +1,36 @@
+Work only in the repository in your current directory. Do not use the network,
+git history, benchmark files, saved answers, memory, skills, or delegated agents. Fix the SOURCE
+code so the issue below is resolved. Do not modify tests, docs, changelogs, or configuration.
+Make the smallest robust change. Investigate, edit, and run a narrow relevant test if time permits;
+do not commit. Dependencies are preinstalled; use `go test ./...` for narrow tests. You have a
+strict 5-minute work budget. A patch present at timeout will still be scored.
+
+ISSUE:
+Add confirmation flag to `gh repo edit --visibility` command
+### Describe the feature or problem you’d like to solve
+
+Changing the visibility of a repository is one of the most impactful, potentially dangerous actions because of the consequences when going from public to private or internal or vice versa:
+
+> - If you decide to make this repository public in the future, it will not be possible to restore these stars and watchers and this will affect its repository rankings.
+> - Dependency graph and Dependabot alerts will remain enabled with permission to perform read-only analysis on this repository. Any custom Dependabot alert rules will be disabled unless GitHub Advanced Security is enabled for this repository.
+> - Code scanning will become unavailable.
+> - Current forks will remain public and will be detached from this repository.
+
+![Screenshot of GitHub repository settings danger zone](https://github.com/user-attachments/assets/4ebb49f2-fa57-433f-b79f-af47c2b7e940)
+![Screenshot of GitHub repository visibility changing from private to public](https://github.com/user-attachments/assets/a96fd66e-e764-45b6-8162-0c0939e6346b)
+
+Users are interactively prompted when using `gh repo edit` command to change visibility, however there are no safeguards when used non-interactively:
+
+```shell
+➜ gh repo edit
+? What do you want to edit? Visibility
+? Visibility private
+! Changing the repository visibility to private will cause permanent loss of stars and watchers.
+? Do you want to change visibility to private? (y/N)
+```
+
+This issue is to implement an experience similar to various `gh <primitive> delete` commands requiring a boolean flag to confirm changing visibility when used non-interactively.
+
+### Acceptance Criteria
+
+- [ ] When `gh repo edit --visibility` is called non-interactively, it requires the `--accept-visibility-change-consequences` flag to be included or the command fails

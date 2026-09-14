@@ -1,0 +1,3 @@
+Only the actual delimiter line matches now, and the base64 `==` inside the CSS no longer matches. The fix is complete and existing tests pass.
+
+**Summary:** In `src/generators/utils/parse.ts`, the delimiter regex `/\s*={2,}\s*/gm` matched any run of 2+ equals signs anywhere in the text, including the `==` base64 padding inside `url('data:...==')`. This split records mid-line, leaking trailing text like `') !important;` into `domainPatterns`, which later crashed `createUrlRegex`. Fixed by anchoring the regex to whole lines (`/^\s*={2,}\s*$/gm`), so only lines consisting solely of `=` characters (the actual block delimiters) are matched.

@@ -1,0 +1,89 @@
+diff --git a/api/queries_user.go b/api/queries_user.go
+index 3822f20..9903e58 100644
+--- a/api/queries_user.go
++++ b/api/queries_user.go
+@@ -19,3 +19,29 @@ func CurrentUserID(client *Client, hostname string) (string, error) {
+ 	err := client.Query(hostname, "UserCurrent", &query, nil)
+ 	return query.Viewer.ID, err
+ }
++
++// CurrentLoginNameAndOrgs returns the current authenticated user's login name
++// along with the names of the organizations they are a member of.
++func CurrentLoginNameAndOrgs(client *Client, hostname string) (string, []string, error) {
++	var query struct {
++		Viewer struct {
++			Login         string
++			Organizations struct {
++				Nodes []struct {
++					Login string
++				}
++			} `graphql:"organizations(first: 100)"`
++		}
++	}
++	err := client.Query(hostname, "UserCurrent", &query, nil)
++	if err != nil {
++		return "", nil, err
++	}
++
++	orgs := make([]string, len(query.Viewer.Organizations.Nodes))
++	for i, node := range query.Viewer.Organizations.Nodes {
++		orgs[i] = node.Login
++	}
++
++	return query.Viewer.Login, orgs, nil
++}
+diff --git a/pkg/cmd/repo/create/create.go b/pkg/cmd/repo/create/create.go
+index 8e1ae0b..9f35f46 100644
+--- a/pkg/cmd/repo/create/create.go
++++ b/pkg/cmd/repo/create/create.go
+@@ -273,7 +273,7 @@ func createFromScratch(opts *CreateOptions) error {
+ 	host, _ := cfg.DefaultHost()
+ 
+ 	if opts.Interactive {
+-		opts.Name, opts.Description, opts.Visibility, err = interactiveRepoInfo(opts.Prompter, "")
++		opts.Name, opts.Description, opts.Visibility, err = interactiveRepoInfo(httpClient, host, opts.Prompter, "")
+ 		if err != nil {
+ 			return err
+ 		}
+@@ -467,7 +467,7 @@ func createFromLocal(opts *CreateOptions) error {
+ 	}
+ 
+ 	if opts.Interactive {
+-		opts.Name, opts.Description, opts.Visibility, err = interactiveRepoInfo(opts.Prompter, filepath.Base(absPath))
++		opts.Name, opts.Description, opts.Visibility, err = interactiveRepoInfo(httpClient, host, opts.Prompter, filepath.Base(absPath))
+ 		if err != nil {
+ 			return err
+ 		}
+@@ -699,12 +699,31 @@ func interactiveLicense(client *http.Client, hostname string, prompter iprompter
+ }
+ 
+ // name, description, and visibility
+-func interactiveRepoInfo(prompter iprompter, defaultName string) (string, string, string, error) {
++func interactiveRepoInfo(client *http.Client, hostname string, prompter iprompter, defaultName string) (string, string, string, error) {
+ 	name, err := prompter.Input("Repository name", defaultName)
+ 	if err != nil {
+ 		return "", "", "", err
+ 	}
+ 
++	// If the user did not specify an owner prefix (e.g. "owner/repo"), offer
++	// to select an owner from their personal account and any organizations
++	// they belong to. This lookup is best-effort: if it fails, we silently
++	// fall back to creating the repository under the default owner.
++	if !strings.Contains(name, "/") {
++		apiClient := api.NewClientFromHTTP(client)
++		login, orgs, err := api.CurrentLoginNameAndOrgs(apiClient, hostname)
++		if err == nil && len(orgs) > 0 {
++			options := append([]string{login}, orgs...)
++			selected, err := prompter.Select("Repository owner", login, options)
++			if err != nil {
++				return "", "", "", err
++			}
++			if options[selected] != login {
++				name = options[selected] + "/" + name
++			}
++		}
++	}
++
+ 	description, err := prompter.Input("Description", defaultName)
+ 	if err != nil {
+ 		return "", "", "", err

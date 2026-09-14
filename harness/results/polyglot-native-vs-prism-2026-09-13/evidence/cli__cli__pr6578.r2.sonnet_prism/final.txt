@@ -1,0 +1,6 @@
+All tests and vet pass. Summary of the fix for `gh repo create`'s "Prompt for owner when repo name is un-prefixed":
+
+- **`api/queries_user.go`**: added `CurrentLoginNameAndOrgs`, a GraphQL query that returns the current user's login plus the organizations they belong to.
+- **`pkg/cmd/repo/create/create.go`**: `interactiveRepoInfo` now takes the HTTP client/hostname. After the user enters a repo name, if it isn't already owner-prefixed, it fetches the login + orgs; when there's at least one org, it shows a `Repository owner` select prompt (personal account first/default, then orgs). Picking an org prefixes the name with `org/`; picking the personal account leaves it unprefixed. The lookup is best-effort — any API error simply skips the owner prompt so behavior degrades gracefully. Both `createFromScratch` and `createFromLocal` now pass their existing `httpClient`/`host` through.
+
+Verified with `go build ./...`, `go vet`, and `go test ./pkg/cmd/repo/create/... ./api/...` — all pass. No tests were modified.

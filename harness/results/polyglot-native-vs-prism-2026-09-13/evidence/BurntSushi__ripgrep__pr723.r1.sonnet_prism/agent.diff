@@ -1,0 +1,110 @@
+diff --git a/src/app.rs b/src/app.rs
+index 7a10b35..cc3f2af 100644
+--- a/src/app.rs
++++ b/src/app.rs
+@@ -146,6 +146,7 @@ pub fn app() -> App<'static, 'static> {
+              .value_name("FILE").takes_value(true)
+              .set(ArgSettings::AllowLeadingHyphen)
+              .multiple(true).number_of_values(1))
++        .arg(flag("fixed-width-line-numbers"))
+         .arg(flag("follow").short("L"))
+         .arg(flag("max-count")
+              .short("m").value_name("NUM").takes_value(true)
+@@ -431,6 +432,11 @@ lazy_static! {
+               When specifying multiple ignore files, earlier files have lower \
+               precedence than later files. If you are looking for a way to \
+               include or exclude files and directories directly used -g instead.");
++        doc!(h, "fixed-width-line-numbers",
++             "Left-pad line numbers to a fixed width.",
++             "Left-pad line numbers with spaces so that they are all a fixed \
++              width. This is useful for keeping the indentation of matched \
++              lines consistent. This implies --line-number.");
+         doc!(h, "follow",
+              "Follow symbolic links.");
+         doc!(h, "max-count",
+diff --git a/src/args.rs b/src/args.rs
+index 106762c..23c3a38 100644
+--- a/src/args.rs
++++ b/src/args.rs
+@@ -45,6 +45,7 @@ pub struct Args {
+     files_without_matches: bool,
+     eol: u8,
+     files: bool,
++    fixed_width_line_numbers: bool,
+     follow: bool,
+     glob_overrides: Override,
+     grep: Grep,
+@@ -138,6 +139,7 @@ impl Args {
+             .column(self.column)
+             .context_separator(self.context_separator.clone())
+             .eol(self.eol)
++            .fixed_width_line_numbers(self.fixed_width_line_numbers)
+             .heading(self.heading)
+             .line_per_match(self.line_per_match)
+             .null(self.null)
+@@ -328,6 +330,8 @@ impl<'a> ArgMatches<'a> {
+             files_without_matches: self.is_present("files-without-match"),
+             eol: b'\n',
+             files: self.is_present("files"),
++            fixed_width_line_numbers:
++                self.is_present("fixed-width-line-numbers"),
+             follow: self.is_present("follow"),
+             glob_overrides: try!(self.overrides()),
+             grep: try!(self.grep()),
+@@ -609,6 +613,7 @@ impl<'a> ArgMatches<'a> {
+             || self.is_present("column")
+             || self.is_present("pretty")
+             || self.is_present("vimgrep")
++            || self.is_present("fixed-width-line-numbers")
+         }
+     }
+ 
+diff --git a/src/printer.rs b/src/printer.rs
+index 37680f9..288bce8 100644
+--- a/src/printer.rs
++++ b/src/printer.rs
+@@ -78,6 +78,8 @@ pub struct Printer<W> {
+     eol: u8,
+     /// A file separator to show before any matches are printed.
+     file_separator: Option<Vec<u8>>,
++    /// Whether to left-pad line numbers to a fixed width.
++    fixed_width_line_numbers: bool,
+     /// Whether to show file name as a heading or not.
+     ///
+     /// N.B. If with_filename is false, then this setting has no effect.
+@@ -111,6 +113,7 @@ impl<W: WriteColor> Printer<W> {
+             context_separator: "--".to_string().into_bytes(),
+             eol: b'\n',
+             file_separator: None,
++            fixed_width_line_numbers: false,
+             heading: false,
+             line_per_match: false,
+             null: false,
+@@ -155,6 +158,12 @@ impl<W: WriteColor> Printer<W> {
+         self
+     }
+ 
++    /// Whether to left-pad line numbers to a fixed width with spaces.
++    pub fn fixed_width_line_numbers(mut self, yes: bool) -> Printer<W> {
++        self.fixed_width_line_numbers = yes;
++        self
++    }
++
+     /// Whether to show file name as a heading or not.
+     ///
+     /// N.B. If with_filename is false, then this setting has no effect.
+@@ -457,7 +466,13 @@ impl<W: WriteColor> Printer<W> {
+     }
+ 
+     fn line_number(&mut self, n: u64, sep: u8) {
+-        self.write_colored(n.to_string().as_bytes(), |colors| colors.line());
++        const FIXED_WIDTH: usize = 6;
++        let n = n.to_string();
++        if self.fixed_width_line_numbers && n.len() < FIXED_WIDTH {
++            let padding = " ".repeat(FIXED_WIDTH - n.len());
++            self.write(padding.as_bytes());
++        }
++        self.write_colored(n.as_bytes(), |colors| colors.line());
+         self.separator(&[sep]);
+     }
+ 

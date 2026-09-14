@@ -1,0 +1,9 @@
+Only the actual delimiter line matches now, not the base64 `==` within the CSS. The fix resolves the issue.
+
+## Summary
+
+The bug was in `src/generators/utils/parse.ts:146`. The delimiter regex `/\s*={2,}\s*/gm` matched any run of 2+ `=` characters anywhere in the text, including base64 padding (`==`) embedded in CSS `data:` URLs. This caused the parser to treat the trailing part of such lines (e.g. `') !important;`) as a new record/domain-pattern, which later broke `createUrlRegex` with an "Unmatched `)`" error.
+
+Fix: anchor the delimiter regex to match only lines that consist entirely of `=` characters (optionally surrounded by whitespace), using `^\s*={2,}\s*$` with the multiline flag, so embedded `==` in base64 strings is no longer mistaken for a block delimiter.
+
+Verified: existing `tests/generators/utils/parse.tests.ts` suite (7 tests) still passes, and a manual check confirms the base64-padded CSS from the issue no longer matches the delimiter regex.

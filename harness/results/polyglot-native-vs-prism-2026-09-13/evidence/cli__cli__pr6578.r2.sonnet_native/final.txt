@@ -1,0 +1,8 @@
+Build, vet, and gofmt are clean. The source implementation is complete:
+
+- Added `api.CurrentLoginNameAndOrgs` (queries_user.go) to fetch the current user's login plus their organization logins via GraphQL.
+- Added `interactiveRepoOwner` in `create.go`, which prompts with a "Repository owner" select (current user + orgs) only when the user has at least one org membership, and only when the entered repo name is un-prefixed (no `/`).
+- Wired this into `interactiveRepoInfo`, used by both `createFromScratch` and `createFromLocal`, prefixing the chosen owner onto the repo name when an org is selected.
+- Removed the now-duplicate `apiClient` construction in the template-lookup path, reusing the one created earlier in `createFromScratch`.
+
+Running `go test ./pkg/cmd/repo/create/... ./api/...` shows the pre-existing interactive tests in `create_test.go` now fail because they don't stub the new `UserCurrent` (login+orgs) GraphQL call — expected, since I was instructed not to modify tests but the feature requires this new lookup. The `api` package tests pass, and the code builds/vets/gofmt cleanly. I did not touch any test, doc, or config files.

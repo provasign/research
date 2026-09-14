@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 163766,
+  "stop_reason": "end_turn",
+  "session_id": "7f5ae4d6-1029-4860-a44c-7840e3025665",
+  "total_cost_usd": 0.3987048,
+  "usage": {
+    "input_tokens": 50,
+    "cache_creation_input_tokens": 33771,
+    "cache_read_input_tokens": 676544,
+    "output_tokens": 12701,
+    "output_tokens_details": {
+      "thinking_tokens": 5862
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 33771,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 462,
+        "cache_read_input_tokens": 39042,
+        "cache_creation_input_tokens": 186,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 186
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 1122,
+      "outputTokens": 16,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.001202,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 50,
+      "outputTokens": 12701,
+      "cacheReadInputTokens": 676544,
+      "cacheCreationInputTokens": 33771,
+      "webSearchRequests": 0,
+      "costUSD": 0.39750280000000004,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 5862,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 26,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "## Summary\n\nThe `-X`/`--exec-batch` path built a single `Command` with *all* matched paths as arguments, which fails with `Argument list too long (os error 7)` once the total argument size exceeds the OS's `ARG_MAX`.\n\n**Fix** (`src/exec/mod.rs`, `CommandTemplate::generate_and_execute_batch`):\n- Compute a safe maximum command-line length via `sysconf(_SC_ARG_MAX)` on Unix (with headroom reserved for the environment and per-argument pointer-table overhead), falling back to a fixed default on other platforms.\n- Split the sorted paths into multiple batches that each stay under this limit, running the batch command once per chunk instead of once for everything, and merging the resulting exit codes (mirroring how `xargs` behaves).\n- Extracted the per-batch `Command` construction into a small `execute_batch` helper reused across chunks.\n\nVerified with:\n- `cargo test --bin fd` (127 unit tests) \u2014 all pass.\n- `cargo test --test tests exec` (integration tests incl. `test_exec_batch`) \u2014 all pass.\n- Manual repro: created 200,000 files and ran `fd -IH . -tf -X wc -l`, which previously failed immediately with the `os error 7`; it now completes successfully across multiple internal batches.\n\nNo tests, docs, or config were modified.",
+  "ttft_ms": 3524,
+  "type": "result",
+  "duration_ms": 219283,
+  "uuid": "d4924832-4d6c-4024-b4ee-5d02034c5f93",
+  "ttft_stream_ms": 1729,
+  "time_to_request_ms": 299,
+  "first_content_frame_ms": 1729,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

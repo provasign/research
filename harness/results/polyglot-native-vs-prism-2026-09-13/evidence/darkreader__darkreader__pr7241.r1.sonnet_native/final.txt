@@ -1,0 +1,9 @@
+All existing tests pass with the fix.
+
+## Summary
+
+The bug was in `src/generators/utils/parse.ts:146`. The delimiter regex `/\s*={2,}\s*/gm` used to split theme-fix records was matching *any* run of 2+ `=` characters anywhere in the text — including the `==` padding at the end of base64-encoded data URLs embedded in custom CSS. This caused the parser to incorrectly split records mid-line, leaking trailing CSS fragments (like `') !important;`) into `domainPatterns`, which later crashed `createUrlRegex` with an "Unmatched )" error.
+
+Fix: anchor the delimiter regex to whole lines (`^\s*={2,}\s*$`) so it only matches lines that consist solely of `=` characters (optionally surrounded by whitespace), not incidental `==` sequences within CSS/base64 content.
+
+Ran the relevant narrow test suites (`tests/config` and `tests/generators/utils`) — all 13 tests pass.

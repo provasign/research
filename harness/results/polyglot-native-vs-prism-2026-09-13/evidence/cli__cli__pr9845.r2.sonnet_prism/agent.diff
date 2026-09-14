@@ -1,0 +1,49 @@
+diff --git a/pkg/cmd/repo/edit/edit.go b/pkg/cmd/repo/edit/edit.go
+index 508dea0..5980ec6 100644
+--- a/pkg/cmd/repo/edit/edit.go
++++ b/pkg/cmd/repo/edit/edit.go
+@@ -49,15 +49,16 @@ const (
+ )
+ 
+ type EditOptions struct {
+-	HTTPClient      *http.Client
+-	Repository      ghrepo.Interface
+-	IO              *iostreams.IOStreams
+-	Edits           EditRepositoryInput
+-	AddTopics       []string
+-	RemoveTopics    []string
+-	InteractiveMode bool
+-	Detector        fd.Detector
+-	Prompter        iprompter
++	HTTPClient                         *http.Client
++	Repository                         ghrepo.Interface
++	IO                                 *iostreams.IOStreams
++	Edits                              EditRepositoryInput
++	AddTopics                          []string
++	RemoveTopics                       []string
++	InteractiveMode                    bool
++	AcceptVisibilityChangeConsequences bool
++	Detector                           fd.Detector
++	Prompter                           iprompter
+ 	// Cache of current repo topics to avoid retrieving them
+ 	// in multiple flows.
+ 	topicsCache []string
+@@ -142,6 +143,10 @@ func NewCmdEdit(f *cmdutil.Factory, runF func(options *EditOptions) error) *cobr
+ 				return cmdutil.FlagErrorf("specify properties to edit when not running interactively")
+ 			}
+ 
++			if opts.Edits.Visibility != nil && !opts.InteractiveMode && !opts.AcceptVisibilityChangeConsequences {
++				return cmdutil.FlagErrorf("--accept-visibility-change-consequences required when changing visibility via --visibility")
++			}
++
+ 			if runF != nil {
+ 				return runF(opts)
+ 			}
+@@ -153,6 +158,7 @@ func NewCmdEdit(f *cmdutil.Factory, runF func(options *EditOptions) error) *cobr
+ 	cmdutil.NilStringFlag(cmd, &opts.Edits.Homepage, "homepage", "h", "Repository home page `URL`")
+ 	cmdutil.NilStringFlag(cmd, &opts.Edits.DefaultBranch, "default-branch", "", "Set the default branch `name` for the repository")
+ 	cmdutil.NilStringFlag(cmd, &opts.Edits.Visibility, "visibility", "", "Change the visibility of the repository to {public,private,internal}")
++	cmd.Flags().BoolVar(&opts.AcceptVisibilityChangeConsequences, "accept-visibility-change-consequences", false, "Accept the consequences of changing the repository visibility")
+ 	cmdutil.NilBoolFlag(cmd, &opts.Edits.IsTemplate, "template", "", "Make the repository available as a template repository")
+ 	cmdutil.NilBoolFlag(cmd, &opts.Edits.EnableIssues, "enable-issues", "", "Enable issues in the repository")
+ 	cmdutil.NilBoolFlag(cmd, &opts.Edits.EnableProjects, "enable-projects", "", "Enable projects in the repository")

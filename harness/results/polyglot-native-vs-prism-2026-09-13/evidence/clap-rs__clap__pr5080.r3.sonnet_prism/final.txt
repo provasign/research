@@ -1,0 +1,9 @@
+All 83 library tests and all 820 builder integration tests pass.
+
+## Summary
+
+**Root cause:** `UnknownArgumentValueParser` (and any custom `value_parser` set on a flag-like arg using `ArgAction::SetTrue`/`SetFalse`/`Count`) was being invoked not only when the user actually supplied the argument, but also whenever clap auto-filled the argument's *implicit* default value (e.g. `"false"` for an unset `SetTrue` flag) during `Parser::add_default_value`. Since these implicit defaults are synthetic internal values (not real command-line input), running them through a user-supplied `value_parser` — especially one designed to always error, like `UnknownArgumentValueParser` — caused `get_matches()` to fail even when the flag was never used on the command line.
+
+**Fix** (`clap_builder/src/parser/parser.rs`): `Parser::push_arg_values` now takes the `ValueSource`. When populating a flag-like argument's value from an internally-synthesized default (`ValueSource::DefaultValue` and the argument doesn't actually take values), it uses the action's own built-in parser (`ArgAction::default_value_parser`, e.g. `bool`/`u8`) instead of the argument's configured `value_parser`. Real command-line values, and any `Set`/`Append` argument's default values, are unaffected and continue to go through the user's `value_parser` as before.
+
+Verified with the existing `unknown_argument_flag`/`unknown_argument_option` tests (still pass, confirming the parser still errors when the hidden flag is genuinely used) and a manual repro confirming `get_matches()` no longer fails when the flag is absent.

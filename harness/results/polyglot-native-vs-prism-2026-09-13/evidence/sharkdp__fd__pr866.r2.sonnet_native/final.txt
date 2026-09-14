@@ -1,0 +1,16 @@
+The change looks clean and minimal in scope. Summary:
+
+## Summary
+
+Fixed `-X`/`--exec-batch` failing with "Argument list too long" when passed a very large number of files.
+
+**Root cause:** `generate_and_execute_batch` in `src/exec/mod.rs` built a single `Command` with every matched path appended as an argument, with no bound on the total argument-list size, so on large result sets it exceeded the OS's `ARG_MAX`.
+
+**Fix:** The batch executor now splits the paths into multiple chunks sized to stay under the platform's actual argument-length limit (queried via `sysconf(_SC_ARG_MAX)` on Unix, with a conservative fallback elsewhere and a safety margin reserved for the environment), running the command once per chunk and merging the exit codes (`src/exec/mod.rs`).
+
+**Verification:**
+- `cargo build` succeeds.
+- `cargo test --bin fd exec` — all 24 existing exec-related tests pass unchanged.
+- Manual repro: created 300,000 files and ran `fd -IH . -tf -X wc -l`, which previously failed with "Argument list too long"; it now completes successfully across multiple batched invocations.
+
+No tests, docs, or config were modified.

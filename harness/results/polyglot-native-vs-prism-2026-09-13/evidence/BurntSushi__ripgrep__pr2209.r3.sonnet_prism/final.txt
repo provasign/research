@@ -1,0 +1,6 @@
+All tests pass and the reported issue is fixed. Summary of the fix in `crates/printer/src/util.rs` (`Replacer::replace_all`):
+
+- **Root cause**: For multiline matches, `subject` is extended past `range.end` (by up to `MAX_LOOK_AHEAD` bytes) to give the regex engine enough context for look-ahead. But `Matcher::replace_with_captures_at`'s default implementation *unconditionally* appends everything from the end of the last processed match to the end of the haystack (`dst.extend(&haystack[last_match..])`), even when the `append` callback stops iteration early. That caused all the extra look-ahead content to leak into the final replacement output.
+- **Fix**: after the replace call, truncate `dst` by exactly the number of extra bytes (`subject.len() - range.end`) that were appended due to the look-ahead extension. Also added a guard in the `append` callback to stop as soon as a match starts at or beyond `range.end`, mirroring the existing logic in `find_iter_at_in_context`.
+
+Verified with the exact reproduction from the issue — output now matches the expected single line, and all 94 existing `grep-printer` tests (including the multiline replacement tests) still pass.

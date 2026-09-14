@@ -1,0 +1,153 @@
+diff --git a/src/exec/mod.rs b/src/exec/mod.rs
+index a364e86..e9f3a64 100644
+--- a/src/exec/mod.rs
++++ b/src/exec/mod.rs
+@@ -13,7 +13,7 @@ use anyhow::{anyhow, Result};
+ use lazy_static::lazy_static;
+ use regex::Regex;
+ 
+-use crate::exit_codes::ExitCode;
++use crate::exit_codes::{merge_exitcodes, ExitCode};
+ use crate::filesystem::strip_current_dir;
+ 
+ use self::command::execute_command;
+@@ -163,35 +163,118 @@ impl CommandTemplate {
+     where
+         I: Iterator<Item = PathBuf>,
+     {
+-        let mut cmd = Command::new(self.args[0].generate("", None));
+-        cmd.stdin(Stdio::inherit());
+-        cmd.stdout(Stdio::inherit());
+-        cmd.stderr(Stdio::inherit());
+-
+         let mut paths: Vec<_> = paths.collect();
+-        let mut has_path = false;
++        paths.sort();
+ 
+-        for arg in &self.args[1..] {
+-            if arg.has_tokens() {
+-                paths.sort();
+-
+-                // A single `Tokens` is expected
+-                // So we can directly consume the iterator once and for all
+-                for path in &mut paths {
+-                    cmd.arg(arg.generate(strip_current_dir(path), self.path_separator.as_deref()));
+-                    has_path = true;
++        if paths.is_empty() {
++            return ExitCode::Success;
++        }
++
++        let max_arg_length = max_command_line_length();
++
++        // Every argument occupies space for its bytes plus a terminating NUL, as well as an
++        // entry in the argv pointer array that the kernel/shell also has to account for.
++        const ARG_OVERHEAD: usize = std::mem::size_of::<usize>() + 1;
++
++        // Length of everything except the placeholder-generated arguments (executable name and
++        // any fixed arguments), used to determine how many paths can be batched together without
++        // exceeding the maximum command line length supported by the shell/OS.
++        let fixed_length: usize = std::iter::once(&self.args[0])
++            .chain(self.args[1..].iter().filter(|arg| !arg.has_tokens()))
++            .map(|arg| arg.generate("", None).len() + ARG_OVERHEAD)
++            .sum();
++
++        let mut results = Vec::new();
++        let mut chunk_start = 0;
++        while chunk_start < paths.len() {
++            let mut chunk_length = fixed_length;
++            let mut chunk_end = chunk_start;
++
++            while chunk_end < paths.len() {
++                let arg_length = self.args[1..]
++                    .iter()
++                    .filter(|arg| arg.has_tokens())
++                    .map(|arg| {
++                        arg.generate(
++                            strip_current_dir(&paths[chunk_end]),
++                            self.path_separator.as_deref(),
++                        )
++                        .len()
++                            + ARG_OVERHEAD
++                    })
++                    .sum::<usize>();
++
++                if chunk_end > chunk_start && chunk_length + arg_length > max_arg_length {
++                    break;
++                }
++
++                chunk_length += arg_length;
++                chunk_end += 1;
++            }
++
++            let mut cmd = Command::new(self.args[0].generate("", None));
++            cmd.stdin(Stdio::inherit());
++            cmd.stdout(Stdio::inherit());
++            cmd.stderr(Stdio::inherit());
++
++            for arg in &self.args[1..] {
++                if arg.has_tokens() {
++                    for path in &paths[chunk_start..chunk_end] {
++                        cmd.arg(arg.generate(strip_current_dir(path), self.path_separator.as_deref()));
++                    }
++                } else {
++                    cmd.arg(arg.generate("", None));
+                 }
+-            } else {
+-                cmd.arg(arg.generate("", None));
+             }
++
++            results.push(execute_command(cmd, &Mutex::new(()), buffer_output));
++
++            chunk_start = chunk_end;
+         }
+ 
+-        if has_path {
+-            execute_command(cmd, &Mutex::new(()), buffer_output)
++        merge_exitcodes(results)
++    }
++}
++
++/// The maximum length (in bytes) of the argument list that we are willing to pass to a single
++/// invocation of the executed command. This is used to split up very large batches of search
++/// results (`--exec-batch`/`-X`) into multiple invocations, in order to avoid hitting the
++/// operating system's limit on the total size of the command line (e.g. `argv`/`envp`), which
++/// would otherwise cause an "Argument list too long" error.
++fn max_command_line_length() -> usize {
++    // Leave some headroom for miscellaneous overhead that the OS also counts against the
++    // limit but that we don't account for explicitly.
++    const HEADROOM: usize = 2048;
++
++    #[cfg(all(unix, not(target_os = "redox")))]
++    let limit = {
++        let arg_max = unsafe { libc::sysconf(libc::_SC_ARG_MAX) };
++        if arg_max > 0 {
++            arg_max as usize
+         } else {
+-            ExitCode::Success
++            // Fall back to a conservative default (as used by e.g. GNU xargs) if the limit
++            // could not be determined.
++            128 * 1024
+         }
+-    }
++    };
++
++    #[cfg(not(all(unix, not(target_os = "redox"))))]
++    let limit = {
++        // Windows has a command line length limit of about 32768 characters. Use the same
++        // conservative default on other platforms (e.g. Redox) where we cannot query the limit.
++        32 * 1024
++    };
++
++    // The environment is also passed alongside argv and counts against the same limit on
++    // most Unix systems, so we need to subtract its size to get an accurate budget for argv.
++    let environ_size: usize = std::env::vars_os()
++        .map(|(key, value)| key.len() + value.len() + 2 + std::mem::size_of::<usize>())
++        .sum();
++
++    limit
++        .saturating_sub(environ_size)
++        .saturating_sub(HEADROOM)
++        .max(4096)
+ }
+ 
+ /// Represents a template for a single command argument.

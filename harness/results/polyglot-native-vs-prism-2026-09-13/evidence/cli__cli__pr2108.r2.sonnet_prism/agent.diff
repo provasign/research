@@ -1,0 +1,110 @@
+diff --git a/api/queries_repo.go b/api/queries_repo.go
+index 1ca7a92..6c6dcaf 100644
+--- a/api/queries_repo.go
++++ b/api/queries_repo.go
+@@ -457,6 +457,24 @@ func (m *RepoMetadataResult) ProjectsToIDs(names []string) ([]string, error) {
+ 	return ids, nil
+ }
+ 
++func (m *RepoMetadataResult) ProjectsToPaths(names []string) ([]string, error) {
++	var paths []string
++	for _, projectName := range names {
++		found := false
++		for _, p := range m.Projects {
++			if strings.EqualFold(projectName, p.Name) {
++				paths = append(paths, strings.TrimPrefix(p.ResourcePath, "/"))
++				found = true
++				break
++			}
++		}
++		if !found {
++			return nil, fmt.Errorf("'%s' not found", projectName)
++		}
++	}
++	return paths, nil
++}
++
+ func (m *RepoMetadataResult) MilestoneToID(title string) (string, error) {
+ 	for _, m := range m.Milestones {
+ 		if strings.EqualFold(title, m.Title) {
+@@ -682,8 +700,9 @@ func RepoResolveMetadataIDs(client *Client, repo ghrepo.Interface, input RepoRes
+ }
+ 
+ type RepoProject struct {
+-	ID   string
+-	Name string
++	ID           string
++	Name         string
++	ResourcePath string
+ }
+ 
+ // RepoProjects fetches all open projects for a repository
+diff --git a/pkg/cmd/issue/create/create.go b/pkg/cmd/issue/create/create.go
+index 03581d3..8123428 100644
+--- a/pkg/cmd/issue/create/create.go
++++ b/pkg/cmd/issue/create/create.go
+@@ -142,7 +142,13 @@ func createRun(opts *CreateOptions) (err error) {
+ 
+ 	if opts.WebMode {
+ 		openURL := ghrepo.GenerateRepoURL(baseRepo, "issues/new")
+-		if opts.Title != "" || opts.Body != "" || len(opts.Assignees) > 0 {
++		if opts.Title != "" || opts.Body != "" || len(opts.Assignees) > 0 || len(opts.Projects) > 0 {
++			if len(tb.Projects) > 0 && tb.MetadataResult == nil {
++				tb.MetadataResult, err = api.RepoMetadata(apiClient, baseRepo, api.RepoMetadataInput{Projects: true})
++				if err != nil {
++					return
++				}
++			}
+ 			openURL, err = prShared.WithPrAndIssueQueryParams(openURL, tb)
+ 			if err != nil {
+ 				return
+@@ -243,6 +249,12 @@ func createRun(opts *CreateOptions) (err error) {
+ 	}
+ 
+ 	if action == prShared.PreviewAction {
++		if len(tb.Projects) > 0 && tb.MetadataResult == nil {
++			tb.MetadataResult, err = api.RepoMetadata(apiClient, baseRepo, api.RepoMetadataInput{Projects: true})
++			if err != nil {
++				return
++			}
++		}
+ 		openURL := ghrepo.GenerateRepoURL(baseRepo, "issues/new")
+ 		openURL, err = prShared.WithPrAndIssueQueryParams(openURL, tb)
+ 		if err != nil {
+diff --git a/pkg/cmd/pr/create/create.go b/pkg/cmd/pr/create/create.go
+index 0925914..5c63197 100644
+--- a/pkg/cmd/pr/create/create.go
++++ b/pkg/cmd/pr/create/create.go
+@@ -710,6 +710,13 @@ func handlePush(opts CreateOptions, ctx CreateContext) error {
+ }
+ 
+ func generateCompareURL(ctx CreateContext, state shared.IssueMetadataState) (string, error) {
++	if len(state.Projects) > 0 && state.MetadataResult == nil {
++		metadataResult, err := api.RepoMetadata(ctx.Client, ctx.BaseRepo, api.RepoMetadataInput{Projects: true})
++		if err != nil {
++			return "", err
++		}
++		state.MetadataResult = metadataResult
++	}
+ 	u := ghrepo.GenerateRepoURL(
+ 		ctx.BaseRepo,
+ 		"compare/%s...%s?expand=1",
+diff --git a/pkg/cmd/pr/shared/params.go b/pkg/cmd/pr/shared/params.go
+index 722a981..484a718 100644
+--- a/pkg/cmd/pr/shared/params.go
++++ b/pkg/cmd/pr/shared/params.go
+@@ -28,7 +28,13 @@ func WithPrAndIssueQueryParams(baseURL string, state IssueMetadataState) (string
+ 		q.Set("labels", strings.Join(state.Labels, ","))
+ 	}
+ 	if len(state.Projects) > 0 {
+-		q.Set("projects", strings.Join(state.Projects, ","))
++		projectPaths := state.Projects
++		if state.MetadataResult != nil {
++			if paths, err := state.MetadataResult.ProjectsToPaths(state.Projects); err == nil {
++				projectPaths = paths
++			}
++		}
++		q.Set("projects", strings.Join(projectPaths, ","))
+ 	}
+ 	if len(state.Milestones) > 0 {
+ 		q.Set("milestone", state.Milestones[0])

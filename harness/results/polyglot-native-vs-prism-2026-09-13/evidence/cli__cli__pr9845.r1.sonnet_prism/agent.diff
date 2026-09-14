@@ -1,0 +1,32 @@
+diff --git a/pkg/cmd/repo/edit/edit.go b/pkg/cmd/repo/edit/edit.go
+index 508dea0..20cdd8f 100644
+--- a/pkg/cmd/repo/edit/edit.go
++++ b/pkg/cmd/repo/edit/edit.go
+@@ -58,6 +58,8 @@ type EditOptions struct {
+ 	InteractiveMode bool
+ 	Detector        fd.Detector
+ 	Prompter        iprompter
++
++	AcceptVisibilityChangeConsequences bool
+ 	// Cache of current repo topics to avoid retrieving them
+ 	// in multiple flows.
+ 	topicsCache []string
+@@ -142,6 +144,10 @@ func NewCmdEdit(f *cmdutil.Factory, runF func(options *EditOptions) error) *cobr
+ 				return cmdutil.FlagErrorf("specify properties to edit when not running interactively")
+ 			}
+ 
++			if !opts.InteractiveMode && opts.Edits.Visibility != nil && !opts.AcceptVisibilityChangeConsequences {
++				return cmdutil.FlagErrorf("--accept-visibility-change-consequences required when changing visibility non-interactively")
++			}
++
+ 			if runF != nil {
+ 				return runF(opts)
+ 			}
+@@ -167,6 +173,7 @@ func NewCmdEdit(f *cmdutil.Factory, runF func(options *EditOptions) error) *cobr
+ 	cmdutil.NilBoolFlag(cmd, &opts.Edits.AllowUpdateBranch, "allow-update-branch", "", "Allow a pull request head branch that is behind its base branch to be updated")
+ 	cmd.Flags().StringSliceVar(&opts.AddTopics, "add-topic", nil, "Add repository topic")
+ 	cmd.Flags().StringSliceVar(&opts.RemoveTopics, "remove-topic", nil, "Remove repository topic")
++	cmd.Flags().BoolVar(&opts.AcceptVisibilityChangeConsequences, "accept-visibility-change-consequences", false, "Accept the consequences of changing the repository visibility")
+ 
+ 	return cmd
+ }

@@ -1,0 +1,132 @@
+diff --git a/api/queries_user.go b/api/queries_user.go
+index 3822f20..43defe7 100644
+--- a/api/queries_user.go
++++ b/api/queries_user.go
+@@ -1,5 +1,7 @@
+ package api
+ 
++import "github.com/shurcooL/githubv4"
++
+ func CurrentLoginName(client *Client, hostname string) (string, error) {
+ 	var query struct {
+ 		Viewer struct {
+@@ -19,3 +21,45 @@ func CurrentUserID(client *Client, hostname string) (string, error) {
+ 	err := client.Query(hostname, "UserCurrent", &query, nil)
+ 	return query.Viewer.ID, err
+ }
++
++// CurrentUserOrgs returns the list of organization logins that the
++// authenticated user is a member of.
++func CurrentUserOrgs(client *Client, hostname string) ([]string, error) {
++	type responseData struct {
++		Viewer struct {
++			Organizations struct {
++				Nodes []struct {
++					Login string
++				}
++				PageInfo struct {
++					HasNextPage bool
++					EndCursor   string
++				}
++			} `graphql:"organizations(first: 100, after: $endCursor)"`
++		}
++	}
++
++	var orgs []string
++	variables := map[string]interface{}{
++		"endCursor": (*githubv4.String)(nil),
++	}
++
++	for {
++		var query responseData
++		err := client.Query(hostname, "OrganizationList", &query, variables)
++		if err != nil {
++			return nil, err
++		}
++
++		for _, node := range query.Viewer.Organizations.Nodes {
++			orgs = append(orgs, node.Login)
++		}
++
++		if !query.Viewer.Organizations.PageInfo.HasNextPage {
++			break
++		}
++		variables["endCursor"] = githubv4.String(query.Viewer.Organizations.PageInfo.EndCursor)
++	}
++
++	return orgs, nil
++}
+diff --git a/pkg/cmd/repo/create/create.go b/pkg/cmd/repo/create/create.go
+index 8e1ae0b..fa6ab6e 100644
+--- a/pkg/cmd/repo/create/create.go
++++ b/pkg/cmd/repo/create/create.go
+@@ -277,6 +277,15 @@ func createFromScratch(opts *CreateOptions) error {
+ 		if err != nil {
+ 			return err
+ 		}
++		if !strings.Contains(opts.Name, "/") {
++			owner, err := interactiveOwner(httpClient, host, opts.Prompter)
++			if err != nil {
++				return err
++			}
++			if owner != "" {
++				opts.Name = owner + "/" + opts.Name
++			}
++		}
+ 		opts.AddReadme, err = opts.Prompter.Confirm("Would you like to add a README file?", false)
+ 		if err != nil {
+ 			return err
+@@ -471,6 +480,15 @@ func createFromLocal(opts *CreateOptions) error {
+ 		if err != nil {
+ 			return err
+ 		}
++		if !strings.Contains(opts.Name, "/") {
++			owner, err := interactiveOwner(httpClient, host, opts.Prompter)
++			if err != nil {
++				return err
++			}
++			if owner != "" {
++				opts.Name = owner + "/" + opts.Name
++			}
++		}
+ 	}
+ 
+ 	var repoToCreate ghrepo.Interface
+@@ -698,6 +716,37 @@ func interactiveLicense(client *http.Client, hostname string, prompter iprompter
+ 	return licenses[selected].Key, nil
+ }
+ 
++// interactiveOwner prompts the user to choose an owner (their personal account or
++// one of the organizations they belong to) for a repository whose name was entered
++// without an owner prefix. It returns an empty string if the user has no organizations
++// to choose from, or if they select their personal account.
++func interactiveOwner(client *http.Client, hostname string, prompter iprompter) (string, error) {
++	apiClient := api.NewClientFromHTTP(client)
++
++	login, err := api.CurrentLoginName(apiClient, hostname)
++	if err != nil {
++		return "", err
++	}
++
++	orgs, err := api.CurrentUserOrgs(apiClient, hostname)
++	if err != nil {
++		return "", err
++	}
++	if len(orgs) == 0 {
++		return "", nil
++	}
++
++	owners := append([]string{login}, orgs...)
++	selected, err := prompter.Select("Repository owner", login, owners)
++	if err != nil {
++		return "", err
++	}
++	if owners[selected] == login {
++		return "", nil
++	}
++	return owners[selected], nil
++}
++
+ // name, description, and visibility
+ func interactiveRepoInfo(prompter iprompter, defaultName string) (string, string, string, error) {
+ 	name, err := prompter.Input("Repository name", defaultName)

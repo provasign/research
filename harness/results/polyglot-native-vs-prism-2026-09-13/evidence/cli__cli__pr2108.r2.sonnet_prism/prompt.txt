@@ -1,0 +1,25 @@
+Work only in the repository in your current directory. Do not use the network,
+git history, benchmark files, saved answers, memory, skills, or delegated agents. Fix the SOURCE
+code so the issue below is resolved. Do not modify tests, docs, changelogs, or configuration.
+Make the smallest robust change. Investigate, edit, and run a narrow relevant test if time permits;
+do not commit. Dependencies are preinstalled; use `go test ./...` for narrow tests. You have a
+strict 5-minute work budget. A patch present at timeout will still be scored.
+
+ISSUE:
+project argument works differently with the --web flag
+### Describe the bug
+Without the `--web` mode, passing the project name in the project flag, works properly.
+However, using the `--web` mode, we need to pass the project path, because GitHub takes the project path as the query parameter
+Version of gh: master
+
+### Example
+Suppose I have a project named "My Project" in my repo, "testingCLI"
+For the non-web version, this works:
+`gh issue create -t Title -b Body -p "My Project"`
+For the web version, I need to change it to:
+`gh issue create -t Title -b Body -p "AliabbasMerchant/testingCLI/1" --web`
+
+### Possible Solution
+Either:  
+1. We accept the project name everywhere, and convert the name to the path in the web mode (This may cause conflicts when the org and the repo has projects with the same name; But is not a breaking change)
+2. We accept the project path everywhere, and convert the path to the name in the normal mode (This may be a breaking change for our users, but will help determine the project much more specifically)

@@ -1,0 +1,58 @@
+diff --git a/crates/printer/src/util.rs b/crates/printer/src/util.rs
+index 434deec..c44a0a8 100644
+--- a/crates/printer/src/util.rs
++++ b/crates/printer/src/util.rs
+@@ -82,26 +82,35 @@ impl<M: Matcher> Replacer<M> {
+             dst.clear();
+             matches.clear();
+ 
++            // We want to replace all matches within `range`, but not any
++            // matches that might occur in the extra look-ahead bytes we
++            // sliced onto `subject` above (for multi-line searches). So we
++            // stop as soon as we see a match that starts at or after
++            // `range.end`, and otherwise bound the trailing unmatched bytes
++            // we copy to `range.end` instead of the end of `subject`.
++            let mut last_match = range.start;
+             matcher
+-                .replace_with_captures_at(
+-                    subject,
+-                    range.start,
+-                    caps,
+-                    dst,
+-                    |caps, dst| {
+-                        let start = dst.len();
+-                        caps.interpolate(
+-                            |name| matcher.capture_index(name),
+-                            subject,
+-                            replacement,
+-                            dst,
+-                        );
+-                        let end = dst.len();
+-                        matches.push(Match::new(start, end));
+-                        true
+-                    },
+-                )
++                .captures_iter_at(subject, range.start, caps, |caps| {
++                    let m = caps.get(0).unwrap();
++                    if m.start() >= range.end {
++                        return false;
++                    }
++                    dst.extend(&subject[last_match..m.start()]);
++                    last_match = m.end();
++
++                    let start = dst.len();
++                    caps.interpolate(
++                        |name| matcher.capture_index(name),
++                        subject,
++                        replacement,
++                        dst,
++                    );
++                    let end = dst.len();
++                    matches.push(Match::new(start, end));
++                    true
++                })
+                 .map_err(io::Error::error_message)?;
++            dst.extend(&subject[last_match..range.end.min(subject.len())]);
+         }
+         Ok(())
+     }

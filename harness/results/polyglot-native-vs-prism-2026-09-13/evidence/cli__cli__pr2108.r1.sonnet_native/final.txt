@@ -1,0 +1,12 @@
+The diff looks clean and minimal. Build and narrow tests pass.
+
+## Summary
+
+The bug: `gh issue create --web -p "My Project"` (and the equivalent PR command) put the raw project **name** into the `projects` query parameter, but GitHub's web UI expects the project's **resource path** (e.g. `owner/repo/projects/1`).
+
+Fix (source only):
+- `api/queries_repo.go`: added `ResourcePath` to `RepoProject` (already fetched automatically by the existing GraphQL queries via reflection) and added `RepoMetadataResult.ProjectsToPaths` to resolve project names to their resource paths.
+- `pkg/cmd/pr/shared/params.go`: `WithPrAndIssueQueryParams` now takes the API client and base repo, fetches project metadata when projects are specified, and resolves names to resource paths before setting the `projects` query param — while non-web submission (which uses `ProjectsToIDs`) is unaffected.
+- `pkg/cmd/issue/create/create.go` and `pkg/cmd/pr/create/create.go`: updated call sites to pass the client/repo.
+
+This keeps `-p "My Project"` working consistently in both web and non-web modes (option 1 from the issue), with no test/doc/config changes. Verified with `go build ./...` and `go test ./pkg/cmd/issue/create/... ./pkg/cmd/pr/create/... ./pkg/cmd/pr/shared/... ./api/...` — all pass.

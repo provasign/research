@@ -1,0 +1,13 @@
+All tests pass and the build is clean.
+
+## Summary
+
+The bug: `gh issue create -w -p "Project Name"` (and the equivalent `pr create -w`) put the raw project **name** into the `projects` query parameter of the web URL, but GitHub's web UI expects a project **path** (e.g. `/owner/repo/projects/1`) there. The non-web path worked because it resolves project names to GraphQL IDs via the API instead.
+
+Fix (in `api/queries_repo.go` and `pkg/cmd/pr/shared/params.go`):
+- Added `ResourcePath` to `api.RepoProject` (already fetched via existing GraphQL queries — the graphql-go client auto-derives the field name).
+- Added `RepoMetadataResult.ProjectsToPaths`, mirroring the existing `ProjectsToIDs`.
+- Added `shared.ProjectsToPaths(client, baseRepo, names)`, which fetches repo/org project metadata and resolves names to resource paths.
+- In `pkg/cmd/issue/create/create.go` and `pkg/cmd/pr/create/create.go`, before building the web URL, project names are now resolved to resource paths via this helper, so `--web` and non-`--web` both accept the same project **name** input (option 1 from the issue, non-breaking).
+
+Verified with `go build ./...` and `go test ./pkg/cmd/issue/create/... ./pkg/cmd/pr/create/... ./pkg/cmd/pr/shared/... ./api/...` — all passing. No test/doc/config files were modified.

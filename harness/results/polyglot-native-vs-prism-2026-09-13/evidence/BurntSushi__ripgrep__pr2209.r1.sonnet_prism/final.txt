@@ -1,0 +1,16 @@
+The change is minimal and targeted. Summary:
+
+## Root cause
+In `Replacer::replace_all` (`crates/printer/src/util.rs`), when `-U`/`--multiline` is active, the subject buffer passed to the matcher is deliberately extended past the actual match's end (`range.end`) by up to `MAX_LOOK_AHEAD` bytes, so look-around assertions can be resolved correctly. However, it then called `matcher.replace_with_captures_at`, whose default behavior unconditionally appends everything from the last match to the *end of the given haystack* into the output buffer. That meant the extra look-ahead bytes — potentially many lines beyond the intended match — leaked into the replacement output.
+
+## Fix
+Replaced the call to `replace_with_captures_at` with a manual loop using `captures_iter_at` that:
+- Stops considering matches whose start is at or past the intended `subject_end` (mirroring the existing bound check in `find_iter_at_in_context`).
+- Appends the final trailing bytes only up to `subject_end`, not to the full (possibly extended) subject buffer.
+
+## Verification
+- `cargo build -p grep-printer` — clean.
+- `cargo test -p grep-printer --lib` — all 94 tests pass, including the pre-existing multiline replacement tests.
+- Reproduced the exact issue scenario with the built `rg` binary — the reported over-matching is gone, and the output now matches the expected behavior described in the issue.
+
+No tests, docs, or config were modified — only the source fix in `crates/printer/src/util.rs`. The patch has not been committed, per your instructions.

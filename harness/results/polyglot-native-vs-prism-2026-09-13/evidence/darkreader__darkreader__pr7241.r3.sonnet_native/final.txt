@@ -1,0 +1,15 @@
+The regex now only matches the standalone `====` delimiter line (only `=` characters, optionally surrounded by tabs/spaces, on its own line), and no longer matches the `==` inside the base64 string, since that occurs mid-line inside `background-image: url(...)`.
+
+Summary of the fix in `src/generators/utils/parse.ts:146`:
+
+```js
+const delimiterRegex = /\s*={2,}\s*/gm;
+```
+→
+```js
+const delimiterRegex = /^[ \t]*={2,}[ \t]*$/gm;
+```
+
+This anchors the delimiter match to an entire line consisting only of `=` characters (with optional surrounding spaces/tabs), rather than any run of `==` anywhere in the text — which previously matched base64 padding like `...ErkJggg==') !important;`, causing corrupted `domainPatterns` entries and downstream `Invalid regular expression` crashes.
+
+Both the config tests (`tests/config/jest.config.js`) and the parse-specific tests (`tests/generators/utils/jest.config.js`) pass with this change.
