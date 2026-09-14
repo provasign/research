@@ -79,6 +79,19 @@ class ToolRegistryTests(unittest.TestCase):
         self.assertEqual(rc.TOOLS["prism"].sonnet_call_prefix, "mcp__prism__")
         self.assertEqual(rc.TOOLS["codegraph"].sonnet_call_prefix, "mcp__codegraph__")
 
+    def test_invokes_cli_sees_through_codex_shell_wrapper(self):
+        """Codex's command_execution events carry the full
+        `/bin/zsh -lc '<inner>'` wrapper, not the inner command directly
+        (Claude Code's Bash tool gives the inner command). Caught
+        2026-09-13: this made every Codex+Prism cell that used the CLI
+        instead of the MCP tool invisible to invokes_cli, regardless of
+        what it actually ran (72 of 83 historical Codex+Prism cells)."""
+        wrapped = "/bin/zsh -lc 'prism query \"issue create\" --terms project'"
+        self.assertTrue(rc.TOOLS["prism"].invokes_cli(wrapped))
+        self.assertFalse(rc.TOOLS["codegraph"].invokes_cli(wrapped))
+        wrapped_chain = "/bin/zsh -lc 'cd /w && prism read a.go:1-10'"
+        self.assertTrue(rc.TOOLS["prism"].invokes_cli(wrapped_chain))
+
 
 class SuccessfulToolActionsTests(unittest.TestCase):
     def test_denied_compact_mcp_call_is_not_adoption(self):
@@ -422,6 +435,25 @@ class NetworkClassifierTests(unittest.TestCase):
             "uv --version", "grep -rn fileno src/",
         ):
             self.assertIsNone(rc.classify_network(cmd), cmd)
+
+    def test_gh_subcommand_text_in_a_quoted_argument_is_not_a_violation(self):
+        """The polyglot suite added cli/cli (GitHub's own CLI) as a
+        benchmark repo: "gh issue"/"gh pr" appear constantly as ordinary
+        text there -- in Prism query strings, source, commit messages --
+        with nothing executed. Caught 2026-09-13 on a live Codex+Prism
+        cell: `gh\\s+(?:pr|api|repo|issue)\\b` matched inside a quoted
+        `prism query "..."` argument and was reported as "network access
+        via shell". A real `gh` invocation, wrapped or not, must still be
+        caught -- see test_definite_fetches for the positive case."""
+        for cmd in (
+            'prism query "project argument works differently with --web '
+            'flag gh issue create project" --terms project --terms web',
+            "/bin/zsh -lc 'prism read pkg/cmd/issue/create/create.go:1-10'",
+            'echo "see gh repo clone and gh api docs for details"',
+        ):
+            self.assertIsNone(rc.classify_network(cmd), cmd)
+        # A real gh call, wrapped the way Codex reports it, must still be caught.
+        self.assertEqual(rc.classify_network("/bin/zsh -lc 'gh pr list'"), "definite")
 
 
 class NetworkAuditTests(unittest.TestCase):

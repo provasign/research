@@ -159,12 +159,72 @@ def stop(proc: subprocess.Popen) -> None:
         proc.wait()
 
 
-def _invokes_cli(value: str, binary_name: str) -> bool:
+_SHELL_WRAPPERS = ("sh", "bash", "zsh")
+_SHELL_C_FLAGS = ("-c", "-lc", "-cl")
+_SHELL_OPERATORS = {";", "&&", "||", "|", "&"}
+
+
+def _shell_segments(value: str) -> list[list[str]]:
+    """Split a shell command line into argv-token segments (one list of
+    tokens per `;`/`&&`/`||`/`|`/`&`-separated command), unwrapping one
+    outer `<sh|bash|zsh> -c/-lc '<inner>'` layer first.
+
+    Codex's `command_execution` events carry the full wrapper
+    (`/bin/zsh -lc 'prism query ...'`); Claude Code's Bash tool gives the
+    inner command directly. Without unwrapping, a naive single shlex.split
+    of the wrapped form yields exactly 3 tokens -- the shell, the flag, and
+    the ENTIRE inner command as one opaque token (single quotes suppress
+    all splitting) -- so nothing inside it is ever seen as a real command.
+    Caught 2026-09-13: every Codex+Prism cell that used the CLI instead of
+    the MCP tool was invisible to `_invokes_cli`/`successful_own_tool_actions`
+    this way, scoring as "own tool had no successful calls" regardless of
+    what it actually ran (72 of 83 historical Codex+Prism cells show this;
+    31 of those plainly mention `prism` in their own command list)."""
     try:
         tokens = shlex.split(value)
     except ValueError:
         tokens = value.split()
-    return any(Path(token).name == binary_name for token in tokens)
+    if (len(tokens) >= 3 and Path(tokens[0]).name in _SHELL_WRAPPERS
+            and tokens[1] in _SHELL_C_FLAGS):
+        try:
+            inner = shlex.split(tokens[2])
+        except ValueError:
+            inner = tokens[2].split()
+        tokens = inner + tokens[3:]
+    segments: list[list[str]] = []
+    current: list[str] = []
+    for tok in tokens:
+        if tok in _SHELL_OPERATORS:
+            if current:
+                segments.append(current)
+            current = []
+        else:
+            current.append(tok)
+    if current:
+        segments.append(current)
+    return segments
+
+
+def _invokes_cli(value: str, binary_name: str) -> bool:
+    return any(seg and Path(seg[0]).name == binary_name for seg in _shell_segments(value))
+
+
+def _invokes_command(value: str, name: str, subcommands: set[str] | None = None) -> bool:
+    """True if `name` is actually run as a command (first token of some
+    segment), optionally requiring its subcommand (second token) be one of
+    `subcommands`. Unlike a plain substring/regex match over the raw text,
+    this does not fire on `name` appearing inside a quoted argument to a
+    DIFFERENT program -- caught on `cli/cli` (GitHub's own CLI) tasks,
+    where a Prism query string like `"gh issue create --web ..."` matched
+    the old regex `gh\\s+(?:pr|api|repo|issue)\\b` as a false "network
+    access via shell" violation: the codebase being edited is gh itself,
+    so its own subcommand names appear constantly as ordinary text, never
+    as an actual invocation."""
+    for seg in _shell_segments(value):
+        if seg and Path(seg[0]).name == name:
+            if subcommands is None or (len(seg) > 1 and seg[1] in subcommands):
+                return True
+    return False
 
 
 def invokes_prism(value: str) -> bool:
@@ -187,9 +247,16 @@ def invokes_prism(value: str) -> bool:
 # denied those and broke cells in the swebench_ab probes (see its history).
 _NETWORK_DEFINITE = re.compile(
     r"(?<![\w/.-])(?:pip3?\s+(?:download|install)\b|uv\s+(?:pip\s+install|add|sync)\b"
-    r"|npm\s+(?:install|i|ci)\b|curl\s|wget\s|gh\s+(?:pr|api|repo|issue)\b"
+    r"|npm\s+(?:install|i|ci)\b|curl\s|wget\s"
     r"|git\s+(?:clone|fetch|pull|ls-remote)\b)"
 )
+# `gh <pr|api|repo|issue>` is checked separately, at command position (see
+# _invokes_command), not by this regex: the polyglot suite added cli/cli
+# (GitHub's own CLI) as a benchmark repo, where "gh issue"/"gh pr" appear
+# constantly as ordinary text -- in Prism query strings, code, commit
+# messages -- with nothing executed. A text-anywhere regex false-positived
+# on exactly that shape.
+_GH_NETWORK_SUBCOMMANDS = {"pr", "api", "repo", "issue"}
 # `pip install` of a LOCAL path (`-e .`, `.`, `./pkg`, `/abs`) is a build step,
 # not a fetch: it only reaches the index if a dependency is missing, and the
 # task prompt states dependencies are preinstalled. Recorded as suspect, not
@@ -273,6 +340,8 @@ def classify_network(value: str) -> str | None:
     local-path `pip install` or a bare URL literal (recorded for review, never
     asserted); else None."""
     cmd, python_bodies = _python_embedded_code(value)
+    if _invokes_command(cmd, "gh", _GH_NETWORK_SUBCOMMANDS):
+        return "definite"
     hit = False
     for m in _NETWORK_DEFINITE.finditer(cmd):
         hit = True
