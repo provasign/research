@@ -227,8 +227,10 @@ def finalize_coding(cell: rc.Cell, rec: dict, final: str) -> dict:
     against the pinned baseline, excluding dependency-setup files."""
     if cell.arm.startswith("gpt55"):
         add_gpt55_cost(rec)
+    language = cell.extra.get("language", "python")
+    suffixes = rc.SOURCE_SUFFIXES_BY_LANGUAGE.get(language, (".py", ".pyi"))
     diff, changed_files, non_source = rc.source_diff(
-        cell.work, cell.extra["baseline"], cell.extra["setup_files"])
+        cell.work, cell.extra["baseline"], cell.extra["setup_files"], suffixes)
     (cell.out / "agent.diff").write_text(diff)
     rec["task"] = cell.extra["task_id"]
     return {
@@ -339,7 +341,8 @@ def cmd_rescore(args: argparse.Namespace) -> int:
                        invocation_id="recovered",
                        extra={"task_id": task_id, "trial": trial, "baseline": baseline,
                               "setup_files": rc.template_setup_files(template),
-                              "allow_source_edits": True})
+                              "allow_source_edits": True,
+                              "language": tasks[task_id].get("language", "python")})
         events = rc.read_events(out / "stdout.jsonl")
         if arm.startswith("sonnet"):
             rec, final, calls = rc.summarize_sonnet(events, out)
@@ -570,7 +573,8 @@ def cmd_run(args: argparse.Namespace) -> int:
                     prompt_for_coding(tasks[task_id], args.timeout_s), env_dir=env_dir,
                     tool_cli_dir=tool_cli_dirs.get(tool),
                     extra={"task_id": task_id, "trial": trial, "baseline": baseline,
-                           "setup_files": setup_files, "allow_source_edits": True},
+                           "setup_files": setup_files, "allow_source_edits": True,
+                           "language": tasks[task_id].get("language", "python")},
                 )
                 pending[pool.submit(rc.run_cell, cell, cfg, finalize_coding)] = cell
                 next_cell += 1

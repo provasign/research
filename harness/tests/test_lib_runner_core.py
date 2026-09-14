@@ -649,5 +649,63 @@ class BenchCellKeyTests(unittest.TestCase):
                          ["a.r1.sonnet_prism", "b.r1.sonnet_prism", "a.r2.sonnet_prism", "b.r2.sonnet_prism"])
 
 
+class SourceDiffLanguageTests(unittest.TestCase):
+    """is_source_path defaults to Python-only suffixes; a non-Python task
+    MUST pass its own language's suffixes via source_diff's extra_suffixes,
+    or every edit is silently classified as non-source and the captured
+    diff comes back empty regardless of what the agent did. Caught
+    2026-09-13 after a full 66-cell polyglot run (Go/Rust/TypeScript) scored
+    0/66 resolved on BOTH arms: agent.diff was empty in every single cell
+    despite real, uncommitted .go/.rs/.ts edits sitting in the work tree --
+    finalize_coding never threaded the task's language into source_diff."""
+
+    def _repo(self, tmp: str, filename: str, before: str, after: str) -> tuple[Path, str]:
+        work = Path(tmp)
+        (work / filename).parent.mkdir(parents=True, exist_ok=True)
+        (work / filename).write_text(before)
+        rc.command(["git", "init", "-q"], work)
+        rc.command(["git", "-c", "user.name=t", "-c", "user.email=t@t", "add", "-A"], work)
+        rc.command(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "base"], work)
+        baseline = rc.command(["git", "rev-parse", "HEAD"], work).decode().strip()
+        (work / filename).write_text(after)
+        return work, baseline
+
+    def test_go_edit_is_invisible_without_the_go_suffix(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            work, baseline = self._repo(tmp, "pkg/x.go", "package x\n", "package x\n// edited\n")
+            diff, files, _ = rc.source_diff(work, baseline, [])  # default: python-only
+            self.assertEqual(diff, "")
+            self.assertEqual(files, [])
+            diff, files, _ = rc.source_diff(
+                work, baseline, [], rc.SOURCE_SUFFIXES_BY_LANGUAGE["go"])
+            self.assertIn("edited", diff)
+            self.assertEqual(files, ["pkg/x.go"])
+
+    def test_rust_and_typescript_edits_are_captured_with_their_own_suffixes(self):
+        for lang, filename in (("rust", "src/lib.rs"), ("ts", "src/x.ts")):
+            with tempfile.TemporaryDirectory() as tmp:
+                work, baseline = self._repo(tmp, filename, "// a\n", "// a edited\n")
+                diff, files, _ = rc.source_diff(
+                    work, baseline, [], rc.SOURCE_SUFFIXES_BY_LANGUAGE[lang])
+                self.assertIn("edited", diff, lang)
+                self.assertEqual(files, [filename], lang)
+
+    def test_go_test_files_are_excluded_like_python_test_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            work, baseline = self._repo(tmp, "pkg/x_test.go", "package x\n", "package x\n// edited\n")
+            diff, files, non_source = rc.source_diff(
+                work, baseline, [], rc.SOURCE_SUFFIXES_BY_LANGUAGE["go"])
+            self.assertEqual(diff, "")
+            self.assertEqual(non_source, ["pkg/x_test.go"])
+
+    def test_typescript_spec_files_are_excluded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            work, baseline = self._repo(tmp, "tests/x.spec.ts", "// a\n", "// a edited\n")
+            diff, files, non_source = rc.source_diff(
+                work, baseline, [], rc.SOURCE_SUFFIXES_BY_LANGUAGE["ts"])
+            self.assertEqual(diff, "")
+            self.assertEqual(non_source, ["tests/x.spec.ts"])
+
+
 if __name__ == "__main__":
     unittest.main()

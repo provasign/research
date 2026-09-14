@@ -1079,26 +1079,56 @@ def agent_path(env_dir: Path | None, tool_cli_dir: Path | None, rg: str | None) 
     return os.pathsep.join(dict.fromkeys(parts))
 
 
+SOURCE_SUFFIXES_BY_LANGUAGE = {
+    "python": (".py", ".pyi"),
+    "go": (".go",),
+    "rust": (".rs",),
+    "ts": (".ts", ".tsx"),
+    "js": (".js", ".jsx", ".mjs", ".cjs"),
+}
+
+
 def is_source_path(path: str, extra_suffixes: tuple[str, ...] = (".py", ".pyi")) -> bool:
-    """Keep implementation files while rejecting tests and run artifacts."""
+    """Keep implementation files while rejecting tests and run artifacts.
+
+    `extra_suffixes` defaults to Python only -- a non-Python task MUST pass
+    its own language's suffixes (see SOURCE_SUFFIXES_BY_LANGUAGE) or every
+    edit is silently classified as non-source and the captured diff comes
+    back empty regardless of what the agent actually did. Caught 2026-09-13
+    after a full 66-cell polyglot run scored 0/66 resolved on BOTH arms:
+    every cell's `agent.diff` was empty ("empty_diff": true) despite real,
+    uncommitted .go/.rs/.ts edits sitting in the work tree the whole time --
+    `finalize_coding` never threaded the task's language through. The bug
+    silently invalidated every "not resolved" verdict for every non-Python
+    cell run this session, not just this one call site.
+    """
     value = Path(path)
     parts = set(value.parts)
+    is_test_name = value.name.startswith("test_") or value.name.endswith("_test.py")
+    if value.suffix in (".go",):
+        is_test_name = is_test_name or value.name.endswith("_test.go")
+    elif value.suffix in (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"):
+        stem = value.name
+        is_test_name = is_test_name or any(
+            stem.endswith(suffix) for suffix in (".test.ts", ".test.tsx", ".test.js", ".test.jsx",
+                                                 ".spec.ts", ".spec.tsx", ".spec.js", ".spec.jsx",
+                                                 ".tests.ts", ".tests.js"))
     return (
         value.suffix in extra_suffixes
         and not parts.intersection({"test", "tests", ".grove", ".prism", ".shale", ".codegraph"})
-        and not value.name.startswith("test_")
-        and not value.name.endswith("_test.py")
+        and not is_test_name
     )
 
 
-def source_diff(work: Path, baseline: str, setup_files: list[str]) -> tuple[str, list[str], list[str]]:
+def source_diff(work: Path, baseline: str, setup_files: list[str],
+                extra_suffixes: tuple[str, ...] = (".py", ".pyi")) -> tuple[str, list[str], list[str]]:
     command(["git", "add", "-A"], work, check=False)
     all_changed = command(
         ["git", "diff", "--cached", "--name-only", baseline], work, check=False
     ).decode().splitlines()
     setup = set(setup_files)
     candidate_files = [path for path in all_changed if path not in setup]
-    source_files = [path for path in candidate_files if is_source_path(path)]
+    source_files = [path for path in candidate_files if is_source_path(path, extra_suffixes)]
     non_source_files = [path for path in candidate_files if path not in source_files]
     if not source_files:
         return "", [], non_source_files
