@@ -50,8 +50,18 @@ def run_query(prism, cwd, task, terms, timeout=180):
     (blocked readline; un-timeouted cleanup); the CLI does the same engine
     work with none of the protocol surface to wedge. Requires the
     2026-08-26 renderer fix (50f06c3) — before it, --format text printed
-    file paths and discarded the content."""
-    rc, out, err = run_capped([prism, 'query', task, '--terms', ','.join(terms), '--format', 'text'],
+    file paths and discarded the content.
+
+    `task` is accepted for backward-compatible call sites but NOT passed
+    to the CLI: `prism query`'s positional <task> argument was removed
+    2026-09 (it was a display label only, never used for retrieval --
+    NL-keyed ranking was removed the same change). On a build after that
+    change, `query <task> --terms ...` misparses -- the CLI now starts
+    flag parsing at args[0], so the task string lands in `dir` instead of
+    being skipped, and the command fails against a bogus directory.
+    Found via Codex's own ranking review needing a temporary CLI shim for
+    the same reason."""
+    rc, out, err = run_capped([prism, 'query', '--terms', ','.join(terms), '--format', 'text'],
                               cwd=cwd, timeout=timeout)
     if rc != 0:
         raise RuntimeError((err or 'query failed')[:100])
