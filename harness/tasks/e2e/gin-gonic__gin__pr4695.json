@@ -1,0 +1,30 @@
+{
+  "instance_id": "gin-gonic__gin__pr4695",
+  "repo": "gin-gonic/gin",
+  "pr": 4695,
+  "base_commit": "2e4d4f38962a6f15ae496d59b294f307eef95429",
+  "merge_commit": "293ad7edebb3ae30369288bd6416ca0d78474727",
+  "patch": "diff --git a/context.go b/context.go\nindex a2e28e5..640e20b 100644\n--- a/context.go\n+++ b/context.go\n@@ -141,6 +141,16 @@ func (c *Context) Copy() *Context {\n \tcp.Params = make([]Param, len(cParams))\n \tcopy(cp.Params, cParams)\n \n+\tif c.Errors != nil {\n+\t\tcp.Errors = make(errorMsgs, len(c.Errors))\n+\t\tcopy(cp.Errors, c.Errors)\n+\t}\n+\n+\tif c.Accepted != nil {\n+\t\tcp.Accepted = make([]string, len(c.Accepted))\n+\t\tcopy(cp.Accepted, c.Accepted)\n+\t}\n+\n \treturn &cp\n }\n \n",
+  "test_patch": "diff --git a/context_test.go b/context_test.go\nindex 364a92a..2dfdd39 100644\n--- a/context_test.go\n+++ b/context_test.go\n@@ -689,6 +689,50 @@ func TestContextCopy(t *testing.T) {\n \tassert.Equal(t, cp.fullPath, c.fullPath)\n }\n \n+func TestContextCopyCopiesErrors(t *testing.T) {\n+\tc, _ := CreateTestContext(httptest.NewRecorder())\n+\tc.Request, _ = http.NewRequest(http.MethodGet, \"/\", nil)\n+\t_ = c.Error(errors.New(\"first error\"))\n+\t_ = c.Error(errors.New(\"second error\"))\n+\n+\tcp := c.Copy()\n+\n+\t// copied context has the same errors\n+\tassert.Len(t, cp.Errors, 2)\n+\tassert.Equal(t, c.Errors[0].Error(), cp.Errors[0].Error())\n+\tassert.Equal(t, c.Errors[1].Error(), cp.Errors[1].Error())\n+\n+\t// mutations on the copy do not affect the original\n+\t_ = cp.Error(errors.New(\"third error\"))\n+\tassert.Len(t, c.Errors, 2)\n+\tassert.Len(t, cp.Errors, 3)\n+}\n+\n+func TestContextCopyCopiesAccepted(t *testing.T) {\n+\tc, _ := CreateTestContext(httptest.NewRecorder())\n+\tc.Request, _ = http.NewRequest(http.MethodGet, \"/\", nil)\n+\tc.SetAccepted(\"application/json\", \"text/html\")\n+\n+\tcp := c.Copy()\n+\n+\tassert.Equal(t, c.Accepted, cp.Accepted)\n+\n+\t// mutations on the copy do not affect the original\n+\tcp.SetAccepted(\"text/plain\")\n+\tassert.Equal(t, []string{\"application/json\", \"text/html\"}, c.Accepted)\n+\tassert.Equal(t, []string{\"text/plain\"}, cp.Accepted)\n+}\n+\n+func TestContextCopyNilErrorsAndAccepted(t *testing.T) {\n+\tc, _ := CreateTestContext(httptest.NewRecorder())\n+\tc.Request, _ = http.NewRequest(http.MethodGet, \"/\", nil)\n+\n+\tcp := c.Copy()\n+\n+\tassert.Nil(t, cp.Errors)\n+\tassert.Nil(t, cp.Accepted)\n+}\n+\n func TestContextHandlerName(t *testing.T) {\n \tc, _ := CreateTestContext(httptest.NewRecorder())\n \tc.handlers = HandlersChain{func(c *Context) {}, handlerNameTest}\n",
+  "test_functions": [
+    "TestContextCopyCopiesAccepted",
+    "TestContextCopyCopiesErrors",
+    "TestContextCopyNilErrorsAndAccepted"
+  ],
+  "src_files": [
+    "context.go"
+  ],
+  "test_modules": [
+    "context_test.go"
+  ],
+  "problem_statement": "fix(context): Copy() copies Errors and Accepted fields\n\n`Copy()` now copies the `Errors` slice so goroutines receiving a copy can observe errors attached before the copy was made.\r\n`Copy()` now copies the `Accepted` slice so content-negotiation state set by middleware (via `SetAccepted`) is preserved in the copy.\r\nBoth fields use independent slices \u2014 mutations on the copy do not affect the original context.\r\n\r\n`Context.Copy()` was explicitly copying `Keys` and `Params` but\r\nomitted `Errors` and `Accepted`, leaving them as `nil` in the copied\r\ncontext regardless of the original's state.",
+  "n_before": 1,
+  "n_after": 3,
+  "fail_to_pass": [
+    "TestContextCopyCopiesErrors"
+  ],
+  "pass_to_pass": [],
+  "valid": true,
+  "lang": "go",
+  "build": "go-test"
+}

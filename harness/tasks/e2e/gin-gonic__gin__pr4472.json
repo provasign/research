@@ -1,0 +1,31 @@
+{
+  "instance_id": "gin-gonic__gin__pr4472",
+  "repo": "gin-gonic/gin",
+  "pr": 4472,
+  "base_commit": "915e4c90d28ec4cffc6eb146e208ab5a65eac772",
+  "merge_commit": "9914178584e42458ff7d23891463a880f58c9d86",
+  "patch": "diff --git a/context.go b/context.go\nindex e1d9be4..c42459f 100644\n--- a/context.go\n+++ b/context.go\n@@ -989,7 +989,8 @@ func (c *Context) ClientIP() string {\n \n \tif trusted && c.engine.ForwardedByClientIP && c.engine.RemoteIPHeaders != nil {\n \t\tfor _, headerName := range c.engine.RemoteIPHeaders {\n-\t\t\tip, valid := c.engine.validateHeader(c.requestHeader(headerName))\n+\t\t\theaderValue := strings.Join(c.Request.Header.Values(headerName), \",\")\n+\t\t\tip, valid := c.engine.validateHeader(headerValue)\n \t\t\tif valid {\n \t\t\t\treturn ip\n \t\t\t}\n",
+  "test_patch": "diff --git a/context_test.go b/context_test.go\nindex 016fa86..3080015 100644\n--- a/context_test.go\n+++ b/context_test.go\n@@ -1143,6 +1143,37 @@ func TestContextRenderNoContentIndentedJSON(t *testing.T) {\n \tassert.Equal(t, \"application/json; charset=utf-8\", w.Header().Get(\"Content-Type\"))\n }\n \n+func TestContextClientIPWithMultipleHeaders(t *testing.T) {\n+\tc, _ := CreateTestContext(httptest.NewRecorder())\n+\tc.Request, _ = http.NewRequest(http.MethodGet, \"/test\", nil)\n+\n+\t// Multiple X-Forwarded-For headers\n+\tc.Request.Header.Add(\"X-Forwarded-For\", \"1.2.3.4, \"+localhostIP)\n+\tc.Request.Header.Add(\"X-Forwarded-For\", \"5.6.7.8\")\n+\tc.Request.RemoteAddr = localhostIP + \":1234\"\n+\n+\tc.engine.ForwardedByClientIP = true\n+\tc.engine.RemoteIPHeaders = []string{\"X-Forwarded-For\"}\n+\t_ = c.engine.SetTrustedProxies([]string{localhostIP})\n+\n+\t// Should return 5.6.7.8 (last non-trusted IP)\n+\tassert.Equal(t, \"5.6.7.8\", c.ClientIP())\n+}\n+\n+func TestContextClientIPWithSingleHeader(t *testing.T) {\n+\tc, _ := CreateTestContext(httptest.NewRecorder())\n+\tc.Request, _ = http.NewRequest(http.MethodGet, \"/test\", nil)\n+\tc.Request.Header.Set(\"X-Forwarded-For\", \"1.2.3.4, \"+localhostIP)\n+\tc.Request.RemoteAddr = localhostIP + \":1234\"\n+\n+\tc.engine.ForwardedByClientIP = true\n+\tc.engine.RemoteIPHeaders = []string{\"X-Forwarded-For\"}\n+\t_ = c.engine.SetTrustedProxies([]string{localhostIP})\n+\n+\t// Should return 1.2.3.4\n+\tassert.Equal(t, \"1.2.3.4\", c.ClientIP())\n+}\n+\n // Tests that the response is serialized as Secure JSON\n // and Content-Type is set to application/json\n func TestContextRenderSecureJSON(t *testing.T) {\n",
+  "test_functions": [
+    "TestContextClientIPWithMultipleHeaders",
+    "TestContextClientIPWithSingleHeader"
+  ],
+  "src_files": [
+    "context.go"
+  ],
+  "test_modules": [
+    "context_test.go"
+  ],
+  "problem_statement": "fix(context): ClientIP handling for multiple X-Forwarded-For header values\n\n**Description:**\r\n\r\nThis PR addresses the behavior described in issue #4468 by updating how `ClientIP` processes headers listed in `RemoteIPHeaders`.\r\n\r\nWhen multiple headers with the same name (e.g. `X-Forwarded-For`) are present, Gin previously only considered the first header value via `Header.Get`. Per the HTTP specification, such headers must be treated as a single, ordered, comma-separated list.\r\n\r\nThis change joins all header values using `Request.Header.Values(headerName)` before validation, ensuring correct client IP resolution in multi-proxy scenarios.\r\n\r\n**Changes:**\r\n\r\n* Combine all values of headers in `RemoteIPHeaders` before passing them to `validateHeader`.\r\n* Add tests covering multiple header values to ensure correct behavior.\r\n\r\n**Checklist:**\r\n\r\n* [x] PR opened against `master`\r\n* [x] All CI tests pass\r\n* [x] Tests added to cover the updated behavior\r\n* [ ] Documentation update not required (bug fix, not a new feature)\r\n\r\n**References:**\r\n\r\n* Fixes #4468 \r\n",
+  "n_before": 2,
+  "n_after": 2,
+  "fail_to_pass": [
+    "TestContextClientIPWithMultipleHeaders"
+  ],
+  "pass_to_pass": [
+    "TestContextClientIPWithSingleHeader"
+  ],
+  "valid": true,
+  "lang": "go",
+  "build": "go-test"
+}

@@ -40,11 +40,16 @@ import docker_eval
 import fanout_eval
 import seeded_refactor
 import java_eval
+import go_eval
+import js_eval
+import c_eval
 import run_local_agent
 from ab_endtoend_arms import ARMS
 
 OUT = Path("results/e2e")
 OUT.mkdir(parents=True, exist_ok=True)
+
+_LANG_EVAL = {"java": java_eval, "go": go_eval, "js": js_eval, "c": c_eval}
 
 
 def _is_java(task) -> bool:
@@ -52,10 +57,12 @@ def _is_java(task) -> bool:
 
 
 def _repo_for(task) -> Path:
-    """Java tasks live in java_eval.REPO_DIR (e.g. ~/gvg-corpus/jackson-databind);
-    Python tasks use docker_eval's e2e-2026 clone convention."""
-    if _is_java(task):
-        return java_eval.REPO_DIR[task["repo"]]
+    """lang-tagged tasks (java/go/js/c) live in that module's REPO_DIR
+    (e.g. ~/gvg-corpus/<repo>); untagged Python tasks use docker_eval's
+    e2e-2026 clone convention."""
+    lang = task.get("lang")
+    if lang in _LANG_EVAL:
+        return _LANG_EVAL[lang].REPO_DIR[task["repo"]]
     return docker_eval._repo_dir(task)
 
 
@@ -68,6 +75,12 @@ def _score(task, diff: str) -> dict:
         return fanout_eval.score(task, diff)
     if task.get("kind") == "seeded_refactor":
         return seeded_refactor.score(_repo_for(task), task, diff)
+    lang = task.get("lang")
+    if lang == "go":
+        return go_eval.score(go_eval.REPO_DIR[task["repo"]], task, diff)
+    if lang in ("js", "c"):
+        mod = _LANG_EVAL[lang]
+        return mod.score(mod.REPO_DIR[task["repo"]], task["repo"], task, diff)
     if _is_java(task):
         return java_eval.score(java_eval.REPO_DIR[task["repo"]], task, diff)
     return docker_eval.score(task, diff)
