@@ -1,0 +1,11 @@
+Implemented the fix in [src/click/testing.py](/Users/tapabratapal/Projects/provasign/research/harness/results/resolved-cases-native-2026-09-19/work/pallets__click__pr3244.r2.gpt55_native/src/click/testing.py:102).
+
+`CliRunner`’s stdout/stderr wrappers now expose a fallback `fileno()` using the original standard stream descriptors when available, so `subprocess.run(..., stdout=sys.stderr)` no longer raises `io.UnsupportedOperation` during isolation.
+
+Verified with:
+
+```sh
+python -m pytest tests/test_testing.py::test_stderr tests/test_stream_lifecycle.py::test_getvalue_after_isolation_exit
+```
+
+Both passed, and the direct subprocess reproduction exits with code `0`.

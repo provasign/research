@@ -1,0 +1,7 @@
+All relevant tests pass. Summary of the fix:
+
+1. **`src/urllib3/connection.py`** — In `HTTPSConnection.connect()`, when the connection is a forwarding proxy connection (`proxy_is_forwarding`), the socket is actually being wrapped in TLS to talk to the proxy itself, not the destination. Previously it always used `self.ssl_context`/`self.assert_hostname`/`self.assert_fingerprint` (meant for the destination). Now it uses the `ProxyConfig`'s `ssl_context`/`assert_hostname`/`assert_fingerprint` (i.e., `proxy_ssl_context`) in that case.
+
+2. **`src/urllib3/poolmanager.py`** — `ProxyManager.__init__` now raises a `ValueError` if `use_forwarding_for_https=True` and a plain `ssl_context` was passed alongside `proxy_ssl_context` (ambiguous config), or if `ssl_context` was passed without `proxy_ssl_context` (since `ssl_context` is meaningless/misleading in forwarding mode — `proxy_ssl_context` must be used instead).
+
+I left tests unchanged per the instructions (did not remove the pre-existing `pytest.skip` in `test_proxy_https_target_tls_error`, since that requires modifying a test file).

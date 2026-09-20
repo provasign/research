@@ -1,0 +1,12 @@
+Implemented the proxy TLS fix in source only.
+
+Changed:
+- [src/urllib3/connection.py](/Users/tapabratapal/Projects/provasign/research/harness/results/prism-grove-v050-control-codex55-2026-09-19/work/urllib3__urllib3__pr3786.r1.gpt55_prism/src/urllib3/connection.py): forwarding proxy TLS now uses `ProxyConfig.ssl_context`, proxy hostname assertions, and avoids origin client cert/key fields.
+- [src/urllib3/poolmanager.py](/Users/tapabratapal/Projects/provasign/research/harness/results/prism-grove-v050-control-codex55-2026-09-19/work/urllib3__urllib3__pr3786.r1.gpt55_prism/src/urllib3/poolmanager.py): `ProxyManager(..., use_forwarding_for_https=True, ssl_context=...)` now raises `ValueError` telling callers to use `proxy_ssl_context`.
+
+Verification:
+- `python -m pytest test/test_util.py::TestUtil::test_connection_requires_http_tunnel_http_proxy test/test_util.py::TestUtil::test_connection_requires_http_tunnel_https_proxy -q` passed.
+- Direct `ProxyManager` constructor check raises the new `ValueError`.
+- `python -m compileall -q src/urllib3/connection.py src/urllib3/poolmanager.py` passed.
+
+A broader `test/test_proxymanager.py test/test_util.py` run was blocked by the sandbox when a test tried to bind a local port (`PermissionError: [Errno 1] Operation not permitted`).

@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 172544,
+  "stop_reason": "end_turn",
+  "session_id": "2b9fd355-b1b5-402c-b941-c9f862bb7899",
+  "total_cost_usd": 0.44846740000000007,
+  "usage": {
+    "input_tokens": 74,
+    "cache_creation_input_tokens": 35852,
+    "cache_read_input_tokens": 893242,
+    "output_tokens": 12344,
+    "output_tokens_details": {
+      "thinking_tokens": 6278
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 35852,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 561,
+        "cache_read_input_tokens": 42415,
+        "cache_creation_input_tokens": 385,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 385
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 2748,
+      "outputTokens": 15,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.002823,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 74,
+      "outputTokens": 12344,
+      "cacheReadInputTokens": 893242,
+      "cacheCreationInputTokens": 35852,
+      "webSearchRequests": 0,
+      "costUSD": 0.44564440000000005,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 6278,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 37,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "## Summary\n\n**Root cause:** In `Console.print`, when `soft_wrap=True` (which sets `crop=False`), the rendered segments were appended directly to the buffer (`self._buffer.extend(new_segments)`) without splitting embedded newline characters out of styled segments. This meant a segment like `Segment(\"soft\\n\", style)` (or the separate `end=\"\\n\"` segment carrying the same style) got wrapped in ANSI codes as `\\x1b[34;47msoft\\n\\x1b[0m` \u2014 the reset code `\\x1b[0m` came *after* the line feed, so terminals apply the background color through the newline/scroll, causing it to bleed onto the following line.\n\nWhen `crop=True` (the default, `soft_wrap=False`), `Segment.split_and_crop_lines` already handled this correctly by splitting styled text at newlines and re-inserting a plain, unstyled `\"\\n\"` segment, so the reset always preceded the line feed.\n\n**Fix** (`rich/console.py`, in `Console.print`): applied the same newline-splitting logic to the `crop=False` path \u2014 styled segments containing `\"\\n\"` are split so the newline itself is emitted as a separate, unstyled segment, ensuring the style reset happens before the line feed.\n\n**Verification:**\n```\n'\\x1b[34;47msoft\\x1b[0m\\nnext line\\n'   # reset now precedes the newline\n```\nRan `tests/test_console.py`, `tests/test_segment.py`, `tests/test_text.py` (270 tests) \u2014 all pass. The `test_syntax.py`/`test_card.py` failures are pre-existing (identical on the unmodified baseline), unrelated to this change.",
+  "ttft_ms": 1856,
+  "type": "result",
+  "duration_ms": 179008,
+  "uuid": "dfb32c11-0741-459a-9aa1-d8d5fd2f322a",
+  "ttft_stream_ms": 1227,
+  "time_to_request_ms": 25,
+  "first_content_frame_ms": 1487,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

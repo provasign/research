@@ -1,0 +1,13 @@
+Implemented the source fix in [connection.py](/private/tmp/prism-compare-e2e-remaining-20260912/work/urllib3__urllib3__pr3786.r1.gpt55_prism/src/urllib3/connection.py) and [poolmanager.py](/private/tmp/prism-compare-e2e-remaining-20260912/work/urllib3__urllib3__pr3786.r1.gpt55_prism/src/urllib3/poolmanager.py).
+
+What changed:
+- `ProxyManager(..., use_forwarding_for_https=True, ssl_context=...)` now raises `ValueError` telling callers to use `proxy_ssl_context`.
+- HTTPS proxy TLS wrapping now uses `ProxyConfig.ssl_context` (`proxy_ssl_context`) and proxy assertion settings for forwarding mode.
+- HTTPS proxy tunnel wrapping no longer borrows origin CA/cert settings; it uses only the proxy context/default proxy TLS behavior.
+
+Verification:
+- `python -m py_compile src/urllib3/connection.py src/urllib3/poolmanager.py` passed.
+- A direct constructor sanity check raised the expected `ValueError`.
+- Narrow dummyserver pytest was attempted, but failed during fixture setup with `OSError: failed to bind socket`, before exercising the change.
+
+I did not modify tests/docs/config per your constraint.

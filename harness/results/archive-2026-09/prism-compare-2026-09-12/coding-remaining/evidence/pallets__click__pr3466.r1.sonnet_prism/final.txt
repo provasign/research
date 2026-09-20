@@ -1,0 +1,9 @@
+All completion tests pass. 
+
+## Summary
+
+The bug: `_TUPLE_PARAM_COMPLETE=zsh_source ...` output was emitted via `click.echo(comp.source())`, writing the generated shell script as a `str` through click's text-mode output stream. Python's `io.TextIOWrapper` (used for stdout there) translates embedded `\n` to `os.linesep` on write when no explicit `newline` is set. On Windows-hosted shells (e.g., msys2 zsh via Git-for-Windows Python), this turns `\n` into `\r\n`, so tokens like `then` become `then\r` — no longer a recognized shell keyword — breaking the `if/elif/fi` control structure and producing `parse error near 'elif'`.
+
+**Fix** (`src/click/shell_completion.py`): encode the generated script/completions to `bytes` before calling `echo`, since `echo` writes `bytes`/`bytearray` directly to the underlying binary stream, bypassing the text-mode newline translation and preserving literal `\n` line endings regardless of platform.
+
+Ran `tests/test_shell_completion.py` and all completion-related tests (`-k "complet"`) — all 53 pass.

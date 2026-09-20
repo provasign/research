@@ -1,0 +1,6 @@
+Implemented the fix in [src/click/testing.py](/Users/tapabratapal/Projects/provasign/research/harness/results/paired-grove-v050-gate-codex55-2026-09-19/work/pallets__click__pr3244.r2.gpt55_native/src/click/testing.py): `CliRunner`’s wrapped stdout/stderr now expose the original stream file descriptors when available, so `subprocess.run(..., stdout=sys.stderr)` no longer hits `UnsupportedOperation`.
+
+Verified with:
+`python -m pytest tests/test_testing.py::test_stderr tests/test_stream_lifecycle.py::test_wrapper_close_does_not_close_underlying_buffer tests/test_stream_lifecycle.py::test_wrapper_del_does_not_close_underlying_buffer`
+
+I also ran a direct repro using `CliRunner().invoke(..., catch_exceptions=False)`, and it exits cleanly.

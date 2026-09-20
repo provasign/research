@@ -1,0 +1,63 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..0bd7457 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -8,6 +8,7 @@ import pdb
+ import shlex
+ import sys
+ import tempfile
++import threading
+ import typing as t
+ from types import TracebackType
+ 
+@@ -76,11 +77,50 @@ class BytesIOCopy(io.BytesIO):
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._pipe_reader: t.BinaryIO | None = None
++        self._pipe_writer: t.BinaryIO | None = None
++        self._pipe_thread: threading.Thread | None = None
+ 
+     def flush(self) -> None:
+         super().flush()
+         self.copy_to.flush()
+ 
++    def fileno(self) -> int:
++        if self._pipe_writer is None:
++            read_fd, write_fd = os.pipe()
++            self._pipe_reader = os.fdopen(read_fd, "rb")
++            self._pipe_writer = os.fdopen(write_fd, "wb")
++            self._pipe_thread = threading.Thread(
++                target=self._forward_pipe, daemon=True
++            )
++            self._pipe_thread.start()
++
++        return self._pipe_writer.fileno()
++
++    def _forward_pipe(self) -> None:
++        assert self._pipe_reader is not None
++
++        for chunk in iter(lambda: self._pipe_reader.read(8192), b""):
++            self.write(chunk)
++
++    def getvalue(self) -> bytes:
++        self.flush()
++        self._close_pipe_writer()
++        return super().getvalue()
++
++    def _close_pipe_writer(self) -> None:
++        if self._pipe_writer is not None:
++            self._pipe_writer.close()
++            self._pipe_writer = None
++
++        if self._pipe_thread is not None:
++            self._pipe_thread.join()
++            self._pipe_thread = None
++
++        if self._pipe_reader is not None:
++            self._pipe_reader.close()
++            self._pipe_reader = None
++
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+         return super().write(b)

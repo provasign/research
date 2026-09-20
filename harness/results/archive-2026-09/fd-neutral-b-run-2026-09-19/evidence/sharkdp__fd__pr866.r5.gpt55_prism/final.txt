@@ -1,0 +1,13 @@
+Implemented the `-X/--exec-batch` fix in [src/exec/mod.rs](/Users/tapabratapal/Projects/provasign/research/harness/results/fd-neutral-b-run-2026-09-19/work/sharkdp__fd__pr866.r5.gpt55_prism/src/exec/mod.rs).
+
+What changed:
+- Batch execution now splits path arguments across multiple command invocations based on the platform argument limit.
+- On Unix, it uses `sysconf(_SC_ARG_MAX)`, subtracts current environment size, and keeps a small safety margin.
+- Placeholder ordering is preserved, so commands with fixed args before or after `{}` still behave correctly.
+- Exit codes from all generated batches are merged.
+
+Verification:
+- Ran `cargo fmt`
+- Ran `cargo test test_exec_batch` successfully
+
+There was one pre-existing compiler warning in `src/filesystem.rs` about lifetime syntax; I left it untouched.

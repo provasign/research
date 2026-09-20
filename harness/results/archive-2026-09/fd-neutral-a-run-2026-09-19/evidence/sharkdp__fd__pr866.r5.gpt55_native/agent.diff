@@ -1,0 +1,192 @@
+diff --git a/src/exec/mod.rs b/src/exec/mod.rs
+index a364e86..fec1eef 100644
+--- a/src/exec/mod.rs
++++ b/src/exec/mod.rs
+@@ -13,6 +13,7 @@ use anyhow::{anyhow, Result};
+ use lazy_static::lazy_static;
+ use regex::Regex;
+ 
++use crate::exit_codes::merge_exitcodes;
+ use crate::exit_codes::ExitCode;
+ use crate::filesystem::strip_current_dir;
+ 
+@@ -21,6 +22,8 @@ use self::input::{basename, dirname, remove_extension};
+ pub use self::job::{batch, job};
+ use self::token::Token;
+ 
++const POINTER_SIZE: usize = std::mem::size_of::<usize>();
++
+ /// Execution mode of the command
+ #[derive(Debug, Clone, Copy, PartialEq)]
+ pub enum ExecutionMode {
+@@ -163,35 +166,152 @@ impl CommandTemplate {
+     where
+         I: Iterator<Item = PathBuf>,
+     {
+-        let mut cmd = Command::new(self.args[0].generate("", None));
+-        cmd.stdin(Stdio::inherit());
+-        cmd.stdout(Stdio::inherit());
+-        cmd.stderr(Stdio::inherit());
+-
+         let mut paths: Vec<_> = paths.collect();
+-        let mut has_path = false;
++        paths.sort();
++
++        let program = self.args[0].generate("", None);
++        let mut args_before_paths = Vec::new();
++        let mut args_after_paths = Vec::new();
++        let mut path_arg_template = None;
+ 
+         for arg in &self.args[1..] {
+             if arg.has_tokens() {
+-                paths.sort();
+-
+-                // A single `Tokens` is expected
+-                // So we can directly consume the iterator once and for all
+-                for path in &mut paths {
+-                    cmd.arg(arg.generate(strip_current_dir(path), self.path_separator.as_deref()));
+-                    has_path = true;
+-                }
++                path_arg_template = Some(arg);
+             } else {
+-                cmd.arg(arg.generate("", None));
++                let generated = arg.generate("", None);
++                if path_arg_template.is_some() {
++                    args_after_paths.push(generated);
++                } else {
++                    args_before_paths.push(generated);
++                }
+             }
+         }
+ 
+-        if has_path {
+-            execute_command(cmd, &Mutex::new(()), buffer_output)
+-        } else {
++        let path_arg_template = match path_arg_template {
++            Some(template) => template,
++            None => return ExitCode::Success,
++        };
++
++        let mut path_args = paths
++            .iter()
++            .map(|path| {
++                path_arg_template.generate(strip_current_dir(path), self.path_separator.as_deref())
++            })
++            .peekable();
++
++        if path_args.peek().is_none() {
++            return ExitCode::Success;
++        }
++
++        let fixed_args_size = command_size(&program, &args_before_paths, &args_after_paths);
++        let max_command_size = max_command_size();
++        let mut results = Vec::new();
++        let mut batch = Vec::new();
++        let mut batch_size = fixed_args_size;
++
++        for path_arg in path_args {
++            let path_arg_size = os_string_size(&path_arg);
++            if !batch.is_empty() && batch_size + path_arg_size > max_command_size {
++                results.push(self.execute_batch(
++                    &program,
++                    &args_before_paths,
++                    &batch,
++                    &args_after_paths,
++                    buffer_output,
++                ));
++                batch.clear();
++                batch_size = fixed_args_size;
++            }
++
++            batch_size += path_arg_size;
++            batch.push(path_arg);
++        }
++
++        if batch.is_empty() {
+             ExitCode::Success
++        } else {
++            results.push(self.execute_batch(
++                &program,
++                &args_before_paths,
++                &batch,
++                &args_after_paths,
++                buffer_output,
++            ));
++            merge_exitcodes(results)
+         }
+     }
++
++    fn execute_batch(
++        &self,
++        program: &OsStr,
++        args_before_paths: &[OsString],
++        path_args: &[OsString],
++        args_after_paths: &[OsString],
++        buffer_output: bool,
++    ) -> ExitCode {
++        let mut cmd = Command::new(program);
++        cmd.stdin(Stdio::inherit());
++        cmd.stdout(Stdio::inherit());
++        cmd.stderr(Stdio::inherit());
++        cmd.args(args_before_paths);
++        cmd.args(path_args);
++        cmd.args(args_after_paths);
++
++        execute_command(cmd, &Mutex::new(()), buffer_output)
++    }
++}
++
++fn command_size(
++    program: &OsStr,
++    args_before_paths: &[OsString],
++    args_after_paths: &[OsString],
++) -> usize {
++    os_str_size(program)
++        + POINTER_SIZE
++        + args_before_paths
++            .iter()
++            .map(|arg| os_string_size(arg))
++            .sum::<usize>()
++        + args_after_paths
++            .iter()
++            .map(|arg| os_string_size(arg))
++            .sum::<usize>()
++}
++
++fn os_string_size(value: &OsString) -> usize {
++    os_str_size(value.as_os_str()) + POINTER_SIZE
++}
++
++#[cfg(unix)]
++fn os_str_size(value: &OsStr) -> usize {
++    use std::os::unix::ffi::OsStrExt;
++
++    value.as_bytes().len() + 1
++}
++
++#[cfg(not(unix))]
++fn os_str_size(value: &OsStr) -> usize {
++    value.to_string_lossy().len() + 1
++}
++
++#[cfg(all(unix, not(target_os = "redox")))]
++fn max_command_size() -> usize {
++    let arg_max = unsafe { libc::sysconf(libc::_SC_ARG_MAX) };
++    let arg_max = if arg_max > 0 {
++        arg_max as usize
++    } else {
++        128 * 1024
++    };
++    let env_size = std::env::vars_os()
++        .map(|(key, value)| os_str_size(&key) + os_str_size(&value) + POINTER_SIZE)
++        .sum::<usize>();
++
++    arg_max.saturating_sub(env_size + 2048).max(4096)
++}
++
++#[cfg(any(not(unix), target_os = "redox"))]
++fn max_command_size() -> usize {
++    128 * 1024
+ }
+ 
+ /// Represents a template for a single command argument.

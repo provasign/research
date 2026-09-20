@@ -1,0 +1,30 @@
+{
+  "instance_id": "Textualize__rich__pr3882",
+  "repo": "Textualize/rich",
+  "pr": 3882,
+  "base_commit": "12eeb42c96a7a953865b19da204dea6fe658713b",
+  "merge_commit": "abd5a2afc41ff1196fe4d901b8784bb08acf3140",
+  "problem_statement": "[BUG] PromptBase.on_validate_error should explicitly enable markup\n\n- [x] I've checked [docs](https://rich.readthedocs.io/en/latest/introduction.html) and [closed issues](https://github.com/Textualize/rich/issues?q=is%3Aissue+is%3Aclosed) for possible solutions.\n- [x] I can't find my issue in the [FAQ](https://github.com/Textualize/rich/blob/master/FAQ.md).\n\n**Describe the bug**\n\nI create a console with `Console(markup=False)` and then pass it to `Confirm.ask(..., console=console)`.  If the user doesn't pick a valid choice, they get an error that says `[prompt.invalid]Please enter Y or N`.\n\nI think `PromptBase.on_validate_error()` should explicitly pass `markup=true` to `self.console.print(error)`.\n\n**Platform**\n\nEvery platform, it's a logic bug.  (I'm on Ubuntu 25.10 with gnome-terminal, which doesn't matter.)",
+  "patch": "diff --git a/rich/prompt.py b/rich/prompt.py\nindex c7cf25b..ae94d9b 100644\n--- a/rich/prompt.py\n+++ b/rich/prompt.py\n@@ -262,7 +262,7 @@ class PromptBase(Generic[PromptType]):\n             value (str): String entered by user.\n             error (InvalidResponse): Exception instance the initiated the error.\n         \"\"\"\n-        self.console.print(error)\n+        self.console.print(error, markup=True)\n \n     def pre_prompt(self) -> None:\n         \"\"\"Hook to display something before the prompt.\"\"\"\n",
+  "test_patch": "diff --git a/tests/test_prompt.py b/tests/test_prompt.py\nindex 11bffa7..e254cd4 100644\n--- a/tests/test_prompt.py\n+++ b/tests/test_prompt.py\n@@ -111,3 +111,16 @@ def test_prompt_confirm_default():\n     output = console.file.getvalue()\n     print(repr(output))\n     assert output == expected\n+\n+\n+def test_prompt_confirm_markup():\n+    INPUT = \"foo\\nNO\\ny\"\n+    console = Console(file=io.StringIO(), markup=False)\n+    answer = Confirm.ask(\n+        \"continue\", console=console, stream=io.StringIO(INPUT), default=True\n+    )\n+    assert answer is True\n+    expected = \"continue [y/n] (y): Please enter Y or N\\ncontinue [y/n] (y): Please enter Y or N\\ncontinue [y/n] (y): \"\n+    output = console.file.getvalue()\n+    print(repr(output))\n+    assert output == expected\n",
+  "test_modules": [
+    "tests/test_prompt.py"
+  ],
+  "src_files": [
+    "rich/prompt.py"
+  ],
+  "kind": "bug",
+  "task_kind": "localized",
+  "fail_to_pass": [
+    "tests/test_prompt.py::test_prompt_confirm_markup"
+  ],
+  "pass_to_pass": [
+    "tests/test_prompt.py::test_prompt_confirm_default",
+    "tests/test_prompt.py::test_prompt_confirm_no",
+    "tests/test_prompt.py::test_prompt_confirm_yes",
+    "tests/test_prompt.py::test_prompt_int",
+    "tests/test_prompt.py::test_prompt_str",
+    "tests/test_prompt.py::test_prompt_str_case_insensitive",
+    "tests/test_prompt.py::test_prompt_str_default"
+  ]
+}

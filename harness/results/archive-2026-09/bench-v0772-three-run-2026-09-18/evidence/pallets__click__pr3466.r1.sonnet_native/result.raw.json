@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 111930,
+  "stop_reason": "end_turn",
+  "session_id": "eda3b684-7800-482b-a616-e226dc53250e",
+  "total_cost_usd": 0.2613012,
+  "usage": {
+    "input_tokens": 32,
+    "cache_creation_input_tokens": 24173,
+    "cache_read_input_tokens": 424736,
+    "output_tokens": 7817,
+    "output_tokens_details": {
+      "thinking_tokens": 4140
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 24173,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 334,
+        "cache_read_input_tokens": 35027,
+        "cache_creation_input_tokens": 390,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 390
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 1358,
+      "outputTokens": 14,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.001428,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 32,
+      "outputTokens": 7817,
+      "cacheReadInputTokens": 424736,
+      "cacheCreationInputTokens": 24173,
+      "webSearchRequests": 0,
+      "costUSD": 0.25987319999999997,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 4140,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 16,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "No `\\r\\n` sequences appear, and the output is byte-identical to a pure LF script.\n\n## Summary\n\nThe bug: `click.shell_completion.shell_complete()` printed the completion script via `echo(comp.source())`, a plain string written through Python's text-mode stdout. On Windows, text-mode streams translate `\\n` \u2192 `\\r\\n` on write. When shells like msys2's zsh capture that output via `$(...)`, the embedded `\\r` characters corrupt the script and produce `parse error near 'elif'`.\n\nFix: encode the source script to bytes before passing to `echo()` (`src/click/shell_completion.py:47`), which routes it through `echo`'s binary-writer path and bypasses the newline translation, guaranteeing the shell script always uses `\\n` line endings regardless of platform.\n\nVerified with `tests/test_shell_completion.py` (53 passed) and by confirming zsh's `zsh -n` no longer errors on a CRLF-corrupted vs. fixed script.",
+  "ttft_ms": 4906,
+  "type": "result",
+  "duration_ms": 112613,
+  "uuid": "4f29436c-9090-4183-8232-983580f4fd72",
+  "ttft_stream_ms": 2632,
+  "time_to_request_ms": 1142,
+  "first_content_frame_ms": 2632,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

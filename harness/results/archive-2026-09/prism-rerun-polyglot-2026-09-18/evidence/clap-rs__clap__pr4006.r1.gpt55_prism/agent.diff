@@ -1,0 +1,28 @@
+diff --git a/src/parser/validator.rs b/src/parser/validator.rs
+index ebf2b23..4977d12 100644
+--- a/src/parser/validator.rs
++++ b/src/parser/validator.rs
+@@ -483,7 +483,7 @@ impl<'help, 'cmd> Validator<'help, 'cmd> {
+             if let Some(arg) = self.cmd.find(arg_or_group) {
+                 debug!("Validator::validate_required:iter: This is an arg");
+                 if !is_exclusive_present && !self.is_missing_required_ok(arg, matcher, conflicts) {
+-                    return self.missing_required_error(matcher, vec![]);
++                    return self.missing_required_error(matcher, vec![arg.id.clone()]);
+                 }
+             } else if let Some(group) = self.cmd.find_group(arg_or_group) {
+                 debug!("Validator::validate_required:iter: This is a group");
+@@ -573,10 +573,13 @@ impl<'help, 'cmd> Validator<'help, 'cmd> {
+ 
+         let usg = Usage::new(self.cmd).required(&self.required);
+ 
+-        let req_args = usg
++        let mut req_args = usg
+             .get_required_usage_from(&incl, Some(matcher), true)
+             .into_iter()
+             .collect::<Vec<_>>();
++        if req_args.is_empty() {
++            req_args.extend(incl.iter().filter_map(|id| self.cmd.find(id).map(|a| a.to_string())));
++        }
+ 
+         debug!(
+             "Validator::missing_required_error: req_args={:#?}",

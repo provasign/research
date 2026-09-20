@@ -1,0 +1,9 @@
+Implemented the smallest source fix in [src/click/testing.py](/Users/tapabratapal/Projects/provasign/research/harness/results/paired-grove-v058-gate-codex55-2026-09-19/work/pallets__click__pr3244.r1.gpt55_prism/src/click/testing.py): `_NamedTextIOWrapper` can now lazily delegate `fileno()` to the original std stream it replaced. This prevents `subprocess.run(..., stdout=sys.stderr)` from hitting `io.UnsupportedOperation` inside `CliRunner`.
+
+Verified with:
+
+```sh
+python -m pytest tests/test_testing.py::test_isolation_flushes_unflushed_stderr tests/test_stream_lifecycle.py::test_wrapper_preserves_name_and_mode
+```
+
+Also ran a direct reproduction; it exits with `0` and no `UnsupportedOperation`.

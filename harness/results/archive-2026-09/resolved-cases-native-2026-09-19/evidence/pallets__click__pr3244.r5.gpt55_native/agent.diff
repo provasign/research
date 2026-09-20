@@ -1,0 +1,68 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..9ed8f62 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -8,6 +8,7 @@ import pdb
+ import shlex
+ import sys
+ import tempfile
++import threading
+ import typing as t
+ from types import TracebackType
+ 
+@@ -76,15 +77,55 @@ class BytesIOCopy(io.BytesIO):
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._read_fd: int | None = None
++        self._write_fd: int | None = None
++        self._reader_thread: threading.Thread | None = None
+ 
+     def flush(self) -> None:
+         super().flush()
+         self.copy_to.flush()
+ 
++    def fileno(self) -> int:
++        if self._write_fd is None:
++            self._read_fd, self._write_fd = os.pipe()
++            self._reader_thread = threading.Thread(target=self._read_pipe)
++            self._reader_thread.daemon = True
++            self._reader_thread.start()
++
++        return self._write_fd
++
++    def getvalue(self) -> bytes:
++        self._close_pipe()
++        return super().getvalue()
++
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+         return super().write(b)
+ 
++    def _read_pipe(self) -> None:
++        assert self._read_fd is not None
++
++        try:
++            while True:
++                chunk = os.read(self._read_fd, 8192)
++
++                if not chunk:
++                    break
++
++                self.write(chunk)
++        finally:
++            os.close(self._read_fd)
++            self._read_fd = None
++
++    def _close_pipe(self) -> None:
++        if self._write_fd is not None:
++            os.close(self._write_fd)
++            self._write_fd = None
++
++        if self._reader_thread is not None:
++            self._reader_thread.join()
++            self._reader_thread = None
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.

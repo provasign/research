@@ -1,0 +1,3 @@
+All 1419 tests pass, plus the reproduction case now works correctly and no longer raises `UnsupportedOperation`.
+
+Fix summary: `click.testing.BytesIOCopy` (used for `CliRunner`'s captured stdout/stderr) is now a lazy hybrid — it behaves as a plain `io.BytesIO` until `fileno()` is called, at which point it spools its contents into a real OS-backed temp file and proxies I/O there, giving `subprocess.run` etc. a real file descriptor to write to (`src/click/testing.py:70-158`). `flush()` also picks up bytes written directly to that fd (bypassing `write()`, as `subprocess` does) so the mixed `output` capture stays correct.

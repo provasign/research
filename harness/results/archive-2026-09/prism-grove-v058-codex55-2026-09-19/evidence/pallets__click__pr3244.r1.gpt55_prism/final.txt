@@ -1,0 +1,9 @@
+Implemented the source fix in [src/click/testing.py](/Users/tapabratapal/Projects/provasign/research/harness/results/prism-grove-v058-codex55-2026-09-19/work/pallets__click__pr3244.r1.gpt55_prism/src/click/testing.py:76).
+
+`CliRunner`’s captured binary streams now lazily provide a real `fileno()` via a temp file when subprocess needs one, while preserving normal in-memory capture for the usual path. This resolves `subprocess.run(..., stdout=sys.stderr)` raising `io.UnsupportedOperation`.
+
+Verified with:
+- Direct repro using `CliRunner` + `subprocess.run(["echo", "foo"], stdout=sys.stderr)`
+- `python -m pytest tests/test_testing.py tests/test_stream_lifecycle.py`
+
+Both passed.

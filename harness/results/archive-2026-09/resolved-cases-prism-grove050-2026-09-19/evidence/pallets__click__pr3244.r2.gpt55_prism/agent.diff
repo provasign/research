@@ -1,0 +1,48 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..851cf51 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -76,15 +76,43 @@ class BytesIOCopy(io.BytesIO):
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._file: t.BinaryIO | None = None
++        self._file_position = 0
+ 
+     def flush(self) -> None:
+         super().flush()
+         self.copy_to.flush()
+ 
++        if self._file is not None:
++            self._file.flush()
++
++    def fileno(self) -> int:
++        if self._file is None:
++            self._file = tempfile.TemporaryFile()
++
++        return self._file.fileno()
++
+     def write(self, b: ReadableBuffer) -> int:
++        if self._file is not None:
++            return self._file.write(b)
++
+         self.copy_to.write(b)
+         return super().write(b)
+ 
++    def getvalue(self) -> bytes:
++        if self._file is not None:
++            self._file.flush()
++            self._file.seek(self._file_position)
++            new_bytes = self._file.read()
++            self._file_position = self._file.tell()
++            self._file.seek(0, io.SEEK_END)
++
++            if new_bytes:
++                self.copy_to.write(new_bytes)
++                super().write(new_bytes)
++
++        return super().getvalue()
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.

@@ -1,0 +1,38 @@
+diff --git a/rich/console.py b/rich/console.py
+index 994adfc..aec88f3 100644
+--- a/rich/console.py
++++ b/rich/console.py
+@@ -2123,13 +2123,27 @@ class Console:
+             buffer = Segment.remove_color(buffer)
+         for text, style, control in buffer:
+             if style:
+-                append(
+-                    style.render(
+-                        text,
+-                        color_system=color_system,
+-                        legacy_windows=legacy_windows,
++                if "\n" in text:
++                    while text:
++                        line, new_line, text = text.partition("\n")
++                        if line:
++                            append(
++                                style.render(
++                                    line,
++                                    color_system=color_system,
++                                    legacy_windows=legacy_windows,
++                                )
++                            )
++                        if new_line:
++                            append(new_line)
++                else:
++                    append(
++                        style.render(
++                            text,
++                            color_system=color_system,
++                            legacy_windows=legacy_windows,
++                        )
+                     )
+-                )
+             elif not (not_terminal and control):
+                 append(text)
+ 

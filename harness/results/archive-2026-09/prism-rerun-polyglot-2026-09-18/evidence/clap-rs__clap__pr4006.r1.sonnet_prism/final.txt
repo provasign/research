@@ -1,0 +1,5 @@
+All 173 tests pass. The fix is complete.
+
+**Root cause**: In `Usage::get_required_usage_from` (src/output/usage.rs), args belonging to a required `ArgGroup` were always excluded from the individual "missing required argument" list, even when the group's requirement was already satisfied by another present arg. This meant an arg required via `requires()` (not the group itself) would be silently dropped from the error message, producing an empty `req_args` list.
+
+**Fix**: Only exclude group members from the individual listing when the containing group is still unsatisfied (i.e., no arg from that group is present). If the group is already satisfied but a specific member is separately required (e.g., via `requires`), it now correctly appears in the error.

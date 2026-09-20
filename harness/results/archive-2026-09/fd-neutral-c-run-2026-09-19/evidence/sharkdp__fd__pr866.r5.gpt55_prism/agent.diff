@@ -1,0 +1,167 @@
+diff --git a/src/exec/mod.rs b/src/exec/mod.rs
+index a364e86..815574f 100644
+--- a/src/exec/mod.rs
++++ b/src/exec/mod.rs
+@@ -5,6 +5,8 @@ mod token;
+ 
+ use std::borrow::Cow;
+ use std::ffi::{OsStr, OsString};
++#[cfg(unix)]
++use std::os::unix::ffi::OsStrExt;
+ use std::path::{Component, Path, PathBuf, Prefix};
+ use std::process::{Command, Stdio};
+ use std::sync::{Arc, Mutex};
+@@ -13,7 +15,7 @@ use anyhow::{anyhow, Result};
+ use lazy_static::lazy_static;
+ use regex::Regex;
+ 
+-use crate::exit_codes::ExitCode;
++use crate::exit_codes::{merge_exitcodes, ExitCode};
+ use crate::filesystem::strip_current_dir;
+ 
+ use self::command::execute_command;
+@@ -163,37 +165,125 @@ impl CommandTemplate {
+     where
+         I: Iterator<Item = PathBuf>,
+     {
+-        let mut cmd = Command::new(self.args[0].generate("", None));
++        let mut paths: Vec<_> = paths.collect();
++        if paths.is_empty() {
++            return ExitCode::Success;
++        }
++        paths.sort();
++
++        let token_arg_index = self
++            .args
++            .iter()
++            .position(|arg| arg.has_tokens())
++            .expect("exec-batch requires exactly one placeholder argument");
++
++        let executable = self.args[0].generate("", None);
++        let fixed_args_size = command_size(&executable)
++            + self.args[1..]
++                .iter()
++                .filter(|arg| !arg.has_tokens())
++                .map(|arg| osstr_size(&arg.generate("", None)))
++                .sum::<usize>();
++        let max_size = max_command_size().saturating_sub(fixed_args_size);
++        let mut results = Vec::new();
++        let mut pending = Vec::new();
++        let mut pending_size = 0;
++
++        for path in &paths {
++            let arg = self.args[token_arg_index]
++                .generate(strip_current_dir(path), self.path_separator.as_deref());
++            let arg_size = osstr_size(&arg);
++
++            if !pending.is_empty() && pending_size + arg_size > max_size {
++                results.push(self.execute_batch_chunk(
++                    &executable,
++                    token_arg_index,
++                    &pending,
++                    buffer_output,
++                ));
++                pending.clear();
++                pending_size = 0;
++            }
++
++            pending_size += arg_size;
++            pending.push(arg);
++        }
++
++        if !pending.is_empty() {
++            results.push(self.execute_batch_chunk(
++                &executable,
++                token_arg_index,
++                &pending,
++                buffer_output,
++            ));
++        }
++
++        merge_exitcodes(results)
++    }
++
++    fn execute_batch_chunk(
++        &self,
++        executable: &OsStr,
++        token_arg_index: usize,
++        path_args: &[OsString],
++        buffer_output: bool,
++    ) -> ExitCode {
++        let mut cmd = Command::new(executable);
+         cmd.stdin(Stdio::inherit());
+         cmd.stdout(Stdio::inherit());
+         cmd.stderr(Stdio::inherit());
+ 
+-        let mut paths: Vec<_> = paths.collect();
+-        let mut has_path = false;
+-
+-        for arg in &self.args[1..] {
+-            if arg.has_tokens() {
+-                paths.sort();
+-
+-                // A single `Tokens` is expected
+-                // So we can directly consume the iterator once and for all
+-                for path in &mut paths {
+-                    cmd.arg(arg.generate(strip_current_dir(path), self.path_separator.as_deref()));
+-                    has_path = true;
+-                }
++        for (index, arg) in self.args[1..].iter().enumerate() {
++            if index + 1 == token_arg_index {
++                cmd.args(path_args);
+             } else {
+                 cmd.arg(arg.generate("", None));
+             }
+         }
+ 
+-        if has_path {
+-            execute_command(cmd, &Mutex::new(()), buffer_output)
+-        } else {
+-            ExitCode::Success
+-        }
++        execute_command(cmd, &Mutex::new(()), buffer_output)
+     }
+ }
+ 
++fn command_size(executable: &OsStr) -> usize {
++    osstr_size(executable) + env_size()
++}
++
++fn osstr_size(value: &OsStr) -> usize {
++    osstr_len(value) + 1 + std::mem::size_of::<usize>()
++}
++
++#[cfg(unix)]
++fn osstr_len(value: &OsStr) -> usize {
++    value.as_bytes().len()
++}
++
++#[cfg(not(unix))]
++fn osstr_len(value: &OsStr) -> usize {
++    value.to_string_lossy().len()
++}
++
++fn env_size() -> usize {
++    std::env::vars_os()
++        .map(|(key, value)| osstr_size(&key) + osstr_size(&value))
++        .sum()
++}
++
++#[cfg(all(unix, not(target_os = "redox")))]
++fn max_command_size() -> usize {
++    let arg_max = unsafe { libc::sysconf(libc::_SC_ARG_MAX) };
++    if arg_max > 0 {
++        (arg_max as usize).saturating_sub(2048)
++    } else {
++        128 * 1024
++    }
++}
++
++#[cfg(any(not(unix), target_os = "redox"))]
++fn max_command_size() -> usize {
++    32 * 1024
++}
++
+ /// Represents a template for a single command argument.
+ ///
+ /// The argument is either a collection of `Token`s including at least one placeholder variant, or

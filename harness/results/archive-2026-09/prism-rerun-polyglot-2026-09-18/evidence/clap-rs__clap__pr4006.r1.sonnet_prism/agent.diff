@@ -1,0 +1,20 @@
+diff --git a/src/output/usage.rs b/src/output/usage.rs
+index 7adaf58..880431d 100644
+--- a/src/output/usage.rs
++++ b/src/output/usage.rs
+@@ -386,6 +386,15 @@ impl<'help, 'cmd> Usage<'help, 'cmd> {
+             .cmd
+             .get_groups()
+             .filter(|gn| required.contains(&gn.id))
++            .filter(|gn| {
++                matcher.map_or(true, |m| {
++                    !self
++                        .cmd
++                        .unroll_args_in_group(&gn.id)
++                        .iter()
++                        .any(|arg| m.check_explicit(arg, ArgPredicate::IsPresent))
++                })
++            })
+             .flat_map(|g| self.cmd.unroll_args_in_group(&g.id))
+             .collect::<Vec<_>>();
+ 

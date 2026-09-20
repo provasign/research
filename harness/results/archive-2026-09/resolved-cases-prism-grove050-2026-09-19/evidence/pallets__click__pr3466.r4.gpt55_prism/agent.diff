@@ -1,0 +1,31 @@
+diff --git a/src/click/shell_completion.py b/src/click/shell_completion.py
+index 7235f10..c8cbe58 100644
+--- a/src/click/shell_completion.py
++++ b/src/click/shell_completion.py
+@@ -16,6 +16,12 @@ from .core import ParameterSource
+ from .utils import echo
+ 
+ 
++def _echo_completion(value: str) -> None:
++    # Write bytes so Windows does not translate "\n" to "\r\n". Shells such
++    # as zsh parse CRLF completion scripts incorrectly.
++    echo(value.encode(), nl=True)
++
++
+ def shell_complete(
+     cli: Command,
+     ctx_args: cabc.MutableMapping[str, t.Any],
+@@ -44,11 +50,11 @@ def shell_complete(
+     comp = comp_cls(cli, ctx_args, prog_name, complete_var)
+ 
+     if instruction == "source":
+-        echo(comp.source())
++        _echo_completion(comp.source())
+         return 0
+ 
+     if instruction == "complete":
+-        echo(comp.complete())
++        _echo_completion(comp.complete())
+         return 0
+ 
+     return 1

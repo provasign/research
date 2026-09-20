@@ -1,0 +1,50 @@
+diff --git a/src/click/shell_completion.py b/src/click/shell_completion.py
+index 7235f10..c911e62 100644
+--- a/src/click/shell_completion.py
++++ b/src/click/shell_completion.py
+@@ -16,6 +16,10 @@ from .core import ParameterSource
+ from .utils import echo
+ 
+ 
++def _quote_zsh(value: str) -> str:
++    return "'" + value.replace("'", "'\\''") + "'"
++
++
+ def shell_complete(
+     cli: Command,
+     ctx_args: cabc.MutableMapping[str, t.Any],
+@@ -137,10 +141,11 @@ _SOURCE_ZSH = """\
+     local -a completions
+     local -a completions_with_descriptions
+     local -a response
+-    (( ! $+commands[%(prog_name)s] )) && return 1
++    local prog_name=%(prog_name_shell)s
++    (( ! $+commands[$prog_name] )) && return 1
+ 
+     response=("${(@f)$(env COMP_WORDS="${words[*]}" COMP_CWORD=$((CURRENT-1)) \
+-%(complete_var)s=zsh_complete %(prog_name)s)}")
++%(complete_var)s=zsh_complete "$prog_name")}")
+ 
+     for type key descr in ${response}; do
+         if [[ "$type" == "plain" ]]; then
+@@ -170,7 +175,7 @@ if [[ $zsh_eval_context[-1] == loadautofunc ]]; then
+     %(complete_func)s "$@"
+ else
+     # eval/source/. command, register function for later
+-    compdef %(complete_func)s %(prog_name)s
++    compdef %(complete_func)s %(prog_name_shell)s
+ fi
+ """
+ 
+@@ -370,6 +375,11 @@ class ZshComplete(ShellComplete):
+     name = "zsh"
+     source_template = _SOURCE_ZSH
+ 
++    def source_vars(self) -> dict[str, t.Any]:
++        rv = super().source_vars()
++        rv["prog_name_shell"] = _quote_zsh(self.prog_name)
++        return rv
++
+     def get_completion_args(self) -> tuple[list[str], str]:
+         cwords = split_arg_string(os.environ["COMP_WORDS"])
+         cword = int(os.environ["COMP_CWORD"])

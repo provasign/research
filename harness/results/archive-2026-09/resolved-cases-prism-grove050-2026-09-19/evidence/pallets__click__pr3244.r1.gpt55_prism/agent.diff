@@ -1,0 +1,53 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..28a86f1 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -107,6 +107,35 @@ class _NamedTextIOWrapper(io.TextIOWrapper):
+         super().__init__(buffer, **kwargs)
+         self._name = name
+         self._mode = mode
++        self._fileno_stream: t.BinaryIO | None = None
++        self._fileno_stream_position = 0
++
++    def _flush_fileno_stream(self) -> None:
++        if self._fileno_stream is None:
++            return
++
++        self._fileno_stream.flush()
++        self._fileno_stream.seek(self._fileno_stream_position)
++        output = self._fileno_stream.read()
++        self._fileno_stream_position = self._fileno_stream.tell()
++        self._fileno_stream.seek(0, os.SEEK_END)
++
++        if output:
++            self.buffer.write(output)
++            self.buffer.flush()
++
++    def fileno(self) -> int:
++        try:
++            return self.buffer.fileno()
++        except (AttributeError, OSError, io.UnsupportedOperation):
++            if self._fileno_stream is None:
++                self._fileno_stream = tempfile.TemporaryFile("w+b")
++
++            return self._fileno_stream.fileno()
++
++    def flush(self) -> None:
++        super().flush()
++        self._flush_fileno_stream()
+ 
+     def close(self) -> None:
+         """
+@@ -115,7 +144,11 @@ class _NamedTextIOWrapper(io.TextIOWrapper):
+ 
+         .. versionadded:: 8.3.2
+         """
+-        ...
++        self.flush()
++
++        if self._fileno_stream is not None:
++            self._fileno_stream.close()
++            self._fileno_stream = None
+ 
+     @property
+     def name(self) -> str:

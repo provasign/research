@@ -1,0 +1,58 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..ffb6daf 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -76,12 +76,51 @@ class BytesIOCopy(io.BytesIO):
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._file: t.BinaryIO | None = None
++        self._file_last_pos = 0
++
++    def _get_file(self) -> t.BinaryIO:
++        if self._file is None:
++            self._file = tempfile.TemporaryFile()
++            self._file.write(super().getvalue())
++            self._file.flush()
++            self._file_last_pos = self._file.tell()
++
++        return self._file
++
++    def _sync_from_file(self) -> None:
++        if self._file is None:
++            return
++
++        self._file.flush()
++        current = self._file.tell()
++        self._file.seek(self._file_last_pos)
++        new_data = self._file.read()
++        self._file.seek(current)
++
++        if new_data:
++            self.copy_to.write(new_data)
++            super().write(new_data)
++            self._file_last_pos += len(new_data)
++
++    def fileno(self) -> int:
++        return self._get_file().fileno()
+ 
+     def flush(self) -> None:
+-        super().flush()
+-        self.copy_to.flush()
++        if self._file is not None:
++            self._file.flush()
++        else:
++            super().flush()
++            self.copy_to.flush()
++
++    def getvalue(self) -> bytes:
++        self._sync_from_file()
++        return super().getvalue()
+ 
+     def write(self, b: ReadableBuffer) -> int:
++        if self._file is not None:
++            return self._file.write(b)
++
+         self.copy_to.write(b)
+         return super().write(b)
+ 

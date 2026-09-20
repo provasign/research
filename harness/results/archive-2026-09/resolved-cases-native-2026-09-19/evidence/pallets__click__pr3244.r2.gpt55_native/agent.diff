@@ -1,0 +1,70 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..99ca37f 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -102,11 +102,17 @@ class StreamMixer:
+ 
+ class _NamedTextIOWrapper(io.TextIOWrapper):
+     def __init__(
+-        self, buffer: t.BinaryIO, name: str, mode: str, **kwargs: t.Any
++        self,
++        buffer: t.BinaryIO,
++        name: str,
++        mode: str,
++        fallback_fileno: int | None = None,
++        **kwargs: t.Any,
+     ) -> None:
+         super().__init__(buffer, **kwargs)
+         self._name = name
+         self._mode = mode
++        self._fallback_fileno = fallback_fileno
+ 
+     def close(self) -> None:
+         """
+@@ -125,6 +131,25 @@ class _NamedTextIOWrapper(io.TextIOWrapper):
+     def mode(self) -> str:
+         return self._mode
+ 
++    def fileno(self) -> int:
++        if self._fallback_fileno is not None:
++            return self._fallback_fileno
++
++        return super().fileno()
++
++
++def _get_fileno(*streams: t.IO[t.Any] | None) -> int | None:
++    for stream in streams:
++        if stream is None:
++            continue
++
++        try:
++            return stream.fileno()
++        except (AttributeError, io.UnsupportedOperation, OSError, ValueError):
++            pass
++
++    return None
++
+ 
+ def make_input_stream(
+     input: str | bytes | t.IO[t.Any] | None, charset: str
+@@ -336,7 +361,11 @@ class CliRunner:
+             text_input._CHUNK_SIZE = 1  # type: ignore
+ 
+         sys.stdout = _NamedTextIOWrapper(
+-            stream_mixer.stdout, encoding=self.charset, name="<stdout>", mode="w"
++            stream_mixer.stdout,
++            encoding=self.charset,
++            name="<stdout>",
++            mode="w",
++            fallback_fileno=_get_fileno(old_stdout, sys.__stdout__),
+         )
+ 
+         sys.stderr = _NamedTextIOWrapper(
+@@ -344,6 +373,7 @@ class CliRunner:
+             encoding=self.charset,
+             name="<stderr>",
+             mode="w",
++            fallback_fileno=_get_fileno(old_stderr, sys.__stderr__),
+             errors="backslashreplace",
+         )
+ 

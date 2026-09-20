@@ -1,0 +1,90 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..d60b909 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -76,15 +76,51 @@ class BytesIOCopy(io.BytesIO):
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._file = tempfile.TemporaryFile()
++        self._file_position = 0
+ 
+     def flush(self) -> None:
++        self._sync_external_writes()
+         super().flush()
+         self.copy_to.flush()
++        if not self._file.closed:
++            self._file.flush()
++
++    def fileno(self) -> int:
++        self.flush()
++        return self._file.fileno()
+ 
+     def write(self, b: ReadableBuffer) -> int:
++        self._sync_external_writes()
++        if not self._file.closed:
++            self._file.write(b)
++            self._file_position = self._file.tell()
+         self.copy_to.write(b)
+         return super().write(b)
+ 
++    def getvalue(self) -> bytes:
++        self._sync_external_writes()
++        return super().getvalue()
++
++    def close_external(self) -> None:
++        self._sync_external_writes()
++        self._file.close()
++
++    def _sync_external_writes(self) -> None:
++        if self._file.closed:
++            return
++
++        self._file.flush()
++        self._file.seek(self._file_position)
++        new_data = self._file.read()
++
++        if not new_data:
++            return
++
++        self._file_position = self._file.tell()
++        self.copy_to.write(new_data)
++        super().write(new_data)
++
+ 
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.
+@@ -96,8 +132,12 @@ class StreamMixer:
+ 
+     def __init__(self) -> None:
+         self.output: io.BytesIO = io.BytesIO()
+-        self.stdout: io.BytesIO = BytesIOCopy(copy_to=self.output)
+-        self.stderr: io.BytesIO = BytesIOCopy(copy_to=self.output)
++        self.stdout: BytesIOCopy = BytesIOCopy(copy_to=self.output)
++        self.stderr: BytesIOCopy = BytesIOCopy(copy_to=self.output)
++
++    def close_external(self) -> None:
++        self.stdout.close_external()
++        self.stderr.close_external()
+ 
+ 
+ class _NamedTextIOWrapper(io.TextIOWrapper):
+@@ -117,6 +157,10 @@ class _NamedTextIOWrapper(io.TextIOWrapper):
+         """
+         ...
+ 
++    def fileno(self) -> int:
++        self.flush()
++        return super().fileno()
++
+     @property
+     def name(self) -> str:
+         return self._name
+@@ -471,6 +515,7 @@ class CliRunner:
+             _compat.should_strip_ansi = old__compat_should_strip_ansi
+             formatting.FORCED_WIDTH = old_forced_width
+             pdb.Pdb.__init__ = old_pdb_init  # type: ignore[method-assign]
++            stream_mixer.close_external()
+ 
+     def invoke(
+         self,

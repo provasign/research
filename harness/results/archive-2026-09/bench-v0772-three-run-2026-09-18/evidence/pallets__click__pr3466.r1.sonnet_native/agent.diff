@@ -1,0 +1,17 @@
+diff --git a/src/click/shell_completion.py b/src/click/shell_completion.py
+index 7235f10..f3dce0f 100644
+--- a/src/click/shell_completion.py
++++ b/src/click/shell_completion.py
+@@ -44,7 +44,11 @@ def shell_complete(
+     comp = comp_cls(cli, ctx_args, prog_name, complete_var)
+ 
+     if instruction == "source":
+-        echo(comp.source())
++        # Encode to bytes so ``echo`` writes through the binary stream,
++        # bypassing platform newline translation. On Windows, text-mode
++        # stdout turns "\n" into "\r\n", which breaks shells (e.g. msys2
++        # zsh) that parse the script from `$(...)` command substitution.
++        echo(comp.source().encode("utf-8"))
+         return 0
+ 
+     if instruction == "complete":

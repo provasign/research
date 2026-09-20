@@ -1,0 +1,121 @@
+diff --git a/src/output/usage.rs b/src/output/usage.rs
+index 7adaf58..0a1e03b 100644
+--- a/src/output/usage.rs
++++ b/src/output/usage.rs
+@@ -394,7 +394,10 @@ impl<'help, 'cmd> Usage<'help, 'cmd> {
+             .chain(incls.iter())
+             .filter(|name| !self.cmd.get_positionals().any(|p| &&p.id == name))
+             .filter(|name| !self.cmd.get_groups().any(|g| &&g.id == name))
+-            .filter(|name| !args_in_groups.contains(name))
++            .filter(|name| {
++                let explicitly_included_missing = matcher.is_some() && incls.contains(*name);
++                explicitly_included_missing || !args_in_groups.contains(name)
++            })
+             .filter(|name| {
+                 !(matcher.is_some()
+                     && matcher
+@@ -440,14 +443,18 @@ impl<'help, 'cmd> Usage<'help, 'cmd> {
+             })
+             .filter_map(|pos| self.cmd.find(pos))
+             .filter(|&pos| incl_last || !pos.is_last_set())
+-            .filter(|pos| !args_in_groups.contains(&pos.id))
++            .filter(|pos| {
++                let explicitly_included_missing = matcher.is_some() && incls.contains(&pos.id);
++                explicitly_included_missing || !args_in_groups.contains(&pos.id)
++            })
+             .map(|pos| (pos.index.unwrap(), pos))
+             .collect::<Vec<(usize, &Arg)>>();
+         pvec.sort_by_key(|(ind, _)| *ind); // sort by index
+ 
+         for (_, p) in pvec {
+             debug!("Usage::get_required_usage_from:push:{:?}", p.id);
+-            if !args_in_groups.contains(&p.id) {
++            let explicitly_included_missing = matcher.is_some() && incls.contains(&p.id);
++            if explicitly_included_missing || !args_in_groups.contains(&p.id) {
+                 ret_val.insert(p.to_string());
+             }
+         }
+diff --git a/src/parser/validator.rs b/src/parser/validator.rs
+index ebf2b23..fd12a32 100644
+--- a/src/parser/validator.rs
++++ b/src/parser/validator.rs
+@@ -483,7 +483,7 @@ impl<'help, 'cmd> Validator<'help, 'cmd> {
+             if let Some(arg) = self.cmd.find(arg_or_group) {
+                 debug!("Validator::validate_required:iter: This is an arg");
+                 if !is_exclusive_present && !self.is_missing_required_ok(arg, matcher, conflicts) {
+-                    return self.missing_required_error(matcher, vec![]);
++                    return self.missing_required_error(matcher, vec![arg.id.clone()], false);
+                 }
+             } else if let Some(group) = self.cmd.find_group(arg_or_group) {
+                 debug!("Validator::validate_required:iter: This is a group");
+@@ -493,7 +493,7 @@ impl<'help, 'cmd> Validator<'help, 'cmd> {
+                     .iter()
+                     .any(|a| matcher.check_explicit(a, ArgPredicate::IsPresent))
+                 {
+-                    return self.missing_required_error(matcher, vec![]);
++                    return self.missing_required_error(matcher, vec![], true);
+                 }
+             }
+         }
+@@ -504,7 +504,7 @@ impl<'help, 'cmd> Validator<'help, 'cmd> {
+                 if matcher.check_explicit(other, ArgPredicate::Equals(std::ffi::OsStr::new(*val)))
+                     && !matcher.check_explicit(&a.id, ArgPredicate::IsPresent)
+                 {
+-                    return self.missing_required_error(matcher, vec![a.id.clone()]);
++                    return self.missing_required_error(matcher, vec![a.id.clone()], true);
+                 }
+             }
+ 
+@@ -515,7 +515,7 @@ impl<'help, 'cmd> Validator<'help, 'cmd> {
+                 && !a.r_ifs_all.is_empty()
+                 && !matcher.check_explicit(&a.id, ArgPredicate::IsPresent)
+             {
+-                return self.missing_required_error(matcher, vec![a.id.clone()]);
++                return self.missing_required_error(matcher, vec![a.id.clone()], true);
+             }
+         }
+ 
+@@ -550,7 +550,7 @@ impl<'help, 'cmd> Validator<'help, 'cmd> {
+         if failed_args.is_empty() {
+             Ok(())
+         } else {
+-            self.missing_required_error(matcher, failed_args)
++            self.missing_required_error(matcher, failed_args, true)
+         }
+     }
+ 
+@@ -564,7 +564,12 @@ impl<'help, 'cmd> Validator<'help, 'cmd> {
+     }
+ 
+     // `incl`: an arg to include in the error even if not used
+-    fn missing_required_error(&self, matcher: &ArgMatcher, incl: Vec<Id>) -> ClapResult<()> {
++    fn missing_required_error(
++        &self,
++        matcher: &ArgMatcher,
++        incl: Vec<Id>,
++        incl_in_usage: bool,
++    ) -> ClapResult<()> {
+         debug!("Validator::missing_required_error; incl={:?}", incl);
+         debug!(
+             "Validator::missing_required_error: reqs={:?}",
+@@ -583,7 +588,7 @@ impl<'help, 'cmd> Validator<'help, 'cmd> {
+             req_args
+         );
+ 
+-        let used: Vec<Id> = matcher
++        let mut used: Vec<Id> = matcher
+             .arg_ids()
+             .filter(|arg_id| matcher.check_explicit(arg_id, ArgPredicate::IsPresent))
+             .filter(|n| {
+@@ -591,8 +596,10 @@ impl<'help, 'cmd> Validator<'help, 'cmd> {
+                 self.cmd.find(n).map_or(true, |a| !a.is_hide_set())
+             })
+             .cloned()
+-            .chain(incl)
+             .collect();
++        if incl_in_usage {
++            used.extend(incl);
++        }
+ 
+         Err(Error::missing_required_argument(
+             self.cmd,

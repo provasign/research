@@ -1,0 +1,9 @@
+No `\r\n` sequences appear, and the output is byte-identical to a pure LF script.
+
+## Summary
+
+The bug: `click.shell_completion.shell_complete()` printed the completion script via `echo(comp.source())`, a plain string written through Python's text-mode stdout. On Windows, text-mode streams translate `\n` → `\r\n` on write. When shells like msys2's zsh capture that output via `$(...)`, the embedded `\r` characters corrupt the script and produce `parse error near 'elif'`.
+
+Fix: encode the source script to bytes before passing to `echo()` (`src/click/shell_completion.py:47`), which routes it through `echo`'s binary-writer path and bypasses the newline translation, guaranteeing the shell script always uses `\n` line endings regardless of platform.
+
+Verified with `tests/test_shell_completion.py` (53 passed) and by confirming zsh's `zsh -n` no longer errors on a CRLF-corrupted vs. fixed script.

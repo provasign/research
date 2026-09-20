@@ -1,0 +1,12 @@
+Implemented the `-X` batching fix in [src/exec/mod.rs](/Users/tapabratapal/Projects/provasign/research/harness/results/fd-neutral-c-run-2026-09-19/work/sharkdp__fd__pr866.r2.gpt55_prism/src/exec/mod.rs).
+
+Batch execution now splits file arguments into multiple command invocations sized against `ARG_MAX` on Unix, accounting for environment size, fixed args, null terminators, and pointer overhead. It preserves the existing `{}` placement semantics, including fixed arguments before and after the placeholder.
+
+Verified with:
+
+```sh
+cargo test exec::
+./target/debug/fd -IH . -tf /tmp/generated-many-files -X true
+```
+
+The test run passed; it still shows the repo’s existing lifetime warning in `src/filesystem.rs`.

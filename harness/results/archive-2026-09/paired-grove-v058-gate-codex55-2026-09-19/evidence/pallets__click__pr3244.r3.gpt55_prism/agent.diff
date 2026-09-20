@@ -1,0 +1,107 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..ee98e8e 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -67,23 +67,90 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+         stream._paused = False
+ 
+ 
+-class BytesIOCopy(io.BytesIO):
+-    """Patch ``io.BytesIO`` to let the written stream be copied to another.
++class BytesIOCopy(io.RawIOBase):
++    """A binary stream that copies written bytes to another stream.
+ 
+     .. versionadded:: 8.2
+     """
+ 
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
++        self._file = tempfile.TemporaryFile("w+b")
++        self._copy_pos = 0
+         self.copy_to = copy_to
+ 
++    def readable(self) -> bool:
++        return True
++
++    def writable(self) -> bool:
++        return True
++
++    def seekable(self) -> bool:
++        return True
++
++    def fileno(self) -> int:
++        return self._file.fileno()
++
+     def flush(self) -> None:
++        if self.closed:
++            return
++
+         super().flush()
++        if not self._file.closed:
++            self._file.flush()
++
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
+         self.copy_to.write(b)
+-        return super().write(b)
++        rv = self._file.write(b)
++        self._copy_pos = self._file.tell()
++        return rv
++
++    def read(self, size: int = -1) -> bytes:
++        return self._file.read(size)
++
++    def readinto(self, b: t.Any) -> int | None:
++        return self._file.readinto(b)
++
++    def seek(self, offset: int, whence: int = os.SEEK_SET) -> int:
++        return self._file.seek(offset, whence)
++
++    def tell(self) -> int:
++        return self._file.tell()
++
++    def truncate(self, size: int | None = None) -> int:
++        return self._file.truncate(size)
++
++    def close(self) -> None:
++        if self.closed:
++            return
++
++        self.flush()
++        self._file.close()
++        super().close()
++
++    def __del__(self) -> None:
++        try:
++            self.close()
++        except Exception:
++            pass
++
++    def getvalue(self) -> bytes:
++        self.flush()
++        pos = self._file.tell()
++        self._file.seek(0)
++        rv = self._file.read()
++        self._file.seek(self._copy_pos)
++        copied = self._file.read()
++        end = self._file.tell()
++        self._file.seek(pos)
++
++        if copied:
++            self.copy_to.write(copied)
++            self._copy_pos = end
++
++        return rv
+ 
+ 
+ class StreamMixer:
+@@ -573,6 +640,8 @@ class CliRunner:
+                 stdout = outstreams[0].getvalue()
+                 stderr = outstreams[1].getvalue()
+                 output = outstreams[2].getvalue()
++                outstreams[0].close()
++                outstreams[1].close()
+ 
+         return Result(
+             runner=self,

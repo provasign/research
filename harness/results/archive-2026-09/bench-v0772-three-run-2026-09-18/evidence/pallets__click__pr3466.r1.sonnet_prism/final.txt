@@ -1,0 +1,7 @@
+All 53 tests pass.
+
+## Summary
+
+Root cause: on Windows, `echo()` in `src/click/utils.py` writes text through a stream opened in universal-newlines mode, so every `"\n"` in the generated zsh/bash/fish completion script gets translated to `"\r\n"`. When that script (with embedded backslash line-continuations, e.g. in `_SOURCE_ZSH`) is `eval`'d by zsh, the stray `\r` breaks the line-continuation, splitting statements incorrectly and producing `parse error near 'elif'`. I reproduced this exact error locally by feeding a CRLF version of the generated zsh script to `zsh -n`.
+
+Fix: in `shell_complete()` (`src/click/shell_completion.py`), the `source` instruction now writes the completion script as bytes (`comp.source().encode()`), so `echo()` routes it through the binary writer, bypassing the platform's text-mode newline translation and preserving `\n` line endings regardless of OS.

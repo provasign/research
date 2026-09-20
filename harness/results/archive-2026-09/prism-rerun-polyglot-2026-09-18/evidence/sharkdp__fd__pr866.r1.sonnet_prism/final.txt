@@ -1,0 +1,9 @@
+All exec tests pass and the reported "Argument list too long" scenario is fixed.
+
+## Summary
+
+Fixed `-X`/`--exec-batch` failing with "Argument list too long" on large result sets by chunking the batched command invocations to respect the platform's argument length limit.
+
+**Change:** `src/exec/mod.rs` — `CommandTemplate::generate_and_execute_batch` now splits paths into multiple `wc -l`-style invocations sized to stay under a computed max argument length (derived from `sysconf(_SC_ARG_MAX)` on Unix, with a conservative constant on other platforms, reserving headroom for environment/overhead), merging exit codes via `merge_exitcodes` instead of building one unbounded command.
+
+Verified by building, exec-batch style test on 220k files (`fd -X wc -l` no longer errors), and `cargo test --bin fd exec::` (24 passed).

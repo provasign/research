@@ -1,0 +1,13 @@
+## Summary
+
+**Root cause:** In `Console.print`, when `soft_wrap=True` (which sets `crop=False`), the rendered segments were appended directly to the buffer (`self._buffer.extend(new_segments)`) without splitting embedded newline characters out of styled segments. This meant a segment like `Segment("soft\n", style)` (or the separate `end="\n"` segment carrying the same style) got wrapped in ANSI codes as `\x1b[34;47msoft\n\x1b[0m` — the reset code `\x1b[0m` came *after* the line feed, so terminals apply the background color through the newline/scroll, causing it to bleed onto the following line.
+
+When `crop=True` (the default, `soft_wrap=False`), `Segment.split_and_crop_lines` already handled this correctly by splitting styled text at newlines and re-inserting a plain, unstyled `"\n"` segment, so the reset always preceded the line feed.
+
+**Fix** (`rich/console.py`, in `Console.print`): applied the same newline-splitting logic to the `crop=False` path — styled segments containing `"\n"` are split so the newline itself is emitted as a separate, unstyled segment, ensuring the style reset happens before the line feed.
+
+**Verification:**
+```
+'\x1b[34;47msoft\x1b[0m\nnext line\n'   # reset now precedes the newline
+```
+Ran `tests/test_console.py`, `tests/test_segment.py`, `tests/test_text.py` (270 tests) — all pass. The `test_syntax.py`/`test_card.py` failures are pre-existing (identical on the unmodified baseline), unrelated to this change.

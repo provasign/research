@@ -1,0 +1,8 @@
+Fixed in [src/click/testing.py](/Users/tapabratapal/Projects/provasign/research/harness/results/paired-grove-v058-gate-codex55-2026-09-19/work/pallets__click__pr3244.r2.gpt55_prism/src/click/testing.py:76).
+
+`BytesIOCopy` now lazily creates a real temporary file when `fileno()` is requested, so `subprocess.run(..., stdout=sys.stderr)` can write through the isolated `CliRunner` stream instead of raising `UnsupportedOperation`. Normal in-memory capture stays unchanged unless a fd is actually needed, and subprocess output is synced back into both the specific stream and mixed output.
+
+Verified with:
+- direct reproducer asserting `stderr == "foo\n"` and `output == "foo\n"`
+- `python -m pytest tests/test_testing.py`
+- `python -m pytest tests/test_stream_lifecycle.py`

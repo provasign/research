@@ -1,0 +1,111 @@
+{
+  "duration_api_ms": 110362,
+  "stop_reason": "end_turn",
+  "session_id": "ff2ce2d2-d25b-438b-9536-4fe9a3fa437e",
+  "total_cost_usd": 0.34142959999999994,
+  "usage": {
+    "input_tokens": 36,
+    "cache_creation_input_tokens": 33936,
+    "cache_read_input_tokens": 499808,
+    "output_tokens": 10408,
+    "output_tokens_details": {
+      "thinking_tokens": 6030
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 33936,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 450,
+        "cache_read_input_tokens": 40558,
+        "cache_creation_input_tokens": 326,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 326
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 1487,
+      "outputTokens": 17,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.001572,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 36,
+      "outputTokens": 10408,
+      "cacheReadInputTokens": 499808,
+      "cacheCreationInputTokens": 33936,
+      "webSearchRequests": 0,
+      "costUSD": 0.3398575999999999,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 6030,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 18,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "All relevant tests pass. Summary of the fix:\n\n1. **`src/urllib3/connection.py`** \u2014 In `HTTPSConnection.connect()`, when the connection is a forwarding proxy connection (`proxy_is_forwarding`), the socket is actually being wrapped in TLS to talk to the proxy itself, not the destination. Previously it always used `self.ssl_context`/`self.assert_hostname`/`self.assert_fingerprint` (meant for the destination). Now it uses the `ProxyConfig`'s `ssl_context`/`assert_hostname`/`assert_fingerprint` (i.e., `proxy_ssl_context`) in that case.\n\n2. **`src/urllib3/poolmanager.py`** \u2014 `ProxyManager.__init__` now raises a `ValueError` if `use_forwarding_for_https=True` and a plain `ssl_context` was passed alongside `proxy_ssl_context` (ambiguous config), or if `ssl_context` was passed without `proxy_ssl_context` (since `ssl_context` is meaningless/misleading in forwarding mode \u2014 `proxy_ssl_context` must be used instead).\n\nI left tests unchanged per the instructions (did not remove the pre-existing `pytest.skip` in `test_proxy_https_target_tls_error`, since that requires modifying a test file).",
+  "ttft_ms": 1034,
+  "type": "result",
+  "duration_ms": 145662,
+  "uuid": "61281155-97d3-451e-9f1b-5c89b412ea86",
+  "ttft_stream_ms": 680,
+  "time_to_request_ms": 30,
+  "first_content_frame_ms": 736,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

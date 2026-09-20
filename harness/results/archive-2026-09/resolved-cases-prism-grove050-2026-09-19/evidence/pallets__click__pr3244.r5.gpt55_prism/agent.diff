@@ -1,0 +1,90 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..7e0019e 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -86,6 +86,74 @@ class BytesIOCopy(io.BytesIO):
+         return super().write(b)
+ 
+ 
++class FileCopy:
++    """A writable binary stream that can be passed to APIs requiring a fd."""
++
++    def __init__(self, copy_to: io.BytesIO) -> None:
++        self._file = tempfile.TemporaryFile("w+b")
++        self.copy_to = copy_to
++        self._copy_pos = 0
++
++    def __getattr__(self, name: str) -> t.Any:
++        return getattr(self._file, name)
++
++    def readable(self) -> bool:
++        return True
++
++    def writable(self) -> bool:
++        return True
++
++    def seekable(self) -> bool:
++        return True
++
++    @property
++    def closed(self) -> bool:
++        return self._file.closed
++
++    def close(self) -> None:
++        self._file.close()
++
++    def __del__(self) -> None:
++        self.close()
++
++    def fileno(self) -> int:
++        return self._file.fileno()
++
++    def flush(self) -> None:
++        self._file.flush()
++        self.copy_to.flush()
++
++    def seek(self, offset: int, whence: int = os.SEEK_SET) -> int:
++        return self._file.seek(offset, whence)
++
++    def tell(self) -> int:
++        return self._file.tell()
++
++    def read(self, size: int = -1) -> bytes:
++        return self._file.read(size)
++
++    def write(self, b: ReadableBuffer) -> int:
++        self.copy_to.write(b)
++        rv = self._file.write(b)
++        self._copy_pos = self._file.tell()
++        return rv
++
++    def getvalue(self) -> bytes:
++        self.flush()
++        pos = self._file.tell()
++        self._file.seek(self._copy_pos)
++        uncopied = self._file.read()
++
++        if uncopied:
++            self.copy_to.write(uncopied)
++            self._copy_pos += len(uncopied)
++
++        self._file.seek(0)
++        value = self._file.read()
++        self._file.seek(pos)
++        return value
++
++
+ class StreamMixer:
+     """Mixes `<stdout>` and `<stderr>` streams.
+ 
+@@ -96,8 +164,8 @@ class StreamMixer:
+ 
+     def __init__(self) -> None:
+         self.output: io.BytesIO = io.BytesIO()
+-        self.stdout: io.BytesIO = BytesIOCopy(copy_to=self.output)
+-        self.stderr: io.BytesIO = BytesIOCopy(copy_to=self.output)
++        self.stdout = FileCopy(copy_to=self.output)
++        self.stderr = FileCopy(copy_to=self.output)
+ 
+ 
+ class _NamedTextIOWrapper(io.TextIOWrapper):

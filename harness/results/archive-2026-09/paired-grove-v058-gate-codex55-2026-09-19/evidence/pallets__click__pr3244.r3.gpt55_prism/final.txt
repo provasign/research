@@ -1,0 +1,13 @@
+Implemented the source fix in [src/click/testing.py](/Users/tapabratapal/Projects/provasign/research/harness/results/paired-grove-v058-gate-codex55-2026-09-19/work/pallets__click__pr3244.r3.gpt55_prism/src/click/testing.py).
+
+`CliRunner`’s captured stdout/stderr streams now have real file descriptors by backing `BytesIOCopy` with a temporary binary file while preserving `getvalue()` and mixed-output copying. `CliRunner.invoke()` closes those fd-backed streams after collecting result bytes.
+
+Verified with:
+
+```sh
+python -m pytest tests/test_stream_lifecycle.py tests/test_testing.py::test_isolation_stderr_errors
+```
+
+Result: `25 passed`.
+
+I also ran a direct reproduction of `subprocess.run(..., stdout=sys.stderr)` through `CliRunner`; it passes and captures `foo` in both `stderr` and `output`.

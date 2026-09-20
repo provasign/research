@@ -1,0 +1,46 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..a3f0bbd 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -76,12 +76,41 @@ class BytesIOCopy(io.BytesIO):
+     def __init__(self, copy_to: io.BytesIO) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._file: t.BinaryIO | None = None
++        self._file_position = 0
+ 
+     def flush(self) -> None:
+         super().flush()
+         self.copy_to.flush()
++        self._sync_direct_writes()
++
++    def fileno(self) -> int:
++        if self._file is None:
++            self._file = tempfile.TemporaryFile()
++            self._file.write(super().getvalue())
++            self._file_position = self._file.tell()
++
++        return self._file.fileno()
++
++    def _sync_direct_writes(self) -> None:
++        if self._file is None:
++            return
++
++        self._file.flush()
++        self._file.seek(self._file_position)
++        new_data = self._file.read()
++        self._file_position = self._file.tell()
++
++        if new_data:
++            self.copy_to.write(new_data)
++            super().write(new_data)
++
++    def getvalue(self) -> bytes:
++        self._sync_direct_writes()
++        return super().getvalue()
+ 
+     def write(self, b: ReadableBuffer) -> int:
++        self._sync_direct_writes()
+         self.copy_to.write(b)
+         return super().write(b)
+ 

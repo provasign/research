@@ -1,0 +1,13 @@
+No `ResourceWarning` and no exception — the reproduction case from the issue now passes.
+
+## Summary
+
+**Root cause:** `CliRunner`'s `isolation()` replaced `sys.stdout`/`sys.stderr` with `_NamedTextIOWrapper` objects backed by `io.BytesIO`. `io.BytesIO` has no OS-level file descriptor, so passing `sys.stdout`/`sys.stderr` to `subprocess.run(..., stdout=<stream>)` failed with `io.UnsupportedOperation: fileno` when subprocess tried `stdout.fileno()`.
+
+**Fix (`src/click/testing.py`):**
+- Reworked `BytesIOCopy` to wrap a real `tempfile.TemporaryFile()` instead of subclassing `io.BytesIO`, while preserving its `write`/`flush`/`getvalue` "copy to another stream" behavior via `__getattr__` delegation and an explicit `fileno()` that returns the real fd. This lets code under test pass `sys.stdout`/`sys.stderr` to `subprocess.run` (or anything needing a real fd).
+- Added `getvalue()` (reads without disturbing the file's current position) since real files lack it.
+- `StreamMixer` now constructs its three `BytesIOCopy` streams accordingly.
+- `isolation()` explicitly closes the three streams in its `finally` block (real files need explicit closing, unlike `BytesIO`), and `BytesIOCopy.__del__` closes the temp file as a backstop so no `ResourceWarning` fires if a `StreamMixer` is used outside `CliRunner` without an explicit close.
+
+Ran the full test suite (`python -m pytest`): 1419 passed, 24 skipped, 1 xfailed — no regressions. Verified the exact SSCCE from the issue no longer raises and correctly captures subprocess output. No test/doc/config files were modified.

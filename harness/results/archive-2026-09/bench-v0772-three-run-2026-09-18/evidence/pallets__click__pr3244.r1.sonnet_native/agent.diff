@@ -1,0 +1,123 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index fe079ba..efcbd8d 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -70,20 +70,95 @@ def _pause_echo(stream: EchoingStdin | None) -> cabc.Iterator[None]:
+ class BytesIOCopy(io.BytesIO):
+     """Patch ``io.BytesIO`` to let the written stream be copied to another.
+ 
++    ``fileno()`` lazily spools the buffer's contents to a real, OS-backed
++    temporary file the first time it's called, so instances can be used as
++    ``stdout``/``stderr`` for :func:`subprocess.run` and similar APIs that
++    require a real file descriptor. Until ``fileno()`` is used, the buffer
++    behaves like a plain :class:`io.BytesIO` with no OS resources to clean
++    up.
++
+     .. versionadded:: 8.2
+     """
+ 
+-    def __init__(self, copy_to: io.BytesIO) -> None:
++    def __init__(self, copy_to: t.IO[bytes]) -> None:
+         super().__init__()
+         self.copy_to = copy_to
++        self._real_file: t.IO[bytes] | None = None
++        self._copied_pos = 0
++
++    def fileno(self) -> int:
++        if self._real_file is None:
++            real_file = tempfile.TemporaryFile()
++            real_file.write(super().getvalue())
++            real_file.seek(super().tell())
++            self._real_file = real_file
++
++        return self._real_file.fileno()
+ 
+     def flush(self) -> None:
+-        super().flush()
++        if self._real_file is None:
++            super().flush()
++        else:
++            self._real_file.flush()
++
++        # Data may have been written directly to our file descriptor (e.g. by
++        # a subprocess redirected to this stream), bypassing ``write()``. Pick
++        # up anything not yet mirrored to ``copy_to``.
++        end = self._end()
++
++        if end > self._copied_pos:
++            self.copy_to.write(self._read_range(self._copied_pos, end))
++            self._copied_pos = end
++
+         self.copy_to.flush()
+ 
+     def write(self, b: ReadableBuffer) -> int:
++        if self._real_file is None:
++            n = super().write(b)
++        else:
++            n = self._real_file.write(b)
++
+         self.copy_to.write(b)
+-        return super().write(b)
++        self._copied_pos = max(self._copied_pos, self.tell())
++        return n
++
++    def read(self, *args: t.Any) -> bytes:
++        if self._real_file is None:
++            return super().read(*args)
++        return self._real_file.read(*args)
++
++    def seek(self, *args: t.Any) -> int:
++        if self._real_file is None:
++            return super().seek(*args)
++        return self._real_file.seek(*args)
++
++    def tell(self) -> int:
++        if self._real_file is None:
++            return super().tell()
++        return self._real_file.tell()
++
++    def _end(self) -> int:
++        pos = self.tell()
++        end = self.seek(0, os.SEEK_END)
++        self.seek(pos)
++        return end
++
++    def _read_range(self, start: int, end: int) -> bytes:
++        pos = self.tell()
++        self.seek(start)
++        data = self.read(end - start)
++        self.seek(pos)
++        return data
++
++    def getvalue(self) -> bytes:
++        if self._real_file is None:
++            return super().getvalue()
++        return self._read_range(0, self._end())
++
++    def close(self) -> None:
++        if self._real_file is not None:
++            self._real_file.close()
++        super().close()
+ 
+ 
+ class StreamMixer:
+@@ -96,8 +171,8 @@ class StreamMixer:
+ 
+     def __init__(self) -> None:
+         self.output: io.BytesIO = io.BytesIO()
+-        self.stdout: io.BytesIO = BytesIOCopy(copy_to=self.output)
+-        self.stderr: io.BytesIO = BytesIOCopy(copy_to=self.output)
++        self.stdout: t.IO[bytes] = BytesIOCopy(copy_to=self.output)
++        self.stderr: t.IO[bytes] = BytesIOCopy(copy_to=self.output)
+ 
+ 
+ class _NamedTextIOWrapper(io.TextIOWrapper):
+@@ -471,6 +546,8 @@ class CliRunner:
+             _compat.should_strip_ansi = old__compat_should_strip_ansi
+             formatting.FORCED_WIDTH = old_forced_width
+             pdb.Pdb.__init__ = old_pdb_init  # type: ignore[method-assign]
++            stream_mixer.stdout.close()
++            stream_mixer.stderr.close()
+ 
+     def invoke(
+         self,

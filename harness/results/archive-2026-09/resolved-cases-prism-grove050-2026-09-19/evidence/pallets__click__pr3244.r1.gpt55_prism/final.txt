@@ -1,0 +1,9 @@
+Implemented the fix in [src/click/testing.py](/Users/tapabratapal/Projects/provasign/research/harness/results/resolved-cases-prism-grove050-2026-09-19/work/pallets__click__pr3244.r1.gpt55_prism/src/click/testing.py:103).
+
+`_NamedTextIOWrapper` now lazily provides a real temporary file descriptor when its underlying in-memory buffer has no `fileno()`, then drains any subprocess fd-level writes back into Click’s captured streams on `flush()`. This fixes `subprocess.run(..., stdout=sys.stderr)` under `CliRunner` without leaking output to the real terminal.
+
+Verified with:
+- Direct reproducer for `stdout=sys.stderr`
+- Direct stdout/stderr subprocess capture check
+- `python -m pytest tests/test_stream_lifecycle.py::test_wrapper_close_does_not_close_underlying_buffer tests/test_stream_lifecycle.py::test_wrapper_del_does_not_close_underlying_buffer tests/test_stream_lifecycle.py::test_mixer_buffers_survive_wrapper_gc tests/test_stream_lifecycle.py::test_getvalue_after_isolation_exit`
+- `python -m pytest tests/test_testing.py::test_runner tests/test_testing.py::test_runner_with_stream`

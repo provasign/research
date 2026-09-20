@@ -1,0 +1,8 @@
+Implemented the fix in [src/click/testing.py](/Users/tapabratapal/Projects/provasign/research/harness/results/paired-grove-v050-gate-codex55-2026-09-19/work/pallets__click__pr3244.r3.gpt55_native/src/click/testing.py).
+
+`CliRunner`’s captured stdout/stderr streams now expose a real `fileno()` backed by a temporary file, then sync subprocess writes back into Click’s captured output. The text wrapper also flushes before returning `fileno()` so buffered Python output keeps the right order.
+
+Verified with:
+`python -m pytest tests/test_testing.py::test_stderr tests/test_stream_lifecycle.py::test_getvalue_after_isolation_exit`
+
+Also ran an inline reproducer for `subprocess.run(..., stdout=sys.stderr)`, which now exits cleanly and captures `foo\n`.

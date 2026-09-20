@@ -1,0 +1,11 @@
+Implemented the source fix in [connection.py](/Users/tapabratapal/Projects/provasign/research/harness/results/prism-grove-v058-codex55-2026-09-19/work/urllib3__urllib3__pr3786.r1.gpt55_prism/src/urllib3/connection.py) and [poolmanager.py](/Users/tapabratapal/Projects/provasign/research/harness/results/prism-grove-v058-codex55-2026-09-19/work/urllib3__urllib3__pr3786.r1.gpt55_prism/src/urllib3/poolmanager.py).
+
+What changed:
+- Forwarding HTTPS proxy connections now wrap TLS using `proxy_config.ssl_context` / proxy assertions, not the origin `HTTPSConnection.ssl_context`.
+- HTTPS proxy TLS wrapping is shared between forwarding and tunnel modes.
+- `ProxyManager(..., use_forwarding_for_https=True, ssl_context=...)` now raises `ValueError` on 2.x, including the explicit “both `ssl_context` and `proxy_ssl_context`” case.
+
+Verification:
+- `python -m py_compile src/urllib3/connection.py src/urllib3/poolmanager.py` passed.
+- A small in-process check confirmed forwarding uses `proxy_ssl_context`.
+- The narrow dummyserver pytest could not run because the local server failed to bind a socket during setup, before exercising urllib3.

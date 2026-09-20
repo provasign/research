@@ -1,0 +1,152 @@
+diff --git a/src/exec/mod.rs b/src/exec/mod.rs
+index a364e86..8d80df1 100644
+--- a/src/exec/mod.rs
++++ b/src/exec/mod.rs
+@@ -4,6 +4,7 @@ mod job;
+ mod token;
+ 
+ use std::borrow::Cow;
++use std::env;
+ use std::ffi::{OsStr, OsString};
+ use std::path::{Component, Path, PathBuf, Prefix};
+ use std::process::{Command, Stdio};
+@@ -13,7 +14,7 @@ use anyhow::{anyhow, Result};
+ use lazy_static::lazy_static;
+ use regex::Regex;
+ 
+-use crate::exit_codes::ExitCode;
++use crate::exit_codes::{merge_exitcodes, ExitCode};
+ use crate::filesystem::strip_current_dir;
+ 
+ use self::command::execute_command;
+@@ -163,35 +164,118 @@ impl CommandTemplate {
+     where
+         I: Iterator<Item = PathBuf>,
+     {
+-        let mut cmd = Command::new(self.args[0].generate("", None));
+-        cmd.stdin(Stdio::inherit());
+-        cmd.stdout(Stdio::inherit());
+-        cmd.stderr(Stdio::inherit());
+-
+         let mut paths: Vec<_> = paths.collect();
++        paths.sort();
++
+         let mut has_path = false;
++        let mut results = Vec::new();
++        let max_size = max_command_size();
++        let fixed_size = self.fixed_command_size();
++        let mut path_args = Vec::new();
++        let mut size = fixed_size;
+ 
+         for arg in &self.args[1..] {
+             if arg.has_tokens() {
+-                paths.sort();
+-
+                 // A single `Tokens` is expected
+                 // So we can directly consume the iterator once and for all
+-                for path in &mut paths {
+-                    cmd.arg(arg.generate(strip_current_dir(path), self.path_separator.as_deref()));
++                for path in &paths {
++                    let path_arg =
++                        arg.generate(strip_current_dir(path), self.path_separator.as_deref());
++                    let path_arg_size = command_arg_size(&path_arg);
++
++                    if !path_args.is_empty() && size + path_arg_size > max_size {
++                        results.push(self.execute_batch(&path_args, buffer_output));
++                        path_args.clear();
++                        size = fixed_size;
++                    }
++
++                    size += path_arg_size;
++                    path_args.push(path_arg);
+                     has_path = true;
+                 }
+-            } else {
+-                cmd.arg(arg.generate("", None));
+             }
+         }
+ 
+         if has_path {
+-            execute_command(cmd, &Mutex::new(()), buffer_output)
++            if !path_args.is_empty() {
++                results.push(self.execute_batch(&path_args, buffer_output));
++            }
++            merge_exitcodes(results)
+         } else {
+             ExitCode::Success
+         }
+     }
++
++    fn execute_batch(&self, path_args: &[OsString], buffer_output: bool) -> ExitCode {
++        let mut cmd = Command::new(self.args[0].generate("", None));
++        cmd.stdin(Stdio::inherit());
++        cmd.stdout(Stdio::inherit());
++        cmd.stderr(Stdio::inherit());
++
++        for arg in &self.args[1..] {
++            if arg.has_tokens() {
++                cmd.args(path_args);
++            } else {
++                cmd.arg(arg.generate("", None));
++            }
++        }
++
++        execute_command(cmd, &Mutex::new(()), buffer_output)
++    }
++
++    fn fixed_command_size(&self) -> usize {
++        let executable = self.args[0].generate("", None);
++        let args_size = self.args[1..]
++            .iter()
++            .filter(|arg| !arg.has_tokens())
++            .map(|arg| command_arg_size(&arg.generate("", None)))
++            .sum::<usize>();
++
++        command_arg_size(&executable) + args_size
++    }
++}
++
++fn max_command_size() -> usize {
++    argument_max()
++        .saturating_sub(environment_size())
++        .saturating_sub(2048)
++}
++
++#[cfg(all(unix, not(target_os = "redox")))]
++fn argument_max() -> usize {
++    let arg_max = unsafe { libc::sysconf(libc::_SC_ARG_MAX) };
++    if arg_max > 0 {
++        arg_max as usize
++    } else {
++        128 * 1024
++    }
++}
++
++#[cfg(any(not(unix), target_os = "redox"))]
++fn argument_max() -> usize {
++    32 * 1024
++}
++
++fn environment_size() -> usize {
++    env::vars_os()
++        .map(|(key, value)| command_arg_size(&key) + command_arg_size(&value))
++        .sum()
++}
++
++fn command_arg_size(arg: &OsStr) -> usize {
++    os_str_len(arg) + 1 + std::mem::size_of::<usize>()
++}
++
++#[cfg(unix)]
++fn os_str_len(arg: &OsStr) -> usize {
++    use std::os::unix::ffi::OsStrExt;
++
++    arg.as_bytes().len()
++}
++
++#[cfg(not(unix))]
++fn os_str_len(arg: &OsStr) -> usize {
++    arg.to_string_lossy().len()
+ }
+ 
+ /// Represents a template for a single command argument.
