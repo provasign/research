@@ -60,7 +60,7 @@ def main():
                 "permissionDecision": "deny",
                 "permissionDecisionReason": (
                     f"You already have lines {best_cov['from']}-{best_cov['to']} of "
-                    f"{best_cov['file']} from an earlier prism op=read result in this "
+                    f"{best_cov['file']} from an earlier prism result in this "
                     f"session -- scroll back to it instead of re-reading. If you need "
                     f"content past line {best_cov['to']}, request only that range."
                 ),
