@@ -4,6 +4,25 @@
 compact tool). Raw per-task results in `REPORT.md`/`results.json`. This file
 is the deep dive requested on every flagged case.
 
+## UPDATE 2026-09-21: fix confirmed, corrected full-50-task result
+
+The `TOOL_ARTIFACTS` fix below was applied and the 11 commons-lang tasks were
+re-run clean. Result: **commons-lang flips from prism 0/11 to prism 9/11
+(82%) — now beating native's 8/11 (73%)**, fully confirming the diagnosis.
+Corrected full-50-task aggregate (39 clean tasks + 11 re-run commons-lang):
+
+| | resolved | tokens |
+|---|---|---|
+| native | 32/50 (64.0%) | 38,830,033 |
+| **prism** | **34/50 (68.0%)** | 40,632,378 (**1.046x**) |
+
+Once the harness bug is fixed, prism resolves *more* tasks than native
+overall, at a modest 4.6% token premium. The commons-lang re-run alone cost
+more (1.46x tokens on that corpus specifically) despite the resolve-rate win
+— worth watching if commons-lang gets more tasks in a future run, but not
+investigated further here since the correctness question (was 0/11 a real
+prism weakness) is now resolved: no, it wasn't.
+
 ## Headline: the apparent "prism regression" was 89% one confirmed harness bug, not prism
 
 Raw aggregate looked bad for prism:
