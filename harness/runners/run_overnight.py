@@ -19,6 +19,7 @@ for _d in (_os.path.dirname(_H), _H, _os.path.join(_os.path.dirname(_H), "aggreg
     if _d not in _sys.path:
         _sys.path.insert(0, _d)
 
+import argparse
 import json
 import re
 import time
@@ -26,9 +27,14 @@ from pathlib import Path
 
 import run_e2e
 
-MANIFEST = Path("results/paired-gate/manifest.json")
+_ap = argparse.ArgumentParser()
+_ap.add_argument("--manifest", default="results/paired-gate/manifest.json")
+_ap.add_argument("--out-dir", default="results/overnight-run")
+_args = _ap.parse_args()
+
+MANIFEST = Path(_args.manifest)
 TASKS_DIR = Path("tasks/e2e")
-OUT_DIR = Path("results/overnight-run")
+OUT_DIR = Path(_args.out_dir)
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 RESULTS = OUT_DIR / "results.json"
 REPORT = OUT_DIR / "REPORT.md"
