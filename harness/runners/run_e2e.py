@@ -30,11 +30,14 @@ for _d in (_H, _os.path.join(_H, "runners"), _os.path.join(_H, "aggregate"),
 import argparse
 import os
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
 import time
 from pathlib import Path
+
+HOOKS_SRC = Path(__file__).resolve().parent.parent / "hooks"
 
 import docker_eval
 import fanout_eval
@@ -125,6 +128,35 @@ def _agent_diff(wt: Path, task) -> str:  # noqa: D401
                            *excludes, check=False)
 
 
+def _install_read_guard_hook(wt: Path) -> None:
+    """Deny a native Read that substantially overlaps a range prism already
+    delivered this session (prism_read_tracker.py/prism_read_guard.py under
+    harness/hooks/). Measured 2026-09-21: the single largest fixable driver
+    of prism-arm token blowup was re-reading content already delivered by
+    prism; advisory steering alone didn't hold up over multi-turn sessions.
+    TOOL_ARTIFACTS already excludes .claude/ from the scored diff, so these
+    files never leak into agent_diff."""
+    hooks_dir = wt / ".claude" / "hooks"
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy(HOOKS_SRC / "prism_read_tracker.py", hooks_dir / "prism_read_tracker.py")
+    shutil.copy(HOOKS_SRC / "prism_read_guard.py", hooks_dir / "prism_read_guard.py")
+
+    settings_path = wt / ".claude" / "settings.json"
+    settings = json.loads(settings_path.read_text()) if settings_path.exists() else {}
+    hooks = settings.setdefault("hooks", {})
+    hooks.setdefault("PostToolUse", []).append({
+        "matcher": "mcp__prism__prism",
+        "hooks": [{"type": "command",
+                  "command": f"python3 {hooks_dir / 'prism_read_tracker.py'}"}],
+    })
+    hooks.setdefault("PreToolUse", []).append({
+        "matcher": "Read",
+        "hooks": [{"type": "command",
+                  "command": f"python3 {hooks_dir / 'prism_read_guard.py'}"}],
+    })
+    settings_path.write_text(json.dumps(settings, indent=2))
+
+
 def _index_graph(wt: Path, arm: str):
     if arm == "prism_init":
         # The real product setup path -- writes .mcp.json with the actual
@@ -160,6 +192,7 @@ def _index_graph(wt: Path, arm: str):
                             text=True, timeout=300)
         if r2.returncode != 0:
             print(f"  [index] WARN prism index rc={r2.returncode}: {r2.stderr[-200:]}")
+        _install_read_guard_hook(wt)
     elif arm.startswith("prism"):
         r = subprocess.run(["prism", "index", str(wt)], capture_output=True,
                             text=True, timeout=300)
