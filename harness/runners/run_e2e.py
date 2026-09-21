@@ -106,7 +106,14 @@ def _worktree(task):
 # (e.g. .grove/grove.db) makes the whole patch unappliable and silently zeroes
 # the score (this invalidated every prism-arm cell before 2026-07-14).
 TOOL_ARTIFACTS = (".grove", ".engine-b", ".prism", "prism.yaml", ".p.diff",
-                  ".shale")  # mason's evidence trail
+                  ".shale",  # mason's evidence trail
+                  # prism_init writes these into the worktree (real product
+                  # setup path); left unexcluded, they leaked into every
+                  # prism_init scored diff and hard-failed the build on
+                  # RAT-license-audited Apache projects (commons-lang: 0/11
+                  # resolved, confirmed independent of code correctness --
+                  # see overnight-run/INVESTIGATION.md, 2026-09-21).
+                  ".claude", ".mcp.json", "CLAUDE.md")
 
 
 def _agent_diff(wt: Path, task) -> str:  # noqa: D401
