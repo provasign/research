@@ -32,17 +32,34 @@ plus Prism's G* has the type-resolved tail ops Engine B does not.
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 HOME = Path.home()
 CFG_DIR = Path("/tmp/ab-endtoend")
 CFG_DIR.mkdir(exist_ok=True)
 
+
+def _fail_no_prism():
+    raise RuntimeError(
+        "`prism` is not on PATH -- the prism_* arms would silently run with no "
+        "MCP server (measured 2026-09-20 on a stale hardcoded ~/bin/prism path: "
+        "0 mcp__prism__* calls in 6/6 task pairs, indistinguishable from a real "
+        "non-adoption result without checking raw transcripts). Install prism "
+        "or fix PATH before running any prism_* arm.")
+
 (CFG_DIR / "engine-b.json").write_text(json.dumps({"mcpServers": {
     "codegraph": {"type": "stdio", "command": str(HOME / ".local/bin/codegraph"),
                   "args": ["serve", "--mcp"]}}}))
 (CFG_DIR / "prism.json").write_text(json.dumps({"mcpServers": {
-    "prism": {"type": "stdio", "command": str(HOME / "bin/prism"), "args": ["mcp"]}}}))
+    # Bare command name, resolved via PATH at MCP-server-launch time -- a
+    # hardcoded ~/bin/prism path silently rotted after prism moved to
+    # /opt/homebrew/bin (measured 2026-09-20: the prism_source arm ran with
+    # NO mcp__prism__* tools available in ANY of 6 task pairs, indistinguishable
+    # from a real result until someone checked the raw transcript for tool_use
+    # entries). `shutil.which` fails loudly at config-write time instead.
+    "prism": {"type": "stdio", "command": shutil.which("prism") or _fail_no_prism(),
+              "args": ["mcp"]}}}))
 
 # Shared: what every arm may do to actually make the fix. Only the context tool
 # (added per-arm below) differs. No arm may run the oracle test file -- the

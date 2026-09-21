@@ -44,6 +44,7 @@ import go_eval
 import js_eval
 import c_eval
 import run_local_agent
+import usage_account
 from ab_endtoend_arms import ARMS
 
 OUT = Path("results/e2e")
@@ -173,6 +174,12 @@ def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
     try:
         j = json.loads(r.stdout)
         rec.update(turns=j.get("num_turns"), cost_usd=j.get("total_cost_usd"))
+        rec["usage"] = usage_account.cli_usage(j)
+        rec["tokens_request"] = rec["usage"]["input_total"]
+        u = rec["usage"]["tokens"]
+        rec["tokens_out"] = u["output"]
+        rec["tokens_cache_read"] = u["cache_read"]
+        rec["tokens_cache_write"] = u["cache_creation"]
     except Exception:
         if any(h in blob for h in RATE_HINTS):
             raise RateLimited(blob[-300:])
