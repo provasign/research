@@ -76,42 +76,51 @@ def main():
         t0 = time.monotonic()
         native = run_e2e.run_cell(task, a.native_arm, a.model)
         n_tok = total_tokens(native)
-        print(f"  native: resolved={native.get('resolved')} tokens={n_tok} "
-              f"wall_s={native.get('wall_s')} cost=${native.get('cost_usd')} "
+        print(f"  native: resolved={native.get('resolved')} turns={native.get('turns')} "
+              f"tokens={n_tok} wall_s={native.get('wall_s')} cost=${native.get('cost_usd')} "
               f"tools={native.get('tool_trace')}", flush=True)
 
         prism = run_e2e.run_cell(task, a.prism_arm, a.model)
         p_tok = total_tokens(prism)
         prism_calls = sum(v for k, v in (prism.get("tool_trace") or {}).items()
                           if k.startswith("mcp__prism") and isinstance(v, int))
-        print(f"  prism : resolved={prism.get('resolved')} tokens={p_tok} "
-              f"wall_s={prism.get('wall_s')} cost=${prism.get('cost_usd')} "
-              f"prism_calls={prism_calls} tools={prism.get('tool_trace')}", flush=True)
-        if prism_calls == 0:
-            print(f"  !! WARNING: 0 prism tool calls on {iid} -- check the MCP "
-                  f"server actually started before trusting this cell", flush=True)
+        called = prism_calls > 0
+        print(f"  prism : resolved={prism.get('resolved')} turns={prism.get('turns')} "
+              f"tokens={p_tok} wall_s={prism.get('wall_s')} cost=${prism.get('cost_usd')} "
+              f"PRISM_CALLED={called} ({prism_calls} calls) tools={prism.get('tool_trace')}", flush=True)
 
         row = {"task": iid, "lang": lang, "patch_bytes": patch_len,
-               "native": {"resolved": native.get("resolved"), "tokens": n_tok,
-                          "wall_s": native.get("wall_s"), "cost_usd": native.get("cost_usd"),
-                          "tool_trace": native.get("tool_trace")},
-               "prism": {"resolved": prism.get("resolved"), "tokens": p_tok,
-                        "wall_s": prism.get("wall_s"), "cost_usd": prism.get("cost_usd"),
-                        "tool_trace": prism.get("tool_trace"), "prism_calls": prism_calls}}
+               "native": {"resolved": native.get("resolved"), "turns": native.get("turns"),
+                          "tokens": n_tok, "wall_s": native.get("wall_s"),
+                          "cost_usd": native.get("cost_usd"), "tool_trace": native.get("tool_trace")},
+               "prism": {"resolved": prism.get("resolved"), "turns": prism.get("turns"),
+                        "tokens": p_tok, "wall_s": prism.get("wall_s"),
+                        "cost_usd": prism.get("cost_usd"), "tool_trace": prism.get("tool_trace"),
+                        "prism_calls": prism_calls, "called": called}}
         rows.append(row)
         report_path.write_text(json.dumps(rows, indent=2))
 
         # Gate 1: solved regression
         if native.get("resolved") and not prism.get("resolved"):
-            print(f"\n!!! STOP: prism failed {iid} where native solved it. "
-                  f"({len(rows)}/{len(tasks)} tasks run)", flush=True)
+            print(f"\n!!! STOP: prism failed {iid} where native solved it "
+                  f"(prism_called={called}). ({len(rows)}/{len(tasks)} tasks run)", flush=True)
             _summary(rows, stopped_reason="solved_regression", stopped_at=iid)
             return
-        # Gate 2: substantially more tokens
-        if n_tok and p_tok and p_tok > a.token_multiplier * n_tok:
-            print(f"\n!!! STOP: prism used {p_tok} tokens vs native {n_tok} "
-                  f"({p_tok / n_tok:.2f}x > {a.token_multiplier}x) on {iid}. "
+        # Gate 2: prism was NOT called and tokens are substantially higher anyway --
+        # a pure harness/adoption failure, not an engine result. Stop immediately;
+        # do not let this kind of cell accumulate into the aggregate unexamined.
+        if not called and n_tok and p_tok and p_tok > a.token_multiplier * n_tok:
+            print(f"\n!!! STOP: prism was NOT called on {iid} but used {p_tok} tokens "
+                  f"vs native {n_tok} ({p_tok / n_tok:.2f}x > {a.token_multiplier}x). "
                   f"({len(rows)}/{len(tasks)} tasks run)", flush=True)
+            _summary(rows, stopped_reason="non_adoption_token_blowup", stopped_at=iid)
+            return
+        # Gate 3: prism WAS called and tokens are still substantially higher --
+        # a real engine-cost signal, worth stopping on too.
+        if called and n_tok and p_tok and p_tok > a.token_multiplier * n_tok:
+            print(f"\n!!! STOP: prism used {p_tok} tokens vs native {n_tok} "
+                  f"({p_tok / n_tok:.2f}x > {a.token_multiplier}x) on {iid} "
+                  f"(prism_called=True). ({len(rows)}/{len(tasks)} tasks run)", flush=True)
             _summary(rows, stopped_reason="token_blowup", stopped_at=iid)
             return
 

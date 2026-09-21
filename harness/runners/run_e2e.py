@@ -119,7 +119,41 @@ def _agent_diff(wt: Path, task) -> str:  # noqa: D401
 
 
 def _index_graph(wt: Path, arm: str):
-    if arm.startswith("prism"):
+    if arm == "prism_init":
+        # The real product setup path -- writes .mcp.json with the actual
+        # resolved binary + --compact, and a CLAUDE.md with prism's own
+        # current, correct steering (right tool name, explicit ToolSearch
+        # instruction). Hand-rolled MCP configs and guidance strings rot the
+        # moment prism's interface changes (measured 2026-09-20: a stale
+        # ~/bin/prism path AND stale legacy tool names in ab_endtoend_arms.py,
+        # both silently broken for an unknown time). `prism init` is
+        # maintained by prism itself, so it can't drift out of sync this way.
+        r = subprocess.run(["prism", "init", "--harness", "claude", "--yes", str(wt)],
+                           capture_output=True, text=True, timeout=300)
+        if not (wt / ".mcp.json").exists():
+            raise RuntimeError(
+                f"prism init did not create .mcp.json in {wt} "
+                f"(rc={r.returncode}): {r.stdout[-300:]} {r.stderr[-300:]}")
+        # Make the ONE compact tool resident (alwaysLoad) instead of deferred
+        # behind a ToolSearch hop. Deferred-by-default was chosen on a 9-task
+        # haiku A/B (2026-08-29); on this harness's own Sonnet cells 4/8
+        # prism_source sessions never took the ToolSearch hop at all --
+        # silent, zero-cost-looking non-adoption. alwaysLoad previously
+        # measured 90%+ adoption (full38, 2026-08-17+) before being dropped.
+        # Under --compact there is exactly one tool to make resident.
+        mcp_path = wt / ".mcp.json"
+        mcp_cfg = json.loads(mcp_path.read_text())
+        if "prism" in mcp_cfg.get("mcpServers", {}):
+            mcp_cfg["mcpServers"]["prism"]["alwaysLoad"] = True
+            mcp_path.write_text(json.dumps(mcp_cfg, indent=2))
+        # init's own docs say indexing happens automatically on first use, but
+        # build it explicitly up front anyway so the agent's first real call
+        # never eats first-index latency or a cold-cache miss.
+        r2 = subprocess.run(["prism", "index", str(wt)], capture_output=True,
+                            text=True, timeout=300)
+        if r2.returncode != 0:
+            print(f"  [index] WARN prism index rc={r2.returncode}: {r2.stderr[-200:]}")
+    elif arm.startswith("prism"):
         r = subprocess.run(["prism", "index", str(wt)], capture_output=True,
                             text=True, timeout=300)
         if r.returncode != 0:
@@ -163,7 +197,9 @@ def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
     cmd = ["claude", "-p", prompt, "--model", model, "--output-format", "json",
            "--dangerously-skip-permissions", "--strict-mcp-config",
            "--allowedTools", *spec["allowed"]]
-    if spec["mcp"]:
+    if arm == "prism_init":
+        cmd += ["--mcp-config", str(wt / ".mcp.json")]
+    elif spec["mcp"]:
         cmd += ["--mcp-config", spec["mcp"]]
     t0 = time.monotonic()
     r = subprocess.run(cmd, cwd=wt, capture_output=True, text=True, timeout=1800)

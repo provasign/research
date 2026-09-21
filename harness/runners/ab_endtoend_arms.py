@@ -98,6 +98,19 @@ ARMS = {
         "allowed": _EDIT_AND_BUILD,
         "mcp": None,
     },
+    # The real product, set up the real way: `prism init` + `prism index` in
+    # the worktree (run_e2e._index_graph), zero hand-written guidance or
+    # tool-name allowlist -- CLAUDE.md (written by init, prism's own current
+    # steering) and the auto-discovered .mcp.json do 100% of the work, same as
+    # an actual user's repo. No arm-specific tool name is added to `allowed`:
+    # the MCP server's tools become available once --mcp-config points at the
+    # worktree's real .mcp.json (run_e2e._run_cloud), same as any other MCP
+    # server, regardless of what --allowedTools happens to enumerate.
+    "prism_init": {
+        "guidance": "",
+        "allowed": _EDIT_AND_BUILD,
+        "mcp": "__worktree__",
+    },
     # G -- primitives; the agent orchestrates context hop by hop. No query, no
     # task-shaped ops: this arm has to assemble the picture itself.
     "prism_g": {
