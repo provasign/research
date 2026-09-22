@@ -111,6 +111,16 @@ ARMS = {
         "allowed": _EDIT_AND_BUILD,
         "mcp": "__worktree__",
     },
+    # Control arm for the residency question: byte-identical setup to
+    # prism_init (same `prism init`, same CLAUDE.md steering, same read-guard
+    # hook) except alwaysLoad is withheld, so the single compact tool stays
+    # deferred behind a ToolSearch hop. Isolates residency's own effect from
+    # "the MCP server/steering finally worked" (2026-09-22).
+    "prism_init_deferred": {
+        "guidance": "",
+        "allowed": _EDIT_AND_BUILD,
+        "mcp": "__worktree__",
+    },
     # G -- primitives; the agent orchestrates context hop by hop. No query, no
     # task-shaped ops: this arm has to assemble the picture itself.
     "prism_g": {

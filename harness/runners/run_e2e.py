@@ -163,7 +163,7 @@ def _install_read_guard_hook(wt: Path) -> None:
 
 
 def _index_graph(wt: Path, arm: str):
-    if arm == "prism_init":
+    if arm in ("prism_init", "prism_init_deferred"):
         # The real product setup path -- writes .mcp.json with the actual
         # resolved binary + --compact, and a CLAUDE.md with prism's own
         # current, correct steering (right tool name, explicit ToolSearch
@@ -178,18 +178,24 @@ def _index_graph(wt: Path, arm: str):
             raise RuntimeError(
                 f"prism init did not create .mcp.json in {wt} "
                 f"(rc={r.returncode}): {r.stdout[-300:]} {r.stderr[-300:]}")
-        # Make the ONE compact tool resident (alwaysLoad) instead of deferred
-        # behind a ToolSearch hop. Deferred-by-default was chosen on a 9-task
-        # haiku A/B (2026-08-29); on this harness's own Sonnet cells 4/8
-        # prism_source sessions never took the ToolSearch hop at all --
-        # silent, zero-cost-looking non-adoption. alwaysLoad previously
-        # measured 90%+ adoption (full38, 2026-08-17+) before being dropped.
-        # Under --compact there is exactly one tool to make resident.
-        mcp_path = wt / ".mcp.json"
-        mcp_cfg = json.loads(mcp_path.read_text())
-        if "prism" in mcp_cfg.get("mcpServers", {}):
-            mcp_cfg["mcpServers"]["prism"]["alwaysLoad"] = True
-            mcp_path.write_text(json.dumps(mcp_cfg, indent=2))
+        if arm == "prism_init":
+            # Make the ONE compact tool resident (alwaysLoad) instead of
+            # deferred behind a ToolSearch hop. Deferred-by-default was
+            # chosen on a 9-task haiku A/B (2026-08-29); on this harness's
+            # own Sonnet cells 4/8 prism_source sessions never took the
+            # ToolSearch hop at all -- silent, zero-cost-looking
+            # non-adoption. alwaysLoad previously measured 90%+ adoption
+            # (full38, 2026-08-17+) before being dropped. Under --compact
+            # there is exactly one tool to make resident.
+            # prism_init_deferred is the otherwise-identical control arm:
+            # same real setup, same steering, alwaysLoad withheld -- isolates
+            # residency's own effect instead of conflating it with "the MCP
+            # server finally worked" (2026-09-22, requested by Topo).
+            mcp_path = wt / ".mcp.json"
+            mcp_cfg = json.loads(mcp_path.read_text())
+            if "prism" in mcp_cfg.get("mcpServers", {}):
+                mcp_cfg["mcpServers"]["prism"]["alwaysLoad"] = True
+                mcp_path.write_text(json.dumps(mcp_cfg, indent=2))
         # init's own docs say indexing happens automatically on first use, but
         # build it explicitly up front anyway so the agent's first real call
         # never eats first-index latency or a cold-cache miss.
@@ -242,7 +248,7 @@ def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
     cmd = ["claude", "-p", prompt, "--model", model, "--output-format", "json",
            "--dangerously-skip-permissions", "--strict-mcp-config",
            "--allowedTools", *spec["allowed"]]
-    if arm == "prism_init":
+    if arm in ("prism_init", "prism_init_deferred"):
         cmd += ["--mcp-config", str(wt / ".mcp.json")]
     elif spec["mcp"]:
         cmd += ["--mcp-config", spec["mcp"]]
