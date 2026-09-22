@@ -116,7 +116,12 @@ TOOL_ARTIFACTS = (".grove", ".engine-b", ".prism", "prism.yaml", ".p.diff",
                   # RAT-license-audited Apache projects (commons-lang: 0/11
                   # resolved, confirmed independent of code correctness --
                   # see overnight-run/INVESTIGATION.md, 2026-09-21).
-                  ".claude", ".mcp.json", "CLAUDE.md")
+                  ".claude", ".mcp.json", "CLAUDE.md",
+                  # the read-guard hook's own state file (harness/hooks/
+                  # prism_read_tracker.py) -- same leak class as the three
+                  # above, self-inflicted this time (found 2026-09-21 in
+                  # psf/requests pr7315's scored diff).
+                  ".prism-read-tracker.json")
 
 
 def _agent_diff(wt: Path, task) -> str:  # noqa: D401
