@@ -163,7 +163,7 @@ def _install_read_guard_hook(wt: Path) -> None:
 
 
 def _index_graph(wt: Path, arm: str):
-    if arm in ("prism_init", "prism_init_deferred"):
+    if arm in ("prism_init", "prism_init_deferred", "prism_init_no_guard"):
         # The real product setup path -- writes .mcp.json with the actual
         # resolved binary + --compact, and a CLAUDE.md with prism's own
         # current, correct steering (right tool name, explicit ToolSearch
@@ -178,7 +178,7 @@ def _index_graph(wt: Path, arm: str):
             raise RuntimeError(
                 f"prism init did not create .mcp.json in {wt} "
                 f"(rc={r.returncode}): {r.stdout[-300:]} {r.stderr[-300:]}")
-        if arm == "prism_init":
+        if arm in ("prism_init", "prism_init_no_guard"):
             # Make the ONE compact tool resident (alwaysLoad) instead of
             # deferred behind a ToolSearch hop. Deferred-by-default was
             # chosen on a 9-task haiku A/B (2026-08-29); on this harness's
@@ -203,7 +203,8 @@ def _index_graph(wt: Path, arm: str):
                             text=True, timeout=300)
         if r2.returncode != 0:
             print(f"  [index] WARN prism index rc={r2.returncode}: {r2.stderr[-200:]}")
-        _install_read_guard_hook(wt)
+        if arm != "prism_init_no_guard":
+            _install_read_guard_hook(wt)
     elif arm.startswith("prism"):
         r = subprocess.run(["prism", "index", str(wt)], capture_output=True,
                             text=True, timeout=300)
@@ -248,7 +249,7 @@ def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
     cmd = ["claude", "-p", prompt, "--model", model, "--output-format", "json",
            "--dangerously-skip-permissions", "--strict-mcp-config",
            "--allowedTools", *spec["allowed"]]
-    if arm in ("prism_init", "prism_init_deferred"):
+    if arm in ("prism_init", "prism_init_deferred", "prism_init_no_guard"):
         cmd += ["--mcp-config", str(wt / ".mcp.json")]
     elif spec["mcp"]:
         cmd += ["--mcp-config", spec["mcp"]]

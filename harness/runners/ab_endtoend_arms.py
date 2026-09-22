@@ -121,6 +121,18 @@ ARMS = {
         "allowed": _EDIT_AND_BUILD,
         "mcp": "__worktree__",
     },
+    # Control arm for the read-guard question (2026-09-22 handoff opportunity
+    # #1): byte-identical setup to prism_init (same `prism init`, same
+    # CLAUDE.md steering, same alwaysLoad residency) except the read-guard
+    # hook (harness/hooks/prism_read_tracker.py / prism_read_guard.py) is
+    # withheld. The prior before/after comparison (overnight-run vs
+    # guard-fix-run) was confounded by different task samples; this arm lets
+    # the SAME task set run hook-on (prism_init) vs hook-off (this arm).
+    "prism_init_no_guard": {
+        "guidance": "",
+        "allowed": _EDIT_AND_BUILD,
+        "mcp": "__worktree__",
+    },
     # G -- primitives; the agent orchestrates context hop by hop. No query, no
     # task-shaped ops: this arm has to assemble the picture itself.
     "prism_g": {
