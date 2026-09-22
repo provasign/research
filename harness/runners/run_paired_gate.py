@@ -92,11 +92,13 @@ def main():
         row = {"task": iid, "lang": lang, "patch_bytes": patch_len,
                "native": {"resolved": native.get("resolved"), "turns": native.get("turns"),
                           "tokens": n_tok, "wall_s": native.get("wall_s"),
-                          "cost_usd": native.get("cost_usd"), "tool_trace": native.get("tool_trace")},
+                          "cost_usd": native.get("cost_usd"), "tool_trace": native.get("tool_trace"),
+                          "session_id": native.get("session_id")},
                "prism": {"resolved": prism.get("resolved"), "turns": prism.get("turns"),
                         "tokens": p_tok, "wall_s": prism.get("wall_s"),
                         "cost_usd": prism.get("cost_usd"), "tool_trace": prism.get("tool_trace"),
-                        "prism_calls": prism_calls, "called": called}}
+                        "prism_calls": prism_calls, "called": called,
+                        "session_id": prism.get("session_id")}}
         rows.append(row)
         report_path.write_text(json.dumps(rows, indent=2))
 

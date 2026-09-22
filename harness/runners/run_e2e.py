@@ -256,6 +256,7 @@ def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
         j = json.loads(r.stdout)
         rec.update(turns=j.get("num_turns"), cost_usd=j.get("total_cost_usd"))
         rec["usage"] = usage_account.cli_usage(j)
+        rec["session_id"] = rec["usage"].get("session_id")
         rec["tokens_request"] = rec["usage"]["input_total"]
         u = rec["usage"]["tokens"]
         rec["tokens_out"] = u["output"]

@@ -137,11 +137,12 @@ def main():
             "native": {"resolved": native.get("resolved"), "turns": native.get("turns"),
                       "tokens": n_tok, "wall_s": native.get("wall_s"),
                       "cost_usd": native.get("cost_usd"), "tool_trace": native.get("tool_trace"),
+                      "session_id": native.get("session_id"),
                       "error": native.get("error") or native.get("agent_error")},
             "prism": {"resolved": prism.get("resolved"), "turns": prism.get("turns"),
                      "tokens": p_tok, "wall_s": prism.get("wall_s"),
                      "cost_usd": prism.get("cost_usd"), "tool_trace": prism.get("tool_trace"),
-                     "prism_calls": p_calls,
+                     "prism_calls": p_calls, "session_id": prism.get("session_id"),
                      "error": prism.get("error") or prism.get("agent_error")},
         }
         results.append(row)
