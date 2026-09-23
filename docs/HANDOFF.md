@@ -103,10 +103,18 @@ Ranked by cheapness to prove. All impact figures are estimates from the 50-sessi
    assertion. Collapses edit → bash test → read output → fix. Estimate: one avoided suite turn
    ≈ 2.5M ≈ 6%; the real upside is resolve rate (agents fail by misreading test output).
    Design work + A/B. Not the rejected Prism 2.0 edit-moment hook — no hook, an op.
-3. **Cost-aware disclosure (footprint).** Bodies for what will be edited, locators for the
-   rest; window = enclosing symbol; keep the pointer discipline. Ceiling ≈ the 39% never-edited
-   bodies; realistic target is search's speculative second body. Every extra fetch is a
-   ~50K turn, so disclosure must be predictive, not stingy. Measure before building.
+3. **Cost-aware disclosure (footprint) — measured, negative as a standalone lever.**
+   Predictor test on the 180 search bodies in the 50 sessions
+   (`harness/analysis/token-survey/disclosure_predictor.py`): later-edited base rate 43%.
+   Rank does not predict (ranks 1–4 all 39–51% edited). Only two features separate:
+   test-file bodies (0/25 edited — partly a benchmark artifact, the task tail forbids test
+   edits) and bodies not containing the search term (2/20 edited). The safe rule (demote
+   test-file or term-absent bodies) is 95% correct but frees only 32KB ≈ 0.4% of the run;
+   every broader rule sits at 59–63% correctness, i.e. break-even against the ~50K cost of a
+   wrong demotion. Surface features cannot tell the body the agent will edit from the one
+   it will only read; the agent's own request is the signal (`read` bodies: 93% edited).
+   Keep disclosure as the guardrail for #1 (don't over-deliver when collapsing
+   locator→body), not as its own project.
 
 ## Methodology notes (keep)
 
