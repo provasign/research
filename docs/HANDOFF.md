@@ -98,11 +98,23 @@ Ranked by cheapness to prove. All impact figures are estimates from the 50-sessi
    small, deliver the enclosing symbol the agent is about to edit instead of ±50 lines around
    the hit. Read would put those bytes in context anyway; the saving is the turn.
    Estimate: ~33 turns ≈ 1.7M tokens ≈ 4%, resolve-neutral by construction. A/B first.
-2. **Own the verification turn.** `verify` runs the selected tests for changed symbols
-   (grove test-selection, measured tier) and returns completeness + green/red + the failing
-   assertion. Collapses edit → bash test → read output → fix. Estimate: one avoided suite turn
-   ≈ 2.5M ≈ 6%; the real upside is resolve rate (agents fail by misreading test output).
-   Design work + A/B. Not the rejected Prism 2.0 edit-moment hook — no hook, an op.
+2. **Own the verification turn — estimated from transcripts
+   (`harness/analysis/token-survey/verify_estimate*.py`).** 142 build/test-ish Bash turns in
+   the prism arm (2.9/session): 57% targeted test, 25% full/broad suite, 18% toolchain
+   wrangling (venv, pip install, mvn flags, git stash), 1% compile-only. 95 of them run
+   back-to-back with no edit in between (81 immediately consecutive: build→test,
+   targeted→full, flag tweaks, env setup→test); 6 are literal same-command reruns. Host
+   truncated 19/145 outputs. The fix loop is NOT where turns go: strict failing runs 19, only
+   1 followed by an edit — "structured failure shortens the fix loop" is unsupported.
+   The turn estimate is the chains: ≤95 collapsible turns ≈ 1.9/session × ~50K ≈ 4.75M ≈
+   11.6% of the run as an upper bound if one `verify` call absorbs env setup + compile +
+   selected tests; ~6% is the realistic planning number. Test-output bytes are minor (358KB,
+   ~0.8% re-billed). **The resolve-rate signal is the sharper one:** FAILED tasks ran tests
+   13/14 times and saw green (4 strict failures in 51 runs) — they pass the wrong tests.
+   Resolved tasks ran the oracle test module 17/36 (47%), FAILED 4/14 (29%); FAILED ran a
+   broad suite 8/14 vs 13/36. Test selection by changed-symbol coverage ("the tests covering
+   what you changed are X, Y — you ran only X") is the mechanism, and it is a `verify` op,
+   not the rejected Prism 2.0 edit-moment hook. Needs an A/B; the n here is 14 failures.
 3. **Cost-aware disclosure (footprint) — measured, negative as a standalone lever.**
    Predictor test on the 180 search bodies in the 50 sessions
    (`harness/analysis/token-survey/disclosure_predictor.py`): later-edited base rate 43%.
