@@ -162,6 +162,23 @@ Ranked by cheapness to prove. All impact figures are estimates from the 50-sessi
    Keep disclosure as the guardrail for #1 (don't over-deliver when collapsing
    locator→body), not as its own project.
 
+## Resolve-rate reliability on this 50-task bed (2026-09-23, `resolve_reliability.py`)
+
+Three prism_init-config runs of the same 50 tasks (guard-fix-run prism arm, search-body-ab
+baseline, search-body-ab exp) plus one native arm:
+- **Test-retest agreement is 45–46/50** between any two prism runs — 4–5 tasks flip per
+  pass with no relevant change. That is the noise floor for resolve: a single n=50 A/B
+  cannot see anything smaller than ~5 tasks.
+- **30 tasks always pass, 13 always fail, 7 flip.** 12 of the 13 always-fail tasks also
+  fail native — they fail in all four cells. The benchmark's movable range for a context
+  tool is therefore the 7 flaky tasks (+ psf/requests pr7315, native-only pass); the
+  62%→72% headline is mostly "prism wins the flaky ones more often," not "prism solves
+  tasks native cannot."
+- Implication: resolve-rate work on this bed has two options — (a) paired reruns (≥3 per
+  arm) to average out the 7 flippers, or (b) study the 12 hard-core failures directly
+  (diff vs gold patch; each has 4 transcripts) to learn what kind of failure they are,
+  since no retrieval change has moved any of them.
+
 ## Methodology notes (keep)
 
 - guard-fix-run predates `session_id`; its 100 transcripts were recovered by mtime window
