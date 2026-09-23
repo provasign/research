@@ -114,6 +114,24 @@ Ranked by cheapness to prove. All impact figures are estimates from the 50-sessi
    measurement" section) — treat the net resolve gain as directionally positive
    (flat-cost, safe-by-construction change that can only add information) rather than a
    confirmed +2-task result; would want a rerun before citing the number externally.
+   **Theory check (`ab_theory_check.py`, both arms' transcripts by session_id):**
+   - The mechanism fired: search windows 96→34, full bodies 108→153, locator→body
+     follow-up Reads 31→20 (−35%), native Reads 81→68. API turns 1,327→1,268 (−4.4%).
+     Per-task turn delta vs token delta: r = 0.97 — cost is turns, confirmed hard.
+   - Why tokens still came out flat: (a) the mechanism removed 11 follow-up Reads across 50
+     sessions = 0.2 turns/session, not the 0.66 estimated (20 follow-up Reads remain even
+     after a full body — agents re-read past the symbol or read files delivered as
+     locators); (b) bigger bodies added +60KB of search bytes, so context re-billed per
+     turn rose 48,990→50,511 (+3.1%), eating the turn saving; (c) Bash calls rose 308→340
+     (+32 turns) from ordinary agent variance. The 15 tasks where the change did not fire
+     moved 210→205 turns — that is the noise floor, and the biggest per-task swings
+     (pr6076 +49 turns, pr6039 −70) are agent behavior, not the mechanism.
+   - Verdict: the theory's structure holds (turns drive cost); the sizing of this
+     intervention was ~3x too optimistic, and I left out the footprint term I had
+     derived myself (a bigger first delivery is re-billed on every later turn). Apply
+     cost = bytes × remaining-turns to BOTH sides of any future change. Keep the change
+     (flat cost, resolve directionally up, safe by construction); do not cite a token
+     saving for it. Anything under ~±4% needs paired reruns, not one pass of 50.
 2. **Own the verification turn — estimated from transcripts
    (`harness/analysis/token-survey/verify_estimate*.py`).** 142 build/test-ish Bash turns in
    the prism arm (2.9/session): 57% targeted test, 25% full/broad suite, 18% toolchain
