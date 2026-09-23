@@ -179,6 +179,31 @@ baseline, search-body-ab exp) plus one native arm:
   (diff vs gold patch; each has 4 transcripts) to learn what kind of failure they are,
   since no retrieval change has moved any of them.
 
+## H1 result: what kind of failure are the 12 hard-core tasks? (2026-09-23, `h1_failure_classify.py`)
+
+Compared each hard-core task's agent diff (`prism_body_exp`, most recent run) against
+the gold patch's files and hunk ranges (±3 line slack).
+
+| bucket | n | tasks |
+|---|---|---|
+| Right file + region, hunks match closely, still failed | 3 | jansson pr740 (173-187 vs agent 173-186 — nearly identical), commons-lang pr1655, gin pr4805 |
+| Right file + region, but clearly incomplete (missing whole gold hunks) | 5 | commons-lang pr1703 (missed 1 of 2 hunks), gin pr4535 (gold hunk is 71 lines, agent's is 6), click pr3473 (gold spans 6 hunks/~150 lines across the file, agent touched 2 small ones near the end, missed the rest entirely), click pr3678 (missed 3 of 4 hunks), jackson pr6076 (agent's range is a narrower subset of gold's 4 hunks, plus touched an extra file gold didn't) |
+| Wrong file entirely | 2 | jackson pr6018 (agent edited `UnwrappingBeanPropertyWriter.java`, gold touches `BeanSerializerBase.java`+`StdConvertingSerializer.java`), jackson pr6044 (agent edited `StdTypeResolverBuilder.java`, gold touches `TypeResolverProvider.java`) |
+| No edit at all | 2 | jackson pr6052, click pr3504 — agent produced an empty diff |
+
+**10 of 12 found the right file.** Only 2 are retrieval-attributable (wrong file). The
+dominant failure mode (5, arguably 8 including the close-match group) is an incomplete or
+subtly-wrong fix at the RIGHT location — the agent stopped before covering the gold
+patch's full extent, or edited the right lines with the wrong content. This is the same
+shape as last night's finding (failed tasks pass the wrong/insufficient tests and stop
+confident) — an agent that ran only part of the relevant test coverage would not notice
+an incomplete fix. **Conclusion: H3 (verify runs the tests that cover what changed) is
+the higher-leverage path on this bed, not more retrieval work — retrieval already gets
+the agent to the right file 10/12 times; the fix quality and the check on it are what's
+missing.** The 2 wrong-file cases and 2 empty-diff cases are worth a second look
+separately (small n; empty diff might be a distinct failure mode — timeout, task
+misjudged as already satisfied, or a build/tool error — not a context problem at all).
+
 ## Methodology notes (keep)
 
 - guard-fix-run predates `session_id`; its 100 transcripts were recovered by mtime window
