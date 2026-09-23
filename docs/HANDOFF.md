@@ -200,9 +200,39 @@ confident) — an agent that ran only part of the relevant test coverage would n
 an incomplete fix. **Conclusion: H3 (verify runs the tests that cover what changed) is
 the higher-leverage path on this bed, not more retrieval work — retrieval already gets
 the agent to the right file 10/12 times; the fix quality and the check on it are what's
-missing.** The 2 wrong-file cases and 2 empty-diff cases are worth a second look
-separately (small n; empty diff might be a distinct failure mode — timeout, task
-misjudged as already satisfied, or a build/tool error — not a context problem at all).
+missing.**
+
+**Follow-up on the 4 "different" cases (transcript tails, `/tmp/tail_look.py` pattern) —
+they are NOT a different failure mode, they are the same one:**
+- **jackson pr6018 and pr6044 (the two "wrong file" cases) are not retrieval misses.**
+  Both agents landed on a plausible-looking fix in an ADJACENT file, ran a narrow or
+  scoped test command, watched it pass, and wrote a confident technical summary. pr6044
+  ran the full suite (6925 tests, all green) and still missed the gold location — the
+  hidden regression test for this PR isn't in the repo yet, so nothing available to the
+  agent could have caught it except knowing which tests the actual gold change would
+  need. Same shape as the "incomplete fix, ran the wrong tests, saw green" pattern —
+  the file happens to be wrong instead of the fix being partial, but the mechanism (stop
+  once an insufficient check passes) is identical.
+- **jackson pr6052 and click pr3504 (the two "empty diff" cases) are the agent
+  concluding "already fixed," not giving up.** Both explicitly reasoned that the
+  repo already contains the fix and ran (targeted or full) tests to confirm before
+  stopping. **pr3504 additionally surfaced a real, distinct, reproducible bug in the
+  agent's own verification hygiene**, in its own words: "My earlier failures were from
+  accidentally testing against a separately pip-installed click package rather than
+  this repo's source; once run against the repo's `src/`, everything passes cleanly" —
+  it tested the wrong install, got a false pass, and stood down. That is not a context
+  problem prism can fix by delivering more/better code; it is "verify against the
+  checkout, not whatever `pip`/`site-packages` resolves to," a one-line class of
+  steering or a `verify` precondition, independent of H3's test-selection design.
+
+**Revised bottom line: all 12 hard-core failures share one mechanism — the agent stops
+as soon as SOME check it ran passes, and that check was never guaranteed to be the one
+that would have caught the actual gap** (wrong test scope, hidden regression test not
+yet present, or the wrong installed package entirely). Retrieval quality is not
+distinguishing solved from unsolved tasks on this bed at all. H3 gets stronger, not
+just confirmed — and its scope should include a cheap, separate guard for the
+verify-against-installed-not-checkout failure mode, since that one is a one-line
+precondition, not a design project.
 
 ## Methodology notes (keep)
 
