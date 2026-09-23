@@ -229,10 +229,28 @@ they are NOT a different failure mode, they are the same one:**
 as soon as SOME check it ran passes, and that check was never guaranteed to be the one
 that would have caught the actual gap** (wrong test scope, hidden regression test not
 yet present, or the wrong installed package entirely). Retrieval quality is not
-distinguishing solved from unsolved tasks on this bed at all. H3 gets stronger, not
-just confirmed — and its scope should include a cheap, separate guard for the
-verify-against-installed-not-checkout failure mode, since that one is a one-line
-precondition, not a design project.
+distinguishing solved from unsolved tasks on this bed at all.
+
+**The installed-vs-checkout fix (2026-09-23, commit 95bad27b, harness):** added one
+instruction to the shared `TASK_TAIL` in `run_e2e.py` (applies to every arm, not
+prism-specific — this was never a prism problem) telling the agent to confirm its test
+run exercises the edited checkout and to install editable/local if it builds an
+isolated environment. **Smoke-tested by rerunning the one known-affected task
+(click pr3504) and reading the transcript, not by resolve rate:** the agent now
+explicitly runs `pip install -e .` and prints `click.__file__` to confirm it resolves
+to the checkout (`.../e2e-run-.../src/click/__init__.py`, not site-packages) before
+testing. The installed-vs-checkout confusion is confirmed gone by direct evidence.
+**The task still fails** — with verification now correct, the agent concludes "already
+fixed" against a checkout that (per the gold patch) is not, which is the general H3
+failure mode, not this fix's target. Treat this as done and validated for its narrow
+purpose; it does not move resolve rate on this bed since only one known task had this
+specific bug, and the deeper problem underneath it is H3's, not solved by this.
+
+**H3 is now the only path forward on this bed** — retrieval and the installed-vs-checkout
+guard have both been checked and are not where the remaining failures live. Next step is
+scoping the `verify` design: what it needs to compute (changed-symbol → covering-tests
+mapping, grove test-selection tier), what it returns, and how "already fixed" claims get
+checked against the actual diff requirement rather than an ad hoc test run.
 
 ## Methodology notes (keep)
 
