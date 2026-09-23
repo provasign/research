@@ -239,7 +239,14 @@ def _index_graph(wt: Path, arm: str):
 
 TASK_TAIL = ("\n\nFix the SOURCE code in this repository so the issue is resolved "
              "and the project's tests pass. Edit source files only; do NOT modify "
-             "any test files. Make the smallest change that works, then stop.")
+             "any test files. Before declaring the fix verified, confirm your test "
+             "run actually exercises the code you just edited in THIS checkout -- "
+             "not a separately installed copy (e.g. a non-editable `pip install` "
+             "into a fresh venv resolves the published package, not your edit; "
+             "same risk for a cached node_modules or local Maven/Go module install "
+             "that shadows this repo). If you set up an isolated environment to "
+             "run tests, install this repo in editable/local mode. "
+             "Make the smallest change that works, then stop.")
 
 
 # A seeded refactor needs its own closing instruction: the generic tail
