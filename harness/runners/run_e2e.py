@@ -48,7 +48,15 @@ import js_eval
 import c_eval
 import run_local_agent
 import usage_account
-from ab_endtoend_arms import ARMS
+from ab_endtoend_arms import ARMS, PRISM_BIN_FOR_ARM
+
+
+def _prism_bin(arm: str) -> str:
+    """The prism binary to invoke for `prism init`/`prism index` for this
+    arm -- PATH-resolved "prism" normally, or a specific build's absolute
+    path for an arm listed in PRISM_BIN_FOR_ARM (A/B'ing the engine itself
+    without touching the real installed prism)."""
+    return PRISM_BIN_FOR_ARM.get(arm, "prism")
 
 OUT = Path("results/e2e")
 OUT.mkdir(parents=True, exist_ok=True)
@@ -162,8 +170,12 @@ def _install_read_guard_hook(wt: Path) -> None:
     settings_path.write_text(json.dumps(settings, indent=2))
 
 
+PRISM_INIT_ARMS = ("prism_init", "prism_init_deferred", "prism_init_no_guard",
+                    "prism_body_baseline", "prism_body_exp")
+
+
 def _index_graph(wt: Path, arm: str):
-    if arm in ("prism_init", "prism_init_deferred", "prism_init_no_guard"):
+    if arm in PRISM_INIT_ARMS:
         # The real product setup path -- writes .mcp.json with the actual
         # resolved binary + --compact, and a CLAUDE.md with prism's own
         # current, correct steering (right tool name, explicit ToolSearch
@@ -172,13 +184,13 @@ def _index_graph(wt: Path, arm: str):
         # ~/bin/prism path AND stale legacy tool names in ab_endtoend_arms.py,
         # both silently broken for an unknown time). `prism init` is
         # maintained by prism itself, so it can't drift out of sync this way.
-        r = subprocess.run(["prism", "init", "--harness", "claude", "--yes", str(wt)],
+        r = subprocess.run([_prism_bin(arm), "init", "--harness", "claude", "--yes", str(wt)],
                            capture_output=True, text=True, timeout=300)
         if not (wt / ".mcp.json").exists():
             raise RuntimeError(
                 f"prism init did not create .mcp.json in {wt} "
                 f"(rc={r.returncode}): {r.stdout[-300:]} {r.stderr[-300:]}")
-        if arm in ("prism_init", "prism_init_no_guard"):
+        if arm in ("prism_init", "prism_init_no_guard", "prism_body_baseline", "prism_body_exp"):
             # Make the ONE compact tool resident (alwaysLoad) instead of
             # deferred behind a ToolSearch hop. Deferred-by-default was
             # chosen on a 9-task haiku A/B (2026-08-29); on this harness's
@@ -199,7 +211,7 @@ def _index_graph(wt: Path, arm: str):
         # init's own docs say indexing happens automatically on first use, but
         # build it explicitly up front anyway so the agent's first real call
         # never eats first-index latency or a cold-cache miss.
-        r2 = subprocess.run(["prism", "index", str(wt)], capture_output=True,
+        r2 = subprocess.run([_prism_bin(arm), "index", str(wt)], capture_output=True,
                             text=True, timeout=300)
         if r2.returncode != 0:
             print(f"  [index] WARN prism index rc={r2.returncode}: {r2.stderr[-200:]}")
@@ -249,7 +261,7 @@ def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
     cmd = ["claude", "-p", prompt, "--model", model, "--output-format", "json",
            "--dangerously-skip-permissions", "--strict-mcp-config",
            "--allowedTools", *spec["allowed"]]
-    if arm in ("prism_init", "prism_init_deferred", "prism_init_no_guard"):
+    if arm in PRISM_INIT_ARMS:
         cmd += ["--mcp-config", str(wt / ".mcp.json")]
     elif spec["mcp"]:
         cmd += ["--mcp-config", spec["mcp"]]

@@ -30,6 +30,9 @@ import run_e2e
 _ap = argparse.ArgumentParser()
 _ap.add_argument("--manifest", default="results/paired-gate/manifest.json")
 _ap.add_argument("--out-dir", default="results/overnight-run")
+_ap.add_argument("--native-arm", default="baseline")
+_ap.add_argument("--prism-arm", default="prism_init")
+_ap.add_argument("--model", default="sonnet")
 _args = _ap.parse_args()
 
 MANIFEST = Path(_args.manifest)
@@ -40,9 +43,9 @@ RESULTS = OUT_DIR / "results.json"
 REPORT = OUT_DIR / "REPORT.md"
 STATE = OUT_DIR / "state.json"
 
-MODEL = "sonnet"
-NATIVE_ARM = "baseline"
-PRISM_ARM = "prism_init"
+MODEL = _args.model
+NATIVE_ARM = _args.native_arm
+PRISM_ARM = _args.prism_arm
 TOKEN_FLAG_MULTIPLIER = 1.5
 DEFAULT_RATE_LIMIT_SLEEP = 1800  # 30 min fallback when no reset hint is parseable
 

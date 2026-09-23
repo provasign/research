@@ -33,11 +33,22 @@ from __future__ import annotations
 
 import json
 import shutil
+import os
 from pathlib import Path
 
 HOME = Path.home()
 CFG_DIR = Path("/tmp/ab-endtoend")
 CFG_DIR.mkdir(exist_ok=True)
+
+# Per-arm prism BINARY override, for A/B'ing two builds of the engine itself
+# without touching the real installed `prism` on PATH (same idea as MASON_BIN
+# for mason). run_e2e.py's `prism init`/`prism index` calls resolve through
+# this for any arm listed here; every other arm still resolves `prism` via
+# PATH as before.
+PRISM_BIN_FOR_ARM = {
+    "prism_body_baseline": os.environ.get("PRISM_BODY_BASELINE_BIN", "/tmp/prism-baseline"),
+    "prism_body_exp": os.environ.get("PRISM_BODY_EXP_BIN", "/tmp/prism-experimental"),
+}
 
 
 def _fail_no_prism():
@@ -129,6 +140,24 @@ ARMS = {
     # guard-fix-run) was confounded by different task samples; this arm lets
     # the SAME task set run hook-on (prism_init) vs hook-off (this arm).
     "prism_init_no_guard": {
+        "guidance": "",
+        "allowed": _EDIT_AND_BUILD,
+        "mcp": "__worktree__",
+    },
+    # Search-body-collapse A/B (2026-09-23): byte-identical prism_init setup
+    # (resident, read-guard on) except the ENGINE BINARY differs -- baseline
+    # is unmodified HEAD, exp raises searchevidence.go's full-body threshold
+    # for an exact-term-match hit from 20 lines to compactSearchBodiesLegacy's
+    # existing 160-line/10000-byte bound, so a windowed hit the agent would
+    # otherwise re-Read in full is delivered whole the first time. Binary
+    # paths are env-overridable (same pattern as MASON_BIN); run_e2e.py's
+    # _index_graph/_run_cloud resolve them via PRISM_BIN_FOR_ARM.
+    "prism_body_baseline": {
+        "guidance": "",
+        "allowed": _EDIT_AND_BUILD,
+        "mcp": "__worktree__",
+    },
+    "prism_body_exp": {
         "guidance": "",
         "allowed": _EDIT_AND_BUILD,
         "mcp": "__worktree__",
