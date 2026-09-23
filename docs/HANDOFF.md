@@ -19,7 +19,8 @@ upgrade a "single-run" or "estimate" to a pattern without the rerun.
 - **Shipped tonight:** prism v0.81.0 (`prism init --read-guard` / `--no-read-guard`),
   prism v0.81.1 + grove v0.58.3 (`prism doctor` reports Grove's per-language capability
   manifest under `languages`), a test-only fix for a pipe deadlock in `captureStdout`/
-  `capture` that hung windows-latest. Tap refreshed to v0.81.1.
+  `capture` that hung windows-latest. Tap refreshed to v0.81.1. Also committed (not yet
+  tagged/released): search's full-body threshold raise (cd26e452) — see turn-objective #1.
 - **Rejected after measurement (don't reopen without new evidence):** byte cap on
   `search`; delta delivery for extending `read` ranges; per-language budget tiers.
 
@@ -94,10 +95,25 @@ wideImpact degradation; `search` has count caps only (25 / 2000 exhaustive), no 
 
 Ranked by cheapness to prove. All impact figures are estimates from the 50-session anatomy.
 
-1. **Collapse locator→body: prism decides the altitude.** When the located neighborhood is
-   small, deliver the enclosing symbol the agent is about to edit instead of ±50 lines around
-   the hit. Read would put those bytes in context anyway; the saving is the turn.
-   Estimate: ~33 turns ≈ 1.7M tokens ≈ 4%, resolve-neutral by construction. A/B first.
+1. **Collapse locator→body: DONE and measured (2026-09-23, commit cd26e452).**
+   `searchevidence.go` only delivered a search hit's full enclosing body when the symbol was
+   ≤20 lines; anything bigger got a windowed ±9 lines, even for an exact term match, forcing
+   the 33-of-139 locator→body follow-up Reads found earlier. Raised the threshold to
+   `compactSearchBodiesLegacy`'s existing 160-line/10000-byte bound (shared constants
+   `searchFullBodyMaxLines`/`searchFullBodyMaxBytes` in delivery.go) — only for exact-term
+   hits, never fuzzy "related spelling" guesses, and `selected` was already capped upstream
+   so a broad search still windows every hit.
+   **50-task A/B** (`prism_body_baseline` vs `prism_body_exp`, same binary-swap harness
+   pattern as the read-guard hook, guard-fix-run's manifest,
+   `harness/results/search-body-ab/`): resolved 31/50 → 33/50, tokens 0.998x overall
+   (~1.02x excluding the 4 largest per-task ratio outliers each direction — essentially
+   flat, not a token-savings win). 4 resolve mismatches: 3 improvements
+   (jackson-databind pr6019, pr6061; jansson pr731) vs 1 regression (click pr3471).
+   **Caveat: one of the three improvements (pr6019) is the exact task already flagged
+   elsewhere in this doc as non-replicating on a single run** ("Rejected after
+   measurement" section) — treat the net resolve gain as directionally positive
+   (flat-cost, safe-by-construction change that can only add information) rather than a
+   confirmed +2-task result; would want a rerun before citing the number externally.
 2. **Own the verification turn — estimated from transcripts
    (`harness/analysis/token-survey/verify_estimate*.py`).** 142 build/test-ish Bash turns in
    the prism arm (2.9/session): 57% targeted test, 25% full/broad suite, 18% toolchain
