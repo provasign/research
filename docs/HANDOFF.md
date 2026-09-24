@@ -20,11 +20,23 @@ upgrade a "single-run" or "estimate" to a pattern without the rerun.
   prism v0.81.1 + grove v0.58.3 (`prism doctor` reports Grove's per-language capability
   manifest under `languages`), a test-only fix for a pipe deadlock in `captureStdout`/
   `capture` that hung windows-latest. Tap at v0.81.1.
-- **Committed on prism main, NOT yet tagged (needs a release decision):** search's
-  exact-term full-body threshold raise (cd26e452; 50-task A/B: resolve 31→33, tokens
-  flat) and `verify`'s new `testCoverage` field for body-only changes (fff21dd8 +
-  675ddd93 CLI rendering). Both `go test ./...` green. Cut v0.82.0 when ready — run
-  the engine-ceiling regression (`ci_invariants.py`) first, as for every tag.
+- **Released v0.82.0 (2026-09-23, tap refreshed):** search's exact-term full-body
+  threshold raise (cd26e452; 50-task A/B: resolve 31→33, tokens flat) and `verify`'s
+  new informational `testCoverage` field for body-only changes (fff21dd8, 675ddd93 CLI
+  rendering, a9231954 skips `<top-level>` pseudo-symbols). Gate: `go test ./...` +
+  `ci_invariants.py` all held.
+- **H3 A/B RUNNING (launched 2026-09-23 21:41, `harness/results/h3-ab/pass{1,2,3}/`):**
+  control = main binary (`/tmp/prism-h3-control`, has the field, steering unchanged —
+  verify "never a required closing step"); treatment = branch `h3-verify-steering`
+  (`/tmp/prism-h3-treatment`, prism commit fb864107): steering mandates one
+  `verify({})` and a `testCoverage` read before declaring a change finished, with
+  instructions for a "no verified test caller" warning and for the "already fixed"
+  conclusion. Bed = the 19 movable tasks only (12 always-fail + 7 flip; the 30
+  always-pass tasks cannot move), 3 passes per arm. **Probe (click pr3678, treatment):
+  the agent called verify at the end for the first time on a hard-core task, saw the
+  warning on `Command.get_help_option_names`, ran one more search, then stopped —
+  still failed. Adoption moved; behavior only nudged.** The branch is NOT merged; merge
+  only if the run shows more hard-core tasks resolving than the 45–46/50 noise allows.
 - **Where the failures actually are (H1, 12 hard-core tasks, all 4 cells each):** none
   are retrieval misses — the two "wrong file" agents had the gold file in their first
   search result and edited elsewhere; the rest are unfinished or subtly wrong edits at
