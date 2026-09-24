@@ -204,15 +204,28 @@ missing.**
 
 **Follow-up on the 4 "different" cases (transcript tails, `/tmp/tail_look.py` pattern) —
 they are NOT a different failure mode, they are the same one:**
-- **jackson pr6018 and pr6044 (the two "wrong file" cases) are not retrieval misses.**
-  Both agents landed on a plausible-looking fix in an ADJACENT file, ran a narrow or
-  scoped test command, watched it pass, and wrote a confident technical summary. pr6044
-  ran the full suite (6925 tests, all green) and still missed the gold location — the
-  hidden regression test for this PR isn't in the repo yet, so nothing available to the
-  agent could have caught it except knowing which tests the actual gold change would
-  need. Same shape as the "incomplete fix, ran the wrong tests, saw green" pattern —
-  the file happens to be wrong instead of the fix being partial, but the mechanism (stop
-  once an insufficient check passes) is identical.
+- **jackson pr6018 and pr6044 (the two "wrong file" cases) are not retrieval misses —
+  checked against the raw tool_use trace, not inferred from the final diff.** In both
+  sessions the agent's FIRST `search` call returned the gold file by name in the results
+  (`BeanSerializerBase.java` for pr6018, `TypeResolverProvider.java` for pr6044). The
+  agent had the correct location in front of it on turn one and edited a different,
+  plausible-looking file instead, then ran a narrow or full test command (pr6044 ran
+  the full 6925-test suite, all green) and wrote a confident summary. Retrieval
+  succeeded; the agent didn't act on what it was given. Same stop-on-insufficient-check
+  mechanism as the incomplete-fix bucket, with an extra layer: the check passed AND the
+  right answer was already visible and unused.
+  **Open gap, not yet closed:** `change_impact` was called ZERO times across all 10 of
+  the incomplete-fix/close-match/wrong-file sessions (checked via tool_use trace) — only
+  locate-and-fetch ops (`search`/`lookup`) were ever used. Retroactively ran
+  `change_impact` for two of the five incomplete-fix cases to see whether it would have
+  surfaced what was missed: **commons-lang pr1703 — no, the missed hunk is inside the
+  SAME method as the covered one (an unfinished edit, not a missed call site);
+  click pr3473 — unclear, the missed site is a new-feature-threading gap between two
+  unrelated classes (`Argument.__init__` and `Command`'s help renderer) that
+  `change_impact`'s existing-call-edge model wouldn't obviously connect.** Zero adoption
+  of the completeness op is real and worth watching once `verify` exists, but on the two
+  cases actually traced, it does not look like the fix — these remain completeness-of-
+  the-agent's-own-edit problems, which is what `verify`/H3 already targets.
 - **jackson pr6052 and click pr3504 (the two "empty diff" cases) are the agent
   concluding "already fixed," not giving up.** Both explicitly reasoned that the
   repo already contains the fix and ran (targeted or full) tests to confirm before
