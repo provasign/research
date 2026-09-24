@@ -25,28 +25,29 @@ upgrade a "single-run" or "estimate" to a pattern without the rerun.
   new informational `testCoverage` field for body-only changes (fff21dd8, 675ddd93 CLI
   rendering, a9231954 skips `<top-level>` pseudo-symbols). Gate: `go test ./...` +
   `ci_invariants.py` all held.
-- **H3 A/B RUNNING (launched 2026-09-23 21:41, `harness/results/h3-ab/pass{1,2,3}/`):**
-  control = main binary (`/tmp/prism-h3-control`, has the field, steering unchanged —
-  verify "never a required closing step"); treatment = branch `h3-verify-steering`
-  (`/tmp/prism-h3-treatment`, prism commit fb864107): steering mandates one
-  `verify({})` and a `testCoverage` read before declaring a change finished, with
-  instructions for a "no verified test caller" warning and for the "already fixed"
-  conclusion. Bed = the 19 movable tasks only (12 always-fail + 7 flip; the 30
-  always-pass tasks cannot move), 3 passes per arm. **Probe (click pr3678, treatment):
-  the agent called verify at the end for the first time on a hard-core task, saw the
-  warning on `Command.get_help_option_names`, ran one more search, then stopped —
-  still failed. Adoption moved; behavior only nudged.** The branch is NOT merged; merge
-  only if the run shows more hard-core tasks resolving than the 45–46/50 noise allows.
+- **H3 A/B DONE — NEGATIVE. Branch `h3-verify-steering` NOT merged.** 19 movable
+  tasks × 3 passes × 2 arms (`harness/results/h3-ab/pass{1,2,3}/`,
+  `h3_ab_result.py`). Control = main binary, verify optional; treatment = steering
+  that mandates a `verify({})` + `testCoverage` read before finishing.
+  **Adoption worked: verify called in 45/57 treatment sessions vs 0/57 control.
+  Outcomes did not: hard-core tasks resolved 0/36 cells in BOTH arms; flaky tasks
+  control 8 vs treatment 6 (noise); tokens treatment 1.28x control.** The 12 hard-core
+  tasks have now failed in every one of 7 cells each across 4 configurations. Detail in
+  the "H3 result" section below.
 - **Where the failures actually are (H1, 12 hard-core tasks, all 4 cells each):** none
   are retrieval misses — the two "wrong file" agents had the gold file in their first
   search result and edited elsewhere; the rest are unfinished or subtly wrong edits at
   the right place, confirmed by a test run that could not have caught the gap. Every
   one stops the moment some check passes. `change_impact` was called 0 times in all of
   them (real adoption gap; on the two traced it would not have closed the gap).
-- **Next step, not started:** the actual test of H3 — steer the agent to read
-  `verify`'s `testCoverage` before declaring done, rerun the 50-task bed (paired, ≥3
-  passes per arm; single passes cannot resolve <5 tasks). Nothing built tonight has
-  yet been shown to move a hard-core failure.
+- **What is left to move on this bed:** nothing prism-shaped that has been tried.
+  Retrieval (checked), read-guard (shipped, cost only), body delivery (shipped, flat),
+  disclosure (break-even), verify+steering (this run: adoption yes, outcomes no). The
+  12 hard-core tasks are 0 for 7 cells each; treat them as model/task-limited until
+  someone shows a single cell resolving. The 7 flaky tasks are coin flips no arm
+  controls. Next honest move is a different bed or a different question, not another
+  prism variant on this one — see the "H3 result" section for what the transcripts say
+  the agent does with a coverage warning.
 - **Rejected after measurement (don't reopen without new evidence):** byte cap on
   `search`; delta delivery for extending `read` ranges; per-language budget tiers;
   cost-aware disclosure as its own lever (surface features predict "later edited" at
@@ -322,6 +323,48 @@ exists and is correct, but nothing yet tells the agent to USE it before declarin
 verified, and nothing has re-run the 12-task bed with steering that says so. That A/B —
 does surfacing "no verified test caller" change agent behavior on the actual failure
 set — is the real test of whether this closes any of the 12, and hasn't been run.
+
+## H3 result: mandated verify/testCoverage read — negative (2026-09-24, `h3_ab_result.py`)
+
+Design: 19 movable tasks (12 always-fail + 7 flip), 3 passes per arm, same binary
+except steering. Control: `verify` optional ("never a required closing step").
+Treatment (branch `h3-verify-steering`, prism fb864107): one mandated `verify({})` +
+`testCoverage` read before declaring finished, with what to do on a "no verified test
+caller" warning and on an "already fixed" conclusion.
+
+| | control | treatment |
+|---|---|---|
+| cells resolved (of 57) | 8 | 6 |
+| hard-core tasks resolved ≥1 of 3 (of 12) | **0** | **0** |
+| flaky tasks resolved ≥1 of 3 (of 7) | 5 | 4 |
+| sessions that called `verify` | 0/57 | 45/57 |
+| tokens (treatment / control) | — | 1.28x |
+
+What this says:
+- **The steering did its job.** Directive wording took verify adoption from 0% to 79%
+  on the hardest tasks — consistent with the earlier finding that MUST-style steering
+  moves routing where advisory text does not.
+- **The signal did not change outcomes.** 36 hard-core cells per arm, 0 resolves each.
+  The probe transcript shows the mechanism exactly: the agent sees "no verified test
+  caller for `Command.get_help_option_names`", runs one more search, and stops. A
+  coverage warning tells the agent a function is untested; it cannot tell the agent
+  WHAT the fix is missing. The hard-core failures are incomplete or wrong edits, so
+  "run a test that covers this" produces either a passing test of the wrong behavior
+  or nothing — both end with the agent standing down.
+- **It cost 28% more tokens** for the extra verify turn plus the follow-up hunting,
+  with no return. Do not merge. The `testCoverage` field itself stays (shipped in
+  v0.82.0, non-gating, informational) — it is correct, it just isn't a resolve lever.
+- **The 12 hard-core tasks are now 0 for 7 cells each** across native, three prism
+  configurations, and this run. Nothing prism has done touches them. Until one cell
+  resolves under any configuration, treat them as beyond this model on this bed and
+  stop spending prism experiments on them. The 7 flaky tasks move ±1–2 per pass with
+  no arm in control of the direction.
+
+Where the H3 idea could still matter, if anywhere: not as a stop-gate, but upstream —
+before the edit, as "these are the tests that pin the behavior you are about to change,
+read them first." That is a `query`/anchor-summary delivery question (the machinery
+exists: `renderAnchorSummary` already prints "tested by N" for anchors), and it would
+need its own probe. Not started; not obviously worth it given the above.
 
 ## Methodology notes (keep)
 
