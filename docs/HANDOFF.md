@@ -260,10 +260,40 @@ purpose; it does not move resolve rate on this bed since only one known task had
 specific bug, and the deeper problem underneath it is H3's, not solved by this.
 
 **H3 is now the only path forward on this bed** — retrieval and the installed-vs-checkout
-guard have both been checked and are not where the remaining failures live. Next step is
-scoping the `verify` design: what it needs to compute (changed-symbol → covering-tests
-mapping, grove test-selection tier), what it returns, and how "already fixed" claims get
-checked against the actual diff requirement rather than an ad hoc test run.
+guard have both been checked and are not where the remaining failures live.
+
+## H3, first slice: `verify` reports test coverage for body-only changes (2026-09-23, prism commit fff21dd8)
+
+`verify`'s existing pipeline only ever produces a seed (missed-caller check) from a
+signature change, rename, removal, or interface/type member extraction — a pure body
+edit, the shape of an ordinary bug fix, was invisible to it entirely, which is exactly
+why every one of the 12 hard-core failures (all body-only changes) sailed through
+"complete" with zero missed sites. Added a new, non-gating pass: for every changed
+function/method/constructor regardless of contract status, look up its callers via the
+same `ChangeImpactScoped` call `change_impact` already uses, and report which are
+verified test callers under a new `testCoverage` field. No verified caller → an explicit
+warning instead of silently passing. Deliberately never touches `verdict`/`gateFailure`
+— this signal hasn't earned gating trust the way the existing seed pipeline has.
+
+Validated two ways: a new unit test (`TestToolVerify_TestCoverageForBodyOnlyChange`,
+two functions, one with a real test caller, one without, checks both the JSON and text
+renderer) and a real-world check against `commons-lang pr1703`'s actual agent diff —
+correctly reported 22 covering test call sites for the half-fixed function, confirming
+(not just asserting) that this specific failure is a within-function completeness gap,
+not a missing-coverage one, exactly matching the earlier transcript analysis. No false
+positive on the one real case checked. `go test ./...` green throughout.
+
+**Known gap, not yet fixed:** the CLI's plain-text `prism verify` output (`cmdVerify` in
+`internal/cli`, a separate renderer from the MCP path's `renderVerifyAsText`) does not
+yet surface `testCoverage` — confirmed via `--format json`, which does carry it. Lower
+priority since agents consume the MCP tool, not the CLI text path, but worth a follow-up
+fix so a human running `prism verify` from the terminal sees the same signal.
+
+**Not yet done, and this is the part that actually tests H3's thesis:** the new field
+exists and is correct, but nothing yet tells the agent to USE it before declaring a fix
+verified, and nothing has re-run the 12-task bed with steering that says so. That A/B —
+does surfacing "no verified test caller" change agent behavior on the actual failure
+set — is the real test of whether this closes any of the 12, and hasn't been run.
 
 ## Methodology notes (keep)
 
