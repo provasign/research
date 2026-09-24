@@ -16,13 +16,29 @@ upgrade a "single-run" or "estimate" to a pattern without the rerun.
   byte = bytes × turns remaining; cost of one avoidable turn ≈ 50K tokens (~6% of the run
   per turn per session).** Every payload-trimming arc that measured as "wash" was pulling
   the additive lever. Design for fewer round trips, not smaller responses.
-- **Shipped tonight:** prism v0.81.0 (`prism init --read-guard` / `--no-read-guard`),
+- **Released:** prism v0.81.0 (`prism init --read-guard` / `--no-read-guard`),
   prism v0.81.1 + grove v0.58.3 (`prism doctor` reports Grove's per-language capability
   manifest under `languages`), a test-only fix for a pipe deadlock in `captureStdout`/
-  `capture` that hung windows-latest. Tap refreshed to v0.81.1. Also committed (not yet
-  tagged/released): search's full-body threshold raise (cd26e452) — see turn-objective #1.
+  `capture` that hung windows-latest. Tap at v0.81.1.
+- **Committed on prism main, NOT yet tagged (needs a release decision):** search's
+  exact-term full-body threshold raise (cd26e452; 50-task A/B: resolve 31→33, tokens
+  flat) and `verify`'s new `testCoverage` field for body-only changes (fff21dd8 +
+  675ddd93 CLI rendering). Both `go test ./...` green. Cut v0.82.0 when ready — run
+  the engine-ceiling regression (`ci_invariants.py`) first, as for every tag.
+- **Where the failures actually are (H1, 12 hard-core tasks, all 4 cells each):** none
+  are retrieval misses — the two "wrong file" agents had the gold file in their first
+  search result and edited elsewhere; the rest are unfinished or subtly wrong edits at
+  the right place, confirmed by a test run that could not have caught the gap. Every
+  one stops the moment some check passes. `change_impact` was called 0 times in all of
+  them (real adoption gap; on the two traced it would not have closed the gap).
+- **Next step, not started:** the actual test of H3 — steer the agent to read
+  `verify`'s `testCoverage` before declaring done, rerun the 50-task bed (paired, ≥3
+  passes per arm; single passes cannot resolve <5 tasks). Nothing built tonight has
+  yet been shown to move a hard-core failure.
 - **Rejected after measurement (don't reopen without new evidence):** byte cap on
-  `search`; delta delivery for extending `read` ranges; per-language budget tiers.
+  `search`; delta delivery for extending `read` ranges; per-language budget tiers;
+  cost-aware disclosure as its own lever (surface features predict "later edited" at
+  break-even only).
 
 ## Confirmed this cycle
 
