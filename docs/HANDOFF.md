@@ -25,6 +25,25 @@ upgrade a "single-run" or "estimate" to a pattern without the rerun.
   new informational `testCoverage` field for body-only changes (fff21dd8, 675ddd93 CLI
   rendering, a9231954 skips `<top-level>` pseudo-symbols). Gate: `go test ./...` +
   `ci_invariants.py` all held.
+- **Fixed and released same day, prism v0.82.2 (2026-09-24):** every released Linux
+  binary from v0.80.2 through v0.82.1 dynamically required GLIBC_2.34 and refused to
+  even start on Ubuntu 20.04, Debian 11, Amazon Linux 2, or RHEL 8. Found via an
+  external Claude session's own Prism benchmark hitting this on a Google Auto Ubuntu
+  20.04 image, reported into this conversation. Root cause: `CGO_ENABLED=1` (needed
+  for tree-sitter's C parsers) makes the binary dynamically link against the BUILD
+  HOST's glibc as a runtime floor — GitHub's `ubuntu-latest` runner has glibc ≥2.34,
+  where glibc 2.34 merged libpthread into libc and versioned those symbols
+  (`pthread_create`, `__libc_start_main`), so every release since cgo builds started
+  inherited that floor regardless of what prism itself needs. Fix (`release.yml`,
+  commit 6fdcc561): `-tags netgo` (keeps Go's `net` package off cgo's
+  getaddrinfo/res_search) + `-extldflags "-static"` for linux/amd64 and the
+  linux/arm64 cross build. No functional change — cgo stays enabled, tree-sitter
+  parsers are statically linked in, not disabled. Validated twice: once locally in
+  Docker containers reproducing the exact CI build commands (arm64 native, amd64
+  under QEMU) before tagging, and again against the real released v0.82.2 binaries
+  after — both times confirmed zero `GLIBC_*` strings, `file` reports "statically
+  linked", and both binaries start, index a real repo, and return a correct lookup
+  inside `ubuntu:20.04`. Tap refreshed to 0.82.2.
 - **H3 A/B DONE — NEGATIVE. Branch `h3-verify-steering` NOT merged.** 19 movable
   tasks × 3 passes × 2 arms (`harness/results/h3-ab/pass{1,2,3}/`,
   `h3_ab_result.py`). Control = main binary, verify optional; treatment = steering
