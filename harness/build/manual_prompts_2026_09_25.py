@@ -325,12 +325,17 @@ Expected: `res.send()` generates the `ETag` as usual whether or not `Transfer-En
 
 P["gin-gonic__gin__pr4695"] = """Context.Copy() drops Errors and Accepted
 
-`c.Copy()` returns a context whose `Errors` and `Accepted` are always `nil`, regardless of the original:
+From issue #771, "Context.Copy does not copy Context.Errors":
 
-- errors attached with `c.Error(...)` before the copy are not visible on the copy, so a goroutine working with the copy cannot see them;
-- content-negotiation state set by middleware via `c.SetAccepted(...)` is lost in the copy.
+> Is there a reason for this (appart from performance) ?
+> It seems to me that it might be a usual case wanting to send errors to
+> a logging platform or service which takes time, and a good way of doing
+> that may be copying the context. Of course it can be done manually, but
+> it seems to me that the semantics of Copy include copying .Errors.
 
-`Keys` and `Params` are copied correctly. Expected: the copy carries `Errors` and `Accepted` from the original, as independent slices, so that changes on the copy do not affect the original context."""
+The same applies to `Accepted`: content-negotiation state set by middleware via `c.SetAccepted(...)` is lost in the copy. Today `c.Copy()` returns a context whose `Errors` and `Accepted` are always `nil`, regardless of the original, while `Keys` and `Params` are copied correctly.
+
+Expected: the copy carries `Errors` and `Accepted` from the original, as independent slices, so that changes on the copy do not affect the original context."""
 
 
 def main():
