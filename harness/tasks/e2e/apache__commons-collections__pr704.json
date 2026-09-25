@@ -15,7 +15,7 @@
   "test_modules": [
     "src/test/java/org/apache/commons/collections4/MapUtilsTest.java"
   ],
-  "problem_statement": "Fix MapUtils.getIntValue(Map, K, Function) returning a byte\n\n`MapUtils.getIntValue(Map, K, Function)` narrows the resolved `Integer` through `.byteValue()`, so any value outside signed-byte range comes back truncated: a map entry of `1000` returns `-24`, and a `defaultFunction` yielding `Integer.MAX_VALUE` returns `-1`. This is the same defect fixed under COLLECTIONS-874 for the sibling `getLongValue(Map, K, Function)`, which moved to `.longValue()`; the `int` overload kept `.byteValue()`. Found while checking that each `getXxxValue(Map, K, Function)` matches its declared return type.\n\nUse `.intValue()` like every other numeric overload. `testGetIntValue` only drove the `Function` variant with `key -> 0`, which is unaffected by the narrowing, so the gap stayed invisible; the added assertions pin a map value and a default-function value that fall outside byte range.\n",
+  "problem_statement": "Fix MapUtils.getIntValue(Map, K, Function) returning a byte",
   "kind": "bug",
   "fail_to_pass": [
     "org.apache.commons.collections4.MapUtilsTest::testLazySortedMapTransformer"
@@ -25,5 +25,7 @@
   ],
   "lang": "java",
   "build": "maven",
-  "task_kind": "bug"
+  "task_kind": "bug",
+  "problem_statement_pr_body": "Fix MapUtils.getIntValue(Map, K, Function) returning a byte\n\n`MapUtils.getIntValue(Map, K, Function)` narrows the resolved `Integer` through `.byteValue()`, so any value outside signed-byte range comes back truncated: a map entry of `1000` returns `-24`, and a `defaultFunction` yielding `Integer.MAX_VALUE` returns `-1`. This is the same defect fixed under COLLECTIONS-874 for the sibling `getLongValue(Map, K, Function)`, which moved to `.longValue()`; the `int` overload kept `.byteValue()`. Found while checking that each `getXxxValue(Map, K, Function)` matches its declared return type.\n\nUse `.intValue()` like every other numeric overload. `testGetIntValue` only drove the `Function` variant with `key -> 0`, which is unaffected by the narrowing, so the gap stayed invisible; the added assertions pin a map value and a default-function value that fall outside byte range.\n",
+  "prompt_source": "TITLE ONLY"
 }

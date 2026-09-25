@@ -1,0 +1,42 @@
+{
+  "instance_id": "FasterXML__jackson-databind__pr5943",
+  "repo": "FasterXML/jackson-databind",
+  "pr": 5943,
+  "base_commit": "c7ac0c71d56182c23de8f27f864f88eadb737539",
+  "merge_commit": "16162fe235eec3d2acf8ef322b6d13a865bff989",
+  "patch": "diff --git a/src/main/java/tools/jackson/databind/cfg/MapperBuilder.java b/src/main/java/tools/jackson/databind/cfg/MapperBuilder.java\nindex 7531c4a54..a8b840e49 100644\n--- a/src/main/java/tools/jackson/databind/cfg/MapperBuilder.java\n+++ b/src/main/java/tools/jackson/databind/cfg/MapperBuilder.java\n@@ -1088,10 +1088,11 @@ public abstract class MapperBuilder<M extends ObjectMapper,\n         }\n \n         // 10-Sep-2019, tatu: [databind#2432] Module dependencies; need to add first\n-        //   but unlike main module, do NOT replace module if already added\n+        //   but unlike main module, do NOT replace module if already added.\n+        // 24-Apr-2026, tatu: [databind#5941] Walk dependencies transitively to match\n+        //   2.x recursive behavior\n         for (JacksonModule dep : module.getDependencies()) {\n-            _verifyModuleMetadata(dep);\n-            _modules.putIfAbsent(dep.getRegistrationId(), dep);\n+            _addDependency(dep);\n         }\n         _modules.put(moduleId, module);\n         // [databind#5481]: invalidate cached state when modules are modified\n@@ -1099,6 +1100,19 @@ public abstract class MapperBuilder<M extends ObjectMapper,\n         return _this();\n     }\n \n+    private void _addDependency(JacksonModule module)\n+    {\n+        _verifyModuleMetadata(module);\n+        final Object moduleId = module.getRegistrationId();\n+        if (_modules.containsKey(moduleId)) {\n+            return;\n+        }\n+        for (JacksonModule dep : module.getDependencies()) {\n+            _addDependency(dep);\n+        }\n+        _modules.put(moduleId, module);\n+    }\n+\n     private void _verifyModuleMetadata(JacksonModule module)\n     {\n         if (module.getModuleName() == null) {\n",
+  "test_patch": "diff --git a/src/test/java/tools/jackson/databind/ObjectMapperTest.java b/src/test/java/tools/jackson/databind/ObjectMapperTest.java\nindex af0ec22df..a1dfef74b 100644\n--- a/src/test/java/tools/jackson/databind/ObjectMapperTest.java\n+++ b/src/test/java/tools/jackson/databind/ObjectMapperTest.java\n@@ -315,6 +315,40 @@ public class ObjectMapperTest extends DatabindTestUtil\n         assertEquals(Arrays.asList(\"dep1\", \"dep2\", \"main\"), ids);\n     }\n \n+    // [databind#5941]: transitive (multi-level) module dependencies must all be registered\n+    @Test\n+    public void testRegisterTransitiveModuleDependencies() {\n+        final SimpleModule moduleA = new SimpleModule() {\n+            @Override\n+            public Object getRegistrationId() { return \"A\"; }\n+        };\n+        final SimpleModule moduleB = new SimpleModule() {\n+            @Override\n+            public Iterable<? extends JacksonModule> getDependencies() {\n+                return Arrays.asList(moduleA);\n+            }\n+            @Override\n+            public Object getRegistrationId() { return \"B\"; }\n+        };\n+        final SimpleModule moduleC = new SimpleModule() {\n+            @Override\n+            public Iterable<? extends JacksonModule> getDependencies() {\n+                return Arrays.asList(moduleB);\n+            }\n+            @Override\n+            public Object getRegistrationId() { return \"C\"; }\n+        };\n+\n+        ObjectMapper mapper = jsonMapperBuilder()\n+                .addModule(moduleC)\n+                .build();\n+\n+        List<Object> ids = mapper.registeredModules().stream()\n+                .map(JacksonModule::getRegistrationId)\n+                .toList();\n+        assertEquals(Arrays.asList(\"A\", \"B\", \"C\"), ids);\n+    }\n+\n     @Test\n     public void testHasExplicitTimeZone() throws Exception\n     {\n",
+  "test_classes": [
+    "tools.jackson.databind.ObjectMapperTest"
+  ],
+  "src_files": [
+    "src/main/java/tools/jackson/databind/cfg/MapperBuilder.java"
+  ],
+  "test_modules": [
+    "src/test/java/tools/jackson/databind/ObjectMapperTest.java"
+  ],
+  "problem_statement": "Jackson 3 `MapperBuilder.addModule()` is not recursive wrt declared Module dependencies\n\n### Search before asking\n\n- [x] I searched in the [issues](https://github.com/FasterXML/jackson-databind/issues) and found nothing similar.\n\n### Describe the bug\n\nIn Jackson 2, modules could form hierarchies, where registerModule() would be called recursively making sure all dependencies are registered.\n\nJackson 3's implementation of addModule only goes over the passed module's dependencies and not the whole tree, which makes forming such hierarchies impossible. \n\n### Version Information\n\n3.1.2\n\n### Reproduction\n\n```scala\nimport tools.jackson.databind.json.JsonMapper\nimport tools.jackson.databind.module.SimpleModule\n\nimport java.util\n\nobject Test {\n  object ModuleA extends SimpleModule\n  object ModuleB extends SimpleModule {\n    override def getDependencies = util.Arrays.asList(ModuleA)\n  }\n  object ModuleC extends SimpleModule {\n    override def getDependencies = util.Arrays.asList(ModuleB)\n  }\n\n  def main(args: Array[String]): Unit = {\n\n    val mapper = JsonMapper.builder().addModules(ModuleC).build()\n    println(s\"ModuleA: ${mapper.registeredModules().contains(ModuleA)}\")\n    println(s\"ModuleB: ${mapper.registeredModules().contains(ModuleB)}\")\n    println(s\"ModuleC: ${mapper.registeredModules().contains(ModuleC)}\")\n  }\n}\n```\n\n### Expected behavior\n\nEither a correct registration of all modules or some form of warning or error about the behaviour change.\n\n### Additional context\n\nEncountered while migrating from Jackson 2 to Jackson 3.",
+  "fail_to_pass": [
+    "tools.jackson.databind.ObjectMapperTest::testConfigForPropertySorting"
+  ],
+  "pass_to_pass": [
+    "tools.jackson.databind.ObjectMapperTest::testClearCaches",
+    "tools.jackson.databind.ObjectMapperTest::testWithCloseCloseable",
+    "tools.jackson.databind.ObjectMapperTest::test_createParser_DataInput",
+    "tools.jackson.databind.ObjectMapperTest::test_createParser_File",
+    "tools.jackson.databind.ObjectMapperTest::test_createParser_Path",
+    "tools.jackson.databind.ObjectMapperTest::test_createParser_failsIfArgumentIsNull",
+    "tools.jackson.databind.ObjectMapperTest::test_readTree_ByteArray",
+    "tools.jackson.databind.ObjectMapperTest::test_readTree_File",
+    "tools.jackson.databind.ObjectMapperTest::test_readTree_Path",
+    "tools.jackson.databind.ObjectMapperTest::test_readTree_Reader",
+    "tools.jackson.databind.ObjectMapperTest::test_readTree_String",
+    "tools.jackson.databind.ObjectMapperTest::test_readValue_InputStream",
+    "tools.jackson.databind.ObjectMapperTest::test_readValue_failsIfArgumentIsNull",
+    "tools.jackson.databind.ObjectMapperTest::test_writeValue_Writer"
+  ],
+  "lang": "java",
+  "build": "maven",
+  "task_kind": "localized",
+  "prompt_source": "issue"
+}
