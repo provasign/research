@@ -12,7 +12,7 @@
   "src_files": [
     "src/main/java/tools/jackson/databind/deser/jdk/StringCollectionDeserializer.java"
   ],
-  "problem_statement": "Fix #6040\n\n",
+  "problem_statement": "Inconsistency in current token on invalid type coercion for `List<String>`\n\n### Describe your Issue\n\nWe have been migrating from Jackson 2 to 3 and our tests caught the following scenario.\n\nWe disallow all sorts of type coercions. When reading a field that expects a string but is provided with an array, we expect a `MismatchedInputException`, where the `targetType` will be `String.class` and the `currentToken` will be `START_ARRAY`. There is a specific coercion in which the `currentToken` is `END_ARRAY`. We found this peculiar and so we are sharing it here, in case you want to do anything about it.\n\n```\nJsonMapper jsonMapper = JsonMapper.builder()\n    .withCoercionConfigDefaults(coercionConfig -> {\n        coercionConfig.setCoercion(CoercionInputShape.String, CoercionAction.Fail);\n    })\n    .build();\nTypeFactory typeFactory = new TypeFactory();\n\nJavaType containerType;\n\n// currentToken: START_ARRAY, targetType: String.class\ncontainerType = typeFactory.constructParametricType(TestClass.class, String.class);\njsonMapper.readValue(\"{ \\\"field\\\": [] }\", containerType);\n\n// currentToken: END_ARRAY, targetType: String.class\n// Expected currentToken to be START_ARRAY as in the other coercions.\ncontainerType = typeFactory.constructParametricType(List.class, String.class);\ncontainerType = typeFactory.constructParametricType(TestClass.class, containerType);\njsonMapper.readValue(\"{ \\\"field\\\": [ [] ] }\", containerType);\n\n// currentToken: START_ARRAY, targetType: String.class\ncontainerType = typeFactory.constructParametricType(Map.class, String.class, String.class);\ncontainerType = typeFactory.constructParametricType(TestClass.class, containerType);\njsonMapper.readValue(\"{ \\\"field\\\": { \\\"field\\\": [] } }\", containerType);\n\npublic class TestClass<T> {\n    private T field;\n\n    public T getField() {\n        return field;\n    }\n\n    public void setField(T field) {\n        this.field = field;\n    }\n}\n```\n\nVersions used:\n- com.fasterxml.jackson.core:jackson-annotations:2.21\n- tools.jackson.core:jackson-core:3.1.4\n- tools.jackson.core:jackson-databind:3.1.4",
   "fail_to_pass": [
     "tools.jackson.databind.convert.CoerceArrayToStringToken6040Test::arrayForString"
   ],
@@ -24,5 +24,7 @@
   "task_kind": "localized",
   "test_modules": [
     "src/test/java/tools/jackson/databind/convert/CoerceArrayToStringToken6040Test.java"
-  ]
+  ],
+  "problem_statement_pr_body": "Fix #6040\n\n",
+  "prompt_source": "issue"
 }

@@ -12,7 +12,7 @@
   "src_files": [
     "src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java"
   ],
-  "problem_statement": "Fix #6001: custom `@JsonUnwrapped` deserializer\n\nFixes #6001.",
+  "problem_statement": "Regression with custom `@JsonUnwrapped` deserializer from 3.0 to 3.1\n\n### Search before asking\n\n- [x] I searched in the [issues](https://github.com/FasterXML/jackson-databind/issues) and found nothing similar.\n\n### Describe the bug\n\n@JsonUnwrapped on Java record components behaves differently between Jackson databind 3.0.x and 3.1.x when the unwrapped value uses a custom ValueDeserializer that implements unwrappingDeserializer(...).\n\nWith Jackson databind 3.0.x, the custom unwrapping deserializer receives the expected flattened JSON fields.\n\nWith Jackson databind 3.1.x, the custom unwrapping deserializer is still invoked and receives the correct NameTransformer, but the JsonParser content passed to deserialize(...) is an empty object {}. As a result, the unwrapped value cannot be deserialized.\n\nMore context is in the reproducer repo: https://github.com/kistlers/jackson-3-unwrapped-regression/blob/main/README.md\n\nMultiple changes were released with 3.1 that relate to JsonUnwrapped, but I cannot se what exactly relates to my issue:\n- https://github.com/FasterXML/jackson-databind/issues/650\n- https://github.com/FasterXML/jackson-databind/issues/1497\n- https://github.com/FasterXML/jackson-databind/issues/1811\n\n### Version Information\n\n3.1.3\n\n### Reproduction\n\nI created a full reproducer repo:\nhttps://github.com/kistlers/jackson-3-unwrapped-regression\n\nThe Readme describes the full steps of reproduction and a test that works in 3.0.4 and fails in 3.1.3\n\n### Expected behavior\n\nThis behaviour should still work in 3.1\n\n### Additional context\n\n_No response_",
   "fail_to_pass": [
     "tools.jackson.databind.deser.UnwrappedCustomDeserCreator6001Test::opaqueUnwrapperAbsorbsUnknownsEvenWithFailOnUnknown"
   ],
@@ -22,5 +22,7 @@
   "task_kind": "localized",
   "test_modules": [
     "src/test/java/tools/jackson/databind/deser/UnwrappedCustomDeserCreator6001Test.java"
-  ]
+  ],
+  "problem_statement_pr_body": "Fix #6001: custom `@JsonUnwrapped` deserializer\n\nFixes #6001.",
+  "prompt_source": "issue"
 }

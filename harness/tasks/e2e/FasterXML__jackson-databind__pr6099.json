@@ -12,7 +12,7 @@
   "src_files": [
     "src/main/java/com/fasterxml/jackson/databind/type/TypeFactory.java"
   ],
-  "problem_statement": "Resolve classes without initialization in `TypeFactory.findClass()`\n\n2.18 version of #6097, as requested there.\n\nTypeFactory.findClass resolves class names that come straight from input: a Class-valued property or map key, and polymorphic type ids resolved through DatabindContext. It calls Class.forName(name, true, loader), so naming a class in JSON runs that class's static initializer just to look it up. On the polymorphic path the class is loaded and initialized before the PolymorphicTypeValidator gets to deny it, so a rejected class's static block still runs.\n\nfindClass now resolves with initialize=false, so a named class is linked but not initialized; the JVM still initializes it on first real use (instantiating an allowed subtype, or actually using a Class value), so valid behavior is unchanged. classForName(name, initialize, loader) was also ignoring its initialize argument and always passing true, now corrected to honor it. Keeping this in the lookup method covers every caller that resolves a name from input without each one repeating the check.\n\nThe 3.x patch applied cleanly here; test included (fails before the change, passes after).",
+  "problem_statement": "Resolve classes without initialization in `TypeFactory.findClass()`",
   "fail_to_pass": [
     "com.fasterxml.jackson.databind.deser.jdk.ClassDeserNoStaticInitTest::polymorphicInstantiationTriggersStaticInitializer"
   ],
@@ -22,5 +22,7 @@
   "task_kind": "localized",
   "test_modules": [
     "src/test/java/com/fasterxml/jackson/databind/deser/jdk/ClassDeserNoStaticInitTest.java"
-  ]
+  ],
+  "problem_statement_pr_body": "Resolve classes without initialization in `TypeFactory.findClass()`\n\n2.18 version of #6097, as requested there.\n\nTypeFactory.findClass resolves class names that come straight from input: a Class-valued property or map key, and polymorphic type ids resolved through DatabindContext. It calls Class.forName(name, true, loader), so naming a class in JSON runs that class's static initializer just to look it up. On the polymorphic path the class is loaded and initialized before the PolymorphicTypeValidator gets to deny it, so a rejected class's static block still runs.\n\nfindClass now resolves with initialize=false, so a named class is linked but not initialized; the JVM still initializes it on first real use (instantiating an allowed subtype, or actually using a Class value), so valid behavior is unchanged. classForName(name, initialize, loader) was also ignoring its initialize argument and always passing true, now corrected to honor it. Keeping this in the lookup method covers every caller that resolves a name from input without each one repeating the check.\n\nThe 3.x patch applied cleanly here; test included (fails before the change, passes after).",
+  "prompt_source": "TITLE ONLY"
 }

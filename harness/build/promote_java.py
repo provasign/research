@@ -31,7 +31,7 @@ if LOG.exists():
 
 cands = []
 for f in sys.argv[1:] or glob.glob("results/mining/*.cands.json"):
-    cands += [c for c in json.load(open(f)) if "jackson" in c.get("repo", "") or "commons" in c.get("repo", "")]
+    cands += [c for c in json.load(open(f)) if c.get("repo") in REPO_DIR]
 
 print(f"{len(cands)} java candidates, {len(done)} already done\n")
 for c in cands:
@@ -41,7 +41,9 @@ for c in cands:
         print(f"  (skip) {iid}"); continue
     rd = REPO_DIR.get(repo)
     row = {"instance_id": iid, "repo": repo, "pr": pr,
-           "task_kind": c.get("task_kind"), "churn": c.get("churn")}
+           "task_kind": c.get("task_kind") or ("multi_site" if len(c.get("src_files") or []) >= 2
+                                                else "localized"),
+           "churn": c.get("churn")}
     try:
         task = java_eval.build_task(rd, repo, pr)
         v = java_eval.validate(rd, task)
@@ -49,7 +51,7 @@ for c in cands:
                    n_before=v["n_before"], n_after=v["n_after"])
         if v["valid"]:
             task.update(fail_to_pass=v["fail_to_pass"], pass_to_pass=v["pass_to_pass"],
-                        lang="java", build="maven", task_kind=c.get("task_kind"))
+                        lang="java", build="maven", task_kind=row["task_kind"])
             (TASKS / f"{iid}.json").write_text(json.dumps(task, indent=2))
     except Exception as e:
         row.update(valid=False, error=f"{type(e).__name__}: {str(e)[:160]}")

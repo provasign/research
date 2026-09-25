@@ -15,7 +15,7 @@
   "test_modules": [
     "src/test/java/org/apache/commons/lang3/math/NumberUtilsTest.java"
   ],
-  "problem_statement": "Fix NumberUtils min/max varargs dropping the sign of zero\n\n`Repro`: `NumberUtils.max(-0.0d, 0.0d)` returns `-0.0` (so `1 / result` is `-Infinity`); `NumberUtils.min(0.0d, -0.0d)` returns `0.0`.\n\n`Cause`: the `double`/`float` varargs overloads pick the extreme with `<`/`>`, which rank `-0.0` and `0.0` as equal, so the sign held in the accumulator survives. `Math.max`/`Math.min`, the three-argument `min`/`max` overloads and `IEEE754rUtils` all return the other sign for these inputs.\n\n`Fix`: run the loop through `Math.max`/`Math.min` in the four `double`/`float` overloads, matching the three-argument versions. Those also propagate `NaN`, so the explicit `isNaN` check is no longer needed and the existing `NaN` results stay the same.",
+  "problem_statement": "Fix NumberUtils min/max varargs dropping the sign of zero",
   "fail_to_pass": [
     "org.apache.commons.lang3.math.NumberUtilsTest::testMaximumDouble"
   ],
@@ -42,5 +42,7 @@
   ],
   "lang": "java",
   "build": "maven",
-  "task_kind": "localized"
+  "task_kind": "localized",
+  "problem_statement_pr_body": "Fix NumberUtils min/max varargs dropping the sign of zero\n\n`Repro`: `NumberUtils.max(-0.0d, 0.0d)` returns `-0.0` (so `1 / result` is `-Infinity`); `NumberUtils.min(0.0d, -0.0d)` returns `0.0`.\n\n`Cause`: the `double`/`float` varargs overloads pick the extreme with `<`/`>`, which rank `-0.0` and `0.0` as equal, so the sign held in the accumulator survives. `Math.max`/`Math.min`, the three-argument `min`/`max` overloads and `IEEE754rUtils` all return the other sign for these inputs.\n\n`Fix`: run the loop through `Math.max`/`Math.min` in the four `double`/`float` overloads, matching the three-argument versions. Those also propagate `NaN`, so the explicit `isNaN` check is no longer needed and the existing `NaN` results stay the same.",
+  "prompt_source": "TITLE ONLY"
 }

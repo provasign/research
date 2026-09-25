@@ -12,7 +12,7 @@
   "test_modules": [
     "test/suites/api/test_unpack.c"
   ],
-  "problem_statement": "Unpack: include keys in type mismatch error messages\n\nI think the error messages like `Expected string, got integer` that `json_unpack_ex` outputs when parsing a JSON object like `{\"one\": 1, \"two\": 2, \"three\": 3}` would be much more helpful if they included information about _which_ item it was that was found problematic \u2013 just like the error message for a missing item already does: `Object item not found: four`.\r\n\r\nThe attached commit is a proposal how this could be implemented: it now says `Expected string, got integer for key two`. For values that are not in an object, but in an array or at the root level, the error message is unmodified as before.\r\n\r\nThis is not a full path in the case of nested objects, just the key in the innermost object, however I think that will be sufficient to guide a user in most cases. In cases where it is not, the calling code can still determine the full path by examining `error.position` (which points at the corresponding format specifier in the format string).\r\n\r\nIf changing error messages for existing callers is considered an incompatible API change, then this functionality could also be gated behind an additional flag for `json_unpack_ex`.\r\n\r\nWhat do you think?",
+  "problem_statement": "Unpack: include keys in type mismatch error messages",
   "n_before": 215,
   "n_after": 215,
   "fail_to_pass": [
@@ -236,5 +236,7 @@
   ],
   "valid": true,
   "lang": "c",
-  "build": "ctest"
+  "build": "ctest",
+  "problem_statement_pr_body": "Unpack: include keys in type mismatch error messages\n\nI think the error messages like `Expected string, got integer` that `json_unpack_ex` outputs when parsing a JSON object like `{\"one\": 1, \"two\": 2, \"three\": 3}` would be much more helpful if they included information about _which_ item it was that was found problematic \u2013 just like the error message for a missing item already does: `Object item not found: four`.\r\n\r\nThe attached commit is a proposal how this could be implemented: it now says `Expected string, got integer for key two`. For values that are not in an object, but in an array or at the root level, the error message is unmodified as before.\r\n\r\nThis is not a full path in the case of nested objects, just the key in the innermost object, however I think that will be sufficient to guide a user in most cases. In cases where it is not, the calling code can still determine the full path by examining `error.position` (which points at the corresponding format specifier in the format string).\r\n\r\nIf changing error messages for existing callers is considered an incompatible API change, then this functionality could also be gated behind an additional flag for `json_unpack_ex`.\r\n\r\nWhat do you think?",
+  "prompt_source": "TITLE ONLY"
 }

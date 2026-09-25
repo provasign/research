@@ -1,0 +1,55 @@
+{
+  "instance_id": "apache__dubbo__pr16348",
+  "repo": "apache/dubbo",
+  "pr": 16348,
+  "base_commit": "866860d01395870ce010606f14326c963e040f56",
+  "merge_commit": "b75adde95997f6fdd195e8dd8ed5986ceefcd7de",
+  "patch": "diff --git a/dubbo-common/src/main/java/org/apache/dubbo/common/utils/StringUtils.java b/dubbo-common/src/main/java/org/apache/dubbo/common/utils/StringUtils.java\nindex 7fafe8494..477e55082 100644\n--- a/dubbo-common/src/main/java/org/apache/dubbo/common/utils/StringUtils.java\n+++ b/dubbo-common/src/main/java/org/apache/dubbo/common/utils/StringUtils.java\n@@ -1428,7 +1428,7 @@ public final class StringUtils {\n                     return Boolean.TRUE;\n                 }\n                 if (\"off\".equalsIgnoreCase(value)) {\n-                    return Boolean.TRUE;\n+                    return Boolean.FALSE;\n                 }\n                 break;\n             case 4:\n",
+  "test_patch": "diff --git a/dubbo-common/src/test/java/org/apache/dubbo/common/utils/StringUtilsTest.java b/dubbo-common/src/test/java/org/apache/dubbo/common/utils/StringUtilsTest.java\nindex 0d7cef3c0..65317f38d 100644\n--- a/dubbo-common/src/test/java/org/apache/dubbo/common/utils/StringUtilsTest.java\n+++ b/dubbo-common/src/test/java/org/apache/dubbo/common/utils/StringUtilsTest.java\n@@ -34,6 +34,7 @@ import static org.apache.dubbo.common.utils.CollectionUtils.ofSet;\n import static org.apache.dubbo.common.utils.StringUtils.splitToList;\n import static org.apache.dubbo.common.utils.StringUtils.splitToSet;\n import static org.apache.dubbo.common.utils.StringUtils.startsWithIgnoreCase;\n+import static org.apache.dubbo.common.utils.StringUtils.toBoolean;\n import static org.apache.dubbo.common.utils.StringUtils.toCommaDelimitedString;\n import static org.hamcrest.MatcherAssert.assertThat;\n import static org.hamcrest.Matchers.containsString;\n@@ -503,4 +504,37 @@ class StringUtilsTest {\n         assertTrue(startsWithIgnoreCase(\"dubbo.Application.name\", \"dubbo.application.\"));\n         assertTrue(startsWithIgnoreCase(\"Dubbo.application.name\", \"dubbo.application.\"));\n     }\n+\n+    @Test\n+    void testToBoolean() {\n+        // true representations\n+        assertEquals(Boolean.TRUE, toBoolean(\"true\"));\n+        assertEquals(Boolean.TRUE, toBoolean(\"True\"));\n+        assertEquals(Boolean.TRUE, toBoolean(\"on\"));\n+        assertEquals(Boolean.TRUE, toBoolean(\"yes\"));\n+        assertEquals(Boolean.TRUE, toBoolean(\"1\"));\n+        assertEquals(Boolean.TRUE, toBoolean(\"y\"));\n+        assertEquals(Boolean.TRUE, toBoolean(\"Y\"));\n+\n+        // false representations\n+        assertEquals(Boolean.FALSE, toBoolean(\"false\"));\n+        assertEquals(Boolean.FALSE, toBoolean(\"False\"));\n+        assertEquals(Boolean.FALSE, toBoolean(\"off\"));\n+        assertEquals(Boolean.FALSE, toBoolean(\"Off\"));\n+        assertEquals(Boolean.FALSE, toBoolean(\"no\"));\n+        assertEquals(Boolean.FALSE, toBoolean(\"0\"));\n+        assertEquals(Boolean.FALSE, toBoolean(\"n\"));\n+        assertEquals(Boolean.FALSE, toBoolean(\"N\"));\n+\n+        // unrecognized or empty input returns null\n+        assertNull(toBoolean(null));\n+        assertNull(toBoolean(\"\"));\n+        assertNull(toBoolean(\"dubbo\"));\n+\n+        // the overload falls back to the default value only for unrecognized input\n+        assertFalse(StringUtils.toBoolean(\"off\", true));\n+        assertTrue(StringUtils.toBoolean(\"on\", false));\n+        assertTrue(StringUtils.toBoolean(\"unknown\", true));\n+        assertFalse(StringUtils.toBoolean(null, false));\n+    }\n }\n",
+  "test_classes": [
+    "org.apache.dubbo.common.utils.StringUtilsTest"
+  ],
+  "src_files": [
+    "dubbo-common/src/main/java/org/apache/dubbo/common/utils/StringUtils.java"
+  ],
+  "test_modules": [
+    "dubbo-common/src/test/java/org/apache/dubbo/common/utils/StringUtilsTest.java"
+  ],
+  "problem_statement": "StringUtils.toBoolean(\"off\") returns true instead of false\n\n### Apache Dubbo Component\n\nJava SDK (apache/dubbo)\n\n### Dubbo Version\n\n`3.3` branch (current HEAD, `3.3.7-SNAPSHOT`). Introduced in #14924.\n\n### Steps to reproduce this issue\n\n`StringUtils.toBoolean(\"off\")` returns `Boolean.TRUE`.\n\nThe method's Javadoc states it supports `'on'/'off'` as a boolean pair, and every other\nfalsy token is parsed correctly. Only `\"off\"` is wrong:\n\n```\non=true   off=true(!)   yes=true   no=false   true=true   false=false   1=true   0=false\n```\n\n### What you expected to happen\n\n`StringUtils.toBoolean(\"off\")` should return `Boolean.FALSE` (the antonym of `\"on\"`).\n\n### Root cause\n\nIn `StringUtils.toBoolean` the `case 3` branch returns `Boolean.TRUE` for `\"off\"`, copy-pasted\nfrom the adjacent `\"yes\"` branch.\n\n### Impact\n\n`toBoolean` backs Triple REST argument binding (`GeneralTypeConverter`) and REST/OpenAPI config\nparsing (`ConfigFactory`, `Helper`), so a value of `\"off\"` is interpreted as `true` in those paths.",
+  "fail_to_pass": [
+    "org.apache.dubbo.common.utils.StringUtilsTest::testIsContains"
+  ],
+  "pass_to_pass": [
+    "org.apache.dubbo.common.utils.StringUtilsTest::testCamelToSplitName",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testConvertToSplitName",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testEncodeParameters",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testExceptionToString",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testGetServiceKey",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testIsBlank",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testIsEmpty",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testIsEquals",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testIsInteger",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testIsJavaIdentifier",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testIsNoneEmpty",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testIsNotEmpty",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testJoinCollectionString",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testLength",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testParseInteger",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testParseParameters",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testParseQueryString",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testRepeat",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testReplace",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testSnakeCaseToSplitName",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testSplitToList",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testStartsWithIgnoreCase",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testToArgumentString",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testToCommaDelimitedString",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testToOSStyleKey",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testToQueryString",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testTranslate"
+  ],
+  "lang": "java",
+  "build": "maven",
+  "task_kind": "localized",
+  "prompt_source": "issue"
+}

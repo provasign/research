@@ -15,7 +15,7 @@
   "test_modules": [
     "src/test/java/org/apache/commons/lang3/ArrayUtilsTest.java"
   ],
-  "problem_statement": "Fix ArrayUtils.reverse range underflow on Integer.MIN_VALUE end\n\nRepro: `ArrayUtils.reverse(new int[]{1, 2, 3}, 0, Integer.MIN_VALUE)`.\nExpected: no change, since the `endIndexExclusive` Javadoc documents an undervalue `< start index` as no change.\nActual: `ArrayIndexOutOfBoundsException: Index 2147483647 out of bounds for length 3`.\nCause: `Math.min(array.length, endIndexExclusive) - 1` keeps `Integer.MIN_VALUE` and the `- 1` underflows to `Integer.MAX_VALUE`, so the `while (j > i)` loop indexes past the array. All nine primitive and `Object` range overloads share the line.\nFix: clamp the end to zero before the decrement with the existing `max0` helper, as the sibling `subarray` and `shift` methods already do. Every other negative end was already a no-op, so valid ranges are unchanged.",
+  "problem_statement": "Fix ArrayUtils.reverse range underflow on Integer.MIN_VALUE end",
   "fail_to_pass": [
     "org.apache.commons.lang3.ArrayUtilsTest::testShiftAllDouble"
   ],
@@ -278,5 +278,7 @@
   ],
   "lang": "java",
   "build": "maven",
-  "task_kind": "localized"
+  "task_kind": "localized",
+  "problem_statement_pr_body": "Fix ArrayUtils.reverse range underflow on Integer.MIN_VALUE end\n\nRepro: `ArrayUtils.reverse(new int[]{1, 2, 3}, 0, Integer.MIN_VALUE)`.\nExpected: no change, since the `endIndexExclusive` Javadoc documents an undervalue `< start index` as no change.\nActual: `ArrayIndexOutOfBoundsException: Index 2147483647 out of bounds for length 3`.\nCause: `Math.min(array.length, endIndexExclusive) - 1` keeps `Integer.MIN_VALUE` and the `- 1` underflows to `Integer.MAX_VALUE`, so the `while (j > i)` loop indexes past the array. All nine primitive and `Object` range overloads share the line.\nFix: clamp the end to zero before the decrement with the existing `max0` helper, as the sibling `subarray` and `shift` methods already do. Every other negative end was already a no-op, so valid ranges are unchanged.",
+  "prompt_source": "TITLE ONLY"
 }

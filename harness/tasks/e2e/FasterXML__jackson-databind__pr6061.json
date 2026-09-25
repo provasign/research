@@ -12,7 +12,7 @@
   "src_files": [
     "src/main/java/tools/jackson/databind/node/TreeBuildingGenerator.java"
   ],
-  "problem_statement": "Fix #6059\n\n",
+  "problem_statement": "`ObjectMapper.valueToTree()` with `byte[]` does not produce `BinaryNode`\n\n### Search before asking\n\n- [x] I searched in the [issues](https://github.com/FasterXML/jackson-databind/issues) and found nothing similar.\n\n### Describe the bug\n\nJson node generated from the same object instance are not equal.\nIn v2 [JsonNodeDeserializer._fromEmbedded](https://github.com/FasterXML/jackson-databind/blob/2.15/src/main/java/com/fasterxml/jackson/databind/deser/std/JsonNodeDeserializer.java#L826) instantiate a BinaryNode.\nIn v3 [TreeBuildingGenerator.writeBinary](https://github.com/FasterXML/jackson-databind/blob/3.x/src/main/java/tools/jackson/databind/node/TreeBuildingGenerator.java#L496) instantiate a POJONode.\n\nOnly BinaryNode use Arrays.equals to compare arrays.\n\n### Version Information\n\n3.2.0\n\n### Reproduction\n\n```java\npackage test;\n\nimport static org.junit.jupiter.api.Assertions.assertEquals;\n\nimport org.junit.jupiter.api.Test;\n\npublic class JacksonBinaryTest {\n\n    byte[] byteArray = new byte[0];\n\n    @Test\n    void jacksonV2() {\n        var mapper = com.fasterxml.jackson.databind.json.JsonMapper.builder().build();\n        var jRecord1 = mapper.valueToTree(byteArray);\n        var jRecord2 = mapper.valueToTree(byteArray);\n        assertEquals(jRecord1, jRecord2);\n    }\n\n    @Test\n    void jacksonV3() {\n        var mapper = tools.jackson.databind.json.JsonMapper.builder().build();\n        var jRecord1 = mapper.valueToTree(byteArray);\n        var jRecord2 = mapper.valueToTree(byteArray);\n        assertEquals(jRecord1, jRecord2); // Failed\n    }\n}\n```\n\n### Expected behavior\n\n_No response_\n\n### Additional context\n\n_No response_",
   "fail_to_pass": [
     "tools.jackson.databind.node.JsonNodeConversionsTest::byteArrayViaTokenBufferToTree6059",
     "tools.jackson.databind.node.JsonNodeConversionsTest::testBigDecimalAsPlainStringTreeConversion",
@@ -33,5 +33,7 @@
   "task_kind": "localized",
   "test_modules": [
     "src/test/java/tools/jackson/databind/node/JsonNodeConversionsTest.java"
-  ]
+  ],
+  "problem_statement_pr_body": "Fix #6059\n\n",
+  "prompt_source": "issue"
 }

@@ -441,6 +441,26 @@ and never ported here.
 - Objects are still in the hardlinked store; an agent would need the exact SHA. Same
   residual as swebench_ab.
 
+## Non-Python task prompts were PR bodies, not issues (2026-09-24, fixed)
+
+`java_eval` / `go_eval` / `js_eval` / `c_eval` `build_task` set `problem_statement` to the
+PR title + body; only the Python builder (`build_task.problem_statement`) used the linked
+issue. 38 of the 50 guard-fix-run tasks were affected; 23/38 prompts named the gold file
+(vs 4/12 Python). Several jackson prompts were 11–70 chars — effectively "Fixes #6011" —
+which is what sent agents to `git log --all --grep=<issue#>` and into the gold-fix leak
+above. Both arms saw the same prompts, so this is not arm-biased; it makes localization
+easier, which if anything understates a discovery tool.
+
+- **Fix:** all four builders now call `build_task.problem_statement` (closing-issue link →
+  keyword-linked issue → PR title only). Added `Backport #N` as a link keyword.
+- **Existing tasks:** `build/refresh_prompts.py` rewrote the 38 prompts; the old text is
+  kept as `problem_statement_pr_body`, and `prompt_source` is `issue` (21) or `TITLE ONLY`
+  (17: 11 commons-lang — Apache PRs rarely link an issue — 3 jansson, express, gin pr4695,
+  jackson pr6099). Title-only prompts name the method, so they cannot test discovery.
+- **Consequence:** the guard-fix-run headline was measured on the old prompts. A rerun
+  on the new prompts is a different (harder, cleaner) bed, not a replication.
+- **Selection rule for new beds:** `prompt_source == "issue"` — structural, outcome-blind.
+
 ## Other transcript patterns checked 2026-09-24 (nothing actionable)
 
 Turn anatomy over 209 sessions: build/test 29%, edits 14%, shell discovery 12%, prism

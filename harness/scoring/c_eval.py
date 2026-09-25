@@ -12,6 +12,9 @@ import json, re, subprocess, sys, tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "build"))
+from build_task import problem_statement as _problem_statement  # noqa: E402
+
 IMAGE = "jansson-eval:latest"
 CLONE_ROOT = Path.home() / "gvg-corpus"
 
@@ -66,7 +69,10 @@ def build_task(repo_dir: Path, repo: str, pr: int) -> dict:
     return {"instance_id": f"{repo.replace('/', '__')}__pr{pr}", "repo": repo, "pr": pr,
             "base_commit": base, "merge_commit": merge, "patch": gold,
             "test_patch": tpatch, "src_files": src, "test_modules": tst,
-            "problem_statement": (meta.get("title") or "") + "\n\n" + (meta.get("body") or "")}
+            # The linked ISSUE, never the PR body: PR bodies routinely
+            # describe the fix (2026-09-24: 23/38 non-Python headline tasks named
+            # the gold file in the prompt). Same source rule as build_task.py.
+            "problem_statement": _problem_statement(repo, pr, meta)}
 
 
 def _run_tests(repo_dir: Path, repo: str, base: str, patches: list, image: str = IMAGE) -> dict:

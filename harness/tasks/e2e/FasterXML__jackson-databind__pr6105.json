@@ -12,7 +12,7 @@
   "src_files": [
     "src/main/java/com/fasterxml/jackson/databind/ser/std/MapSerializer.java"
   ],
-  "problem_statement": "Backport #6101 fix in 2.21\n\n",
+  "problem_statement": "`@JsonInclude(NON_EMPTY, content=CUSTOM)` does not omit a Map property after all entries are filtered\n\n### Search before asking\n\n- [x] I searched in the [issues](https://github.com/FasterXML/jackson-databind/issues) and found nothing similar.\n\n### Describe the bug\n\nWhen `@JsonInclude(value=NON_EMPTY, content=CUSTOM, contentFilter=...)` is applied to a `Map` property, a Map whose entries are all filtered out should be omitted. Instead, the property is written as an empty object: `{\"stuff\":{}}`.\n\n`MapSerializer.isEmpty()` applies the content filter's `equals()` to the whole `Map`, rather than to each entry value. The property is therefore considered non-empty and written; the write path then correctly filters every entry, leaving `{}`.\n\n### Version Information\n\nReproduced on current `3.x` (`3.3.0-SNAPSHOT`). The same two comparisons are also present on current `2.x`.\n\n### Reproduction\n\n```java\nstatic class FooFilter {\n    @Override\n    public boolean equals(Object other) {\n        return \"foo\".equals(other);\n    }\n}\n\nstatic class Bean {\n    @JsonInclude(value = JsonInclude.Include.NON_EMPTY,\n            content = JsonInclude.Include.CUSTOM,\n            contentFilter = FooFilter.class)\n    public Map<String, String> stuff = new LinkedHashMap<>();\n}\n\nBean bean = new Bean();\nbean.stuff.put(\"a\", \"foo\");\nbean.stuff.put(\"b\", \"foo\");\nString json = new ObjectMapper().writeValueAsString(bean);\n// actual: {\"stuff\":{}}\n```\n\nA Map with at least one surviving entry is already handled correctly; for example, `{\"stuff\":{\"b\":\"keep\"}}`.\n\n### Expected behavior\n\nOnce the content filter excludes every entry, the property should be treated as empty because its effective Map content is empty.\n\n```json\n{}\n```\n\n### Additional context\n\nThe write path (`serializeOptionalFields`) already compares the filter with each entry value. Only the two `isEmpty()` loops compare it with the whole `Map`.\n\nA focused fix would pass entry values, rather than the `Map` object, to the content filter during the emptiness check. A stateful filter could therefore observe a different call count or order. Is that compatibility impact acceptable for `contentFilter`?\n\nIf the intended behavior is to omit the property once all content is filtered, I can provide a focused two-line patch with static and dynamic regression tests.",
   "fail_to_pass": [
     "com.fasterxml.jackson.databind.deser.jdk.MapKeyDeserializationTest::testBooleanMapKeyDeserialization"
   ],
@@ -26,5 +26,7 @@
   "task_kind": "localized",
   "test_modules": [
     "src/test/java/com/fasterxml/jackson/databind/ser/filter/JsonIncludeMapContentFilter6101Test.java"
-  ]
+  ],
+  "problem_statement_pr_body": "Backport #6101 fix in 2.21\n\n",
+  "prompt_source": "issue"
 }

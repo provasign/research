@@ -1,0 +1,29 @@
+{
+  "instance_id": "FasterXML__jackson-databind__pr6186",
+  "repo": "FasterXML/jackson-databind",
+  "pr": 6186,
+  "base_commit": "1901d6606b9b7c5aa66207d7208327fcd14a39cb",
+  "merge_commit": "f3c95dcf728b6b726a2c0375f07b28c6442967ea",
+  "patch": "diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/InetSocketAddressSerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/InetSocketAddressSerializer.java\nindex 8720fddfd..37476b598 100644\n--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/InetSocketAddressSerializer.java\n+++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/InetSocketAddressSerializer.java\n@@ -34,6 +34,11 @@ public class InetSocketAddressSerializer\n             } else { // otherwise use name\n                 str = str.substring(0, ix);\n             }\n+        } else if ((str.indexOf(':') >= 0) && !str.startsWith(\"[\")) {\n+            // [databind#6185]: unresolved addresses have no InetAddress, but an IPv6\n+            //   literal host name still needs bracketing so port remains unambiguous\n+            //   (host names stored already-bracketed must not be bracketed twice)\n+            str = \"[\" + str + \"]\";\n         }\n \n         g.writeString(str + \":\" + value.getPort());\n",
+  "test_patch": "diff --git a/src/test/java/com/fasterxml/jackson/databind/ser/jdk/JDKTypeSerializationTest.java b/src/test/java/com/fasterxml/jackson/databind/ser/jdk/JDKTypeSerializationTest.java\nindex 732eadb53..b2160d439 100644\n--- a/src/test/java/com/fasterxml/jackson/databind/ser/jdk/JDKTypeSerializationTest.java\n+++ b/src/test/java/com/fasterxml/jackson/databind/ser/jdk/JDKTypeSerializationTest.java\n@@ -142,6 +142,24 @@ public class JDKTypeSerializationTest\n                 MAPPER.writeValueAsString(new InetSocketAddress(\"2001:db8:85a3:8d3:1319:8a2e:370:7348\", 443)));\n     }\n \n+    // [databind#6185]: unresolved IPv6 literal must be bracketed like resolved one\n+    @Test\n+    public void testInetSocketAddressIPv6Unresolved() throws IOException\n+    {\n+        assertEquals(q(\"[2001:db8::1]:443\"),\n+                MAPPER.writeValueAsString(InetSocketAddress.createUnresolved(\"2001:db8::1\", 443)));\n+        // if host name is stored with brackets, must not bracket twice\n+        assertEquals(q(\"[2001:db8::1]:443\"),\n+                MAPPER.writeValueAsString(InetSocketAddress.createUnresolved(\"[2001:db8::1]\", 443)));\n+        // and IPv6 value read by Jackson must survive a full round-trip with port intact\n+        InetSocketAddress addr = MAPPER.readValue(q(\"[2001:db8::1]:443\"), InetSocketAddress.class);\n+        String json = MAPPER.writeValueAsString(addr);\n+        assertEquals(q(\"[2001:db8::1]:443\"), json);\n+        InetSocketAddress result = MAPPER.readValue(json, InetSocketAddress.class);\n+        assertEquals(addr.getHostName(), result.getHostName());\n+        assertEquals(443, result.getPort());\n+    }\n+\n     // [JACKSON-597]\n     @Test\n     public void testClass() throws IOException\n",
+  "test_classes": [
+    "com.fasterxml.jackson.databind.ser.jdk.JDKTypeSerializationTest"
+  ],
+  "src_files": [
+    "src/main/java/com/fasterxml/jackson/databind/ser/std/InetSocketAddressSerializer.java"
+  ],
+  "test_modules": [
+    "src/test/java/com/fasterxml/jackson/databind/ser/jdk/JDKTypeSerializationTest.java"
+  ],
+  "problem_statement": "Unresolved IPv6 `InetSocketAddress` serialized without brackets, losing port on round-trip\n\n(reported by @renechoi in #6125 \u2014 fix to be implemented independently as the original PR was closed without a CLA)\n\n`InetSocketAddressSerializer` writes values as `host + \":\" + port`. For a resolved address it takes the host part from `InetAddress.toString()` and brackets IPv6 literals, so output looks like `\"[2001:db8::1]:443\"`. For an *unresolved* address there is no `InetAddress`, so it falls back to `getHostName()` and writes an IPv6 literal bare:\n\n```java\nInetSocketAddress.createUnresolved(\"2001:db8::1\", 443)\n// serialized as \"2001:db8::1:443\"\n```\n\nThe trailing `:443` is indistinguishable from another hextet, so the port cannot be recovered on deserialization.\n\nThis has become more visible since #5951: deserialization now always constructs unresolved addresses via `InetSocketAddress.createUnresolved()`, so a bare IPv6 address value read by Jackson no longer survives a round-trip \u2014 on re-serialization the port gets appended bare, and the next read absorbs it into the host name.\n\nExpected: the unresolved branch should bracket IPv6 literals the same way the resolved branch already does, e.g. `\"[2001:db8::1]:443\"`. Host names that are already bracketed (which is what the deserializer stores for `\"[...]:port\"` input) must not be bracketed twice.\n\nApplies to 2.x (2.18+) and 3.x; existing `JDKTypeSerializationTest.testInetSocketAddress()` covers the unresolved form only for IPv4 and host names.",
+  "fail_to_pass": [
+    "com.fasterxml.jackson.databind.ser.jdk.JDKTypeSerializationTest::testSlicedByteBuffer"
+  ],
+  "pass_to_pass": [
+    "com.fasterxml.jackson.databind.ser.jdk.JDKTypeSerializationTest::testBigDecimalAsPlainString"
+  ],
+  "lang": "java",
+  "build": "maven",
+  "task_kind": "localized",
+  "prompt_source": "issue"
+}

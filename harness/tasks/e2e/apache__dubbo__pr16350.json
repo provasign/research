@@ -1,0 +1,57 @@
+{
+  "instance_id": "apache__dubbo__pr16350",
+  "repo": "apache/dubbo",
+  "pr": 16350,
+  "base_commit": "b75adde95997f6fdd195e8dd8ed5986ceefcd7de",
+  "merge_commit": "eb2eb29536f240f08e14b4cf7185d4b2f0ce9317",
+  "patch": "diff --git a/dubbo-common/src/main/java/org/apache/dubbo/common/utils/StringUtils.java b/dubbo-common/src/main/java/org/apache/dubbo/common/utils/StringUtils.java\nindex 477e55082..d140ed445 100644\n--- a/dubbo-common/src/main/java/org/apache/dubbo/common/utils/StringUtils.java\n+++ b/dubbo-common/src/main/java/org/apache/dubbo/common/utils/StringUtils.java\n@@ -1308,7 +1308,7 @@ public final class StringUtils {\n             return str;\n         }\n         int index = str.indexOf(separator);\n-        return index == INDEX_NOT_FOUND ? str : str.substring(index + 1);\n+        return index == INDEX_NOT_FOUND ? EMPTY_STRING : str.substring(index + 1);\n     }\n \n     /**\n",
+  "test_patch": "diff --git a/dubbo-common/src/test/java/org/apache/dubbo/common/utils/StringUtilsTest.java b/dubbo-common/src/test/java/org/apache/dubbo/common/utils/StringUtilsTest.java\nindex 65317f38d..b8250019d 100644\n--- a/dubbo-common/src/test/java/org/apache/dubbo/common/utils/StringUtilsTest.java\n+++ b/dubbo-common/src/test/java/org/apache/dubbo/common/utils/StringUtilsTest.java\n@@ -505,6 +505,20 @@ class StringUtilsTest {\n         assertTrue(startsWithIgnoreCase(\"Dubbo.application.name\", \"dubbo.application.\"));\n     }\n \n+    @Test\n+    void testSubstringAfter() {\n+        // null or empty input is returned as-is\n+        assertThat(StringUtils.substringAfter(null, ':'), is(nullValue()));\n+        assertEquals(\"\", StringUtils.substringAfter(\"\", ':'));\n+        // returns the substring after the first occurrence of the separator\n+        assertEquals(\"b\", StringUtils.substringAfter(\"a:b\", ':'));\n+        assertEquals(\"b:c\", StringUtils.substringAfter(\"a:b:c\", ':'));\n+        // separator at the end leaves nothing after it\n+        assertEquals(\"\", StringUtils.substringAfter(\"ab:\", ':'));\n+        // when the separator is absent the Javadoc promises an empty string\n+        assertEquals(\"\", StringUtils.substringAfter(\"abc\", ':'));\n+    }\n+\n     @Test\n     void testToBoolean() {\n         // true representations\n",
+  "test_classes": [
+    "org.apache.dubbo.common.utils.StringUtilsTest"
+  ],
+  "src_files": [
+    "dubbo-common/src/main/java/org/apache/dubbo/common/utils/StringUtils.java"
+  ],
+  "test_modules": [
+    "dubbo-common/src/test/java/org/apache/dubbo/common/utils/StringUtilsTest.java"
+  ],
+  "problem_statement": "[Bug] StringUtils.substringAfter returns the original string instead of an empty string when the separator is absent\n\n### Apache Dubbo Component\n\nJava SDK (apache/dubbo)\n\n### Dubbo Version\n\n`3.3` branch (current HEAD). The method was introduced in #14924.\n\n### Steps to reproduce this issue\n\n`StringUtils.substringAfter(\"abc\", ':')` returns `\"abc\"`.\n\nThe method's Javadoc states *\"If nothing is found, the empty string is returned.\"*, but when the\nseparator is absent it returns the original string instead:\n\n```\nsubstringAfter(\"a:b\", ':')  -> \"b\"     // ok\nsubstringAfter(\"abc\", ':')  -> \"abc\"   // expected \"\"\n```\n\n### What you expected to happen\n\n`StringUtils.substringAfter(\"abc\", ':')` should return `\"\"` (the empty string), as documented.\n\n### Root cause\n\nIn `substringAfter`, the not-found branch returns `str`:\n\n```java\nint index = str.indexOf(separator);\nreturn index == INDEX_NOT_FOUND ? str : str.substring(index + 1);\n```\n\nThis was copy-pasted from the adjacent `substringBefore`, whose contract is to return the original\nstring. The sibling method `substringAfterLast` correctly returns `EMPTY_STRING` in the same\nsituation, so the two \"after\" methods are inconsistent. The behavior also diverges from Apache\ncommons-lang3's `substringAfter`, which returns the empty string when the separator is absent.\n\n### Impact\n\n`substringAfter` is a public utility method. Although it currently has no internal callers, any\nfuture caller relying on the documented contract would silently receive the original string instead\nof an empty string.\n\n### Are you willing to submit a pull request to fix on your own?\n\n- [x] Yes I am willing to submit a pull request on my own!",
+  "fail_to_pass": [
+    "org.apache.dubbo.common.utils.StringUtilsTest::testIsContains"
+  ],
+  "pass_to_pass": [
+    "org.apache.dubbo.common.utils.StringUtilsTest::testCamelToSplitName",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testConvertToSplitName",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testEncodeParameters",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testExceptionToString",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testExceptionToStringWithMessage",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testGetServiceKey",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testIsBlank",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testIsEmpty",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testIsEquals",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testIsInteger",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testIsJavaIdentifier",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testIsNoneEmpty",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testIsNotEmpty",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testJoinCollectionString",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testLength",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testParseInteger",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testParseParameters",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testParseQueryString",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testRepeat",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testReplace",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testSnakeCaseToSplitName",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testSplitToList",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testStartsWithIgnoreCase",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testToArgumentString",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testToBoolean",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testToCommaDelimitedString",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testToOSStyleKey",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testToQueryString",
+    "org.apache.dubbo.common.utils.StringUtilsTest::testTranslate"
+  ],
+  "lang": "java",
+  "build": "maven",
+  "task_kind": "localized",
+  "prompt_source": "issue"
+}

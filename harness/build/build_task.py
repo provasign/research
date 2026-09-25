@@ -64,7 +64,9 @@ def problem_statement(repo: str, pr: int, meta: dict) -> str:
                 return got
     text = meta["title"] + " " + (meta.get("body") or "")
     for num in re.findall(
-            r"(?i)\b(?:close[sd]?|fix(?:es|ed)?|resolve[sd]?)[:\s]+#(\d+)", text):
+            # "Backport #N fix" PRs carry no text of their own; #N is the issue
+            # (verified below -- a PR number is rejected like any other).
+            r"(?i)\b(?:close[sd]?|fix(?:es|ed)?|resolve[sd]?|backport(?:s|ed)?(?: of)?)[:\s]+#(\d+)", text):
         if (got := _issue_text(repo, num)) is not None:
             return got
     return meta["title"].strip()
