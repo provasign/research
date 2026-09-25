@@ -15,7 +15,7 @@
   "test_modules": [
     "src/test/java/org/apache/commons/lang3/RandomStringUtilsTest.java"
   ],
-  "problem_statement": "Fix RandomStringUtils.random() false rejection of letters and digits",
+  "problem_statement": "RandomStringUtils.random rejects a range that contains digits when letters and digits are requested\n\nRepro: `RandomStringUtils.random(10, '0', 'A', true, true, null, rng)` throws `IllegalArgumentException`.\nExpected: a string of digits, the same as the digits-only call over that range.\nActual: it throws, even though `RandomStringUtils.random(10, '0', 'A', false, true, null, rng)` succeeds on the identical range. Requesting letters in addition to digits should only widen the set of acceptable characters, never make a valid range fail.",
   "fail_to_pass": [
     "org.apache.commons.lang3.RandomStringUtilsTest::testExceptionsRandom",
     "org.apache.commons.lang3.RandomStringUtilsTest::testRandomParameter"
@@ -40,5 +40,6 @@
   "build": "maven",
   "task_kind": "localized",
   "problem_statement_pr_body": "Fix RandomStringUtils.random() false rejection of letters and digits\n\nRepro: `RandomStringUtils.random(10, '0', 'A', true, true, null, rng)` throws `IllegalArgumentException`.\nExpected: a string of digits, the same as the digits-only call over that range.\nActual: it throws, even though `RandomStringUtils.random(10, '0', 'A', false, true, null, rng)` succeeds on the identical range.\nCause: the ASCII fast-path guard rejects with `digits && end <= '0' || letters && end <= 'A'`, so a `letters && digits` request trips whenever either category is missing. The range `['0', 'A')` holds the digits but no letters, so the `letters` clause fires. Adding `letters` to a `digits` request can only widen the accepted set, never empty it.\nFix: reject only when none of the requested categories is reachable. A range holding neither still rejects through the existing rejection cap.\n\n- [x] Read the [contribution guidelines](CONTRIBUTING.md) for this project.\n- [ ] Read the [ASF Generative Tooling Guidance](https://www.apache.org/legal/generative-tooling.html) if you use Artificial Intelligence (AI).\n- [ ] I used AI to create any part of, or all of, this pull request. Which AI tool was used to create this pull request, and to what extent did it contribute?\n- [x] Run a successful build using the default [Maven](https://maven.apache.org/) goal with `mvn`; that's `mvn` on the command line by itself.\n- [x] Write unit tests that match behavioral changes, where the tests fail if the changes to the runtime are not applied. This may not always be possible, but it is a best practice.\n- [x] Write a pull request description that is detailed enough to understand what the pull request does, how, and why.\n- [x] Each commit in the pull request should have a meaningful subject line and body.\n",
-  "prompt_source": "TITLE ONLY"
+  "prompt_source": "manual",
+  "problem_statement_title_only": "Fix RandomStringUtils.random() false rejection of letters and digits"
 }

@@ -17,7 +17,7 @@
   "test_modules": [
     "context_test.go"
   ],
-  "problem_statement": "fix(context): Copy() copies Errors and Accepted fields",
+  "problem_statement": "Context.Copy() drops Errors and Accepted\n\n`c.Copy()` returns a context whose `Errors` and `Accepted` are always `nil`, regardless of the original:\n\n- errors attached with `c.Error(...)` before the copy are not visible on the copy, so a goroutine working with the copy cannot see them;\n- content-negotiation state set by middleware via `c.SetAccepted(...)` is lost in the copy.\n\n`Keys` and `Params` are copied correctly. Expected: the copy carries `Errors` and `Accepted` from the original, as independent slices, so that changes on the copy do not affect the original context.",
   "n_before": 1,
   "n_after": 3,
   "fail_to_pass": [
@@ -28,5 +28,6 @@
   "lang": "go",
   "build": "go-test",
   "problem_statement_pr_body": "fix(context): Copy() copies Errors and Accepted fields\n\n`Copy()` now copies the `Errors` slice so goroutines receiving a copy can observe errors attached before the copy was made.\r\n`Copy()` now copies the `Accepted` slice so content-negotiation state set by middleware (via `SetAccepted`) is preserved in the copy.\r\nBoth fields use independent slices \u2014 mutations on the copy do not affect the original context.\r\n\r\n`Context.Copy()` was explicitly copying `Keys` and `Params` but\r\nomitted `Errors` and `Accepted`, leaving them as `nil` in the copied\r\ncontext regardless of the original's state.",
-  "prompt_source": "TITLE ONLY"
+  "prompt_source": "manual",
+  "problem_statement_title_only": "fix(context): Copy() copies Errors and Accepted fields"
 }

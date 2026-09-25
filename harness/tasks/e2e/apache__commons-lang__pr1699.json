@@ -18,7 +18,7 @@
     "src/test/java/org/apache/commons/lang3/StringUtilsSubstringTest.java",
     "src/test/java/org/apache/commons/lang3/text/StrBuilderTest.java"
   ],
-  "problem_statement": "Fix int overflow in StringUtils.midString() and StrBuilder.midString() length handling",
+  "problem_statement": "StringUtils.mid / StrBuilder.midString throw for very large lengths\n\nRepro: `StringUtils.mid(\"foobar\", 3, Integer.MAX_VALUE)` and `new StrBuilder(\"hello goodbye hello\").midString(14, Integer.MAX_VALUE)`.\nExpected: the tail of the string (`\"bar\"`, `\"hello\"`), per the Javadoc that says the rest is returned when the length exceeds what is available.\nActual: `StringIndexOutOfBoundsException`.",
   "fail_to_pass": [
     "org.apache.commons.lang3.StringUtilsSubstringTest::testRight_String",
     "org.apache.commons.lang3.StringUtilsSubstringTest::testSubstring_StringInt"
@@ -66,5 +66,6 @@
   "build": "maven",
   "task_kind": "multi_site",
   "problem_statement_pr_body": "Fix int overflow in StringUtils.midString() and StrBuilder.midString() length handling\n\nRepro: `StringUtils.mid(\"foobar\", 3, Integer.MAX_VALUE)` and `new StrBuilder(\"hello goodbye hello\").midString(14, Integer.MAX_VALUE)`.\nExpected: the tail of the string (`\"bar\"`, `\"hello\"`), per the Javadoc that says the rest is returned when the length exceeds what is available.\nActual: `StringIndexOutOfBoundsException`.\nCause: both pick the \"return the rest\" branch with `pos + len` / `index + length`, which overflows to a negative `int` for a length near `Integer.MAX_VALUE`, so the guard is false and the code falls through to `substring`/`new String` with an out-of-range length. `WordUtils.wrap` already widens to `long` to avoid the same overflow.\nFix: compare with subtraction (`str.length() - pos <= len`, `size - index <= length`) so the check stays in range; the `substring(pos, pos + len)` branch now runs only when `len` is smaller than the remaining characters, so it cannot overflow.\n\n- [x] Read the [contribution guidelines](CONTRIBUTING.md) for this project.\n- [x] Write unit tests that match behavioral changes, where the tests fail if the changes to the runtime are not applied. Added overflow regressions to `StringUtilsSubstringTest` and `StrBuilderTest` (both fail before the change, pass after).\n- [x] Write a pull request description that is detailed enough to understand what the pull request does, how, and why.\n- [x] Each commit in the pull request should have a meaningful subject line and body.\n",
-  "prompt_source": "TITLE ONLY"
+  "prompt_source": "manual",
+  "problem_statement_title_only": "Fix int overflow in StringUtils.midString() and StrBuilder.midString() length handling"
 }

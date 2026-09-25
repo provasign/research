@@ -18,7 +18,7 @@
     "src/test/java/org/apache/commons/collections4/list/SetUniqueListTest.java",
     "src/test/java/org/apache/commons/collections4/set/ListOrderedSetTest.java"
   ],
-  "problem_statement": "Reject out-of-range index before mutating in indexed add",
+  "problem_statement": "Out-of-range indexed add leaves SetUniqueList / ListOrderedSet inconsistent\n\n`SetUniqueList.add(int, E)` / `addAll(int, Collection)` and `ListOrderedSet.add(int, E)` / `addAll(int, Collection)` throw `IndexOutOfBoundsException` for an out-of-range index, as expected \u2014 but the collection is left in a corrupted state afterwards:\n\n- `contains(x)` returns `true` although `x` is not in the list;\n- `size()` disagrees with `asSet()` / `asList()`;\n- a later `add(x)` silently does nothing, because `x` is considered already present.\n\nExpected: an add rejected because of a bad index should leave the collection exactly as it was (as `ListOrderedMap.put(int, K, V)` already does).",
   "kind": "bug",
   "fail_to_pass": [
     "org.apache.commons.collections4.list.SetUniqueListTest::testObjectEqualsSelf",
@@ -35,5 +35,6 @@
   "build": "maven",
   "task_kind": "bug",
   "problem_statement_pr_body": "Reject out-of-range index before mutating in indexed add\n\n`SetUniqueList.add(int, E)`/`addAll(int, Collection)` and `ListOrderedSet.add(int, E)`/`addAll(int, Collection)` mutate the uniqueness set before the index-validating backing collection, so an out-of-range index throws from the list but the element is already in the set, leaving `contains(x)` true while the element is absent, `size()` out of step with `asSet()`/`asList()`, and the element silently dropped by the next `add`; `ListOrderedMap.put(int, K, V)` already range-checks the index up front, so these four now do the same. Found while auditing the ordered/unique decorators for state left behind by a rejected operation.\n\n- [x] Read the [contribution guidelines](CONTRIBUTING.md) for this project.\n- [ ] Read the [ASF Generative Tooling Guidance](https://www.apache.org/legal/generative-tooling.html) if you use Artificial Intelligence (AI).\n- [ ] I used AI to create any part of, or all of, this pull request. Which AI tool was used to create this pull request, and to what extent did it contribute?\n- [x] Run a successful build using the default [Maven](https://maven.apache.org/) goal with `mvn`; that's `mvn` on the command line by itself.\n- [x] Write unit tests that match behavioral changes, where the tests fail if the changes to the runtime are not applied. This may not always be possible, but it is a best practice.\n- [x] Write a pull request description that is detailed enough to understand what the pull request does, how, and why.\n- [x] Each commit in the pull request should have a meaningful subject line and body.\n",
-  "prompt_source": "TITLE ONLY"
+  "prompt_source": "manual",
+  "problem_statement_title_only": "Reject out-of-range index before mutating in indexed add"
 }

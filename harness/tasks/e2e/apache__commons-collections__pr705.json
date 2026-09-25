@@ -18,7 +18,7 @@
     "src/test/java/org/apache/commons/collections4/bag/HashBagTest.java",
     "src/test/java/org/apache/commons/collections4/multiset/HashMultiSetTest.java"
   ],
-  "problem_statement": "Clamp overflow in AbstractMapBag and AbstractMapMultiSet add",
+  "problem_statement": "HashBag / HashMultiSet counts and size overflow to negative\n\nIn `HashBag` and `HashMultiSet` (and the other bags/multisets built on `AbstractMapBag` / `AbstractMapMultiSet`), adding occurrences past `Integer.MAX_VALUE` overflows:\n\n```java\nbag.add(x, Integer.MAX_VALUE);\nbag.add(x, 1);\nbag.getCount(x);   // Integer.MIN_VALUE\nbag.size();        // negative\n```\n\nExpected: `getCount` and `size()` should not go negative; per the `Collection.size()` contract they should saturate at `Integer.MAX_VALUE`.",
   "kind": "bug",
   "fail_to_pass": [
     "org.apache.commons.collections4.multiset.AbstractMultiSetTest$MultiSetUniqueSetTest::testSetEquals",
@@ -32,5 +32,6 @@
   "build": "maven",
   "task_kind": "bug",
   "problem_statement_pr_body": "Clamp overflow in AbstractMapBag and AbstractMapMultiSet add\n\n`add(Object, int)` in `AbstractMapBag` and `AbstractMapMultiSet` accumulates the running `size` and the per-element count into plain `int` fields with no upper bound, so a second `add` whose total crosses `Integer.MAX_VALUE` overflows both: `add(x, Integer.MAX_VALUE)` then `add(x, 1)` leaves `getCount(x) == Integer.MIN_VALUE` and `size()` negative. Clamp both to `Integer.MAX_VALUE` inside `add()`, matching the `Collection.size()` contract and the existing `BloomFilter`/`CompositeMap.size()` idiom. Found while auditing the bag/multiset count arithmetic; the regression tests in `HashBagTest` and `HashMultiSetTest` fail before the change (`-4` / `Integer.MIN_VALUE`) and pass after.\n\n- [x] Read the [contribution guidelines](CONTRIBUTING.md) for this project.\n- [ ] Read the [ASF Generative Tooling Guidance](https://www.apache.org/legal/generative-tooling.html) if you use Artificial Intelligence (AI).\n- [ ] I used AI to create any part of, or all of, this pull request. Which AI tool was used to create this pull request, and to what extent did it contribute?\n- [x] Run a successful build using the default [Maven](https://maven.apache.org/) goal with `mvn`; that's `mvn` on the command line by itself.\n- [x] Write unit tests that match behavioral changes, where the tests fail if the changes to the runtime are not applied. This may not always be possible, but it is a best practice.\n- [x] Write a pull request description that is detailed enough to understand what the pull request does, how, and why.\n- [x] Each commit in the pull request should have a meaningful subject line and body.\n",
-  "prompt_source": "TITLE ONLY"
+  "prompt_source": "manual",
+  "problem_statement_title_only": "Clamp overflow in AbstractMapBag and AbstractMapMultiSet add"
 }

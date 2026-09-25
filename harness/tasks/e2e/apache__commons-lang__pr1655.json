@@ -15,7 +15,7 @@
   "test_modules": [
     "src/test/java/org/apache/commons/lang3/text/WordUtilsTest.java"
   ],
-  "problem_statement": "Fix `WordUtils.wrap` for `wrapOn` matches different from one character",
+  "problem_statement": "WordUtils.wrap mishandles wrapOn patterns that match more or less than one character\n\n`WordUtils.wrap(str, wrapLength, newLineStr, wrapLongWords, wrapOn)` produces wrong output when the `wrapOn` regex matches something other than exactly one character:\n\n- if `wrapOn` matches several characters, the extra separator characters are left in the wrapped output instead of being consumed;\n- if `wrapOn` matches zero characters (a zero-width match), one character of the input is lost at each wrap.\n\nExpected: the separator matched by `wrapOn` should be consumed exactly, whatever its length, including zero-width matches.",
   "fail_to_pass": [
     "org.apache.commons.lang3.text.WordUtilsTest::testCapitalizeWithDelimiters_String",
     "org.apache.commons.lang3.text.WordUtilsTest::testWrapStringIntStringBooleanString(String, int, boolean, String, String)[14]",
@@ -43,5 +43,6 @@
   "build": "maven",
   "task_kind": "localized",
   "problem_statement_pr_body": "Fix `WordUtils.wrap` for `wrapOn` matches different from one character\n\n`WordUtils.wrap` advanced the offset by a single character past each `wrapOn` match, assuming the separator is always exactly one character long:\r\n\r\n - When the `wrapOn` regex matched several characters, the surplus separator characters were left in the wrapped output instead of being consumed,\r\n - When the `wrapOn` regex matched zero characters, one additional character was consumed.\r\n\r\nNow it tracks the end offset of each match and resume from there, so that separators of any length, including zero-width matches, are skipped correctly.\r\n\r\n- [x] I used AI to refactor tests and reword descriptions",
-  "prompt_source": "TITLE ONLY"
+  "prompt_source": "manual",
+  "problem_statement_title_only": "Fix `WordUtils.wrap` for `wrapOn` matches different from one character"
 }

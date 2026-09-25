@@ -15,7 +15,7 @@
   "test_modules": [
     "src/test/java/org/apache/commons/collections4/list/TreeListTest.java"
   ],
-  "problem_statement": "Increment modCount after the bounds check in TreeList add and remove",
+  "problem_statement": "TreeList add/remove with a bad index breaks existing iterators\n\nOn a `TreeList`, calling `add(int, E)` or `remove(int)` with an out-of-range index throws `IndexOutOfBoundsException` and leaves the list unchanged \u2014 yet an iterator obtained before that call now throws `ConcurrentModificationException` on its next use.\n\nExpected: a rejected (out-of-range) `add`/`remove` should be a true no-op and must not invalidate existing iterators, as is already the case for `set(int, E)` and for `AbstractLinkedList`.",
   "kind": "bug",
   "fail_to_pass": [
     "org.apache.commons.collections4.list.TreeListTest::testObjectEqualsSelf"
@@ -30,5 +30,6 @@
   "build": "maven",
   "task_kind": "bug",
   "problem_statement_pr_body": "Increment modCount after the bounds check in TreeList add and remove\n\nnoticed `add(int, E)` and `remove(int)` bump `modCount` before `checkInterval`, so a rejected out-of-range index leaves the list unchanged yet still trips a spurious `ConcurrentModificationException` in an iterator obtained earlier. `set(int, E)` already validates first and `AbstractLinkedList` validates via `getNode` before bumping `modCount`; moving the increment below the bounds check in both methods makes a rejected index a true no-op.\n\n- [x] Read the [contribution guidelines](CONTRIBUTING.md) for this project.\n- [ ] Read the [ASF Generative Tooling Guidance](https://www.apache.org/legal/generative-tooling.html) if you use Artificial Intelligence (AI).\n- [ ] I used AI to create any part of, or all of, this pull request. Which AI tool was used to create this pull request, and to what extent did it contribute?\n- [x] Run a successful build using the default [Maven](https://maven.apache.org/) goal with `mvn`; that's `mvn` on the command line by itself.\n- [x] Write unit tests that match behavioral changes, where the tests fail if the changes to the runtime are not applied. This may not always be possible, but it is a best practice.\n- [x] Write a pull request description that is detailed enough to understand what the pull request does, how, and why.\n- [x] Each commit in the pull request should have a meaningful subject line and body. Note that a maintainer may squash commits during the merge process.\n",
-  "prompt_source": "TITLE ONLY"
+  "prompt_source": "manual",
+  "problem_statement_title_only": "Increment modCount after the bounds check in TreeList add and remove"
 }

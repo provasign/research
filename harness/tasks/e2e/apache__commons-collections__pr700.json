@@ -21,7 +21,7 @@
     "src/test/java/org/apache/commons/collections4/TransformerUtilsTest.java",
     "src/test/java/org/apache/commons/collections4/functors/SwitchTransformerMapMutatesTest.java"
   ],
-  "problem_statement": "Do not mutate the input map in switch closure/transformer factories",
+  "problem_statement": "switchClosure / switchMapClosure / switchMapTransformer modify the caller's map\n\n`ClosureUtils.switchClosure(Map)`, `ClosureUtils.switchMapClosure(Map)` and `TransformerUtils.switchMapTransformer(Map)` treat the entry with a `null` key as the default. After calling one of them, that `null`-key entry has disappeared from the map the caller passed in: the factory has a side effect on its argument.\n\nExpected: the factories should read the default from the map without mutating the caller's map; the caller's map should be unchanged after the call.",
   "kind": "bug",
   "fail_to_pass": [
     "org.apache.commons.collections4.TransformerUtilsTest::testNullTransformer",
@@ -45,5 +45,6 @@
   "build": "maven",
   "task_kind": "bug",
   "problem_statement_pr_body": "Do not mutate the input map in switch closure/transformer factories\n\n`switchClosure(Map)`, `switchMapClosure(Map)` and `switchMapTransformer(Map)` pulled the default out with `map.remove(null)` on the caller's map, so the null-key entry vanished from the caller's map as a side effect; spotted while extending the sibling fix in #696 that only touched `SwitchTransformer.switchTransformer`, they now copy into a `LinkedHashMap` first.",
-  "prompt_source": "TITLE ONLY"
+  "prompt_source": "manual",
+  "problem_statement_title_only": "Do not mutate the input map in switch closure/transformer factories"
 }

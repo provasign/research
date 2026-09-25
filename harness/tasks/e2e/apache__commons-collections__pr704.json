@@ -15,7 +15,7 @@
   "test_modules": [
     "src/test/java/org/apache/commons/collections4/MapUtilsTest.java"
   ],
-  "problem_statement": "Fix MapUtils.getIntValue(Map, K, Function) returning a byte",
+  "problem_statement": "MapUtils.getIntValue(Map, K, Function) returns truncated values\n\n`MapUtils.getIntValue(Map, K, Function)` returns wrong results for values outside the signed-byte range:\n\n- a map entry of `1000` returns `-24`;\n- a `defaultFunction` yielding `Integer.MAX_VALUE` returns `-1`.\n\nExpected: the full `int` value (`1000`, `Integer.MAX_VALUE`), as the other `getXxxValue(Map, K, Function)` overloads do for their types.",
   "kind": "bug",
   "fail_to_pass": [
     "org.apache.commons.collections4.MapUtilsTest::testLazySortedMapTransformer"
@@ -27,5 +27,6 @@
   "build": "maven",
   "task_kind": "bug",
   "problem_statement_pr_body": "Fix MapUtils.getIntValue(Map, K, Function) returning a byte\n\n`MapUtils.getIntValue(Map, K, Function)` narrows the resolved `Integer` through `.byteValue()`, so any value outside signed-byte range comes back truncated: a map entry of `1000` returns `-24`, and a `defaultFunction` yielding `Integer.MAX_VALUE` returns `-1`. This is the same defect fixed under COLLECTIONS-874 for the sibling `getLongValue(Map, K, Function)`, which moved to `.longValue()`; the `int` overload kept `.byteValue()`. Found while checking that each `getXxxValue(Map, K, Function)` matches its declared return type.\n\nUse `.intValue()` like every other numeric overload. `testGetIntValue` only drove the `Function` variant with `key -> 0`, which is unaffected by the narrowing, so the gap stayed invisible; the added assertions pin a map value and a default-function value that fall outside byte range.\n",
-  "prompt_source": "TITLE ONLY"
+  "prompt_source": "manual",
+  "problem_statement_title_only": "Fix MapUtils.getIntValue(Map, K, Function) returning a byte"
 }

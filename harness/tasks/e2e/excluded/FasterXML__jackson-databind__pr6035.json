@@ -13,7 +13,7 @@
   "src_files": [
     "src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java"
   ],
-  "problem_statement": "Fix #6031, @JsonAlias/@JsonIgnore\n\n",
+  "problem_statement": "Getter annotated with `@JsonIgnore` prevents `@JsonAlias` from working on `@JsonCreator` parameter (regression in 3.2.0)\n\n### Describe the bug\n\nWhen a class has:\n1. A `@JsonCreator` constructor parameter with `@JsonAlias(\"oldName\")`\n2. A getter annotated with `@JsonIgnore` named `getOldName()`\n\nThe alias `\"oldName\"` is silently ignored during deserialization and the value becomes `null`.\n\nRemoving the getter annotated with `@JsonIgnore` makes the alias work correctly.\n\nThis appears to be a regression in 3.2.0 (works in 3.1.4). I suspect the change in #5952 (unconditionally registering property names from getters annotated with `@JsonIgnore` in the ignorable list) causes the ignored property name to shadow the `@JsonAlias` on the creator parameter.\n\n### Version information\n\n- jackson-databind 3.2.0\n- Java 17+\n\n### To Reproduce\n\n```java\nimport com.fasterxml.jackson.annotation.*;\nimport org.junit.jupiter.api.Test;\nimport tools.jackson.databind.json.JsonMapper;\n\nimport static org.junit.jupiter.api.Assertions.*;\n\nclass JsonAliasIgnoreConflictTest {\n\n    public static class MyBean {\n        @JsonProperty(\"newName\")\n        private final String value;\n\n        @JsonCreator\n        public MyBean(\n                @JsonProperty(\"newName\") @JsonAlias(\"oldName\") String value) {\n            this.value = value;\n        }\n\n        public String getValue() { return value; }\n\n        // This getter causes @JsonAlias(\"oldName\") to stop working\n        @Deprecated\n        @JsonIgnore\n        public String getOldName() { return value; }\n    }\n\n    @Test\n    void aliasOnCreatorShouldWorkWithIgnoredGetter() {\n        JsonMapper mapper = JsonMapper.builder().build();\n\n        // value is null instead of \"hello\"\n        // Removing getOldName() makes this work as expected\n        MyBean result = mapper.readValue(\"{\\\"oldName\\\":\\\"hello\\\"}\", MyBean.class);\n        assertEquals(\"hello\", result.getValue());\n    }\n}\n```\n\n### Expected behavior\n\n`@JsonAlias(\"oldName\")` on the `@JsonCreator` parameter should take precedence over (or not be affected by) a getter annotated with `@JsonIgnore` that produces the same implicit property name `\"oldName\"`.\n\n### Additional context\n\nA common pattern where this occurs is property renaming with backward compatibility: a field is renamed (e.g., `oldName` \u2192 `newName`), a `@JsonAlias` is added for the old name, and a deprecated getter annotated with `@JsonIgnore` is kept for source compatibility. This pattern worked in 3.1.4 but breaks in 3.2.0.",
   "fail_to_pass": [
     "tools.jackson.databind.deser.PropertyAliasTest::testAliasOnCreatorWithIgnoredGetter",
     "tools.jackson.databind.deser.PropertyAliasTest::testAliasOnRecordUpdateWithIgnoredGetter",
@@ -34,5 +34,6 @@
     "src/test/java/tools/jackson/databind/deser/PropertyAliasTest.java",
     "src/test/java/tools/jackson/databind/introspect/POJOPropertiesCollectorTest.java"
   ],
-  "prompt_source": "TITLE ONLY"
+  "prompt_source": "issue",
+  "problem_statement_title_only": "Fix #6031, @JsonAlias/@JsonIgnore\n\n"
 }

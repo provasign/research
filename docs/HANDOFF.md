@@ -460,6 +460,13 @@ easier, which if anything understates a discovery tool.
 - **Consequence:** the guard-fix-run headline was measured on the old prompts. A rerun
   on the new prompts is a different (harder, cleaner) bed, not a replication.
 - **Selection rule for new beds:** `prompt_source == "issue"` — structural, outcome-blind.
+- **2026-09-25: title-only prompts rewritten by hand** (`build/manual_prompts_2026_09_25.py`,
+  36 tasks incl. commons-collections, e2e-fanout, excluded): written from PR text or JIRA
+  only, never the gold/test patch; keep symptom/repro/expected, drop cause/fix. JIRA text
+  used verbatim for COLLECTIONS-714 and LANG-1818; jackson pr6035 got its real issue #6031.
+  `prompt_source` is now `issue` or `manual` on every mined task; the prior title is kept as
+  `problem_statement_title_only`. Five were written from a title alone (jansson 740/741,
+  commons-lang 1631/1709/1720) and are the least grounded — symptom-level only.
 
 ## Other transcript patterns checked 2026-09-24 (nothing actionable)
 

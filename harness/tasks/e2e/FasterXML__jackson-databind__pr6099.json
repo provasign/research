@@ -12,7 +12,7 @@
   "src_files": [
     "src/main/java/com/fasterxml/jackson/databind/type/TypeFactory.java"
   ],
-  "problem_statement": "Resolve classes without initialization in `TypeFactory.findClass()`",
+  "problem_statement": "Naming a class in JSON runs its static initializer\n\nWhen a class name comes from input \u2014 a `Class`-valued property or map key, or a polymorphic type id \u2014 `TypeFactory.findClass()` resolves it in a way that initializes the class. So merely naming a class in JSON runs that class's static initializer, just to look it up.\n\nOn the polymorphic path this happens before the `PolymorphicTypeValidator` gets to deny the type: a class that the validator rejects still has its static block executed.\n\nExpected: resolving a class name from input should not run its static initializer; the class should only be initialized when it is actually used (for example when an allowed subtype is instantiated). Valid deserialization behavior should not change.\n\n(2.18 branch.)",
   "fail_to_pass": [
     "com.fasterxml.jackson.databind.deser.jdk.ClassDeserNoStaticInitTest::polymorphicInstantiationTriggersStaticInitializer"
   ],
@@ -24,5 +24,6 @@
     "src/test/java/com/fasterxml/jackson/databind/deser/jdk/ClassDeserNoStaticInitTest.java"
   ],
   "problem_statement_pr_body": "Resolve classes without initialization in `TypeFactory.findClass()`\n\n2.18 version of #6097, as requested there.\n\nTypeFactory.findClass resolves class names that come straight from input: a Class-valued property or map key, and polymorphic type ids resolved through DatabindContext. It calls Class.forName(name, true, loader), so naming a class in JSON runs that class's static initializer just to look it up. On the polymorphic path the class is loaded and initialized before the PolymorphicTypeValidator gets to deny it, so a rejected class's static block still runs.\n\nfindClass now resolves with initialize=false, so a named class is linked but not initialized; the JVM still initializes it on first real use (instantiating an allowed subtype, or actually using a Class value), so valid behavior is unchanged. classForName(name, initialize, loader) was also ignoring its initialize argument and always passing true, now corrected to honor it. Keeping this in the lookup method covers every caller that resolves a name from input without each one repeating the check.\n\nThe 3.x patch applied cleanly here; test included (fails before the change, passes after).",
-  "prompt_source": "TITLE ONLY"
+  "prompt_source": "manual",
+  "problem_statement_title_only": "Resolve classes without initialization in `TypeFactory.findClass()`"
 }
