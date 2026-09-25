@@ -105,11 +105,42 @@ class RateLimited(Exception):
 
 
 def _worktree(task):
+    """Per-cell LOCAL CLONE at base_commit with every ref stripped -- NOT a
+    `git worktree`. A worktree shares the corpus clone's refs, and the corpus
+    was cloned after each task's fixing PR merged, so `git log --all` finds the
+    gold fix. Measured 2026-09-24 over 366 cells with transcripts: 32 cells
+    opened a post-base commit touching the gold source files (`git log --all
+    --grep=<issue>` then `git show <sha>`), 27 of them scored resolved
+    (mostly jackson-databind: pr6105, 6019, 6042, 6012, 6061, ...). Same
+    leak and same fix as swebench_ab.run_arm (2026-08-15), never ported here.
+    After the refs and remote are deleted, `git log --all` shows only the base
+    commit's ancestry."""
     repo = _repo_for(task)
     wt = Path(tempfile.mkdtemp(prefix="e2e-run-"))
-    docker_eval._sh("git", "-C", str(repo), "worktree", "add", "--force",
-                    "--detach", str(wt), task["base_commit"], timeout=300)
+    sh = docker_eval._sh
+    sh("git", "clone", "--local", "--no-checkout", "--quiet", str(repo), str(wt), timeout=600)
+    # A blobless (promisor) corpus clone can't serve lazy fetches through a
+    # file-path origin: point origin at the real remote for the one checkout
+    # (setup time, before any agent runs), then strip it.
+    if sh("git", "-C", str(repo), "config", "remote.origin.promisor",
+          check=False).strip() == "true":
+        upstream = sh("git", "-C", str(repo), "remote", "get-url", "origin").strip()
+        sh("git", "-C", str(wt), "remote", "set-url", "origin", upstream)
+        sh("git", "-C", str(wt), "config", "remote.origin.promisor", "true")
+        sh("git", "-C", str(wt), "config", "remote.origin.partialclonefilter", "blob:none")
+    sh("git", "-C", str(wt), "checkout", "--detach", "-f", "-q", task["base_commit"], timeout=600)
+    for ref in sh("git", "-C", str(wt), "for-each-ref", "--format=%(refname)").split():
+        sh("git", "-C", str(wt), "update-ref", "-d", ref)
+    sh("git", "-C", str(wt), "remote", "remove", "origin", check=False)
+    head = sh("git", "-C", str(wt), "rev-parse", "HEAD").strip()
+    if head != task["base_commit"]:
+        raise RuntimeError(f"checkout for {task['instance_id']} is at {head!r}, expected "
+                           f"{task['base_commit']!r} -- refusing to run on the wrong code")
     return repo, wt
+
+
+def _remove_worktree(wt: Path):
+    shutil.rmtree(wt, ignore_errors=True)
 
 
 # Index/tool artifacts the context tools drop into the worktree. They MUST be
@@ -422,8 +453,7 @@ def run_cell(task: dict, arm: str, model: str, tag: str = "") -> dict:
             meta = _run_mason(wt, task, arm)
             diff = _agent_diff(wt, task)
             _save_diff(task, model, arm, tag, diff)
-            docker_eval._sh("git", "-C", str(repo), "worktree", "remove",
-                            "--force", str(wt), check=False)
+            _remove_worktree(wt)
             sc = _score(task, diff)
             return {"task": task["instance_id"], "arm": arm, "model": model,
                     "kind": task.get("kind"), "resolved": sc.get("resolved"),
@@ -444,8 +474,7 @@ def run_cell(task: dict, arm: str, model: str, tag: str = "") -> dict:
         diff = _agent_diff(wt, task)
         _save_diff(task, model, arm, tag, diff)
     finally:
-        docker_eval._sh("git", "-C", str(repo), "worktree", "remove", "--force",
-                        str(wt), check=False)
+        _remove_worktree(wt)
     sc = _score(task, diff)
     return {"task": task["instance_id"], "arm": arm, "model": model,
             "kind": task.get("kind"), "resolved": sc.get("resolved"),

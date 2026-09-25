@@ -385,6 +385,70 @@ read them first." That is a `query`/anchor-summary delivery question (the machin
 exists: `renderAnchorSummary` already prints "tested by N" for anchors), and it would
 need its own probe. Not started; not obviously worth it given the above.
 
+## Offline sizing for "verify runs the tests" (2026-09-24, `verify_replay.py`, no LLM cost)
+
+209 sessions with `session_id` (search-body-ab, guard-hook-ab, residency-ab, h3-ab control
+arm; h3 treatment excluded because verify was mandated). 16.3 turns/session, 4.7 of them
+build/test/env/repro-only turns.
+
+- **Turn headroom.** Collapsing every edit-free chain of check turns into one call: 19% of
+  turns (upper bound, includes the agent's own ad-hoc repro scripts, which verify cannot
+  absorb). Repo build/test chains only: 7%. Counted directly as removable events — reruns
+  of the same test tool on the same or a broader target with no edit between: **1.43
+  turns/session = 8.8% of turns, ~9.5% of tokens**. By language: python 13.5%, java 9.2%,
+  go 5.3%, c 2.0%.
+- **What those reruns are.** Sampled pairs are mostly the agent failing to get the runner
+  working: `python` vs `python3`, a broken global pytest-asyncio plugin (`-p no:...`,
+  `PYTEST_DISABLE_PLUGIN_AUTOLOAD`), `-Djacoco.skip` / `-Drat.skip`, `JAVA_HOME` hunting;
+  a minority are planned targeted → full-suite sequences. **Caveat: much of this is this
+  Mac's environment, not the product's typical user** — a developer's own machine
+  usually runs its own tests on the first try. The 8.8% is a benchmark-bed number; the
+  real-world share is unmeasured.
+- **Before/after "vacuous check" signal: dead on this bed.** Gold tests are absent from
+  the checkout and test edits are forbidden, so repo tests pass on base by construction.
+  The only base-vs-fix check is one the agent ran before its first edit and again after:
+  resolved 4/109 (4%), failed 9/100 (9%); within the 7 mixed tasks 1/17 vs 4/26. Rare,
+  and not higher in resolved cells. Do not build it on this evidence.
+- **What building it would require.** The saving depends on verify knowing a working
+  test command per repo (ecosystem detection is not enough — the jacoco/rat/asyncio
+  flags are repo- and machine-specific). That means a configured or learned test
+  command, i.e. a new prism responsibility, not an extension of the graph.
+
+## Gold-fix leak in run_e2e — found and fixed (2026-09-24, `gold_leak_audit.py`)
+
+`run_e2e._worktree` used `git worktree add` on corpus clones made after each task's fix
+merged, so the agent's checkout shared refs that contain the gold commit. Agents found it
+with `git log --all --grep=<issue#>`, confirmed it was not an ancestor of HEAD, and ran
+`git show <sha> -- <file>`. The same leak was fixed in `swebench_ab.py` on 2026-08-15
+and never ported here.
+
+- **Scale:** 32 of 366 cells with transcripts opened a post-base commit touching the gold
+  source files; 27 of those scored resolved. Concentrated in jackson-databind (pr6105,
+  6019, 6042, 6012, 6061, 6099, 6008, 6030, 6039), plus click pr3466/3471.
+- **Numbers with leaked cells removed:**
+  - guard-fix-run (headline): prism 32/45 (71%) vs native 27/46 (59%). **Holds.**
+  - search-body-ab: 27/44 vs 27/46. **The +2 resolve gain was leak, not the change.**
+    The change itself is still flat-cost and safe; just no resolve claim.
+  - guard-hook-ab 9/12 vs 8/11, residency-ab 7/12 vs 8/12: unchanged conclusions.
+  - H3: still no difference (clean control 6/54, treatment 4/52).
+  - jackson pr6019's "non-replicating" result is explained: some cells copied the fix.
+- **Fix:** `_worktree` now makes a per-cell `git clone --local`, checks out base (via the
+  real remote for blobless corpora), deletes every ref and the remote, and verifies HEAD.
+  Checked on jackson/click (blobless) and gin (full): reachable commits == base ancestry,
+  fix commit invisible, gold patch round-trips through `_agent_diff`.
+- **Not fixed (same pattern, older runners, not used by current A/Bs):** `run.py`
+  `ensure_worktree`, `mason_oracle.agent_worktree`, `ab_routing.make_worktree`.
+- Objects are still in the hardlinked store; an agent would need the exact SHA. Same
+  residual as swebench_ab.
+
+## Other transcript patterns checked 2026-09-24 (nothing actionable)
+
+Turn anatomy over 209 sessions: build/test 29%, edits 14%, shell discovery 12%, prism
+search 9%, Read 9%, prism lookup 6%, Grep 5%. Shell discovery is mostly `grep -n` inside
+an already-known file and `git` (substitution, not turn removal). Back-to-back single
+prism calls: 1.38/session, but 78% use the previous result (not batchable). Lookup
+misses from comma-joined names: 1 in 209 sessions. Prism errors: 4 total.
+
 ## Methodology notes (keep)
 
 - guard-fix-run predates `session_id`; its 100 transcripts were recovered by mtime window
