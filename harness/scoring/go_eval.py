@@ -23,7 +23,24 @@ CLONE_ROOT = Path.home() / "gvg-corpus"
 
 REPO_DIR = {
     "gin-gonic/gin": CLONE_ROOT / "gin",
+    "urfave/cli": CLONE_ROOT / "cli",
+    "go-chi/chi": CLONE_ROOT / "chi",
+    "labstack/echo": CLONE_ROOT / "echo",
 }
+
+# The agent runs host go 1.25 with GOTOOLCHAIN=local (run_e2e._agent_env); a
+# base whose go.mod asks for a newer go/toolchain can't build for the agent,
+# while the scorer's GOTOOLCHAIN=auto would silently download one.
+MAX_GO = (1, 25)
+
+
+def base_go_version_ok(repo_dir: Path, base: str) -> tuple[bool, str]:
+    """(ok, detail): go.mod's `go` and `toolchain` lines at base are <= MAX_GO."""
+    mod = sh("git", "-C", str(repo_dir), "show", f"{base}:go.mod")
+    for m in re.finditer(r"(?m)^(go|toolchain)\s+(?:go)?(\d+)\.(\d+)", mod):
+        if (int(m.group(2)), int(m.group(3))) > MAX_GO:
+            return False, m.group(0).strip()
+    return True, ""
 
 TESTP = re.compile(r"_test\.go$")
 SRCP = re.compile(r"\.go$")  # non-test .go files (filtered below)
@@ -38,15 +55,29 @@ def sh(*a, cwd=None, timeout=600, check=True):
 
 
 def _test_func_names(diff_text: str) -> list[str]:
-    """Names of Test* functions touched (added or modified) by a diff."""
-    names = []
+    """Names of Test* functions touched (added or modified) by a diff.
+
+    A changed line counts toward the function enclosing it: the hunk header's
+    function context (`@@ ... @@ func TestX(`), updated by any `func` line
+    inside the hunk. Matching only +/- `func Test` lines missed every test
+    whose body alone changed (go-chi/chi#1029 edits TestMethodNotAllowed)."""
+    names = set()
+    cur = None
     for line in diff_text.splitlines():
-        if not line[:1] in "+-":
+        if line.startswith("@@"):
+            m = re.search(r"@@ func (Test\w+)\(", line)
+            cur = m.group(1) if m else None
             continue
-        m = FUNC_RE.match(line[1:])
-        if m:
-            names.append(m.group(1))
-    return sorted(set(names))
+        if line.startswith(("diff --git", "--- ", "+++ ")):
+            cur = None
+            continue
+        body = line[1:]
+        if body.startswith("func "):
+            m = FUNC_RE.match(body)
+            cur = m.group(1) if m else None
+        if line[:1] in "+-" and cur:
+            names.add(cur)
+    return sorted(names)
 
 
 def build_task(repo_dir: Path, repo: str, pr: int) -> dict:

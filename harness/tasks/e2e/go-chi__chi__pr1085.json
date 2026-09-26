@@ -1,0 +1,29 @@
+{
+  "instance_id": "go-chi__chi__pr1085",
+  "repo": "go-chi/chi",
+  "pr": 1085,
+  "base_commit": "a54874f0e2f12647a19e82ee70dfa8185014100c",
+  "merge_commit": "4ef87eaf2cfb27d3126d48194e1a84806acc1aed",
+  "patch": "diff --git a/middleware/wrap_writer.go b/middleware/wrap_writer.go\nindex 367e0fc..b2de875 100644\n--- a/middleware/wrap_writer.go\n+++ b/middleware/wrap_writer.go\n@@ -208,8 +208,10 @@ func (f *http2FancyWriter) Push(target string, opts *http.PushOptions) error {\n \n func (f *httpFancyWriter) ReadFrom(r io.Reader) (int64, error) {\n \tif f.basicWriter.tee != nil {\n+\t\t// Route through basicWriter.Write so that data is also written to the\n+\t\t// tee writer. basicWriter.Write already increments basicWriter.bytes,\n+\t\t// so we must NOT add n again here (that would double-count).\n \t\tn, err := io.Copy(&f.basicWriter, r)\n-\t\tf.basicWriter.bytes += int(n)\n \t\treturn n, err\n \t}\n \trf := f.basicWriter.ResponseWriter.(io.ReaderFrom)\n",
+  "test_patch": "diff --git a/middleware/wrap_writer_test.go b/middleware/wrap_writer_test.go\nindex 7e8f6ab..dfbbaa4 100644\n--- a/middleware/wrap_writer_test.go\n+++ b/middleware/wrap_writer_test.go\n@@ -4,6 +4,7 @@ import (\n \t\"bytes\"\n \t\"net/http\"\n \t\"net/http/httptest\"\n+\t\"strings\"\n \t\"testing\"\n )\n \n@@ -84,3 +85,27 @@ func TestBasicWriterDiscardsWritesToOriginalResponseWriter(t *testing.T) {\n \t\tassertEqual(t, 11, wrap.BytesWritten())\n \t})\n }\n+\n+// TestHttpFancyWriterReadFromByteCountWithTee is a regression test for\n+// https://github.com/go-chi/chi/issues/1067.\n+// httpFancyWriter.ReadFrom was adding n to basicWriter.bytes even when the\n+// write went through basicWriter.Write (which already increments the counter),\n+// resulting in double-counting the bytes when a Tee writer was set.\n+func TestHttpFancyWriterReadFromByteCountWithTee(t *testing.T) {\n+\toriginal := &httptest.ResponseRecorder{\n+\t\tHeaderMap: make(http.Header),\n+\t\tBody:      new(bytes.Buffer),\n+\t}\n+\tf := &httpFancyWriter{basicWriter: basicWriter{ResponseWriter: original}}\n+\n+\tvar teeBuf bytes.Buffer\n+\tf.Tee(&teeBuf)\n+\n+\tconst input = \"hello world\"\n+\tn, err := f.ReadFrom(strings.NewReader(input))\n+\tassertNoError(t, err)\n+\tassertEqual(t, int64(len(input)), n)\n+\t// Before the fix, BytesWritten() returned 22 (double-counted).\n+\tassertEqual(t, len(input), f.BytesWritten())\n+\tassertEqual(t, []byte(input), teeBuf.Bytes())\n+}\n",
+  "test_functions": [
+    "TestBasicWriterDiscardsWritesToOriginalResponseWriter",
+    "TestHttpFancyWriterReadFromByteCountWithTee"
+  ],
+  "src_files": [
+    "middleware/wrap_writer.go"
+  ],
+  "test_modules": [
+    "middleware/wrap_writer_test.go"
+  ],
+  "problem_statement": "httpFancyWriter.ReadFrom double-counts BytesWritten when Tee is set\n\n## Description\n\n`httpFancyWriter.ReadFrom` in `middleware/wrap_writer.go` double-counts the bytes written when a `Tee` writer is set.\n\nWhen `tee != nil`, `ReadFrom` uses `io.Copy(&f.basicWriter, r)` which routes writes through `basicWriter.Write()`. The `Write` method already increments `basicWriter.bytes` on line 112. However, after `io.Copy` returns, `ReadFrom` also adds `n` to `basicWriter.bytes` again on line 212:\n\n```go\nfunc (f *httpFancyWriter) ReadFrom(r io.Reader) (int64, error) {\n\tif f.basicWriter.tee != nil {\n\t\tn, err := io.Copy(&f.basicWriter, r)\n\t\tf.basicWriter.bytes += int(n)  // BUG: double-counts, basicWriter.Write already incremented bytes\n\t\treturn n, err\n\t}\n\t// ...non-tee path correctly counts since rf.ReadFrom bypasses basicWriter.Write\n}\n```\n\nThis causes `BytesWritten()` to return double the actual number of bytes when using `ReadFrom` with a `Tee` writer.\n\n## Reproduction\n\n```go\nfunc TestHttpFancyWriterReadFromWithTee(t *testing.T) {\n\toriginal := &httptest.ResponseRecorder{\n\t\tHeaderMap: make(http.Header),\n\t\tBody:      new(bytes.Buffer),\n\t}\n\tf := &httpFancyWriter{basicWriter: basicWriter{ResponseWriter: original}}\n\n\tvar teeBuf bytes.Buffer\n\tf.Tee(&teeBuf)\n\n\tinput := \"hello world\"\n\tn, err := f.ReadFrom(strings.NewReader(input))\n\t// n == 11, err == nil\n\t// f.BytesWritten() == 22  -- BUG: should be 11\n}\n```\n\n## Fix\n\nRemove the redundant `f.basicWriter.bytes += int(n)` line in the tee branch, since `io.Copy` through `basicWriter.Write` already handles byte counting.",
+  "fail_to_pass": [
+    "TestHttpFancyWriterReadFromByteCountWithTee"
+  ],
+  "pass_to_pass": [
+    "TestBasicWriterDiscardsWritesToOriginalResponseWriter"
+  ],
+  "lang": "go",
+  "build": "go-test",
+  "prompt_source": "issue"
+}

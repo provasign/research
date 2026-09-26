@@ -1,0 +1,29 @@
+{
+  "instance_id": "urfave__cli__pr2311",
+  "repo": "urfave/cli",
+  "pr": 2311,
+  "base_commit": "efc63527f896aa4440fb7434de1980c577f80488",
+  "merge_commit": "bc00bd4d77dae229ec7d0cb46b67760e168b28c9",
+  "patch": "diff --git a/flag_bool_with_inverse.go b/flag_bool_with_inverse.go\nindex 272dd98f..680fe2c6 100644\n--- a/flag_bool_with_inverse.go\n+++ b/flag_bool_with_inverse.go\n@@ -179,6 +179,14 @@ func (bif *BoolWithInverseFlag) String() string {\n \t\tprefix = \"-\"\n \t}\n \n+\t// Guard against a FlagStringer that returns a string without a tab (e.g.\n+\t// a custom stringer or the default stringer when the flag does not\n+\t// implement DocGenerationFlag). In that case treat the entire output as\n+\t// the tab-delimited suffix so the slice never goes out of bounds.\n+\tif i < 0 {\n+\t\ti = 0\n+\t}\n+\n \treturn fmt.Sprintf(\"%s[%s]%s%s\", prefix, bif.inversePrefix(), bif.Name, out[i:])\n }\n \n",
+  "test_patch": "diff --git a/flag_bool_with_inverse_test.go b/flag_bool_with_inverse_test.go\nindex 98149458..fbb7e43f 100644\n--- a/flag_bool_with_inverse_test.go\n+++ b/flag_bool_with_inverse_test.go\n@@ -520,3 +520,26 @@ func TestBoolWithInverseFlag_SatisfiesVisibleFlagInterface(t *testing.T) {\n \n \t_ = f.IsVisible()\n }\n+\n+// TestBoolWithInverseFlagStringNoPanicWithNoTabStringer is a regression test for\n+// https://github.com/urfave/cli/issues/2303.\n+// BoolWithInverseFlag.String() panicked with \"slice bounds out of range [-1:]\"\n+// when the FlagStringer returned a string without a tab character.\n+func TestBoolWithInverseFlagStringNoPanicWithNoTabStringer(t *testing.T) {\n+\torig := FlagStringer\n+\tdefer func() { FlagStringer = orig }()\n+\n+\tFlagStringer = func(f Flag) string {\n+\t\treturn \"no tab here\"\n+\t}\n+\n+\tflag := &BoolWithInverseFlag{\n+\t\tName: \"verbose\",\n+\t}\n+\n+\t// Must not panic.\n+\tgot := flag.String()\n+\tif !strings.Contains(got, \"verbose\") {\n+\t\tt.Errorf(\"expected String() to contain the flag name, got %q\", got)\n+\t}\n+}\n",
+  "test_functions": [
+    "TestBoolWithInverseFlagStringNoPanicWithNoTabStringer",
+    "TestBoolWithInverseFlag_SatisfiesVisibleFlagInterface"
+  ],
+  "src_files": [
+    "flag_bool_with_inverse.go"
+  ],
+  "test_modules": [
+    "flag_bool_with_inverse_test.go"
+  ],
+  "problem_statement": "BoolWithInverseFlag.String() panics when FlagStringer returns string without tab\n\n## Summary\n\n`BoolWithInverseFlag.String()` panics with `slice bounds out of range [-1:]` when the `FlagStringer` function returns a string that does not contain a tab character. Since `FlagStringer` is a public variable that users are encouraged to override, this panic is reachable through documented API usage.\n\n**Version:** cli/v3 (commit ef08e2e)\n**Go:** 1.22\n\n## Affected Code\n\n```go\n// flag_bool_with_inverse.go:170-183\nfunc (bif *BoolWithInverseFlag) String() string {\n    out := FlagStringer(bif)\n\n    i := strings.Index(out, \"\\t\")\n\n    prefix := \"--\"\n\n    // single character flags are prefixed with `-` instead of `--`\n    if len(bif.Name) == 1 {\n        prefix = \"-\"\n    }\n\n    return fmt.Sprintf(\"%s[%s]%s%s\", prefix, bif.inversePrefix(), bif.Name, out[i:])\n}\n```\n\nWhen `FlagStringer` returns a string without `\\t`, `strings.Index` returns `-1`, and `out[-1:]` panics. The default `stringifyFlag` can also return `\"\"` (no tab) when the flag doesn't satisfy `DocGenerationFlag`.\n\n## Reproduction\n\n```go\npackage main\n\nimport (\n    \"fmt\"\n    \"github.com/urfave/cli/v3\"\n)\n\nfunc main() {\n    cli.FlagStringer = func(f cli.Flag) string {\n        return \"custom output without tab\"\n    }\n\n    flag := &cli.BoolWithInverseFlag{\n        BoolFlag: cli.BoolFlag{\n            Name: \"verbose\",\n        },\n    }\n\n    fmt.Println(flag.String())\n    // panic: runtime error: slice bounds out of range [-1:]\n}\n```\n\n## Why This Matters\n\n- `BoolWithInverseFlag.String()` is an exported method implementing `fmt.Stringer` \u2014 called implicitly by `fmt.Print`, logging, error messages\n- `FlagStringer` is a [documented public variable](https://pkg.go.dev/github.com/urfave/cli/v3#FlagStringer) that users are encouraged to override for custom help output\n- The panic is undocumented and cannot be anticipated by users setting a custom `FlagStringer`\n- Note: `FlagBase[T].String()` in flag_impl.go:226 calls `FlagStringer(f)` directly without tab parsing, so it is not affected \u2014 only `BoolWithInverseFlag` has this issue\n\n## Suggested Fix\n\nGuard against `strings.Index` returning `-1`:\n\n```go\nfunc (bif *BoolWithInverseFlag) String() string {\n    out := FlagStringer(bif)\n\n    i := strings.Index(out, \"\\t\")\n    if i == -1 {\n        return out\n    }\n\n    prefix := \"--\"\n    if len(bif.Name) == 1 {\n        prefix = \"-\"\n    }\n\n    return fmt.Sprintf(\"%s[%s]%s%s\", prefix, bif.inversePrefix(), bif.Name, out[i:])\n}\n```",
+  "fail_to_pass": [
+    "TestBoolWithInverseFlagStringNoPanicWithNoTabStringer"
+  ],
+  "pass_to_pass": [
+    "TestBoolWithInverseFlag_SatisfiesVisibleFlagInterface"
+  ],
+  "lang": "go",
+  "build": "go-test",
+  "prompt_source": "issue"
+}

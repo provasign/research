@@ -1,0 +1,26 @@
+{
+  "instance_id": "go-chi__chi__pr1029",
+  "repo": "go-chi/chi",
+  "pr": 1029,
+  "base_commit": "29164f023bf9319e74d5961a21a712653bb98c83",
+  "merge_commit": "9b6ddcddb96aa14648702e7eaabef38e14e65157",
+  "patch": "diff --git a/tree.go b/tree.go\nindex 9f56549..e7bc9ed 100644\n--- a/tree.go\n+++ b/tree.go\n@@ -479,7 +479,9 @@ func (n *node) findRoute(rctx *Context, method methodTyp, path string) *node {\n \t\t\t\t\t\t\tif endpoints == mALL || endpoints == mSTUB {\n \t\t\t\t\t\t\t\tcontinue\n \t\t\t\t\t\t\t}\n-\t\t\t\t\t\t\trctx.methodsAllowed = append(rctx.methodsAllowed, endpoints)\n+\t\t\t\t\t\t\tif !slices.Contains(rctx.methodsAllowed, endpoints) {\n+\t\t\t\t\t\t\t\trctx.methodsAllowed = append(rctx.methodsAllowed, endpoints)\n+\t\t\t\t\t\t\t}\n \t\t\t\t\t\t}\n \n \t\t\t\t\t\t// flag that the routing context found a route, but not a corresponding\n@@ -525,7 +527,9 @@ func (n *node) findRoute(rctx *Context, method methodTyp, path string) *node {\n \t\t\t\t\tif endpoints == mALL || endpoints == mSTUB {\n \t\t\t\t\t\tcontinue\n \t\t\t\t\t}\n-\t\t\t\t\trctx.methodsAllowed = append(rctx.methodsAllowed, endpoints)\n+\t\t\t\t\tif !slices.Contains(rctx.methodsAllowed, endpoints) {\n+\t\t\t\t\t\trctx.methodsAllowed = append(rctx.methodsAllowed, endpoints)\n+\t\t\t\t\t}\n \t\t\t\t}\n \n \t\t\t\t// flag that the routing context found a route, but not a corresponding\n",
+  "test_patch": "diff --git a/mux_test.go b/mux_test.go\nindex 3e3b18f..29b421f 100644\n--- a/mux_test.go\n+++ b/mux_test.go\n@@ -394,14 +394,18 @@ func TestMuxNestedNotFound(t *testing.T) {\n func TestMethodNotAllowed(t *testing.T) {\n \tr := NewRouter()\n \n-\tr.Get(\"/hi\", func(w http.ResponseWriter, r *http.Request) {\n+\tr.Get(\"/hi\", func(w http.ResponseWriter, _ *http.Request) {\n \t\tw.Write([]byte(\"hi, get\"))\n \t})\n \n-\tr.Head(\"/hi\", func(w http.ResponseWriter, r *http.Request) {\n+\tr.Head(\"/hi\", func(w http.ResponseWriter, _ *http.Request) {\n \t\tw.Write([]byte(\"hi, head\"))\n \t})\n \n+\tr.Get(\"/*\", func(w http.ResponseWriter, _ *http.Request) {\n+\t\tw.Write([]byte(\"catch-all\"))\n+\t})\n+\n \tts := httptest.NewServer(r)\n \tdefer ts.Close()\n \n",
+  "test_functions": [
+    "TestMethodNotAllowed"
+  ],
+  "src_files": [
+    "tree.go"
+  ],
+  "test_modules": [
+    "mux_test.go"
+  ],
+  "problem_statement": "Duplicate HTTP methods in 405 Allow header\n\nIt seems like when routes are registered which 'overlap' due to their wildcards, their methods are repeated in the Allow header in 405 responses.\n\nMinimal runnable example: https://go.dev/play/p/wm5Roz8MSRJ\n\n```go\npackage main\n\nimport (\n\t\"fmt\"\n\t\"log\"\n\t\"net/http\"\n\t\"net/http/httptest\"\n\n\t\"github.com/go-chi/chi/v5\"\n)\n\nfunc main() {\n\tr := chi.NewRouter()\n\n\tr.Post(\"/article/1-2-3\", func(w http.ResponseWriter, r *http.Request) {\n\t\tw.WriteHeader(http.StatusOK)\n\n\t})\n\n\tr.Post(\"/article/{a}\", func(w http.ResponseWriter, r *http.Request) {\n\t\tw.WriteHeader(http.StatusOK)\n\n\t})\n\n\tr.Post(\"/article/{b}-{c}\", func(w http.ResponseWriter, r *http.Request) {\n\t\tw.WriteHeader(http.StatusOK)\n\t})\n\n\tr.Post(\"/article/{b}-{c}-{d}\", func(w http.ResponseWriter, r *http.Request) {\n\t\tw.WriteHeader(http.StatusOK)\n\t})\n\n\tserver := httptest.NewServer(r)\n\tdefer server.Close()\n\n\t// Send a request with an unsupported method\n\tres, err := http.Get(server.URL + \"/article/1-2-3\")\n\tif err != nil {\n\t\tlog.Fatal(err)\n\t}\n\n\tfmt.Println(\"Status:\", res.Status)\n\tfmt.Println(\"Header:\", res.Header)\n}\n```\n\nOutputs:\n\n```\nStatus: 405 Method Not Allowed\nHeader: map[Allow:[POST POST POST POST] Content-Length:[0] Date:[Tue, 10 Nov 2009 23:00:00 GMT]]\n```\n\nThe `POST` value in the `Allow` header is duplicated four times, which seems strange, and I think ideally it would only appear once.",
+  "fail_to_pass": [
+    "TestMethodNotAllowed"
+  ],
+  "pass_to_pass": [],
+  "lang": "go",
+  "build": "go-test",
+  "prompt_source": "issue"
+}

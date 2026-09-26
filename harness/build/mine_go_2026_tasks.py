@@ -17,6 +17,8 @@ TEST_RE = re.compile(r"_test\.go$")
 SRC_RE = re.compile(r"\.go$")
 SKIP_RE = re.compile(r"\b(bump|merge|revert|typo|changelog|release note|pre-commit|"
                      r"github action|ci)\b", re.I)
+# --bugs-only: titles that announce a feature/doc change, not a bug fix.
+FEAT_RE = re.compile(r"^\s*(feat|docs?|add|support|introduce|implement)\b", re.I)
 
 
 def gh_json(*args: str):
@@ -26,7 +28,7 @@ def gh_json(*args: str):
     return json.loads(r.stdout)
 
 
-def candidates(repo: str, limit: int, year: str = "2026"):
+def candidates(repo: str, limit: int, year: str = "2026", bugs_only: bool = False):
     prs = gh_json("pr", "list", "-R", repo, "--state", "merged", "--limit", str(limit),
                   "--json", "number,title,mergedAt,labels,body")
     out = []
@@ -40,6 +42,8 @@ def candidates(repo: str, limit: int, year: str = "2026"):
         is_bug = bool(BUG_RE.search(title) or BUG_RE.search(p.get("body") or ""))
         is_feat = bool(labels & {"feature", "enhancement", "new feature"})
         if not (is_bug or is_feat):
+            continue
+        if bugs_only and (not is_bug or FEAT_RE.search(title)):
             continue
         files = gh_json("pr", "view", str(p["number"]), "-R", repo, "--json", "files")["files"]
         paths = [f["path"] for f in files]
@@ -62,9 +66,11 @@ if __name__ == "__main__":
     ap.add_argument("repo", help="owner/name")
     ap.add_argument("--scan", type=int, default=100, help="how many recent merged PRs to scan")
     ap.add_argument("--year", default="2026")
+    ap.add_argument("--bugs-only", action="store_true",
+                    help="keep only issue-linked bug fixes (drop feat/docs/add titles)")
     ap.add_argument("--json-out", dest="json_out", default="")
     a = ap.parse_args()
-    cands = candidates(a.repo, a.scan, a.year)
+    cands = candidates(a.repo, a.scan, a.year, a.bugs_only)
     print(f"# {len(cands)} candidate {a.year} tasks in {a.repo} (of {a.scan} scanned)\n")
     for c in cands:
         print(f"  [{c['kind']:7}] pr#{c['pr']:<6} churn={c['churn']:<4} "
