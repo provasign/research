@@ -17,10 +17,13 @@
   ],
   "problem_statement": "Disabling wrapper on list (`defaultUseWrapper = false`) does not serialize/deserialize `null` lists as expected [REVERTED in 3.2.1]\n\nI noticed that when i serialize an object with a null list and disable using a default wrapper around lists, upon deserialization the object returned differs from the object serialized.\r\n\r\nHere is a test of the problem\r\n```\r\nimport com.fasterxml.jackson.dataformat.xml.XmlMapper;\r\nimport com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlRootElement;\r\nimport java.io.IOException;\r\nimport java.util.List;\r\nimport org.junit.jupiter.api.Assertions;\r\nimport org.junit.jupiter.api.Test;\r\n\r\npublic class JacksonTest {\r\n\r\n    @Test\r\n    public void test() throws IOException {\r\n        XmlMapper mapper = XmlMapper.builder().defaultUseWrapper(false).build();\r\n\r\n        Parent a = new Parent();\r\n        String out = mapper.writeValueAsString(a);\r\n        Parent b = mapper.readValue(out, Parent.class);\r\n        Assertions.assertEquals(a.getChildren(), b.getChildren());\r\n    }\r\n\r\n    @JacksonXmlRootElement\r\n    static class Parent {\r\n        List<Child> children;\r\n\r\n        public Parent() {}\r\n\r\n        public List<Child> getChildren() {\r\n            return children;\r\n        }\r\n\r\n        public void setChildren(List<Child> children) {\r\n            this.children = children;\r\n        }\r\n    }\r\n\r\n    static class Child {\r\n        private String name;\r\n    }\r\n}\r\n```\r\n\r\nclass `Parent` has a list of class `Child` that is null, when this object is serialized the following xml is \r\n```\r\n<Parent><children/></Parent>\r\n```\r\nif you take this xml and deserialize it back into a `Parent` object what ends up happening is that the children property is a list that has one element, an object of `Child` with null properties.   I was expecting that Parent would have a null list instead.\r\n\r\nIf you enable wrapper, it works fine and the serialized xml is\r\n\r\n```\r\n<Parent/>\r\n```\r\n\r\nwhich deserializes into the same object as the original",
   "fail_to_pass": [
+    "tools.jackson.dataformat.xml.lists.Issue627NullListTest::testNullListRoundTripNoWrapper",
+    "tools.jackson.dataformat.xml.lists.Issue627NullListTest::testXsiNilUnwrappedListDeser"
+  ],
+  "pass_to_pass": [
     "tools.jackson.dataformat.xml.lists.Issue627NullListTest::testNonNullListRoundTripNoWrapper",
     "tools.jackson.dataformat.xml.lists.Issue627NullListTest::testNullListRoundTripWithWrapper"
   ],
-  "pass_to_pass": [],
   "lang": "java",
   "build": "maven",
   "task_kind": "localized",

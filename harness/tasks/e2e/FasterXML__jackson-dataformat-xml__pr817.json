@@ -20,10 +20,13 @@
   "problem_statement": "Trouble dealing with JacksonXMLText if properties are present or if element is in a collection\n\nGiven the xml of:\r\n\r\n`<project><text>   </text></project>`\r\n\r\nand the Text.java of:\r\n\r\n```\r\npublic class Text {\r\n\tprivate String content;\r\n\r\n\tpublic Text() {\r\n\t}\r\n\r\n\t@JacksonXmlText\r\n\tpublic String getContent() {\r\n\t\treturn content;\r\n\t}\r\n\r\n\tpublic void setContent(String content) {\r\n\t\tthis.content = content;\r\n\t}\r\n}\r\n```\r\n\r\nThe setContent method will be called with the whitespace contained in `<text>`.  However, if I add (with Text.java having \"id\" as an attribute):\r\n\r\n`<project><text id=\"test\">   </text></project>`\r\n\r\nThe setContent call will be **skipped** when it only contains whitespace.  However, non-whitespace only text:\r\n\r\n`<project><text id=\"test\">hello world!</text></project>`\r\n\r\nwould have setContent with \"hello world!\" passed in\r\n\r\nAdditionally, if I were to use the xml:\r\n\r\n`<project><text>   </text><text>hello world!</text></project>`\r\n\r\n...and have Project contain a List of Texts (whether wrapped or unwrapped), it will result in the same failure.  The second Text object will have the contents of \"hello world!\", but the first will contain null rather than it's whitespace.\r\n\r\nI'm struggling with how to work around this as the items I'm dealing with really represent text in a document and sometimes I will have empty strings (which have meaning, but I could deal with those being null) or whitespace (spaces) which have meaning.",
   "fail_to_pass": [
     "tools.jackson.dataformat.xml.deser.XmlTextWhitespace565Test::testMultipleReplacementsWithWhitespace565",
-    "tools.jackson.dataformat.xml.deser.XmlTextWhitespace565Test::testNonWhitespaceTextWithAttributes565",
+    "tools.jackson.dataformat.xml.deser.XmlTextWhitespace565Test::testWhitespaceTextWithAttributes565",
+    "tools.jackson.dataformat.xml.deser.XmlTextWithEmpty449Test::testXmlText449ItemWithAttr",
     "tools.jackson.dataformat.xml.deser.XmlTextWithEmpty449Test::testXmlText449ItemWithList"
   ],
-  "pass_to_pass": [],
+  "pass_to_pass": [
+    "tools.jackson.dataformat.xml.deser.XmlTextWhitespace565Test::testNonWhitespaceTextWithAttributes565"
+  ],
   "lang": "java",
   "build": "maven",
   "task_kind": "localized",

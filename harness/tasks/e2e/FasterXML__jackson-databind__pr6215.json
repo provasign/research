@@ -20,11 +20,14 @@
   ],
   "problem_statement": "`DecimalNode` to `BigInteger` conversion no longer guarded by `StreamReadConstraints.validateBigIntegerScale()`\n\nIn 2.x, every `DecimalNode` \u2192 `BigInteger` conversion went through `BaseJsonNode._bigIntFromBigDec()`, which calls `StreamReadConstraints.defaults().validateBigIntegerScale(value.scale())` before `BigDecimal.toBigInteger()` (added for #3864). That guard exists because `toBigInteger()` on a `BigDecimal` with huge scale magnitude is extremely expensive (computes 10^|scale|), while the textual form is tiny \u2014 `1e2000000000` is 12 characters, so `maxNumberLength` doesn't help.\n\nIn 3.x the guard is gone: `DecimalNode._asBigIntegerValueUnchecked()` is a bare `_value.toBigInteger()` (dropped in the #4970 number-accessor rework). Streaming parsers are still guarded (`ParserBase.convertNumberToBigInteger()`), and `BigIntegerDeserializer` / `TokenBuffer` still validate, but the `JsonNode` accessors are not:\n\n```java\nObjectMapper mapper = JsonMapper.builder().enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS).build();\nJsonNode n = mapper.readTree(\"1e2000000000\");\nn.bigIntegerValue(); // CPU/memory DoS, no StreamConstraintsException\n```\n\nSame via `TreeTraversingParser.getBigIntegerValue()` (which is also how tree-backed format parsers such as TOML expose numbers), and via `asBigInteger()` / `bigIntegerValueOpt()` etc. \u2014 all six accessors funnel through `_asBigIntegerValueUnchecked()`.\n\nFix: restore the check in `DecimalNode._asBigIntegerValueUnchecked()` (using `StreamReadConstraints.defaults()`, as 2.x did, since nodes don't carry the configured constraints). PR to follow.",
   "fail_to_pass": [
+    "tools.jackson.databind.node.DecimalNodeBigIntegerScaleTest::testAccessorsGuarded",
     "tools.jackson.databind.node.DecimalNodeBigIntegerScaleTest::testPOJONodeAccessorsGuarded",
+    "tools.jackson.databind.node.DecimalNodeBigIntegerScaleTest::testViaTreeTraversingParser"
+  ],
+  "pass_to_pass": [
     "tools.jackson.databind.node.DecimalNodeBigIntegerScaleTest::testViaConversion",
     "tools.jackson.databind.node.DecimalNodeBigIntegerScaleTest::testWithinLimits"
   ],
-  "pass_to_pass": [],
   "lang": "java",
   "build": "maven",
   "task_kind": "multi_site",

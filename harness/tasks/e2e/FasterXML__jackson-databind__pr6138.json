@@ -17,14 +17,16 @@
   ],
   "problem_statement": "`DefaultCacheProvider.Builder` does not preserve default cache sizes for unspecified values\n\n### Search before asking\n\n- [x] I searched in the [issues](https://github.com/FasterXML/jackson-databind/issues) and found nothing similar.\n\n### Describe the bug\n\n### Summary\n\n`DefaultCacheProvider.Builder#build()` documents that unspecified values should use the default configuration.\n\nHowever, the builder cache size fields currently default to Java's `int` default value (`0`). As a result, configuring only one cache size causes the remaining cache sizes to stay at `0` instead of using their documented default values.\n\nThis can unintentionally disable cache retention for cache types that were not explicitly configured.\n\n### Version Information\n\n3.x branch, current snapshot\n\n### Reproduction\n\nThis can be reproduced by adding a regression test under `tools.jackson.databind.cfg`.\n\n```java\nDefaultCacheProvider provider = DefaultCacheProvider.builder()\n        .maxSerializerCacheSize(1234)\n        .build();\n\nassertEquals(1234, provider._maxSerializerCacheSize);\n\n// These currently fail because both values are 0.\nassertEquals(DeserializerCache.DEFAULT_MAX_CACHE_SIZE, provider._maxDeserializerCacheSize);\nassertEquals(TypeFactory.DEFAULT_MAX_CACHE_SIZE, provider._maxTypeFactoryCacheSize);\n```\n### Expected behavior\n\nExpected:\n\n- serializer cache size = `1234`\n- deserializer cache size = `DeserializerCache.DEFAULT_MAX_CACHE_SIZE`\n- type factory cache size = `TypeFactory.DEFAULT_MAX_CACHE_SIZE`\n\nActual:\n\n- serializer cache size = `1234`\n- deserializer cache size = `0`\n- type factory cache size = `0`\n\nA possible fix would be to initialize the builder cache size fields with the same defaults used by `DefaultCacheProvider.defaultInstance()`. This would still preserve the current behavior when a cache size is explicitly set to `0`.\n\n### Additional context\n\nI already have a patch prepared, along with regression tests covering:\n\n- default builder behavior\n- partial cache size overrides\n- explicitly setting a cache size to `0`",
   "fail_to_pass": [
-    "tools.jackson.databind.cfg.CacheProviderTest::testBuilderUsesDefaultsForUnspecifiedCacheSizes",
-    "tools.jackson.databind.cfg.CacheProviderTest::testDefaultCacheProviderConfigDeserializerCacheSizeZero"
+    "tools.jackson.databind.cfg.CacheProviderTest::testBuilderAllowsDisablingIndividualCaches",
+    "tools.jackson.databind.cfg.CacheProviderTest::testBuilderUsesDefaultsForUnspecifiedCacheSizes"
   ],
   "pass_to_pass": [
     "tools.jackson.databind.cfg.CacheProviderTest::sanityCheckSerializerCacheSize",
     "tools.jackson.databind.cfg.CacheProviderTest::sanityCheckTypeFactoryCacheSize",
     "tools.jackson.databind.cfg.CacheProviderTest::testBuilderValueValidation",
     "tools.jackson.databind.cfg.CacheProviderTest::testCustomCacheProviderConfig",
+    "tools.jackson.databind.cfg.CacheProviderTest::testDefaultCacheProviderConfigDeserializerCache",
+    "tools.jackson.databind.cfg.CacheProviderTest::testDefaultCacheProviderConfigDeserializerCacheSizeZero",
     "tools.jackson.databind.cfg.CacheProviderTest::testDefaultCacheProviderSharesCache"
   ],
   "lang": "java",

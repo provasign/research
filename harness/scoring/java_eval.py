@@ -94,13 +94,18 @@ def _run_tests(repo_dir: Path, base: str, patches: list, classes: list, image: s
     try:
         sh("git", "-C", str(repo_dir), "worktree", "add", "--force", "--detach",
            str(wt), base, timeout=300)
+        # Pin BEFORE the patches: run_e2e hands the agent a worktree with the
+        # same pin committed on top of base, so an agent diff that touches
+        # pom.xml was made against the pinned file.
+        _pin_snapshot_parent(wt)
         for p in patches:
             if p.strip():
                 subprocess.run(["git", "-C", str(wt), "apply", "--whitespace=nowarn"],
                                input=p, text=True, capture_output=True)
-        _pin_snapshot_parent(wt)
         dtest = ",".join(c.split(".")[-1] for c in classes)  # -Dtest by simple name
-        cmd = (f"mvn -q -o test -Dtest='{dtest}' -DfailIfNoTests=false "
+        # -nsu: a SNAPSHOT parent that has no release yet (jackson-base
+        # 3.3.0-SNAPSHOT) resolves from the cached snapshot, never a newer one.
+        cmd = (f"mvn -q -o -nsu test -Dtest='{dtest}' -DfailIfNoTests=false "
                "-Dsurefire.failIfNoSpecifiedTests=false -Dmaven.test.failure.ignore=true "
                "2>&1 | tail -5; echo '---SUREFIRE---'; "
                "find . -path '*/surefire-reports/*.xml' -exec cat {} +")
@@ -115,7 +120,7 @@ def _run_tests(repo_dir: Path, base: str, patches: list, classes: list, image: s
                         str(wt)], capture_output=True)
 
 
-def _pin_snapshot_parent(wt: Path) -> None:
+def _pin_snapshot_parent(wt: Path, m2: Path = M2) -> bool:
     """Point a -SNAPSHOT parent POM at its RELEASED version.
 
     Historical jackson poms declare `<parent>jackson-base:X-SNAPSHOT`, and
@@ -126,16 +131,30 @@ def _pin_snapshot_parent(wt: Path) -> None:
     coordinate the commit eventually shipped under; for TEST EXECUTION
     that substitution is faithful enough, and it is deterministic and
     visible here rather than hidden in an image.
+
+    Exception: a dev line with no release yet (jackson-base 3.3.0, 2026-09)
+    keeps its SNAPSHOT parent when that snapshot is in the cache and the
+    release is not -- pinning it made pr6044/pr6052/pr6076 unbuildable.
+    Returns whether pom.xml changed.
     """
     pom = wt / "pom.xml"
     if not pom.exists():
-        return
+        return False
     src = pom.read_text(errors="replace")
     head = src.split("</parent>", 1)
     if len(head) != 2 or "-SNAPSHOT" not in head[0]:
-        return
+        return False
+    gav = re.search(r"<groupId>([^<]+)</groupId>.*?<artifactId>([^<]+)</artifactId>.*?"
+                    r"<version>([^<]+)-SNAPSHOT</version>", head[0].split("<parent>", 1)[-1], re.S)
+    if gav:
+        d = m2.joinpath("repository", *gav.group(1).split("."), gav.group(2))
+        rel, snap = gav.group(3), gav.group(3) + "-SNAPSHOT"
+        if (not (d / rel / f"{gav.group(2)}-{rel}.pom").exists()
+                and any((d / snap).glob(f"{gav.group(2)}-{rel}-*.pom"))):
+            return False
     pinned = re.sub(r"<version>([^<]+)-SNAPSHOT</version>", r"<version>\1</version>", head[0], count=1)
     pom.write_text(pinned + "</parent>" + head[1])
+    return True
 
 
 _SUITE_RE = re.compile(r"<testsuite\b(?:[^>]*/>|.*?</testsuite>)", re.S)

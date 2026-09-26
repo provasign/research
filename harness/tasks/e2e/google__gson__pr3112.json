@@ -17,11 +17,19 @@
   ],
   "problem_statement": "[bug] sub class field missing during serialization if collection's element type is a WildcardType\n\nI am serializing a list like this:\r\n```\r\nList<? extends TestBeanBase> list1;\r\nlist1.add(new TestBeanSub());    // TestBeanSub is a child class of TestBeanBase\r\n```\r\nI find that the fields of TestBeanSub is missed in the serialized json.\r\n\r\nYou can try my example code\uff1a\r\n```java\r\n    @Test\r\n    public void testList() {\r\n        List<TestBeanBase> list = new ArrayList<>();\r\n\r\n        //base class\r\n        TestBeanBase baseBean = new TestBeanBase();\r\n        baseBean.a = \"1\";\r\n        list.add(baseBean);\r\n\r\n        //sub class\r\n        TestBeanSub subBean = new TestBeanSub();\r\n        subBean.a = \"1\";\r\n        subBean.b = \"2\";//b is a field declared in sub class, this field value is missed during serialization\r\n        list.add(subBean);\r\n\r\n        TestBeanList beanList = new TestBeanList();\r\n        beanList.list1 = list;\r\n\r\n        Gson gson = new GsonBuilder().setPrettyPrinting().create();\r\n        System.out.println(gson.toJson(beanList));\r\n    }\r\n\r\n    public static class TestBeanList {\r\n        public List<? extends TestBeanBase> list1; //element type is a WildcardType\r\n    }\r\n\r\n    public static class TestBeanBase {\r\n        public String a;\r\n    }\r\n\r\n    public static class TestBeanSub extends TestBeanBase {\r\n        public String b;\r\n    }\r\n```\r\n\r\nOutput json :\r\n```\r\n{\r\n  \"list1\": [\r\n    {\r\n      \"a\": \"1\"\r\n    },\r\n    {\r\n      \"a\": \"1\"   //field b is missed\r\n    }\r\n  ]\r\n}\r\n```",
   "fail_to_pass": [
-    "com.google.gson.functional.MoreSpecificTypeSerializationTest::testListOfParameterizedSubclassFields",
-    "com.google.gson.functional.MoreSpecificTypeSerializationTest::testMapOfSubclassFields",
-    "com.google.gson.functional.MoreSpecificTypeSerializationTest::testWildcardMapOfSubclassFields"
+    "com.google.gson.functional.MoreSpecificTypeSerializationTest::testWildcardListOfSubclassFields",
+    "com.google.gson.functional.MoreSpecificTypeSerializationTest::testWildcardMapOfSubclassFields",
+    "com.google.gson.functional.MoreSpecificTypeSerializationTest::testWildcardTypeVariableSubclassFields"
   ],
-  "pass_to_pass": [],
+  "pass_to_pass": [
+    "com.google.gson.functional.MoreSpecificTypeSerializationTest::testListOfParameterizedSubclassFields",
+    "com.google.gson.functional.MoreSpecificTypeSerializationTest::testListOfSubclassFields",
+    "com.google.gson.functional.MoreSpecificTypeSerializationTest::testMapOfParameterizedSubclassFields",
+    "com.google.gson.functional.MoreSpecificTypeSerializationTest::testMapOfSubclassFields",
+    "com.google.gson.functional.MoreSpecificTypeSerializationTest::testParameterizedSubclassFields",
+    "com.google.gson.functional.MoreSpecificTypeSerializationTest::testSubclassFields",
+    "com.google.gson.functional.MoreSpecificTypeSerializationTest::testWildcardListOfParameterizedSubclassFields"
+  ],
   "lang": "java",
   "build": "maven",
   "task_kind": "localized",
