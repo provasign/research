@@ -100,8 +100,28 @@ RATE_HINTS = ("rate limit", "usage limit", "429", "too many requests",
               "overloaded", "please try again later")
 
 
+# The agent's session died because the API was unreachable, not because of
+# anything the agent did. Clamshell sleep on battery (2026-09-25 22:57 ->
+# 02:22) cut the network mid-run; claude -p ended with "API Error: Can't
+# reach the API server (ENOTFOUND)" and the cell was scored as a loss.
+NETWORK_HINTS = ("enotfound", "can't reach the api server", "econnrefused",
+                 "econnreset", "etimedout", "network is down", "connection error")
+
+
+def _network_down(returncode: int, blob: str) -> bool:
+    """The session ended on an unreachable API. A blip claude recovered from
+    internally never reaches the final output, so it doesn't count."""
+    if not any(h in blob for h in NETWORK_HINTS):
+        return False
+    return returncode != 0 or '"is_error":true' in blob.replace(" ", "") or "api error" in blob
+
+
 class RateLimited(Exception):
     pass
+
+
+class NetworkDown(RateLimited):
+    """Retry the same cell once the network is back; never score it."""
 
 
 def _worktree(task):
@@ -364,6 +384,8 @@ def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
     blob = (r.stdout + r.stderr).lower()
     if r.returncode != 0 and any(h in blob for h in RATE_HINTS):
         raise RateLimited(blob[-300:])
+    if _network_down(r.returncode, blob):
+        raise NetworkDown(blob[-300:])
     rec = {"wall_s": round(time.monotonic() - t0, 1), "runtimes": runtimes}
     try:
         j = json.loads(r.stdout)
