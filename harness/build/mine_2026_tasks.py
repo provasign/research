@@ -30,6 +30,10 @@ LANG_RULES = {
     "python": (TEST_RE, SRC_RE),
     "java": (re.compile(r"(^|/)src/test/"), re.compile(r"\.java$")),
     "go": (re.compile(r"_test\.go$"), re.compile(r"\.go$")),
+    # TypeScript: colocated *.test.ts/*.spec.ts or a test/ / __tests__ dir;
+    # source is .ts/.tsx/.mts (declaration files are not source).
+    "ts": (re.compile(r"(^|/)(tests?|__tests__)/|\.(test|spec)\.[cm]?tsx?$"),
+           re.compile(r"(?<!\.d)\.(ts|tsx|mts|cts)$")),
 }
 SKIP_RE = re.compile(r"\b(bump|merge|revert|typo|changelog|release note|pre-commit|"
                      r"github action|ci)\b", re.I)

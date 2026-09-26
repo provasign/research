@@ -61,7 +61,9 @@ def _prism_bin(arm: str) -> str:
 OUT = Path("results/e2e")
 OUT.mkdir(parents=True, exist_ok=True)
 
-_LANG_EVAL = {"java": java_eval, "go": go_eval, "js": js_eval, "c": c_eval}
+# "ts" tasks (hono, zod, h3) share js_eval: same node:20 image, vitest runner
+# chosen per repo. The tag exists so results split JS from TypeScript.
+_LANG_EVAL = {"java": java_eval, "go": go_eval, "js": js_eval, "ts": js_eval, "c": c_eval}
 
 
 def _is_java(task) -> bool:
@@ -69,7 +71,7 @@ def _is_java(task) -> bool:
 
 
 def _repo_for(task) -> Path:
-    """lang-tagged tasks (java/go/js/c) live in that module's REPO_DIR
+    """lang-tagged tasks (java/go/js/ts/c) live in that module's REPO_DIR
     (e.g. ~/gvg-corpus/<repo>); untagged Python tasks use docker_eval's
     e2e-2026 clone convention."""
     lang = task.get("lang")
@@ -90,7 +92,7 @@ def _score(task, diff: str) -> dict:
     lang = task.get("lang")
     if lang == "go":
         return go_eval.score(go_eval.REPO_DIR[task["repo"]], task, diff)
-    if lang in ("js", "c"):
+    if lang in ("js", "ts", "c"):
         mod = _LANG_EVAL[lang]
         return mod.score(mod.REPO_DIR[task["repo"]], task["repo"], task, diff)
     if _is_java(task):
