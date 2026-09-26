@@ -1,0 +1,45 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java
+index 439adb8d4..0c4cb82da 100644
+--- a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java
++++ b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java
+@@ -706,6 +706,12 @@ public class BeanDeserializer
+     protected Object _deserializeUsingPropertyBased(final JsonParser p, final DeserializationContext ctxt)
+         throws JacksonException
+     {
++        // Capture the Object's own parsing context here, before we consume its
++        // closing END_OBJECT token: once that happens the parser's "current"
++        // context has already been popped to the parent (enclosing) level, and
++        // blindly calling `p.assignCurrentValue()` after building the bean would
++        // incorrectly overwrite the enclosing value's current value.
++        final TokenStreamContext beanContext = p.streamReadContext();
+         final PropertyBasedCreator creator = _propertyBasedCreator;
+         PropertyValueBuffer buffer = (_anySetter != null)
+             ? creator.startBuildingWithAnySetter(p, ctxt, _objectIdReader, _anySetter, false)
+@@ -885,7 +891,7 @@ public class BeanDeserializer
+             }
+         }
+ 
+-        p.assignCurrentValue(bean);
++        beanContext.assignCurrentValue(bean);
+         // [databind#4938] Since 2.19, allow returning `null` from creator,
+         //  but if so, need to skip all possibly relevant content
+         if (bean == null) {
+@@ -1226,6 +1232,8 @@ public class BeanDeserializer
+         //    value itself is NOT passed via `CreatorProperty` (which isn't supported).
+         //    Ok however to pass via setter or field.
+ 
++        // see comment in `_deserializeUsingPropertyBased()` above
++        final TokenStreamContext beanContext = p.streamReadContext();
+         final PropertyBasedCreator creator = _propertyBasedCreator;
+         PropertyValueBuffer buffer = creator.startBuilding(p, ctxt, _objectIdReader, false);
+ 
+@@ -1332,7 +1340,8 @@ public class BeanDeserializer
+         } catch (Exception e) {
+             return wrapInstantiationProblem(ctxt, e);
+         }
+-        p.assignCurrentValue(bean);
++        // see comment in `_deserializeUsingPropertyBased()` above
++        beanContext.assignCurrentValue(bean);
+ 
+         // [databind#4938] Since 2.19, allow returning `null` from creator,
+         //  but if so, need to skip all possibly relevant content

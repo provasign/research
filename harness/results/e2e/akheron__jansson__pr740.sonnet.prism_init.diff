@@ -1,0 +1,21 @@
+diff --git a/src/pack_unpack.c b/src/pack_unpack.c
+index 60d33c7..afae75a 100644
+--- a/src/pack_unpack.c
++++ b/src/pack_unpack.c
+@@ -173,7 +173,15 @@ static char *read_string(scanner_t *s, va_list *ap, const char *purpose, size_t
+         next_token(s);
+ 
+         if (token(s) == '#') {
+-            length = va_arg(*ap, int);
++            int tmp_length = va_arg(*ap, int);
++            if (tmp_length < 0) {
++                set_error(s, "<args>", json_error_invalid_argument,
++                          "Invalid length argument %d", tmp_length);
++                s->has_error = 1;
++                length = 0;
++            } else {
++                length = (size_t)tmp_length;
++            }
+         } else if (token(s) == '%') {
+             length = va_arg(*ap, size_t);
+         } else {

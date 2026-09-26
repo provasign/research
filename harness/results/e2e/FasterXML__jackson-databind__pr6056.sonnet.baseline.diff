@@ -1,0 +1,17 @@
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/impl/UnwrappedPropertyHandler.java b/src/main/java/com/fasterxml/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
+index 5dadec127..6ca376277 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
+@@ -56,8 +56,12 @@ public class UnwrappedPropertyHandler
+             Object bean, TokenBuffer buffered)
+         throws IOException
+     {
++        final Class<?> activeView = ctxt.getActiveView();
+         for (int i = 0, len = _properties.size(); i < len; ++i) {
+             SettableBeanProperty prop = _properties.get(i);
++            if ((activeView != null) && !prop.visibleInView(activeView)) {
++                continue;
++            }
+             JsonParser p = buffered.asParser(originalParser.streamReadConstraints());
+             p.nextToken();
+             prop.deserializeAndSet(p, ctxt, bean);

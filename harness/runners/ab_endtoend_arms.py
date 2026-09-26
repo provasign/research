@@ -49,6 +49,10 @@ PRISM_BIN_FOR_ARM = {
     "prism_body_baseline": os.environ.get("PRISM_BODY_BASELINE_BIN", "/tmp/prism-baseline"),
     "prism_body_exp": os.environ.get("PRISM_BODY_EXP_BIN", "/tmp/prism-experimental"),
 }
+# Optional: run prism_init on a candidate build instead of the installed prism
+# (2026-09-25 lookup-overloads fix). `prism init` pins its own path in .mcp.json.
+if os.environ.get("PRISM_INIT_BIN"):
+    PRISM_BIN_FOR_ARM["prism_init"] = os.environ["PRISM_INIT_BIN"]
 
 
 def _fail_no_prism():

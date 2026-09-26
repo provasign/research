@@ -132,8 +132,34 @@ def sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def git_no_maintenance_env() -> dict[str, str]:
+    """Return an environment that prevents a Git command from starting
+    background repository maintenance.
+
+    Templates are copied byte-for-byte, including ``.git``. A detached
+    ``git gc --auto`` can rename a pack between copytree's directory scan and
+    file open, producing an intermittent FileNotFoundError and invalidating a
+    whole benchmark run. Append to any caller-provided ``GIT_CONFIG_*`` list
+    rather than replacing it so the guard composes with CI configuration.
+    """
+    env = os.environ.copy()
+    try:
+        count = int(env.get("GIT_CONFIG_COUNT", "0"))
+    except ValueError:
+        count = 0
+    for key, value in (("gc.auto", "0"), ("maintenance.auto", "false")):
+        env[f"GIT_CONFIG_KEY_{count}"] = key
+        env[f"GIT_CONFIG_VALUE_{count}"] = value
+        count += 1
+    env["GIT_CONFIG_COUNT"] = str(count)
+    return env
+
+
 def command(args: list[str], cwd: Path | str | None = None, check: bool = True) -> bytes:
-    return subprocess.run(args, cwd=cwd, capture_output=True, check=check).stdout
+    kwargs = {}
+    if args and Path(args[0]).name == "git":
+        kwargs["env"] = git_no_maintenance_env()
+    return subprocess.run(args, cwd=cwd, capture_output=True, check=check, **kwargs).stdout
 
 
 def read_events(path: Path) -> list[dict]:
@@ -891,6 +917,20 @@ def template_content(path: Path) -> dict[str, str]:
     return values
 
 
+def copy_git_template(source: Path, destination: Path) -> None:
+    """Copy a template after persistently disabling Git auto-maintenance.
+
+    The environment guard on :func:`command` prevents harness-owned Git
+    commands from starting a background pack. Persisting the same settings in
+    the template protects copies made after dependency tools or other callers
+    have touched the repository, and the settings are inherited by every arm.
+    """
+    if (source / ".git").exists():
+        command(["git", "config", "--local", "gc.auto", "0"], source)
+        command(["git", "config", "--local", "maintenance.auto", "false"], source)
+    shutil.copytree(source, destination)
+
+
 def make_git_template(root: Path, key: str, archive: bytes) -> tuple[Path, str]:
     """Extract a pristine archive into a committed git template (the "base")."""
     base = root / "templates" / key / "base"
@@ -919,7 +959,7 @@ def make_prism_template(root: Path, binary: Path, key: str, base: Path) -> tuple
     starting every agent session against an empty index.
     """
     prism = root / "templates" / key / "prism"
-    shutil.copytree(base, prism)
+    copy_git_template(base, prism)
     t0 = time.monotonic()
     indexed = subprocess.run([str(binary), "index", str(prism)], cwd=prism,
                              stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=300)
@@ -956,7 +996,7 @@ def make_codegraph_template(root: Path, binary: Path, key: str, base: Path) -> t
     here -- just the same copy + init + byte-identical-except-`.codegraph`
     check."""
     codegraph = root / "templates" / key / "codegraph"
-    shutil.copytree(base, codegraph)
+    copy_git_template(base, codegraph)
     t0 = time.monotonic()
     initialized = subprocess.run(TOOLS["codegraph"].init_args(binary, codegraph), cwd=codegraph,
                                  stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=300)
@@ -1170,7 +1210,7 @@ def prepare_cell(root: Path, key: str, arm: str, template: Path | None, cfg: Age
     work = root / "work" / key
     out.mkdir(parents=True)
     if template is not None:
-        shutil.copytree(template, work)
+        copy_git_template(template, work)
     spec = TOOLS.get(active_tool(arm))
     mcp = {"mcpServers": {}}
     if spec is not None:

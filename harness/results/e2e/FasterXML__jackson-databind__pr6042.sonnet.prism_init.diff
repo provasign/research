@@ -1,0 +1,31 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/jdk/StringCollectionDeserializer.java b/src/main/java/tools/jackson/databind/deser/jdk/StringCollectionDeserializer.java
+index 405dab1b6..07ba5b2c0 100644
+--- a/src/main/java/tools/jackson/databind/deser/jdk/StringCollectionDeserializer.java
++++ b/src/main/java/tools/jackson/databind/deser/jdk/StringCollectionDeserializer.java
+@@ -13,6 +13,7 @@ import tools.jackson.databind.cfg.CoercionInputShape;
+ import tools.jackson.databind.deser.NullValueProvider;
+ import tools.jackson.databind.deser.ValueInstantiator;
+ import tools.jackson.databind.deser.std.ContainerDeserializerBase;
++import tools.jackson.databind.exc.MismatchedInputException;
+ import tools.jackson.databind.introspect.AnnotatedClass;
+ import tools.jackson.databind.introspect.AnnotatedWithParams;
+ import tools.jackson.databind.jsontype.TypeDeserializer;
+@@ -248,8 +249,16 @@ public final class StringCollectionDeserializer
+                             // custom) one, can hard-code empty String
+                             value = "";
+                         } else {
+-                            // Fail case: delegate to _parseString which will throw proper error
+-                            value = _parseString(p, ctxt, _nullProvider);
++                            // Fail case: parser has already been advanced past the
++                            // original START_ARRAY (to END_ARRAY) to check for
++                            // emptiness; report against START_ARRAY, not END_ARRAY
++                            try {
++                                value = (String) ctxt.handleUnexpectedToken(
++                                        ctxt.constructType(String.class),
++                                        JsonToken.START_ARRAY, p, null);
++                            } catch (MismatchedInputException e) {
++                                throw e.setCurrentToken(JsonToken.START_ARRAY);
++                            }
+                         }
+                     } else {
+                         // Non-empty array: delegate to _parseString which will throw proper error

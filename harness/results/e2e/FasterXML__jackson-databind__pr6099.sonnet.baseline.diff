@@ -1,0 +1,30 @@
+diff --git a/src/main/java/com/fasterxml/jackson/databind/type/TypeFactory.java b/src/main/java/com/fasterxml/jackson/databind/type/TypeFactory.java
+index e8a57c1f8..4fa3a2496 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/type/TypeFactory.java
++++ b/src/main/java/com/fasterxml/jackson/databind/type/TypeFactory.java
+@@ -371,7 +371,7 @@ public class TypeFactory // note: was final in 2.9, removed from 2.10
+         }
+         if (loader != null) {
+             try {
+-                return classForName(className, true, loader);
++                return classForName(className, false, loader);
+             } catch (Exception e) {
+                 prob = ClassUtil.getRootCause(e);
+             }
+@@ -389,11 +389,14 @@ public class TypeFactory // note: was final in 2.9, removed from 2.10
+ 
+     protected Class<?> classForName(String name, boolean initialize,
+             ClassLoader loader) throws ClassNotFoundException {
+-        return Class.forName(name, true, loader);
++        // 25-Sep-2026: do NOT initialize (run static initializer) merely for
++        //    lookup: only actual use of a Class (like instantiation) should
++        //    trigger initialization
++        return Class.forName(name, initialize, loader);
+     }
+ 
+     protected Class<?> classForName(String name) throws ClassNotFoundException {
+-        return Class.forName(name);
++        return Class.forName(name, false, getClass().getClassLoader());
+     }
+ 
+     protected Class<?> _findPrimitive(String className)

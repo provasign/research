@@ -1,0 +1,26 @@
+diff --git a/src/main/java/org/apache/commons/lang3/StringUtils.java b/src/main/java/org/apache/commons/lang3/StringUtils.java
+index 4cc5ab75d..bfefd660c 100644
+--- a/src/main/java/org/apache/commons/lang3/StringUtils.java
++++ b/src/main/java/org/apache/commons/lang3/StringUtils.java
+@@ -3002,6 +3002,10 @@ public static int indexOfDifference(final CharSequence... css) {
+                 break;
+             }
+         }
++        if (firstDiff > 0 && Character.isHighSurrogate(css[0].charAt(firstDiff - 1))
++                && Character.isLowSurrogate(css[0].charAt(firstDiff))) {
++            firstDiff--;
++        }
+         if (firstDiff == -1 && shortestStrLen != longestStrLen) {
+             // we compared all of the characters up to the length of the
+             // shortest string and didn't find a match, but the string lengths
+@@ -3048,6 +3052,10 @@ public static int indexOfDifference(final CharSequence cs1, final CharSequence c
+                 break;
+             }
+         }
++        if (i > 0 && i < cs1.length() && i < cs2.length()
++                && Character.isHighSurrogate(cs1.charAt(i - 1)) && Character.isLowSurrogate(cs1.charAt(i))) {
++            i--;
++        }
+         if (i < cs2.length() || i < cs1.length()) {
+             return i;
+         }

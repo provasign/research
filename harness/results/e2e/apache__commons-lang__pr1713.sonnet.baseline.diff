@@ -1,0 +1,34 @@
+diff --git a/src/main/java/org/apache/commons/lang3/StringUtils.java b/src/main/java/org/apache/commons/lang3/StringUtils.java
+index 4cc5ab75d..76a515b06 100644
+--- a/src/main/java/org/apache/commons/lang3/StringUtils.java
++++ b/src/main/java/org/apache/commons/lang3/StringUtils.java
+@@ -3008,6 +3008,18 @@ public static int indexOfDifference(final CharSequence... css) {
+             // vary, so return the length of the shortest string.
+             return shortestStrLen;
+         }
++        if (firstDiff > 0 && Character.isLowSurrogate(css[0].charAt(firstDiff)) && Character.isHighSurrogate(css[0].charAt(firstDiff - 1))) {
++            boolean allLowSurrogates = true;
++            for (final CharSequence cs : css) {
++                if (!Character.isLowSurrogate(cs.charAt(firstDiff))) {
++                    allLowSurrogates = false;
++                    break;
++                }
++            }
++            if (allLowSurrogates) {
++                return firstDiff - 1;
++            }
++        }
+         return firstDiff;
+     }
+ 
+@@ -3048,6 +3060,10 @@ public static int indexOfDifference(final CharSequence cs1, final CharSequence c
+                 break;
+             }
+         }
++        if (i > 0 && i < cs1.length() && i < cs2.length() && Character.isLowSurrogate(cs1.charAt(i)) && Character.isLowSurrogate(cs2.charAt(i))
++                && Character.isHighSurrogate(cs1.charAt(i - 1))) {
++            --i;
++        }
+         if (i < cs2.length() || i < cs1.length()) {
+             return i;
+         }

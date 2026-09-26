@@ -1,0 +1,16 @@
+diff --git a/context.go b/context.go
+index 1dc730e..9e2912a 100644
+--- a/context.go
++++ b/context.go
+@@ -1219,6 +1219,11 @@ func (c *Context) Render(code int, r render.Render) {
+ // It also updates the HTTP code and sets the Content-Type as "text/html".
+ // See http://golang.org/doc/articles/wiki/
+ func (c *Context) HTML(code int, name string, obj any) {
++	if c.engine.HTMLRender == nil {
++		debugPrint("[WARNING] template %q referenced but no HTML renderer configured; call LoadHTMLGlob/LoadHTMLFiles/LoadHTMLFS before serving requests", name)
++		c.AbortWithStatus(http.StatusInternalServerError)
++		return
++	}
+ 	instance := c.engine.HTMLRender.Instance(name, obj)
+ 	c.Render(code, instance)
+ }

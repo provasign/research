@@ -115,6 +115,7 @@ class SuccessfulToolActionsTests(unittest.TestCase):
         ]}}]
         self.assertEqual(rc.successful_own_tool_actions(events, calls, "sonnet_prism"), 1)
 
+
 class MakePrismTemplateOrderTests(unittest.TestCase):
     def test_index_runs_before_init(self):
         """Regression test: `prism init` alone leaves the graph empty
@@ -144,6 +145,17 @@ class MakePrismTemplateOrderTests(unittest.TestCase):
             with mock.patch.object(rc.subprocess, "run", side_effect=fake_run):
                 rc.make_prism_template(root, binary, "task1", base)
 
+            self.assertEqual(
+                subprocess.run(["git", "config", "--local", "--get", "gc.auto"],
+                               cwd=base, check=True, capture_output=True, text=True).stdout.strip(),
+                "0",
+            )
+            self.assertEqual(
+                subprocess.run(["git", "config", "--local", "--get", "maintenance.auto"],
+                               cwd=base, check=True, capture_output=True, text=True).stdout.strip(),
+                "false",
+            )
+
         self.assertGreaterEqual(len(calls), 3)
         self.assertEqual(calls[0][:2], [str(binary), "index"])
         self.assertEqual(calls[1][:2], [str(binary), "init"])
@@ -172,6 +184,33 @@ class MakePrismTemplateOrderTests(unittest.TestCase):
             with mock.patch.object(rc.subprocess, "run", side_effect=fake_run):
                 with self.assertRaises(RuntimeError):
                     rc.make_prism_template(root, binary, "task1", base)
+
+
+class GitMaintenanceGuardTests(unittest.TestCase):
+    def test_git_command_appends_no_maintenance_config(self):
+        captured = {}
+        original_run = subprocess.run
+
+        def recording_run(args, **kwargs):
+            captured.update(kwargs.get("env") or {})
+            return original_run(args, **kwargs)
+
+        existing = {
+            "GIT_CONFIG_COUNT": "1",
+            "GIT_CONFIG_KEY_0": "core.quotePath",
+            "GIT_CONFIG_VALUE_0": "false",
+        }
+        with mock.patch.dict(_os.environ, existing, clear=False):
+            with mock.patch.object(rc.subprocess, "run", side_effect=recording_run):
+                rc.command(["git", "--version"])
+
+        self.assertEqual(captured["GIT_CONFIG_COUNT"], "3")
+        self.assertEqual(captured["GIT_CONFIG_KEY_0"], "core.quotePath")
+        self.assertEqual(captured["GIT_CONFIG_VALUE_0"], "false")
+        self.assertEqual(captured["GIT_CONFIG_KEY_1"], "gc.auto")
+        self.assertEqual(captured["GIT_CONFIG_VALUE_1"], "0")
+        self.assertEqual(captured["GIT_CONFIG_KEY_2"], "maintenance.auto")
+        self.assertEqual(captured["GIT_CONFIG_VALUE_2"], "false")
 
 
 class InvokesPrismTests(unittest.TestCase):

@@ -47,7 +47,10 @@ TASK_IDS = [ref.id for ref in suites.list_tasks(SUITE)]
 ARMS = ["sonnet_native", "gpt55_native", "sonnet_prism", "gpt55_prism"]
 SONNET_MODEL = "claude-sonnet-5"
 GPT_MODEL = "gpt-5.5"
-LIMIT_S = 300
+LIMIT_S = 480  # was 300: guava-forwarding-delegate's native arm has run as
+                # long as 243s historically even on success, and one cell
+                # hitting 300 aborts the whole multi-task, multi-trial
+                # schedule (this runner stops on the first invalid cell).
 SEED = 20260908
 
 

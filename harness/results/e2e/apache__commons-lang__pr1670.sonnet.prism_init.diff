@@ -1,0 +1,15 @@
+diff --git a/src/main/java/org/apache/commons/lang3/ClassUtils.java b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+index 1e7a3b5e3..e728e43de 100644
+--- a/src/main/java/org/apache/commons/lang3/ClassUtils.java
++++ b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+@@ -1647,6 +1647,10 @@ private static String toCleanName(final String className) {
+             if (dims > MAX_JVM_ARRAY_DIMENSION) {
+                 throw new IllegalArgumentException("Array dimension greater than JVM specification maximum of 255.");
+             }
++            final String arraySuffix = canonicalName.substring(arrIdx);
++            if (!arraySuffix.equals(StringUtils.repeat(arrayMarker, dims))) {
++                throw new IllegalArgumentException("Malformed array class name suffix: " + arraySuffix);
++            }
+             final StringBuilder classNameBuffer = new StringBuilder(StringUtils.repeat(encodedArrayOpen, dims));
+             canonicalName = canonicalName.substring(0, arrIdx);
+             final String abbreviation = ABBREVIATION_MAP.get(canonicalName);

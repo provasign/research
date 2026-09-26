@@ -1,20 +1,30 @@
 diff --git a/src/click/_termui_impl.py b/src/click/_termui_impl.py
-index 1d23026..c75b6cb 100644
+index 1d23026e..91bd9b37 100644
 --- a/src/click/_termui_impl.py
 +++ b/src/click/_termui_impl.py
-@@ -395,6 +395,15 @@ class MaybeStripAnsi(io.TextIOWrapper):
-             text = strip_ansi(text)
-         return super().write(text)
+@@ -439,16 +439,25 @@ def get_pager_file(color: bool | None = None) -> t.Generator[t.TextIO, None, Non
+         # Split streams by capabilities rather than the abstract TextIO /
+         # BinaryIO annotations: buffered text streams can be unwrapped to bytes,
+         # while text-only streams are yielded as-is.
++        wrapped = False
+         if _has_binary_buffer(stream):
+             # Text stream backed by a binary buffer.
+             stream = MaybeStripAnsi(stream.buffer, color=color, encoding=encoding)
++            wrapped = True
+         elif isinstance(stream, t.BinaryIO):
+             # Binary stream
+             stream = MaybeStripAnsi(stream, color=color, encoding=encoding)
++            wrapped = True
+         try:
+             yield stream
+         finally:
+             stream.flush()
++            if wrapped:
++                # MaybeStripAnsi wraps a buffer that belongs to someone else
++                # (e.g. sys.stdout.buffer). Detach it so that this wrapper's
++                # garbage collection doesn't close the shared underlying
++                # buffer out from under its original owner.
++                stream.detach()
  
-+    def close(self) -> None:
-+        # This wrapper doesn't own the underlying binary buffer (it may be
-+        # shared with, e.g., sys.stdout), so only detach from it instead of
-+        # closing it. Otherwise, when this wrapper is garbage collected,
-+        # TextIOWrapper's __del__ would close the shared buffer out from
-+        # under whoever else is using it.
-+        self.flush()
-+        self.detach()
-+
  
- def _pager_contextmanager(
-     color: bool | None = None,
+ @contextlib.contextmanager

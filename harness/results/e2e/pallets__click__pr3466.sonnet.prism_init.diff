@@ -1,0 +1,53 @@
+diff --git a/src/click/shell_completion.py b/src/click/shell_completion.py
+index 7235f100..095553aa 100644
+--- a/src/click/shell_completion.py
++++ b/src/click/shell_completion.py
+@@ -13,6 +13,7 @@ from .core import Group
+ from .core import Option
+ from .core import Parameter
+ from .core import ParameterSource
++from ._compat import _default_text_stdout
+ from .utils import echo
+ 
+ 
+@@ -44,16 +45,38 @@ def shell_complete(
+     comp = comp_cls(cli, ctx_args, prog_name, complete_var)
+ 
+     if instruction == "source":
+-        echo(comp.source())
++        _echo_posix_lines(comp.source())
+         return 0
+ 
+     if instruction == "complete":
+-        echo(comp.complete())
++        _echo_posix_lines(comp.complete())
+         return 0
+ 
+     return 1
+ 
+ 
++def _echo_posix_lines(message: str) -> None:
++    """Write ``message`` to stdout using ``\\n`` line endings only.
++
++    Shell completion scripts and completion responses are consumed by
++    POSIX-style shells (including on Windows, e.g. through Git Bash or
++    MSYS2's zsh). If they were written through :func:`echo`, Python's
++    text-mode stdout would translate ``\\n`` to ``os.linesep`` on
++    Windows, corrupting the script with ``\\r`` characters and breaking
++    shell keywords like ``elif``/``fi``.
++    """
++    stream = _default_text_stdout()
++    buffer = getattr(stream, "buffer", None)
++
++    if buffer is None:
++        echo(message)
++        return
++
++    buffer.write(message.encode(stream.encoding or "utf-8"))
++    buffer.write(b"\n")
++    buffer.flush()
++
++
+ class CompletionItem:
+     """Represents a completion value and metadata about the value. The
+     default metadata is ``type`` to indicate special shell handling,
