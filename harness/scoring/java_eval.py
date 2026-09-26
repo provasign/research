@@ -138,15 +138,44 @@ def _pin_snapshot_parent(wt: Path) -> None:
     pom.write_text(pinned + "</parent>" + head[1])
 
 
+_SUITE_RE = re.compile(r"<testsuite\b(?:[^>]*/>|.*?</testsuite>)", re.S)
+
+
 def _parse_surefire(text: str) -> dict:
+    """classname::name -> PASSED/FAILED/SKIPPED from the surefire XML reports
+    concatenated after ---SUREFIRE---.
+
+    A real XML parse per <testsuite> block. The regex parser this replaces let
+    `[^>]*` swallow the `/` of a self-closing (passing) <testcase/>, so its body
+    ran to the NEXT test's </testcase>: a passing test followed by a failing
+    one read as FAILED and the failing one vanished (2026-09-26). A <failure>
+    or <error> child is FAILED, <skipped> is SKIPPED, anything else PASSED
+    (a <flakyFailure>/<rerunFailure> test passed on rerun). Duplicate ids: a
+    failure anywhere wins. Malformed blocks (a report truncated mid-write) are
+    skipped rather than guessed at."""
+    parts = re.split(r"---SUREFIRE---", text, maxsplit=1)
+    blob = parts[1] if len(parts) > 1 else text
+    rank = {"PASSED": 0, "SKIPPED": 1, "FAILED": 2}
     res = {}
-    xmls = re.split(r"---SUREFIRE---", text, 1)
-    blob = xmls[1] if len(xmls) > 1 else text
-    for m in re.finditer(r"<testcase\b[^>]*\bname=\"([^\"]+)\"[^>]*\bclassname=\"([^\"]+)\"[^>]*(/>|>(.*?)</testcase>)",
-                         blob, re.S):
-        name, cls, _, body = m.group(1), m.group(2), m.group(3), m.group(4) or ""
-        nodeid = f"{cls}::{name}"
-        res[nodeid] = "FAILED" if ("<failure" in body or "<error" in body) else "PASSED"
+    for m in _SUITE_RE.finditer(blob):
+        try:
+            suite = ET.fromstring(m.group(0))
+        except ET.ParseError:
+            continue
+        for tc in suite.iter("testcase"):
+            name, cls = tc.get("name"), tc.get("classname") or suite.get("name")
+            if not name or not cls:
+                continue
+            tags = {c.tag for c in tc}
+            if tags & {"failure", "error"}:
+                o = "FAILED"
+            elif "skipped" in tags:
+                o = "SKIPPED"
+            else:
+                o = "PASSED"
+            k = f"{cls}::{name}"
+            if k not in res or rank[o] > rank[res[k]]:
+                res[k] = o
     return res
 
 
@@ -177,7 +206,8 @@ def _entry_ok(res: dict, entry: str) -> bool:
     if "::" in entry:
         return res.get(entry) == "PASSED"
     hits = [v for k, v in res.items() if k.split("::")[0] == entry]
-    return bool(hits) and all(v == "PASSED" for v in hits)
+    # a @Disabled/assumption-skipped method neither passes nor fails the class
+    return "PASSED" in hits and all(v in ("PASSED", "SKIPPED") for v in hits)
 
 
 def score(repo_dir: Path, task: dict, agent_patch: str) -> dict:
