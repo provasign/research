@@ -1,0 +1,17 @@
+diff --git a/packages/zod/src/v4/core/regexes.ts b/packages/zod/src/v4/core/regexes.ts
+index e2445da7..bbb02324 100644
+--- a/packages/zod/src/v4/core/regexes.ts
++++ b/packages/zod/src/v4/core/regexes.ts
+@@ -133,10 +133,10 @@ export function datetime(args: {
+ }): RegExp {
+   const time = timeSource({ precision: args.precision });
+   const opts = ["Z"];
+-  if (args.local) opts.push("");
+   // if (args.offset) opts.push(`([+-]\\d{2}:\\d{2})`);
+   if (args.offset) opts.push(`([+-](?:[01]\\d|2[0-3]):[0-5]\\d)`);
+-  const timeRegex = `${time}(?:${opts.join("|")})`;
++  const tzRegex = `(?:${opts.join("|")})${args.local ? "?" : ""}`;
++  const timeRegex = `${time}${tzRegex}`;
+ 
+   return new RegExp(`^${dateSource}T(?:${timeRegex})$`);
+ }

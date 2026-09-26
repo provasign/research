@@ -1,0 +1,115 @@
+diff --git a/command.go b/command.go
+index d1fc008e..59b3a030 100644
+--- a/command.go
++++ b/command.go
+@@ -205,6 +205,28 @@ func (cmd *Command) allFlags() []Flag {
+ 	return flags
+ }
+ 
++// preParseStateResetter is implemented by flags which track whether
++// PreParse has already applied them, so that a flag instance shared
++// between a parent command and one of its subcommands isn't re-applied
++// (and its value discarded) partway through a single Run.
++type preParseStateResetter interface {
++	resetPreParseState()
++}
++
++// resetFlagsPreParseState clears the "already applied" bit tracked by flags
++// across the whole command tree so each top-level Run starts from a clean
++// slate, regardless of whether previous Run calls left that bit set.
++func resetFlagsPreParseState(cmd *Command) {
++	for _, fl := range cmd.allFlags() {
++		if r, ok := fl.(preParseStateResetter); ok {
++			r.resetPreParseState()
++		}
++	}
++	for _, subCmd := range cmd.Commands {
++		resetFlagsPreParseState(subCmd)
++	}
++}
++
+ // useShortOptionHandling traverses Lineage() for *any* ancestors
+ // with UseShortOptionHandling
+ func (cmd *Command) useShortOptionHandling() bool {
+diff --git a/command_run.go b/command_run.go
+index 87fa7e7f..d567c68f 100644
+--- a/command_run.go
++++ b/command_run.go
+@@ -136,6 +136,7 @@ func (cmd *Command) run(ctx context.Context, osArgs []string) (_ context.Context
+ 
+ 	if cmd.parent == nil {
+ 		cmd.setupCommandGraph()
++		resetFlagsPreParseState(cmd)
+ 	}
+ 
+ 	var rargs Args = &stringSliceArgs{v: osArgs}
+diff --git a/flag_bool_with_inverse.go b/flag_bool_with_inverse.go
+index bc12c25a..7ac3c257 100644
+--- a/flag_bool_with_inverse.go
++++ b/flag_bool_with_inverse.go
+@@ -68,6 +68,15 @@ func (bif *BoolWithInverseFlag) inversePrefix() string {
+ }
+ 
+ func (bif *BoolWithInverseFlag) PreParse() error {
++	// if the flag has already been applied to a flag set (e.g. because the
++	// same flag instance is shared between a parent command and one of its
++	// subcommands) then re-running PreParse would recreate bif.value and
++	// discard any value already read from the command line, env vars, or
++	// other sources.
++	if bif.applied {
++		return nil
++	}
++
+ 	count := bif.Config.Count
+ 	if count == nil {
+ 		count = &bif.count
+@@ -92,6 +101,14 @@ func (bif *BoolWithInverseFlag) PreParse() error {
+ 	return nil
+ }
+ 
++// resetPreParseState clears the applied bit set by PreParse so that the next
++// top-level Run of a Command tree starts from a clean slate, even though a
++// single Run may legitimately call PreParse more than once for the same flag
++// instance when it is shared between a parent command and its subcommands.
++func (bif *BoolWithInverseFlag) resetPreParseState() {
++	bif.applied = false
++}
++
+ func (bif *BoolWithInverseFlag) PostParse() error {
+ 	tracef("postparse (flag=%[1]q)", bif.Name)
+ 
+diff --git a/flag_impl.go b/flag_impl.go
+index ab97da87..5adb7c50 100644
+--- a/flag_impl.go
++++ b/flag_impl.go
+@@ -157,6 +157,15 @@ func (f *FlagBase[T, C, V]) setMultiValueParsingConfig(c multiValueParsingConfig
+ }
+ 
+ func (f *FlagBase[T, C, V]) PreParse() error {
++	// if the flag has already been applied to a flag set (e.g. because the
++	// same flag instance is shared between a parent command and one of its
++	// subcommands) then re-running PreParse would recreate f.value and
++	// discard any value already read from the command line, env vars, or
++	// other sources.
++	if f.applied {
++		return nil
++	}
++
+ 	newVal := f.Value
+ 
+ 	if f.Destination == nil {
+@@ -175,6 +184,14 @@ func (f *FlagBase[T, C, V]) PreParse() error {
+ 	return nil
+ }
+ 
++// resetPreParseState clears the applied bit set by PreParse so that the next
++// top-level Run of a Command tree starts from a clean slate, even though a
++// single Run may legitimately call PreParse more than once for the same flag
++// instance when it is shared between a parent command and its subcommands.
++func (f *FlagBase[T, C, V]) resetPreParseState() {
++	f.applied = false
++}
++
+ // Set applies given value from string
+ func (f *FlagBase[T, C, V]) Set(_ string, val string) error {
+ 	tracef("apply (flag=%[1]q)", f.Name)

@@ -1,0 +1,46 @@
+diff --git a/gson/src/main/java/com/google/gson/stream/JsonReader.java b/gson/src/main/java/com/google/gson/stream/JsonReader.java
+index e908c79d..d81f2477 100644
+--- a/gson/src/main/java/com/google/gson/stream/JsonReader.java
++++ b/gson/src/main/java/com/google/gson/stream/JsonReader.java
+@@ -1050,7 +1050,12 @@ public class JsonReader implements Closeable {
+     }
+ 
+     peeked = PEEKED_BUFFERED;
+-    double result = Double.parseDouble(peekedString); // don't catch this NumberFormatException.
++    double result;
++    try {
++      result = Double.parseDouble(peekedString);
++    } catch (NumberFormatException e) {
++      throw new NumberFormatException("Cannot parse " + peekedString + locationString());
++    }
+     if (strictness != Strictness.LENIENT && (Double.isNaN(result) || Double.isInfinite(result))) {
+       throw syntaxError("JSON forbids NaN and infinities: " + result);
+     }
+@@ -1104,7 +1109,12 @@ public class JsonReader implements Closeable {
+     }
+ 
+     peeked = PEEKED_BUFFERED;
+-    double asDouble = Double.parseDouble(peekedString); // don't catch this NumberFormatException.
++    double asDouble;
++    try {
++      asDouble = Double.parseDouble(peekedString);
++    } catch (NumberFormatException e) {
++      throw new NumberFormatException("Cannot parse " + peekedString + locationString());
++    }
+     long result = (long) asDouble;
+     if (result != asDouble) { // Make sure no precision was lost casting to 'long'.
+       throw new NumberFormatException("Expected a long but was " + peekedString + locationString());
+@@ -1347,7 +1357,12 @@ public class JsonReader implements Closeable {
+     }
+ 
+     peeked = PEEKED_BUFFERED;
+-    double asDouble = Double.parseDouble(peekedString); // don't catch this NumberFormatException.
++    double asDouble;
++    try {
++      asDouble = Double.parseDouble(peekedString);
++    } catch (NumberFormatException e) {
++      throw new NumberFormatException("Cannot parse " + peekedString + locationString());
++    }
+     result = (int) asDouble;
+     if (result != asDouble) { // Make sure no precision was lost casting to 'int'.
+       throw new NumberFormatException("Expected an int but was " + peekedString + locationString());

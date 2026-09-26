@@ -1,0 +1,84 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java b/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java
+index f538965a7..8c73afc7c 100644
+--- a/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java
++++ b/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java
+@@ -232,7 +232,7 @@ public class ExternalTypeHandler
+                     SettableBeanProperty prop = extProp.getProperty();
+                     Object result = TypeDeserializer.deserializeIfNatural(buffered, ctxt, prop.getType());
+                     if (result != null) {
+-                        prop.set(ctxt, bean, result);
++                        _setIfVisibleInView(ctxt, prop, bean, result);
+                         continue;
+                     }
+                 }
+@@ -276,6 +276,7 @@ public class ExternalTypeHandler
+         // first things first: deserialize all data buffered:
+         final int len = _properties.length;
+         Object[] values = new Object[len];
++        final Class<?> activeView = ctxt.getActiveView();
+         for (int i = 0; i < len; ++i) {
+             String typeId = _typeIds[i];
+             final ExtTypedProperty extProp = _properties[i];
+@@ -301,7 +302,8 @@ public class ExternalTypeHandler
+                         values[i] = result;
+                         // Unlike bean-based complete(), creator-based needs
+                         // to assign parameter to buffer before continuing
+-                        if (prop.isCreatorProperty()) {
++                        if (prop.isCreatorProperty()
++                                && (activeView == null || prop.visibleInView(activeView))) {
+                             buffer.assignParameter(prop, result);
+                         }
+                         continue;
+@@ -332,9 +334,12 @@ public class ExternalTypeHandler
+             }
+ 
+             final SettableBeanProperty prop = extProp.getProperty();
++            final boolean visibleInView = (activeView == null) || prop.visibleInView(activeView);
+             // also: if it's creator prop, fill in
+             if (prop.isCreatorProperty()) {
+-                buffer.assignParameter(prop, values[i]);
++                if (visibleInView) {
++                    buffer.assignParameter(prop, values[i]);
++                }
+ 
+                 // [databind#999] And maybe there's creator property for type id too?
+                 SettableBeanProperty typeProp = extProp.getTypeProperty();
+@@ -359,7 +364,8 @@ public class ExternalTypeHandler
+         // third: assign non-creator properties
+         for (int i = 0; i < len; ++i) {
+             SettableBeanProperty prop = _properties[i].getProperty();
+-            if (!prop.isCreatorProperty()) {
++            if (!prop.isCreatorProperty()
++                    && (activeView == null || prop.visibleInView(activeView))) {
+                 prop.set(ctxt, bean, values[i]);
+             }
+         }
+@@ -436,7 +442,7 @@ public class ExternalTypeHandler
+         JsonToken t = p2.nextToken();
+         // 29-Sep-2015, tatu: As per [databind#942], nulls need special support
+         if (t == JsonToken.VALUE_NULL) {
+-            prop.set(ctxt, bean, null);
++            _setIfVisibleInView(ctxt, prop, bean, null);
+             return;
+         }
+         // [databind#2747]: invoke subtype deserializer via the known-type-id entry
+@@ -444,7 +450,18 @@ public class ExternalTypeHandler
+         // would otherwise expose a synthetic array in `JsonParser.streamReadContext()`
+         // to any custom deserializer examining parsing state).
+         Object value = extProp._typeDeserializer.deserializeTypedWithKnownTypeId(p2, ctxt, typeId);
+-        prop.set(ctxt, bean, value);
++        _setIfVisibleInView(ctxt, prop, bean, value);
++    }
++
++    // [databind#5348]: `@JsonView` must still be honored for properties using
++    // external type id inclusion, same as for regular properties.
++    private static void _setIfVisibleInView(DeserializationContext ctxt,
++            SettableBeanProperty prop, Object bean, Object value)
++    {
++        Class<?> activeView = ctxt.getActiveView();
++        if (activeView == null || prop.visibleInView(activeView)) {
++            prop.set(ctxt, bean, value);
++        }
+     }
+ 
+     /*

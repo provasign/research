@@ -1,0 +1,41 @@
+diff --git a/src/helper/accepts/accepts.ts b/src/helper/accepts/accepts.ts
+index 4c4a4245..eff2e20e 100644
+--- a/src/helper/accepts/accepts.ts
++++ b/src/helper/accepts/accepts.ts
+@@ -45,12 +45,14 @@ const getSpecificity = (type: string): number => {
+ 
+ export const defaultMatch = (accepts: Accept[], config: acceptsConfig): string => {
+   const { supports, default: defaultSupport } = config
+-  const sortedAccepts = accepts.slice().sort((a, b) => {
+-    if (b.q !== a.q) {
+-      return b.q - a.q
+-    }
+-    return getSpecificity(b.type) - getSpecificity(a.type)
+-  })
++  const sortedAccepts = accepts
++    .filter((accept) => accept.q > 0)
++    .sort((a, b) => {
++      if (b.q !== a.q) {
++        return b.q - a.q
++      }
++      return getSpecificity(b.type) - getSpecificity(a.type)
++    })
+ 
+   for (const accept of sortedAccepts) {
+     const matched = supports.find((supported) => matchType(accept.type, supported))
+diff --git a/src/middleware/language/language.ts b/src/middleware/language/language.ts
+index d57d8194..3af94b2b 100644
+--- a/src/middleware/language/language.ts
++++ b/src/middleware/language/language.ts
+@@ -158,7 +158,10 @@ export function detectFromHeader(c: Context, options: DetectorOptions): string |
+     }
+ 
+     const languages = parseAcceptLanguage(acceptLanguage)
+-    for (const { lang } of languages) {
++    for (const { lang, q } of languages) {
++      if (q <= 0) {
++        continue
++      }
+       const normalizedLang = normalizeLanguage(lang, options)
+       if (normalizedLang) {
+         return normalizedLang

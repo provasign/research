@@ -1,0 +1,16 @@
+diff --git a/middleware/static.go b/middleware/static.go
+index a9e67b6..3ef28bd 100644
+--- a/middleware/static.go
++++ b/middleware/static.go
+@@ -196,7 +196,10 @@ func (config StaticConfig) ToMiddleware() (echo.MiddlewareFunc, error) {
+ 			}
+ 
+ 			p := c.Request().URL.Path
+-			pathUnescape := true
++			// Note: net/http already unescapes URL.Path, so no unescaping is needed here. Unescaping it
++			// again would corrupt file names that contain a percent-encoded percent sign (e.g. `100%.txt`
++			// requested as `/100%25.txt`) and break real percent signs already present in the target path.
++			pathUnescape := false
+ 			if strings.HasSuffix(c.Path(), "*") { // When serving from a group, e.g. `/static*`.
+ 				p = c.Param("*")
+ 				pathUnescape = !config.DisablePathUnescaping // because router could already do PathUnescape

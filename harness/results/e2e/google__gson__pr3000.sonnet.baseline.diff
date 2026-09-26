@@ -1,0 +1,53 @@
+diff --git a/gson/src/main/java/com/google/gson/stream/JsonReader.java b/gson/src/main/java/com/google/gson/stream/JsonReader.java
+index e908c79d..be3f3740 100644
+--- a/gson/src/main/java/com/google/gson/stream/JsonReader.java
++++ b/gson/src/main/java/com/google/gson/stream/JsonReader.java
+@@ -1016,6 +1016,21 @@ public class JsonReader implements Closeable {
+     }
+   }
+ 
++  /**
++   * Parses {@code value} as a double, adding location information to the exception message if
++   * parsing fails.
++   */
++  private double parseDouble(String value) {
++    try {
++      return Double.parseDouble(value);
++    } catch (NumberFormatException e) {
++      NumberFormatException locatedException =
++          new NumberFormatException("Cannot parse " + value + " as double" + locationString());
++      locatedException.initCause(e);
++      throw locatedException;
++    }
++  }
++
+   /**
+    * Returns the {@link JsonToken#NUMBER double} value of the next token, consuming it. If the next
+    * token is a string, this method will attempt to parse it as a double using {@link
+@@ -1050,7 +1065,7 @@ public class JsonReader implements Closeable {
+     }
+ 
+     peeked = PEEKED_BUFFERED;
+-    double result = Double.parseDouble(peekedString); // don't catch this NumberFormatException.
++    double result = parseDouble(peekedString);
+     if (strictness != Strictness.LENIENT && (Double.isNaN(result) || Double.isInfinite(result))) {
+       throw syntaxError("JSON forbids NaN and infinities: " + result);
+     }
+@@ -1104,7 +1119,7 @@ public class JsonReader implements Closeable {
+     }
+ 
+     peeked = PEEKED_BUFFERED;
+-    double asDouble = Double.parseDouble(peekedString); // don't catch this NumberFormatException.
++    double asDouble = parseDouble(peekedString);
+     long result = (long) asDouble;
+     if (result != asDouble) { // Make sure no precision was lost casting to 'long'.
+       throw new NumberFormatException("Expected a long but was " + peekedString + locationString());
+@@ -1347,7 +1362,7 @@ public class JsonReader implements Closeable {
+     }
+ 
+     peeked = PEEKED_BUFFERED;
+-    double asDouble = Double.parseDouble(peekedString); // don't catch this NumberFormatException.
++    double asDouble = parseDouble(peekedString);
+     result = (int) asDouble;
+     if (result != asDouble) { // Make sure no precision was lost casting to 'int'.
+       throw new NumberFormatException("Expected an int but was " + peekedString + locationString());

@@ -1,0 +1,16 @@
+diff --git a/src/main/java/tools/jackson/databind/ser/jdk/ObjectArraySerializer.java b/src/main/java/tools/jackson/databind/ser/jdk/ObjectArraySerializer.java
+index d5adb592c..c57e9caed 100644
+--- a/src/main/java/tools/jackson/databind/ser/jdk/ObjectArraySerializer.java
++++ b/src/main/java/tools/jackson/databind/ser/jdk/ObjectArraySerializer.java
+@@ -165,8 +165,10 @@ public class ObjectArraySerializer
+         if (ser == null) {
+             // 30-Sep-2012, tatu: One more thing -- if explicit content type is annotated,
+             //   we can consider it a static case as well.
++            // [databind#1515]: but allow per-property DYNAMIC override
+             if (_elementType != null) {
+-                if (_staticTyping && !_elementType.isJavaLangObject()) {
++                if (_staticTyping && !_elementType.isJavaLangObject()
++                        && !_hasDynamicTypingOverride(ctxt, property)) {
+                     ser = ctxt.findContentValueSerializer(_elementType, property);
+                 }
+             }

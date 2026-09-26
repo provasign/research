@@ -1,0 +1,165 @@
+diff --git a/gson/src/main/java/com/google/gson/stream/JsonReader.java b/gson/src/main/java/com/google/gson/stream/JsonReader.java
+index b96c8269..ebce4a5d 100644
+--- a/gson/src/main/java/com/google/gson/stream/JsonReader.java
++++ b/gson/src/main/java/com/google/gson/stream/JsonReader.java
+@@ -1211,6 +1211,9 @@ public class JsonReader implements Closeable {
+     // Like nextNonWhitespace, this uses locals 'p' and 'l' to save inner-loop field access.
+     char[] buffer = this.buffer;
+     StringBuilder builder = null;
++    // A high surrogate produced by a preceding "\\u" escape that has not yet been paired with a
++    // following low surrogate escape, or 0 if there is none pending.
++    char pendingHighSurrogate = 0;
+     while (true) {
+       int p = pos;
+       int l = limit;
+@@ -1230,6 +1233,7 @@ public class JsonReader implements Closeable {
+           if (builder == null) {
+             return new String(buffer, start, len);
+           } else {
++            flushPendingSurrogate(builder, pendingHighSurrogate);
+             builder.append(buffer, start, len);
+             return builder.toString();
+           }
+@@ -1240,8 +1244,13 @@ public class JsonReader implements Closeable {
+             int estimatedLength = (len + 1) * 2;
+             builder = new StringBuilder(Math.max(estimatedLength, 16));
+           }
++          if (len > 0) {
++            flushPendingSurrogate(builder, pendingHighSurrogate);
++            pendingHighSurrogate = 0;
++          }
+           builder.append(buffer, start, len);
+-          builder.append(readEscapeCharacter());
++          pendingHighSurrogate =
++              appendUnicodeEscape(builder, pendingHighSurrogate, readEscapeCharacter());
+           p = pos;
+           l = limit;
+           start = p;
+@@ -1255,6 +1264,8 @@ public class JsonReader implements Closeable {
+         int estimatedLength = (p - start) * 2;
+         builder = new StringBuilder(Math.max(estimatedLength, 16));
+       }
++      flushPendingSurrogate(builder, pendingHighSurrogate);
++      pendingHighSurrogate = 0;
+       builder.append(buffer, start, p - start);
+       pos = p;
+       if (!fillBuffer(1)) {
+@@ -1263,6 +1274,55 @@ public class JsonReader implements Closeable {
+     }
+   }
+ 
++  /**
++   * Throws if {@code strictness} is {@link Strictness#STRICT} and {@code surrogate} is a lone
++   * (unpaired) UTF-16 surrogate originating from a {@code \\u} escape sequence. RFC 8259 leaves
++   * the handling of such lone surrogates unspecified, but RFC 7493 (I-JSON) and RFC 8785 (JCS)
++   * require them to be rejected.
++   */
++  private void checkUnpairedSurrogate(char surrogate) throws IOException {
++    if (strictness == Strictness.STRICT) {
++      throw syntaxError(
++          "Unpaired surrogate in \\u escape: \\u"
++              + Integer.toHexString(0x10000 | surrogate).substring(1));
++    }
++  }
++
++  /** Appends any pending unpaired high surrogate to {@code builder} in non-strict mode. */
++  private void flushPendingSurrogate(StringBuilder builder, char pendingHighSurrogate)
++      throws IOException {
++    if (pendingHighSurrogate != 0) {
++      checkUnpairedSurrogate(pendingHighSurrogate);
++      builder.append(pendingHighSurrogate);
++    }
++  }
++
++  /**
++   * Handles a character produced by {@link #readEscapeCharacter()}, pairing it with {@code
++   * pendingHighSurrogate} (a preceding unpaired high surrogate escape, or 0 if there is none) if
++   * possible, and appending the resolved character(s) to {@code builder}. Returns the new pending
++   * high surrogate, or 0 if there is none.
++   */
++  private char appendUnicodeEscape(StringBuilder builder, char pendingHighSurrogate, char escaped)
++      throws IOException {
++    if (pendingHighSurrogate != 0) {
++      if (Character.isLowSurrogate(escaped)) {
++        builder.append(pendingHighSurrogate).append(escaped);
++        return 0;
++      }
++      checkUnpairedSurrogate(pendingHighSurrogate);
++      builder.append(pendingHighSurrogate);
++    }
++    if (Character.isHighSurrogate(escaped)) {
++      return escaped;
++    }
++    if (Character.isLowSurrogate(escaped)) {
++      checkUnpairedSurrogate(escaped);
++    }
++    builder.append(escaped);
++    return 0;
++  }
++
+   /** Returns an unquoted value as a string. */
+   @SuppressWarnings("fallthrough")
+   private String nextUnquotedValue() throws IOException {
+@@ -1326,6 +1386,9 @@ public class JsonReader implements Closeable {
+   private void skipQuotedValue(char quote) throws IOException {
+     // Like nextNonWhitespace, this uses locals 'p' and 'l' to save inner-loop field access.
+     char[] buffer = this.buffer;
++    // A high surrogate produced by a preceding "\\u" escape that has not yet been paired with a
++    // following low surrogate escape, or 0 if there is none pending.
++    char pendingHighSurrogate = 0;
+     do {
+       int p = pos;
+       int l = limit;
+@@ -1334,15 +1397,24 @@ public class JsonReader implements Closeable {
+         int c = buffer[p++];
+         if (c == quote) {
+           pos = p;
++          if (pendingHighSurrogate != 0) {
++            checkUnpairedSurrogate(pendingHighSurrogate);
++          }
+           return;
+         } else if (c == '\\') {
+           pos = p;
+-          char unused = readEscapeCharacter();
++          pendingHighSurrogate = skipUnicodeEscape(pendingHighSurrogate, readEscapeCharacter());
+           p = pos;
+           l = limit;
+-        } else if (c == '\n') {
+-          lineNumber++;
+-          lineStart = p;
++        } else {
++          if (c == '\n') {
++            lineNumber++;
++            lineStart = p;
++          }
++          if (pendingHighSurrogate != 0) {
++            checkUnpairedSurrogate(pendingHighSurrogate);
++            pendingHighSurrogate = 0;
++          }
+         }
+       }
+       pos = p;
+@@ -1350,6 +1422,23 @@ public class JsonReader implements Closeable {
+     throw syntaxError("Unterminated string");
+   }
+ 
++  /** Like {@link #appendUnicodeEscape}, but for {@link #skipQuotedValue} which discards content. */
++  private char skipUnicodeEscape(char pendingHighSurrogate, char escaped) throws IOException {
++    if (pendingHighSurrogate != 0) {
++      if (Character.isLowSurrogate(escaped)) {
++        return 0;
++      }
++      checkUnpairedSurrogate(pendingHighSurrogate);
++    }
++    if (Character.isHighSurrogate(escaped)) {
++      return escaped;
++    }
++    if (Character.isLowSurrogate(escaped)) {
++      checkUnpairedSurrogate(escaped);
++    }
++    return 0;
++  }
++
+   @SuppressWarnings("fallthrough")
+   private void skipUnquotedValue() throws IOException {
+     do {

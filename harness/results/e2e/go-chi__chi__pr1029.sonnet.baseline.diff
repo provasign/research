@@ -1,0 +1,42 @@
+diff --git a/tree.go b/tree.go
+index 9f56549..8e0fa9e 100644
+--- a/tree.go
++++ b/tree.go
+@@ -479,7 +479,9 @@ func (n *node) findRoute(rctx *Context, method methodTyp, path string) *node {
+ 							if endpoints == mALL || endpoints == mSTUB {
+ 								continue
+ 							}
+-							rctx.methodsAllowed = append(rctx.methodsAllowed, endpoints)
++							if !methodTypInSlice(endpoints, rctx.methodsAllowed) {
++								rctx.methodsAllowed = append(rctx.methodsAllowed, endpoints)
++							}
+ 						}
+ 
+ 						// flag that the routing context found a route, but not a corresponding
+@@ -525,7 +527,9 @@ func (n *node) findRoute(rctx *Context, method methodTyp, path string) *node {
+ 					if endpoints == mALL || endpoints == mSTUB {
+ 						continue
+ 					}
+-					rctx.methodsAllowed = append(rctx.methodsAllowed, endpoints)
++					if !methodTypInSlice(endpoints, rctx.methodsAllowed) {
++						rctx.methodsAllowed = append(rctx.methodsAllowed, endpoints)
++					}
+ 				}
+ 
+ 				// flag that the routing context found a route, but not a corresponding
+@@ -709,6 +713,15 @@ func equalHandlers(a, b http.Handler) bool {
+ 	return false
+ }
+ 
++func methodTypInSlice(m methodTyp, methods []methodTyp) bool {
++	for _, me := range methods {
++		if me == m {
++			return true
++		}
++	}
++	return false
++}
++
+ func (n *node) walk(fn func(eps endpoints, subroutes Routes) bool) bool {
+ 	// Visit the leaf values if any
+ 	if (n.endpoints != nil || n.subroutes != nil) && fn(n.endpoints, n.subroutes) {

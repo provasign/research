@@ -1,0 +1,17 @@
+diff --git a/dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/router/state/BitList.java b/dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/router/state/BitList.java
+index 013a4010e..2a81e257a 100644
+--- a/dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/router/state/BitList.java
++++ b/dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/router/state/BitList.java
+@@ -123,7 +123,11 @@ public class BitList<E> extends AbstractList<E> implements Cloneable {
+     public synchronized BitList<E> and(BitList<E> target) {
+         rootSet.and(target.rootSet);
+         if (target.getTailList() != null) {
+-            target.getTailList().forEach(this::addToTailList);
++            target.getTailList().forEach(e -> {
++                if (tailList == null || !tailList.contains(e)) {
++                    addToTailList(e);
++                }
++            });
+         }
+         return this;
+     }

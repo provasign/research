@@ -1,0 +1,15 @@
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/InetSocketAddressSerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/InetSocketAddressSerializer.java
+index 8720fddfd..e01e52990 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/InetSocketAddressSerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/InetSocketAddressSerializer.java
+@@ -34,6 +34,10 @@ public class InetSocketAddressSerializer
+             } else { // otherwise use name
+                 str = str.substring(0, ix);
+             }
++        } else if (addr == null && str.indexOf(':') >= 0 && str.charAt(0) != '[') {
++            // Unresolved address with an IPv6 literal host name: bracket it so the
++            // port can be distinguished from the address's own hextets.
++            str = "[" + str + "]";
+         }
+ 
+         g.writeString(str + ":" + value.getPort());

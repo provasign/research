@@ -1,0 +1,18 @@
+diff --git a/middleware/content_charset.go b/middleware/content_charset.go
+index 8e75fe8..18ab646 100644
+--- a/middleware/content_charset.go
++++ b/middleware/content_charset.go
+@@ -15,6 +15,13 @@ func ContentCharset(charsets ...string) func(next http.Handler) http.Handler {
+ 
+ 	return func(next http.Handler) http.Handler {
+ 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++			// Skip the check for requests with no body and no declared Content-Type,
++			// since there's nothing to interpret with a charset.
++			if r.ContentLength == 0 && r.Header.Get("Content-Type") == "" {
++				next.ServeHTTP(w, r)
++				return
++			}
++
+ 			if !contentEncoding(r.Header.Get("Content-Type"), charsets...) {
+ 				w.WriteHeader(http.StatusUnsupportedMediaType)
+ 				return

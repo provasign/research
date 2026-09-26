@@ -1,0 +1,52 @@
+diff --git a/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanPropertyWriter.java b/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanPropertyWriter.java
+index d1b3482c..469cbf42 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanPropertyWriter.java
++++ b/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanPropertyWriter.java
+@@ -81,7 +81,9 @@ public class XmlBeanPropertyWriter
+             ValueSerializer<Object> serializer, boolean dynamicWrapping)
+     {
+         super(wrapped);
+-        _wrapperQName = _qname(wrapperName);
++        // 26-Sep-2026, tatu: [dataformat-xml#834] `wrapperName` may be `null` for
++        //    unwrapped List/array properties that still need null-suppression
++        _wrapperQName = (wrapperName == null) ? null : _qname(wrapperName);
+         _wrappedQName = _qname(wrappedName);
+         _dynamicWrapping = dynamicWrapping;
+ 
+@@ -122,6 +124,16 @@ public class XmlBeanPropertyWriter
+             return;
+         }
+ 
++        // 26-Sep-2026, tatu: [dataformat-xml#834] No wrapper element (unwrapped
++        //    List/array): only need to suppress `null` the way wrapped case does;
++        //    non-null values use default (per-item) serialization as-is.
++        if (_wrapperQName == null) {
++            if (value != null) {
++                super.serializeAsProperty(bean, g, ctxt);
++            }
++            return;
++        }
++
+         /* 13-Feb-2014, tatu: As per [#103], default handling does not really
+          *   work here. Rather, we need just a wrapping and should NOT call
+          *   null handler, as it does not know what to do...
+diff --git a/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java b/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java
+index 2734a6d0..9b5e187c 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java
++++ b/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java
+@@ -77,6 +77,15 @@ public class XmlBeanSerializerModifier
+ 
+             // first things first: no wrapping?
+             if (wrapperName == null || wrapperName == PropertyName.NO_NAME) {
++                // 26-Sep-2026, tatu: [dataformat-xml#834] Unwrapped List/array
++                //    properties still need `null` suppressed (instead of writing an
++                //    empty/nil element that round-trips back as a one-item list);
++                //    dynamically-wrapped (Object-typed) properties are left as-is.
++                if (dynamicWrapping) {
++                    continue;
++                }
++                beanProperties.set(i,
++                        new XmlBeanPropertyWriter(bpw, null, wrappedName, false));
+                 continue;
+             }
+             // no local name? Just double the wrapped name for wrapper

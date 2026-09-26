@@ -1,0 +1,17 @@
+diff --git a/src/main/java/tools/jackson/dataformat/xml/deser/XmlTokenStream.java b/src/main/java/tools/jackson/dataformat/xml/deser/XmlTokenStream.java
+index 1f1df9bb..c5700d47 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/deser/XmlTokenStream.java
++++ b/src/main/java/tools/jackson/dataformat/xml/deser/XmlTokenStream.java
+@@ -364,6 +364,12 @@ public class XmlTokenStream
+     protected void repeatStartElement()
+     {
+ //System.out.println(" XmlTokenStream.repeatStartElement() for <"+_localName+">, _currentWrapper was: "+_currentWrapper);
++        // element marked `xsi:nil="true"` has no actual content; must NOT be
++        // wrapped as a (single-element) array as that would prevent it from
++        // being exposed as `null` and instead produce an empty/1-item List.
++        if (_xsiNilFound) {
++            return;
++        }
+         // sanity check: can only be used when just returned START_ELEMENT:
+         if (_currentState != XML_START_ELEMENT) {
+             // 14-May-2020, tatu: Looks like we DO end up here with empty Lists; if so,

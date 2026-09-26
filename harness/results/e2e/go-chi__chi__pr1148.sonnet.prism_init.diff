@@ -1,0 +1,62 @@
+diff --git a/tree.go b/tree.go
+index 74ff43d..45b434d 100644
+--- a/tree.go
++++ b/tree.go
+@@ -133,6 +133,11 @@ type endpoint struct {
+ 
+ 	// parameter keys recorded on handler nodes
+ 	paramKeys []string
++
++	// mounted marks a per-method entry that only exists because it was
++	// fanned out from a mALL (e.g. Mount) registration, as opposed to an
++	// explicit registration for that specific method.
++	mounted bool
+ }
+ 
+ func (s endpoints) Value(method methodTyp) *endpoint {
+@@ -370,12 +375,14 @@ func (n *node) setEndpoint(method methodTyp, handler http.Handler, pattern strin
+ 			h.handler = handler
+ 			h.pattern = pattern
+ 			h.paramKeys = paramKeys
++			h.mounted = true
+ 		}
+ 	} else {
+ 		h := n.endpoints.Value(method)
+ 		h.handler = handler
+ 		h.pattern = pattern
+ 		h.paramKeys = paramKeys
++		h.mounted = false
+ 	}
+ }
+ 
+@@ -630,14 +637,28 @@ func (n *node) routes() []Route {
+ 
+ 	n.walk(func(eps endpoints, subroutes Routes) bool {
+ 		if eps[mSTUB] != nil && eps[mSTUB].handler != nil && subroutes == nil {
+-			return false
++			// This node only carries mount/stub bookkeeping; skip it unless
++			// some method was explicitly registered on it as well (e.g. a
++			// Get() on the same pattern as a Route()/Mount() without a
++			// trailing slash).
++			hasRegisteredMethod := false
++			for mt, h := range eps {
++				if mt == mALL || mt == mSTUB || h.handler == nil || h.mounted {
++					continue
++				}
++				hasRegisteredMethod = true
++				break
++			}
++			if !hasRegisteredMethod {
++				return false
++			}
+ 		}
+ 
+ 		// Group methodHandlers by unique patterns
+ 		pats := make(map[string]endpoints)
+ 
+ 		for mt, h := range eps {
+-			if h.pattern == "" {
++			if h.pattern == "" || h.mounted {
+ 				continue
+ 			}
+ 			p, ok := pats[h.pattern]

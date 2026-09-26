@@ -1,0 +1,53 @@
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 443cb01b..a40feccb 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -22,7 +22,7 @@ if typing.TYPE_CHECKING:
+ 
+ from ._collections import HTTPHeaderDict
+ from .http2 import probe as http2_probe
+-from .util.response import assert_header_parsing
++from .util.response import _unfold_header_value, assert_header_parsing
+ from .util.timeout import _DEFAULT_TIMEOUT, _TYPE_TIMEOUT, Timeout
+ from .util.util import to_str
+ from .util.wait import wait_for_read
+@@ -616,7 +616,10 @@ class HTTPConnection(_HTTPConnection):
+                 exc_info=True,
+             )
+ 
+-        headers = HTTPHeaderDict(httplib_response.msg.items())
++        headers = HTTPHeaderDict(
++            (name, _unfold_header_value(value))
++            for name, value in httplib_response.msg.items()
++        )
+ 
+         response = HTTPResponse(
+             body=httplib_response,
+diff --git a/src/urllib3/util/response.py b/src/urllib3/util/response.py
+index 0f457869..ae46e5ef 100644
+--- a/src/urllib3/util/response.py
++++ b/src/urllib3/util/response.py
+@@ -1,10 +1,23 @@
+ from __future__ import annotations
+ 
+ import http.client as httplib
++import re
+ from email.errors import MultipartInvariantViolationDefect, StartBoundaryNotFoundDefect
+ 
+ from ..exceptions import HeaderParsingError
+ 
++# Match an obsolete line folding (obs-fold) sequence: a CRLF (or bare LF)
++# followed by at least one space or tab. Per RFC 7230 Section 3.2.4, a
++# recipient that isn't a proxy MUST replace each obs-fold with one or more
++# SP octets before interpreting the field value, since Python's header
++# parser (email.parser) doesn't do this unfolding itself and would
++# otherwise leave the raw CRLF embedded in the header value.
++_OBS_FOLD_RE = re.compile(r"\r\n[ \t]+|\n[ \t]+")
++
++
++def _unfold_header_value(value: str) -> str:
++    return _OBS_FOLD_RE.sub(" ", value)
++
+ 
+ def is_fp_closed(obj: object) -> bool:
+     """

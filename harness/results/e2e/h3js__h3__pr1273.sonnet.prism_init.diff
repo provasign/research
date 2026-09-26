@@ -1,0 +1,37 @@
+diff --git a/src/adapters.ts b/src/adapters.ts
+index 3e7e5bd..5257280 100644
+--- a/src/adapters.ts
++++ b/src/adapters.ts
+@@ -87,9 +87,18 @@ function callNodeHandler(
+ ) {
+   const isMiddleware = handler.length > 2;
+   return new Promise((resolve, reject) => {
++    // A stream piped directly into `res` already writes to the real
++    // response, so `close`/`finish` on `res` is the source of truth for
++    // completion. Track it so the handler's own return doesn't resolve
++    // early (before the pipe finishes) and so we never resolve with the
++    // piped stream itself, which would otherwise be piped into `res` a
++    // second time by the caller and duplicate the response body.
++    let piping = false;
+     res.once("close", () => resolve(kHandled));
+     res.once("finish", () => resolve(kHandled));
+-    res.once("pipe", (stream) => resolve(stream));
++    res.once("pipe", () => {
++      piping = true;
++    });
+     res.once("error", (error) => reject(error));
+     try {
+       if (isMiddleware) {
+@@ -104,7 +113,11 @@ function callNodeHandler(
+         );
+       } else {
+         return Promise.resolve((handler as NodeHandler)(req, res))
+-          .then(() => resolve(kHandled))
++          .then(() => {
++            if (!piping) {
++              resolve(kHandled);
++            }
++          })
+           .catch((error) =>
+             reject(new HTTPError({ cause: error, unhandled: true })),
+           );

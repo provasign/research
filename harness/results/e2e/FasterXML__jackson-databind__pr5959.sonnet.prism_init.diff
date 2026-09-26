@@ -1,0 +1,34 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java
+index cf721c6c5..e2178bc3e 100644
+--- a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java
++++ b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java
+@@ -1410,6 +1410,7 @@ public class BeanDeserializer
+         final ExternalTypeHandler ext = _externalTypeIdHandler.start();
+         final PropertyBasedCreator creator = _propertyBasedCreator;
+         PropertyValueBuffer buffer = creator.startBuilding(p, ctxt, _objectIdReader, false);
++        final Class<?> activeView = _needViewProcesing ? ctxt.getActiveView() : null;
+ 
+         for (JsonToken t = p.currentToken(); t == JsonToken.PROPERTY_NAME; t = p.nextToken()) {
+             String propName = p.currentName();
+@@ -1432,6 +1433,10 @@ public class BeanDeserializer
+                 // 11-Sep-2015, tatu: Important; do NOT pass buffer as last arg, but null,
+                 //   since it is not the bean
+                 if (!ext.handlePropertyValue(p, ctxt, propName, null)) {
++                    if (activeView != null && !creatorProp.visibleInView(activeView)) {
++                        p.skipChildren();
++                        continue;
++                    }
+                     // Last creator property to set?
+                     // [databind#4690] cannot quit early as optimization any more
+                     // if (buffer.assignParameter(creatorProp, value)) { ... build ... }
+@@ -1450,6 +1455,10 @@ public class BeanDeserializer
+                         && ext.handleTypePropertyValue(p, ctxt, propName, null)) {
+                     continue;
+                 }
++                if (activeView != null && !prop.visibleInView(activeView)) {
++                    p.skipChildren();
++                    continue;
++                }
+                 buffer.bufferProperty(prop, prop.deserialize(p, ctxt));
+                 continue;
+             }

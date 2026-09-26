@@ -1,0 +1,44 @@
+diff --git a/tree.go b/tree.go
+index 74ff43d..7d3580c 100644
+--- a/tree.go
++++ b/tree.go
+@@ -7,6 +7,7 @@ package chi
+ import (
+ 	"fmt"
+ 	"net/http"
++	"reflect"
+ 	"regexp"
+ 	"slices"
+ 	"sort"
+@@ -629,8 +630,16 @@ func (n *node) routes() []Route {
+ 	rts := []Route{}
+ 
+ 	n.walk(func(eps endpoints, subroutes Routes) bool {
+-		if eps[mSTUB] != nil && eps[mSTUB].handler != nil && subroutes == nil {
+-			return false
++		// A mount's stub handler blankets every method at the mount point so
++		// that any request can reach the subrouter. If a method here still
++		// points at that same stub handler, it's not a real route registered
++		// by the user, so skip reporting it unless it was overridden (e.g. by
++		// a Get() on the same pattern as the Mount/Route).
++		var stubHandlerPtr uintptr
++		if subroutes == nil {
++			if h := eps[mSTUB]; h != nil && h.handler != nil {
++				stubHandlerPtr = reflect.ValueOf(h.handler).Pointer()
++			}
+ 		}
+ 
+ 		// Group methodHandlers by unique patterns
+@@ -640,6 +649,12 @@ func (n *node) routes() []Route {
+ 			if h.pattern == "" {
+ 				continue
+ 			}
++			if mt == mSTUB {
++				continue
++			}
++			if mt != mALL && stubHandlerPtr != 0 && h.handler != nil && reflect.ValueOf(h.handler).Pointer() == stubHandlerPtr {
++				continue
++			}
+ 			p, ok := pats[h.pattern]
+ 			if !ok {
+ 				p = endpoints{}
