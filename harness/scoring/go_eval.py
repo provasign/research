@@ -34,6 +34,25 @@ REPO_DIR = {
 MAX_GO = (1, 25)
 
 
+GO_IMAGES = {(1, 25): "golang:1.25", (1, 26): "golang:1.26"}
+
+
+def go_version_for(repo_dir: Path, base: str) -> tuple[int, int]:
+    """The Go minor a task's base needs: the highest `go`/`toolchain` line in
+    go.mod, floored at 1.25. gin pr4805/pr4819 declare go 1.26.0, which the
+    agent's pinned 1.25 (GOTOOLCHAIN=local) couldn't build while this scorer's
+    GOTOOLCHAIN=auto silently downloaded 1.26 (2026-09-26). The agent
+    (run_e2e._agent_env) and the scorer both use this version now."""
+    try:
+        mod = sh("git", "-C", str(repo_dir), "show", f"{base}:go.mod")
+    except RuntimeError:
+        return (1, 25)
+    best = (1, 25)
+    for m in re.finditer(r"(?m)^(go|toolchain)\s+(?:go)?(\d+)\.(\d+)", mod):
+        best = max(best, (int(m.group(2)), int(m.group(3))))
+    return best
+
+
 def base_go_version_ok(repo_dir: Path, base: str) -> tuple[bool, str]:
     """(ok, detail): go.mod's `go` and `toolchain` lines at base are <= MAX_GO."""
     mod = sh("git", "-C", str(repo_dir), "show", f"{base}:go.mod")
@@ -103,8 +122,12 @@ def build_task(repo_dir: Path, repo: str, pr: int) -> dict:
             "problem_statement": _problem_statement(repo, pr, meta)}
 
 
-def _run_tests(repo_dir: Path, base: str, patches: list, test_funcs: list, image: str = IMAGE) -> dict:
-    """Worktree at base + patches; `go test -run '^(A|B)$' -json ./...`; parse events."""
+def _run_tests(repo_dir: Path, base: str, patches: list, test_funcs: list, image: str | None = None) -> dict:
+    """Worktree at base + patches; `go test -run '^(A|B)$' -json ./...`; parse events.
+    The image follows the base's go.mod (go_version_for), the same Go the agent
+    ran with, and GOTOOLCHAIN=local keeps it from switching mid-run."""
+    if image is None:
+        image = GO_IMAGES.get(go_version_for(repo_dir, base), IMAGE)
     wt = Path(tempfile.mkdtemp(prefix="go-eval-"))
     try:
         sh("git", "-C", str(repo_dir), "worktree", "add", "--force", "--detach",
@@ -115,7 +138,7 @@ def _run_tests(repo_dir: Path, base: str, patches: list, test_funcs: list, image
                                input=p, text=True, capture_output=True)
         pattern = "^(" + "|".join(re.escape(t) for t in test_funcs) + ")$" if test_funcs else "^$"
         cmd = (f"go test -run '{pattern}' -json ./... 2>&1 || true")
-        out = subprocess.run(["docker", "run", "--rm", "-e", "GOTOOLCHAIN=auto",
+        out = subprocess.run(["docker", "run", "--rm", "-e", "GOTOOLCHAIN=local",
                               "-v", f"{wt}:/w",
                               "-v", f"{GOMOD_CACHE}:/root/go", "-w", "/w", image,
                               "bash", "-c", cmd],
