@@ -318,7 +318,8 @@ SEEDED_TAIL = ("\n\nUpdate the source so the project COMPILES again. Every "
 # go_eval golang:1.25, js_eval node:20, c_eval ubuntu:24.04 gcc 13; Java's
 # JDK is chosen per task below, the same way java_eval picks its image).
 PYTHON_HOME = Path("/opt/homebrew/opt/python@3.12/libexec")
-GO_HOME = Path("/opt/homebrew/opt/go@1.25")
+GO_HOMES = {(1, 25): Path("/opt/homebrew/opt/go@1.25"), (1, 26): Path("/usr/local/go")}
+PINNED_BIN = Path(__file__).resolve().parent.parent / "hooks/pinned-bin"  # pnpm/bun wrappers
 NODE_HOME = Path("/opt/homebrew/opt/node@20")
 GCC = Path("/opt/homebrew/bin/gcc-13")
 GXX = Path("/opt/homebrew/bin/g++-13")
@@ -348,13 +349,22 @@ def _agent_env(wt: Path, task) -> tuple[dict, dict]:
         jdk = int(java_eval.image_for(
             java_eval.commit_date(wt, task["base_commit"])).rsplit("-", 1)[1])
     java_home = Path(f"/opt/homebrew/opt/openjdk@{jdk}")
+    # Go follows the base's go.mod, the same rule go_eval picks its image by
+    # (gin pr4805/pr4819 need 1.26; the agent had 1.25 and couldn't build).
+    go_ver = (1, 25)
+    if task.get("lang") == "go" and task.get("repo") in go_eval.REPO_DIR:
+        go_ver = go_eval.go_version_for(go_eval.REPO_DIR[task["repo"]], task["base_commit"])
+    go_home = GO_HOMES[go_ver]
     for need in (java_home / "bin/java", PYTHON_HOME / "bin/python3",
-                 GO_HOME / "bin/go", NODE_HOME / "bin/node", GCC, GXX):
+                 go_home / "bin/go", NODE_HOME / "bin/node", GCC, GXX,
+                 PINNED_BIN / "pnpm", PINNED_BIN / "bun"):
         if not need.exists():
             raise RuntimeError(f"pinned runtime missing on host: {need}")
     env["JAVA_HOME"] = str(java_home)
+    # pnpm/bun wrappers run the exact versions js_eval installs with, through
+    # the pinned node's npx (hono uses bun.lock, zod/h3 pnpm 10).
     bins = ":".join(map(str, [java_home / "bin", PYTHON_HOME / "bin",
-                              GO_HOME / "bin", NODE_HOME / "bin"]))
+                              go_home / "bin", NODE_HOME / "bin", PINNED_BIN]))
     env["PATH"] = bins + ":" + env.get("PATH", "")
     # Claude Code's Bash tool runs off a snapshot of a login shell, which
     # re-sorts PATH and puts /opt/homebrew/bin back in front. This ZDOTDIR
@@ -366,7 +376,8 @@ def _agent_env(wt: Path, task) -> tuple[dict, dict]:
     # silently downloads whatever toolchain a go.mod asks for.
     env["GOTOOLCHAIN"] = "local"
     env["CC"], env["CXX"] = str(GCC), str(GXX)
-    return env, {"java": jdk, "python": "3.12", "go": "1.25", "node": "20", "cc": "gcc-13"}
+    return env, {"java": jdk, "python": "3.12", "go": f"{go_ver[0]}.{go_ver[1]}", "node": "20",
+                 "pnpm": "10.33.2", "bun": "1.2.20", "cc": "gcc-13"}
 
 
 def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
