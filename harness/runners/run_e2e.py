@@ -329,6 +329,7 @@ PYTHON_HOME = Path("/opt/homebrew/opt/python@3.12/libexec")
 GO_HOMES = {(1, 25): Path("/opt/homebrew/opt/go@1.25"), (1, 26): Path("/usr/local/go")}
 PINNED_BIN = Path(__file__).resolve().parent.parent / "hooks/pinned-bin"  # pnpm/bun wrappers
 NODE_HOME = Path("/opt/homebrew/opt/node@20")
+GH_EMPTY_CONFIG = Path(tempfile.gettempdir()) / "e2e-gh-empty-config"
 GCC = Path("/opt/homebrew/bin/gcc-13")
 GXX = Path("/opt/homebrew/bin/g++-13")
 
@@ -384,8 +385,26 @@ def _agent_env(wt: Path, task) -> tuple[dict, dict]:
     # silently downloads whatever toolchain a go.mod asks for.
     env["GOTOOLCHAIN"] = "local"
     env["CC"], env["CXX"] = str(GCC), str(GXX)
+    # gh unauthenticated for every arm (a sweep50 cell ran `gh pr diff` on its
+    # own task's PR, 2026-09-26). The upstream_guard hook is the real block;
+    # this removes the credentials in case a command slips past it.
+    for k in ("GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"):
+        env.pop(k, None)
+    GH_EMPTY_CONFIG.mkdir(parents=True, exist_ok=True)
+    env["GH_CONFIG_DIR"] = str(GH_EMPTY_CONFIG)
     return env, {"java": jdk, "python": "3.12", "go": f"{go_ver[0]}.{go_ver[1]}", "node": "20",
                  "pnpm": "10.33.2", "bun": "1.2.20", "cc": "gcc-13"}
+
+
+def _upstream_guard_settings() -> str:
+    """--settings JSON passed to EVERY arm's claude -p: a PreToolUse hook that
+    denies fetching from the upstream code host (hooks/upstream_guard.py).
+    Passed on the command line, not written into the worktree, so native arms
+    stay free of .claude/ files and both arms carry the identical hook; it
+    merges with the prism arms' worktree read-guard hooks."""
+    cmd = f"python3 {HOOKS_SRC / 'upstream_guard.py'}"
+    return json.dumps({"hooks": {"PreToolUse": [
+        {"matcher": "Bash|WebFetch", "hooks": [{"type": "command", "command": cmd}]}]}})
 
 
 def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
@@ -394,6 +413,7 @@ def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
     prompt = spec["guidance"] + "\n\nISSUE:\n" + task["problem_statement"] + tail
     cmd = ["claude", "-p", prompt, "--model", model, "--output-format", "json",
            "--dangerously-skip-permissions", "--strict-mcp-config",
+           "--settings", _upstream_guard_settings(),
            "--allowedTools", *spec["allowed"]]
     if arm in PRISM_INIT_ARMS:
         cmd += ["--mcp-config", str(wt / ".mcp.json")]
