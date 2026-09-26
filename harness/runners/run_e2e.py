@@ -182,7 +182,15 @@ TOOL_ARTIFACTS = (".grove", ".engine-b", ".prism", "prism.yaml", ".p.diff",
                   # prism_read_tracker.py) -- same leak class as the three
                   # above, self-inflicted this time (found 2026-09-21 in
                   # psf/requests pr7315's scored diff).
-                  ".prism-read-tracker.json")
+                  ".prism-read-tracker.json",
+                  # Every agent-instruction file prism init can write. With
+                  # zod's CLAUDE.md -> AGENTS.md symlink, init's edit lands in
+                  # AGENTS.md -- a tracked file the CLAUDE.md exclusion above
+                  # never covered -- so the prism arm's scored diff carried it
+                  # (zod pr6129, 2026-09-26). Excluded for both arms; no task's
+                  # tests read these files.
+                  "AGENTS.md", "GEMINI.md", ".github/copilot-instructions.md",
+                  ".cursorrules", ".windsurfrules")
 
 
 def _agent_diff(wt: Path, task) -> str:  # noqa: D401
