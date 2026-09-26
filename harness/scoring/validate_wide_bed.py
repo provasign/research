@@ -17,8 +17,8 @@ from __future__ import annotations
 import json, re, shutil, subprocess, sys, time
 from pathlib import Path
 
-DRAFT = Path(__file__).parent.parent / "results/swebench-live/wide-bed-draft.json"
-OUT = Path(__file__).parent.parent / "results/swebench-live/wide-bed-validation.json"
+DRAFT = Path(__file__).parent.parent / "results/archive-2026-09-tainted/swebench-live/wide-bed-draft.json"
+OUT = Path(__file__).parent.parent / "results/archive-2026-09-tainted/swebench-live/wide-bed-validation.json"
 WORK = Path.home() / ".cache" / "prism-research" / "wide-bed-wt"
 TASK_TIMEOUT = 15 * 60
 HEAVY = {"pytorch__torchtune"}  # torch install: multi-GB; validate separately

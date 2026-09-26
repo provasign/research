@@ -25,7 +25,7 @@ H = Path(__file__).parent.parent
 CACHE = Path.home() / ".cache" / "prism-research" / "swebench-repos"
 PRISM = str(Path.home() / "bin" / "prism")
 WORK = Path.home() / ".cache" / "prism-research" / "verifydet"
-OUT = H / "results/swebench-live/verify-detection.json"
+OUT = H / "results/archive-2026-09-tainted/swebench-live/verify-detection.json"
 KS = [0, 1, 2, 5]
 
 def sh(*a, cwd=None, timeout=600):
@@ -79,7 +79,7 @@ def run_case(repo: Path, sha: str, pairs, k: int):
         sh("git", "-C", str(repo), "worktree", "remove", "--force", str(wt))
 
 def main():
-    cands = json.load(open(H / "results/swebench-live/wide-sweep-candidates.json"))
+    cands = json.load(open(H / "results/archive-2026-09-tainted/swebench-live/wide-sweep-candidates.json"))
     only = sys.argv[1] if len(sys.argv) > 1 else None
     picked = [c for c in cands if c.get("leftover") is not None and c["sites"] >= 15][:12]
     if only:

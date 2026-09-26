@@ -6,7 +6,7 @@ import json, re, datetime, time
 from pathlib import Path
 from collections import defaultdict
 ROOT = Path.home() / ".claude" / "projects"
-RESDIR = Path("/Users/tapabratapal/Projects/provasign/research/harness/results/guard-fix-run")
+RESDIR = Path("/Users/tapabratapal/Projects/provasign/research/harness/results/archive-2026-09-tainted/guard-fix-run")
 start = time.mktime(datetime.datetime(2026,9,21,16,48,0).timetuple())
 end = time.mktime(datetime.datetime(2026,9,21,21,10,0).timetuple())
 files = sorted((f.stat().st_mtime, f) for d in ROOT.iterdir() if d.is_dir() and "e2e-run" in d.name

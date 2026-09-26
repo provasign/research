@@ -1,6 +1,6 @@
 """Aggregate end-to-end benchmark cells into a resolve-rate report.
 
-Reads runs/e2e/*.json, prints (and writes RESULTS-E2E.md) the resolve-rate grid
+Reads results/e2e/*.json, prints (and writes RESULTS-E2E.md) the resolve-rate grid
 model x arm, a per-task grid, and a blast-radius split (churn as proxy) so the
 localized-majority vs high-blast-radius tail contrast is visible.
 """

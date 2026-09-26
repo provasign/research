@@ -13,7 +13,7 @@ import json, re, subprocess, sys
 from pathlib import Path
 
 H = Path(__file__).parent.parent
-SLICE = H / "results/swebench-live/slice-wide-pilot.json"
+SLICE = H / "results/archive-2026-09-tainted/swebench-live/slice-wide-pilot.json"
 CACHE = Path.home() / ".cache" / "prism-research" / "swebench-repos"
 
 def sh(*a, cwd=None, check=True):

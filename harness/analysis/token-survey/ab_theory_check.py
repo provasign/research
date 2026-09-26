@@ -5,7 +5,7 @@ import json, re, sys
 from pathlib import Path
 from collections import defaultdict
 ROOT = Path.home() / ".claude" / "projects"
-RES = Path("/Users/tapabratapal/Projects/provasign/research/harness/results/search-body-ab/results.json")
+RES = Path("/Users/tapabratapal/Projects/provasign/research/harness/results/archive-2026-09-tainted/search-body-ab/results.json")
 PATH_RE = re.compile(r"[\w./-]+\.(?:java|py|go|js|ts|c|h|cpp|rb|rs|php|kt|swift|m)\b")
 
 def find(sid):

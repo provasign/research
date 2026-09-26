@@ -46,7 +46,7 @@ def score(gold: str, model: str):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--runs", default="results/swebench-20")
+    ap.add_argument("--runs", default="results/archive-2026-09-tainted/swebench-20")
     ap.add_argument("--tasks", required=True,
                     help="fetched SWE-bench task JSON (carries gold `patch`)")
     ap.add_argument("--arm", default="baseline", choices=["baseline", "prism"])

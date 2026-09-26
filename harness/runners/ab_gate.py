@@ -21,7 +21,7 @@ the preserved attempts and inclusive costs do not remove that selection bias.
 
 Usage:
   python ab_gate.py --baseline ~/bin/prism --candidate ../prism/bin/prism \
-      [--model haiku] [--limit N] [--out runs/ab-gate]
+      [--model haiku] [--limit N] [--out results/ab-gate]
 Exit 0 = PASS, 1 = FAIL, 2 = harness error.
 """
 from __future__ import annotations

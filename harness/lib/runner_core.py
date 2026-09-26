@@ -2,9 +2,9 @@
 parse the result".
 
 This is the generalized descendant of
-`harness/results/daytoday-four-head-2026-09-07/run_readonly.py` (frozen,
+`harness/results/archive-2026-09-tainted/daytoday-four-head-2026-09-07/run_readonly.py` (frozen,
 never edited -- historical `run_code.py`/`run_panel.py` snapshots under
-`harness/results/*` import it directly and must keep working) merged with
+`harness/results/archive-2026-09-tainted/*` import it directly and must keep working) merged with
 the safety properties `harness/runners/coding_suite.py` layered on top:
 per-task git-archive template prep, a real venv + dependency install,
 a Prism-instrumented template with a byte-identical-except-Prism content

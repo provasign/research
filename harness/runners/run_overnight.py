@@ -28,7 +28,7 @@ from pathlib import Path
 import run_e2e
 
 _ap = argparse.ArgumentParser()
-_ap.add_argument("--manifest", default="results/paired-gate/manifest.json")
+_ap.add_argument("--manifest", default="results/archive-2026-09-tainted/paired-gate/manifest.json")
 _ap.add_argument("--out-dir", default="results/overnight-run")
 _ap.add_argument("--native-arm", default="baseline")
 _ap.add_argument("--prism-arm", default="prism_init")

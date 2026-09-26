@@ -21,8 +21,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import java_eval
 
 H = Path(__file__).parent.parent
-RAW = H / "results/swebench-live/java-pilot-raw.json"
-OUT = H / "results/swebench-live/java-pilot-validation.json"
+RAW = H / "results/archive-2026-09-tainted/swebench-live/java-pilot-raw.json"
+OUT = H / "results/archive-2026-09-tainted/swebench-live/java-pilot-validation.json"
 
 def norm(t):
     """Multi-SWE-bench row -> java_eval task dict."""

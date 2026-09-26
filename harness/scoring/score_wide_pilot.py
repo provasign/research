@@ -24,8 +24,8 @@ import json, re, subprocess, sys
 from pathlib import Path
 
 H = Path(__file__).parent.parent
-SLICE = H / "results/swebench-live/slice-wide-pilot.json"
-RUN = H / "results/swebench-live/widepilot"
+SLICE = H / "results/archive-2026-09-tainted/swebench-live/slice-wide-pilot.json"
+RUN = H / "results/archive-2026-09-tainted/swebench-live/widepilot"
 CACHE = Path.home() / ".cache" / "prism-research" / "swebench-repos"
 sys.path.insert(0, str(H))
 import validate_wide_bed as V  # era env + repair machinery

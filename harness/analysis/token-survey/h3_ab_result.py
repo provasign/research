@@ -5,7 +5,7 @@ adoption (from transcripts), token ratio."""
 import json
 from pathlib import Path
 from collections import defaultdict
-R = Path("/Users/tapabratapal/Projects/provasign/research/harness/results/h3-ab")
+R = Path("/Users/tapabratapal/Projects/provasign/research/harness/results/archive-2026-09-tainted/h3-ab")
 ROOT = Path.home() / ".claude" / "projects"
 HARD = {"FasterXML__jackson-databind__pr6018","FasterXML__jackson-databind__pr6044",
  "FasterXML__jackson-databind__pr6052","FasterXML__jackson-databind__pr6076",

@@ -16,10 +16,10 @@ import docker_eval
 from pathlib import Path
 docker_eval.CLONE_ROOT = Path.home() / ".cache" / "prism-research" / "swebench-repos"
 
-cands = json.load(open('results/swebench-live/phase1/candidates-with-images.json'))
-valid = {t['instance_id'] for t in json.load(open('results/swebench-live/phase1/valid-instances.json'))}
+cands = json.load(open('results/archive-2026-09-tainted/swebench-live/phase1/candidates-with-images.json'))
+valid = {t['instance_id'] for t in json.load(open('results/archive-2026-09-tainted/swebench-live/phase1/valid-instances.json'))}
 todo = [c for c in cands if c['instance_id'] not in valid]
-OUT = Path('results/swebench-live/pool-validation.json')
+OUT = Path('results/archive-2026-09-tainted/swebench-live/pool-validation.json')
 done = json.load(open(OUT)) if OUT.exists() else {}
 
 for i, t in enumerate(todo, 1):

@@ -22,7 +22,7 @@ H = Path(__file__).parent.parent
 
 def main():
     run_dir = Path(sys.argv[1])
-    tasks = {t["instance_id"]: t for t in json.load(open(H / "results/swebench-live/slice-java12.json"))}
+    tasks = {t["instance_id"]: t for t in json.load(open(H / "results/archive-2026-09-tainted/swebench-live/slice-java12.json"))}
     lut = {k.lower(): v for k, v in java_eval.REPO_DIR.items()}
     results = []
     for tid, t in sorted(tasks.items()):

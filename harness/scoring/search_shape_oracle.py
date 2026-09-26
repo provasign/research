@@ -45,7 +45,7 @@ def coverage(repo, sha, hunks, payload):
     return cov / max(len(hunks), 1)
 
 def main():
-    tasks = json.load(open(os.path.join(H, 'results/swebench-live/slice-java12.json')))
+    tasks = json.load(open(os.path.join(H, 'results/archive-2026-09-tainted/swebench-live/slice-java12.json')))
     agg = {s: {'cov': [], 'bytes': []} for s in ('default', 'ctx8', 'ctx25')}
     for t in tasks:
         hunks = gold_hunks(t)

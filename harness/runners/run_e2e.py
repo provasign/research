@@ -13,7 +13,7 @@ Backends (no ANTHROPIC_API_KEY here):
 
 Resumable + auto-pause: every finished cell writes a result JSON and is skipped
 on restart. On an Anthropic usage/rate-limit the cloud path writes a pause
-marker (runs/e2e/PAUSED.json) and the process exits 42; the caller re-invokes
+marker (results/e2e/PAUSED.json) and the process exits 42; the caller re-invokes
 after the reset (ScheduleWakeup). Run local first (free, always completes), then
 cloud.
 """
@@ -292,6 +292,61 @@ SEEDED_TAIL = ("\n\nUpdate the source so the project COMPILES again. Every "
                "do not modify test files.")
 
 
+# Host toolchains matching each scorer image (docker_eval python:3.12,
+# go_eval golang:1.25, js_eval node:20, c_eval ubuntu:24.04 gcc 13; Java's
+# JDK is chosen per task below, the same way java_eval picks its image).
+PYTHON_HOME = Path("/opt/homebrew/opt/python@3.12/libexec")
+GO_HOME = Path("/opt/homebrew/opt/go@1.25")
+NODE_HOME = Path("/opt/homebrew/opt/node@20")
+GCC = Path("/opt/homebrew/bin/gcc-13")
+GXX = Path("/opt/homebrew/bin/g++-13")
+
+
+def _agent_env(wt: Path, task) -> tuple[dict, dict]:
+    """The agent's environment, identical for every arm of a task.
+
+    Runtimes are pinned to what the scorer uses instead of whatever the host
+    defaults to. Unpinned, the host's Java 27 broke Mockito, and each agent
+    found its own way out -- native switched to JDK 17, prism excluded
+    failing tests and stayed on 27 -- so paired arms ran on different
+    runtimes (jackson pr6099, 2026-09-25). Fails loudly when the pinned
+    runtime is missing rather than silently falling back to the host's.
+    """
+    env = dict(os.environ)
+    # Apache RAT fails the agent's own mvn builds on any header-less file, and
+    # prism_init arms carry .mcp.json + CLAUDE.md in the worktree (native arms
+    # carry nothing) -- every commons-lang prism cell burned turns on
+    # -Drat.skip / JAVA_HOME workarounds (2026-09-25 rerun audit). Skip RAT in
+    # every arm via the environment so neither worktree gains a file. Scoring
+    # is unaffected: tool artifacts are already excluded from the scored diff.
+    env["MAVEN_ARGS"] = (env.get("MAVEN_ARGS", "") + " -Drat.skip=true").strip()
+    jdk = 17
+    if _is_java(task):
+        # same era rule the scorer uses to pick its maven image
+        jdk = int(java_eval.image_for(
+            java_eval.commit_date(wt, task["base_commit"])).rsplit("-", 1)[1])
+    java_home = Path(f"/opt/homebrew/opt/openjdk@{jdk}")
+    for need in (java_home / "bin/java", PYTHON_HOME / "bin/python3",
+                 GO_HOME / "bin/go", NODE_HOME / "bin/node", GCC, GXX):
+        if not need.exists():
+            raise RuntimeError(f"pinned runtime missing on host: {need}")
+    env["JAVA_HOME"] = str(java_home)
+    bins = ":".join(map(str, [java_home / "bin", PYTHON_HOME / "bin",
+                              GO_HOME / "bin", NODE_HOME / "bin"]))
+    env["PATH"] = bins + ":" + env.get("PATH", "")
+    # Claude Code's Bash tool runs off a snapshot of a login shell, which
+    # re-sorts PATH and puts /opt/homebrew/bin back in front. This ZDOTDIR
+    # sources the user's real zsh files, then re-prepends E2E_PINNED_PATH.
+    env["ZDOTDIR"] = str(Path(__file__).resolve().parent.parent / "hooks/pinned-zdotdir")
+    env["E2E_PINNED_PATH"] = bins
+    env["SHELL_SESSIONS_DISABLE"] = "1"  # macOS zsh would write .zsh_sessions/ into ZDOTDIR
+    # golang:1.25 runs with GOTOOLCHAIN=local; without it the host go
+    # silently downloads whatever toolchain a go.mod asks for.
+    env["GOTOOLCHAIN"] = "local"
+    env["CC"], env["CXX"] = str(GCC), str(GXX)
+    return env, {"java": jdk, "python": "3.12", "go": "1.25", "node": "20", "cc": "gcc-13"}
+
+
 def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
     spec = ARMS[arm]
     tail = SEEDED_TAIL if task.get("kind") == "seeded_refactor" else TASK_TAIL
@@ -303,12 +358,13 @@ def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
         cmd += ["--mcp-config", str(wt / ".mcp.json")]
     elif spec["mcp"]:
         cmd += ["--mcp-config", spec["mcp"]]
+    env, runtimes = _agent_env(wt, task)
     t0 = time.monotonic()
-    r = subprocess.run(cmd, cwd=wt, capture_output=True, text=True, timeout=1800)
+    r = subprocess.run(cmd, cwd=wt, capture_output=True, text=True, timeout=1800, env=env)
     blob = (r.stdout + r.stderr).lower()
     if r.returncode != 0 and any(h in blob for h in RATE_HINTS):
         raise RateLimited(blob[-300:])
-    rec = {"wall_s": round(time.monotonic() - t0, 1)}
+    rec = {"wall_s": round(time.monotonic() - t0, 1), "runtimes": runtimes}
     try:
         j = json.loads(r.stdout)
         rec.update(turns=j.get("num_turns"), cost_usd=j.get("total_cost_usd"))

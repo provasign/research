@@ -240,8 +240,8 @@ def fmtrow(x):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--prism', default=os.path.expanduser('~/bin/prism'))
-    ap.add_argument('--slice', default=os.path.join(H, 'results/swebench-live/slice-java12.json'))
-    ap.add_argument('--out', default=os.path.join(H, 'results/swebench-live/query-oracle.json'))
+    ap.add_argument('--slice', default=os.path.join(H, 'results/archive-2026-09-tainted/swebench-live/slice-java12.json'))
+    ap.add_argument('--out', default=os.path.join(H, 'results/archive-2026-09-tainted/swebench-live/query-oracle.json'))
     ap.add_argument('--only', default=None, help='run a single instance_id (per-task isolation driver)')
     a = ap.parse_args()
     tasks = json.load(open(a.slice))

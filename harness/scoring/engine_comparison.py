@@ -160,7 +160,7 @@ def main() -> None:
         pm = sum(r["prism_recall"] for r in scored) / len(scored)
         cm = sum(r["engine_b_recall"] for r in scored) / len(scored)
         print(f"\nMEAN over {len(scored)} scored tasks:  prism {pm:.3f}   engine-b {cm:.3f}")
-    Path("results").mkdir(exist_ok=True)
+    Path("results/engine-comparison").mkdir(parents=True, exist_ok=True)
     json.dump(rows, open("results/engine-comparison/engine-b-vs-prism.json", "w"), indent=2)
     print("-> runs/engine-comparison/engine-b-vs-prism.json")
 
