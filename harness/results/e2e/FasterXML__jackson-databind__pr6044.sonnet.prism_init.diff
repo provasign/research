@@ -1,0 +1,223 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializerBase.java b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializerBase.java
+index 6cb875c15..c4a517548 100644
+--- a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializerBase.java
++++ b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializerBase.java
+@@ -630,19 +630,30 @@ public abstract class BeanDeserializerBase
+ 
+                 // one more thing: if this property uses "external property" type inclusion,
+                 // it needs different handling altogether
+-                if (prop.hasValueTypeDeserializer()) {
+-                    TypeDeserializer typeDeser = prop.getValueTypeDeserializer();
+-                    if (typeDeser.getTypeInclusion() == JsonTypeInfo.As.EXTERNAL_PROPERTY) {
+-                        if (extTypes == null) {
+-                            extTypes = ExternalTypeHandler.builder(_beanType);
++                TypeDeserializer typeDeser = prop.getValueTypeDeserializer();
++                if (typeDeser == null) {
++                    // [databind#5993]: `List<Foo> foo` with `@JsonTypeInfo(include=EXTERNAL_PROPERTY)`
++                    // on the element type: annotation is resolved as a *content* type deserializer
++                    // (since the property type is a container), not the property's own; but the
++                    // external id still needs the same buffering/deferred-resolution handling.
++                    JavaType propType = prop.getType();
++                    if (propType.isCollectionLikeType()) {
++                        Object contentTypeDeser = propType.getContentType().getTypeHandler();
++                        if (contentTypeDeser instanceof TypeDeserializer) {
++                            typeDeser = (TypeDeserializer) contentTypeDeser;
+                         }
+-                        extTypes.addExternal(prop, typeDeser,
+-                                prop.findAliases(ctxt.getConfig()));
+-                        // In fact, remove from list of known properties to simplify later handling
+-                        _beanProperties.remove(prop);
+-                        continue;
+                     }
+                 }
++                if ((typeDeser != null) && (typeDeser.getTypeInclusion() == JsonTypeInfo.As.EXTERNAL_PROPERTY)) {
++                    if (extTypes == null) {
++                        extTypes = ExternalTypeHandler.builder(_beanType);
++                    }
++                    extTypes.addExternal(prop, typeDeser,
++                            prop.findAliases(ctxt.getConfig()));
++                    // In fact, remove from list of known properties to simplify later handling
++                    _beanProperties.remove(prop);
++                    continue;
++                }
+             }
+         }
+         // [databind#1755]: mark that bean properties are fully contextualized
+diff --git a/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java b/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java
+index f538965a7..d86c79a55 100644
+--- a/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java
++++ b/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java
+@@ -2,6 +2,8 @@ package tools.jackson.databind.deser.impl;
+ 
+ import java.util.*;
+ 
++import com.fasterxml.jackson.annotation.JsonTypeInfo.As;
++
+ import tools.jackson.core.*;
+ 
+ import tools.jackson.databind.*;
+@@ -9,7 +11,9 @@ import tools.jackson.databind.deser.SettableBeanProperty;
+ import tools.jackson.databind.deser.bean.BeanPropertyMap;
+ import tools.jackson.databind.deser.bean.PropertyBasedCreator;
+ import tools.jackson.databind.deser.bean.PropertyValueBuffer;
++import tools.jackson.databind.deser.jdk.CollectionDeserializer;
+ import tools.jackson.databind.jsontype.TypeDeserializer;
++import tools.jackson.databind.jsontype.TypeIdResolver;
+ import tools.jackson.databind.jsontype.impl.TypeDeserializerBase;
+ import tools.jackson.databind.util.TokenBuffer;
+ import tools.jackson.databind.util.TokenBufferReadContext;
+@@ -398,11 +402,7 @@ public class ExternalTypeHandler
+         if (t == JsonToken.VALUE_NULL) {
+             return null;
+         }
+-        // [databind#2747]: invoke subtype deserializer via the known-type-id entry
+-        // point so the standard impls skip the wrapper-array re-encoding (which
+-        // would otherwise expose a synthetic array in `JsonParser.streamReadContext()`
+-        // to any custom deserializer examining parsing state).
+-        return extProp._typeDeserializer.deserializeTypedWithKnownTypeId(p2, ctxt, typeId);
++        return _deserializeWithKnownTypeId(p2, ctxt, extProp, typeId);
+     }
+ 
+     // 03-Aug-2022, tatu: [databind#3533] to handle absent value matching:
+@@ -439,14 +439,42 @@ public class ExternalTypeHandler
+             prop.set(ctxt, bean, null);
+             return;
+         }
+-        // [databind#2747]: invoke subtype deserializer via the known-type-id entry
+-        // point so the standard impls skip the wrapper-array re-encoding (which
+-        // would otherwise expose a synthetic array in `JsonParser.streamReadContext()`
+-        // to any custom deserializer examining parsing state).
+-        Object value = extProp._typeDeserializer.deserializeTypedWithKnownTypeId(p2, ctxt, typeId);
++        Object value = _deserializeWithKnownTypeId(p2, ctxt, extProp, typeId);
+         prop.set(ctxt, bean, value);
+     }
+ 
++    /**
++     * Helper that invokes the subtype deserializer for a value whose external
++     * type id has already been resolved out-of-band.
++     *<p>
++     * Normally this is a direct call to
++     * {@link TypeDeserializer#deserializeTypedWithKnownTypeId}: see [databind#2747]
++     * for why that entry point (rather than re-locating the id from the stream)
++     * is used.
++     *<p>
++     * [databind#5993]: However, when the annotated property is a Collection
++     * (e.g. {@code List<Foo> foo}), the external id describes the runtime type
++     * of every element, not of the (List-typed) property value itself; the type
++     * deserializer's base type is the element type (`Foo`), so it cannot be
++     * invoked directly on the whole buffered value. Instead defer to the
++     * property's own {@code CollectionDeserializer}, substituting a type
++     * deserializer that already knows the id for each element -- this way the
++     * Collection deserializer still handles both a JSON Array of elements and,
++     * via {@code JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY}, a single
++     * (non-array) element.
++     */
++    private static Object _deserializeWithKnownTypeId(JsonParser p, DeserializationContext ctxt,
++            ExtTypedProperty extProp, String typeId) throws JacksonException
++    {
++        ValueDeserializer<?> valueDeser = extProp.getProperty().getValueDeserializer();
++        if (valueDeser instanceof CollectionDeserializer) {
++            CollectionDeserializer collDeser = (CollectionDeserializer) valueDeser;
++            TypeDeserializer knownIdDeser = new KnownTypeIdDeserializer(extProp._typeDeserializer, typeId);
++            return collDeser.withValueTypeDeserializer(knownIdDeser).deserialize(p, ctxt);
++        }
++        return extProp._typeDeserializer.deserializeTypedWithKnownTypeId(p, ctxt, typeId);
++    }
++
+     /*
+     /**********************************************************
+     /* Helper classes
+@@ -582,4 +610,65 @@ public class ExternalTypeHandler
+             return _typeProperty;
+         }
+     }
++
++    /**
++     * Proxy {@link TypeDeserializer} used for elements of a Collection-valued
++     * property whose external type id has already been resolved: every
++     * "typed from ..." variant forwards to the real (external-property based)
++     * type deserializer's {@link TypeDeserializer#deserializeTypedWithKnownTypeId}
++     * with the known id, regardless of whether the current element is an
++     * Object, Array, or scalar value. This lets the owning
++     * {@code CollectionDeserializer} keep doing its own per-element token
++     * dispatch (and single-value-as-array unwrapping) unmodified.
++     *
++     * @since 3.3 (fix for [databind#5993])
++     */
++    private static final class KnownTypeIdDeserializer extends TypeDeserializer
++    {
++        private final TypeDeserializer _delegate;
++        private final String _typeId;
++
++        KnownTypeIdDeserializer(TypeDeserializer delegate, String typeId) {
++            _delegate = delegate;
++            _typeId = typeId;
++        }
++
++        @Override
++        public TypeDeserializer forProperty(BeanProperty prop) {
++            TypeDeserializer d = _delegate.forProperty(prop);
++            return (d == _delegate) ? this : new KnownTypeIdDeserializer(d, _typeId);
++        }
++
++        @Override
++        public As getTypeInclusion() { return _delegate.getTypeInclusion(); }
++
++        @Override
++        public String getPropertyName() { return _delegate.getPropertyName(); }
++
++        @Override
++        public TypeIdResolver getTypeIdResolver() { return _delegate.getTypeIdResolver(); }
++
++        @Override
++        public Class<?> getDefaultImpl() { return _delegate.getDefaultImpl(); }
++
++        @Override
++        public Object deserializeTypedFromObject(JsonParser p, DeserializationContext ctxt) throws JacksonException {
++            return _delegate.deserializeTypedWithKnownTypeId(p, ctxt, _typeId);
++        }
++
++        @Override
++        public Object deserializeTypedFromArray(JsonParser p, DeserializationContext ctxt) throws JacksonException {
++            return _delegate.deserializeTypedWithKnownTypeId(p, ctxt, _typeId);
++        }
++
++        @Override
++        public Object deserializeTypedFromScalar(JsonParser p, DeserializationContext ctxt) throws JacksonException {
++            return _delegate.deserializeTypedWithKnownTypeId(p, ctxt, _typeId);
++        }
++
++        @Override
++        public Object deserializeTypedFromAny(JsonParser p, DeserializationContext ctxt) throws JacksonException {
++            return _delegate.deserializeTypedWithKnownTypeId(p, ctxt, _typeId);
++        }
++    }
+ }
+diff --git a/src/main/java/tools/jackson/databind/deser/jdk/CollectionDeserializer.java b/src/main/java/tools/jackson/databind/deser/jdk/CollectionDeserializer.java
+index 56af93272..f195787c2 100644
+--- a/src/main/java/tools/jackson/databind/deser/jdk/CollectionDeserializer.java
++++ b/src/main/java/tools/jackson/databind/deser/jdk/CollectionDeserializer.java
+@@ -155,6 +155,23 @@ public class CollectionDeserializer
+                 nuller, unwrapSingle, _classInfo);
+     }
+ 
++    /**
++     * Method used to support {@code As.EXTERNAL_PROPERTY} type inclusion for
++     * Collection-valued properties: produces a copy of this deserializer that
++     * uses given (already type-id-aware) type deserializer for element values,
++     * while retaining this instance's other (already resolved) settings --
++     * notably {@code ACCEPT_SINGLE_VALUE_AS_ARRAY} handling.
++     *
++     * @since 3.3
++     */
++    public CollectionDeserializer withValueTypeDeserializer(TypeDeserializer vtd) {
++        if (vtd == _valueTypeDeserializer) {
++            return this;
++        }
++        return withResolved(_delegateDeserializer, _valueDeserializer, vtd,
++                _nullProvider, _unwrapSingle);
++    }
++
+     // Important: do NOT cache if polymorphic values
+     @Override
+     public boolean isCachable() {

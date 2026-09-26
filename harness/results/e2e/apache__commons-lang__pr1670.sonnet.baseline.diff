@@ -1,5 +1,5 @@
 diff --git a/src/main/java/org/apache/commons/lang3/ClassUtils.java b/src/main/java/org/apache/commons/lang3/ClassUtils.java
-index 1e7a3b5e3..7836539e9 100644
+index 1e7a3b5e3..6a696c8f9 100644
 --- a/src/main/java/org/apache/commons/lang3/ClassUtils.java
 +++ b/src/main/java/org/apache/commons/lang3/ClassUtils.java
 @@ -1643,7 +1643,16 @@ private static String toCleanName(final String className) {
@@ -7,16 +7,16 @@ index 1e7a3b5e3..7836539e9 100644
          }
          if (canonicalName.endsWith(arrayMarker)) {
 -            final int dims =  (canonicalName.length() - arrIdx) / 2;
-+            final int suffixLen = canonicalName.length() - arrIdx;
-+            final int dims = suffixLen / 2;
-+            if (suffixLen % 2 != 0) {
-+                throw new IllegalArgumentException("Malformed array class name: " + className);
++            final String arraySuffix = canonicalName.substring(arrIdx);
++            if (arraySuffix.length() % 2 != 0) {
++                throw new IllegalArgumentException("Malformed array suffix in class name: " + className);
 +            }
-+            for (int i = arrIdx; i < canonicalName.length(); i += 2) {
-+                if (canonicalName.charAt(i) != '[' || canonicalName.charAt(i + 1) != ']') {
-+                    throw new IllegalArgumentException("Malformed array class name: " + className);
++            for (int i = 0; i < arraySuffix.length(); i += 2) {
++                if (arraySuffix.charAt(i) != '[' || arraySuffix.charAt(i + 1) != ']') {
++                    throw new IllegalArgumentException("Malformed array suffix in class name: " + className);
 +                }
 +            }
++            final int dims =  arraySuffix.length() / 2;
              if (dims > MAX_JVM_ARRAY_DIMENSION) {
                  throw new IllegalArgumentException("Array dimension greater than JVM specification maximum of 255.");
              }

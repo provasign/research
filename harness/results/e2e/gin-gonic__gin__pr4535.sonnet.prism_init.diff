@@ -1,0 +1,39 @@
+diff --git a/tree.go b/tree.go
+index 3ac0a3b..ee97c04 100644
+--- a/tree.go
++++ b/tree.go
+@@ -737,7 +737,7 @@ walk: // Outer loop for walking the tree
+ 		// If this node does not have a wildcard (param or catchAll) child,
+ 		// we can just look up the next child node and continue to walk down
+ 		// the tree
+-		if !n.wildChild {
++		if !n.wildChild || n.indices != "" {
+ 			// Skip rune bytes already processed
+ 			rb = shiftNRuneBytes(rb, npLen)
+ 
+@@ -810,15 +810,19 @@ walk: // Outer loop for walking the tree
+ 				}
+ 			}
+ 
+-			// Nothing found. We can recommend to redirect to the same URL
+-			// without a trailing slash if a leaf exists for that path
+-			if fixTrailingSlash && path == "/" && n.handlers != nil {
+-				return ciPath
++			// Nothing found among the static children.
++			if !n.wildChild {
++				// We can recommend to redirect to the same URL
++				// without a trailing slash if a leaf exists for that path
++				if fixTrailingSlash && path == "/" && n.handlers != nil {
++					return ciPath
++				}
++				return nil
+ 			}
+-			return nil
+ 		}
+ 
+-		n = n.children[0]
++		// The wildcard child, if any, is always the last entry in the array.
++		n = n.children[len(n.children)-1]
+ 		switch n.nType {
+ 		case param:
+ 			// Find param end (either '/' or path end)

@@ -1,0 +1,28 @@
+diff --git a/src/click/testing.py b/src/click/testing.py
+index 19fae4a6..2af65cda 100644
+--- a/src/click/testing.py
++++ b/src/click/testing.py
+@@ -473,7 +473,10 @@ class CliRunner:
+ 
+         @_pause_echo(echo_input)  # type: ignore
+         def visible_input(prompt: str | None = None) -> str:
+-            sys.stdout.write(prompt or "")
++            text = prompt or ""
++            if not color:
++                text = _compat.strip_ansi(text)
++            sys.stdout.write(text)
+             try:
+                 val = next(text_input).rstrip("\r\n")
+             except StopIteration as e:
+@@ -484,7 +487,10 @@ class CliRunner:
+ 
+         @_pause_echo(echo_input)  # type: ignore
+         def hidden_input(prompt: str | None = None) -> str:
+-            sys.stdout.write(f"{prompt or ''}\n")
++            text = prompt or ""
++            if not color:
++                text = _compat.strip_ansi(text)
++            sys.stdout.write(f"{text}\n")
+             sys.stdout.flush()
+             try:
+                 return next(text_input).rstrip("\r\n")

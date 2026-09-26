@@ -1,0 +1,36 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index b422bd49..0c5b7e29 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -3458,6 +3458,7 @@ class Argument(Parameter):
+         self,
+         param_decls: cabc.Sequence[str],
+         required: bool | None = None,
++        help: str | None = None,
+         **attrs: t.Any,
+     ) -> None:
+         # Auto-detect the requirement status of the argument if not explicitly set.
+@@ -3473,6 +3474,11 @@ class Argument(Parameter):
+         if "multiple" in attrs:
+             raise TypeError("__init__() got an unexpected keyword argument 'multiple'.")
+ 
++        if help:
++            help = inspect.cleandoc(help)
++
++        self.help = help
++
+         super().__init__(param_decls, required=required, **attrs)
+ 
+     @property
+@@ -3517,6 +3523,11 @@ class Argument(Parameter):
+     def get_usage_pieces(self, ctx: Context) -> list[str]:
+         return [self.make_metavar(ctx)]
+ 
++    def get_help_record(self, ctx: Context) -> tuple[str, str] | None:
++        if not self.help:
++            return None
++        return self.make_metavar(ctx), self.help
++
+     def get_error_hint(self, ctx: Context | None) -> str:
+         if ctx is not None:
+             return f"'{self.make_metavar(ctx)}'"

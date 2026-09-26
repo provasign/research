@@ -1,13 +1,47 @@
-diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java b/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java
-index 3e63a4a6b..52c5cccf8 100644
---- a/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java
-+++ b/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java
-@@ -894,7 +894,7 @@ ClassUtil.nameOf(handledType()), ClassUtil.name(propName)));
-             // 16-May-2016, tatu: How about per-property case-insensitivity?
-             Boolean B = format.getFeature(JsonFormat.Feature.ACCEPT_CASE_INSENSITIVE_PROPERTIES);
-             if (B != null) {
--                BeanPropertyMap propsOrig = _beanProperties;
-+                BeanPropertyMap propsOrig = contextual._beanProperties;
-                 BeanPropertyMap props = propsOrig.withCaseInsensitivity(B.booleanValue());
-                 if (props != propsOrig) {
-                     contextual = contextual.withBeanProperties(props);
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/impl/BeanPropertyMap.java b/src/main/java/com/fasterxml/jackson/databind/deser/impl/BeanPropertyMap.java
+index ac4a7ede8..41e4c2657 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/impl/BeanPropertyMap.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/impl/BeanPropertyMap.java
+@@ -403,13 +403,20 @@ public class BeanPropertyMap
+         final int len = _propsInOrder.length;
+         ArrayList<SettableBeanProperty> newProps = new ArrayList<SettableBeanProperty>(len);
+ 
++        // 23-Sep-2026: when this map is case-insensitive, property names to
++        // ignore/include must be compared case-insensitively too, otherwise
++        // `@JsonIgnoreProperties` may fail to match actual (differently-cased)
++        // property names.
++        final Collection<String> exclude = _normalizeNames(toExclude);
++        final Collection<String> include = _normalizeNames(toInclude);
++
+         for (int i = 0; i < len; ++i) {
+             SettableBeanProperty prop = _propsInOrder[i];
+             // 01-May-2015, tatu: Not 100% sure if existing `null`s should be retained;
+             //   or, if entries to ignore should be retained as nulls. For now just
+             //   prune them out
+             if (prop != null) { // may contain holes, too, check.
+-                if (!IgnorePropertiesUtil.shouldIgnore(prop.getName(), toExclude, toInclude)) {
++                if (!IgnorePropertiesUtil.shouldIgnore(getPropertyName(prop), exclude, include)) {
+                     newProps.add(prop);
+                 }
+             }
+@@ -534,6 +541,20 @@ public class BeanPropertyMap
+         return _caseInsensitive ? prop.getName().toLowerCase(_locale) : prop.getName();
+     }
+ 
++    // Applies same case-normalization as `getPropertyName()` to a collection of
++    // property names, so that comparisons against actual property names (as used
++    // in `withoutProperties()`) are consistent with this map's case-sensitivity.
++    private Collection<String> _normalizeNames(Collection<String> names) {
++        if (!_caseInsensitive || names == null || names.isEmpty()) {
++            return names;
++        }
++        ArrayList<String> result = new ArrayList<String>(names.size());
++        for (String name : names) {
++            result.add(name.toLowerCase(_locale));
++        }
++        return result;
++    }
++
+     /*
+     /**********************************************************
+     /* Public API, property lookup

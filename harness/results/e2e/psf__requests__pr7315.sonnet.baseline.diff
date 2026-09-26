@@ -1,26 +1,23 @@
 diff --git a/src/requests/adapters.py b/src/requests/adapters.py
-index c5726aed..86b188d0 100644
+index c5726aed..05c6d4ed 100644
 --- a/src/requests/adapters.py
 +++ b/src/requests/adapters.py
-@@ -590,8 +590,19 @@ class HTTPAdapter(BaseAdapter):
+@@ -590,8 +590,16 @@ class HTTPAdapter(BaseAdapter):
              using_socks_proxy = proxy_scheme.startswith("socks")
  
          url = request.path_url
 -        if url.startswith("//"):  # Don't confuse urllib3
 -            url = f"/{url.lstrip('/')}"
 +        if url.startswith("//"):
-+            # A URL with excess leading "/" (path-separator)s can cause
-+            # urllib3 to misinterpret it as a scheme-relative URL with its
-+            # own "//host:port" authority (see #6643). Only trim the extra
-+            # slashes when the remainder actually looks like such an
-+            # authority (i.e. its first path segment contains a ":"),
-+            # otherwise leave them alone -- paths that intentionally start
-+            # with "/" (e.g. presigned S3 URLs for keys beginning with "/")
-+            # must not be modified or their signature will no longer match.
-+            remainder = url.lstrip("/")
-+            first_segment = remainder.split("/", 1)[0]
-+            if ":" in first_segment:
-+                url = f"/{remainder}"
++            # Excess leading path separators can confuse urllib3 into
++            # attempting to reparse the request URI as a host[:port], which
++            # raises for values that aren't valid (e.g. "//v:h"). Only trim
++            # them in that case; otherwise leave the path (and any leading
++            # slashes it legitimately contains, e.g. an S3 object key) alone.
++            try:
++                parse_url(url)
++            except LocationValueError:
++                url = f"/{url.lstrip('/')}"
  
          if is_proxied_http_request and not using_socks_proxy:
              url = urldefragauth(request.url)

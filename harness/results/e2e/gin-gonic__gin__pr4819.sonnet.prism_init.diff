@@ -1,16 +1,17 @@
 diff --git a/tree.go b/tree.go
-index dc84ff6..0205f47 100644
+index dc84ff6..4ac93e4 100644
 --- a/tree.go
 +++ b/tree.go
-@@ -418,6 +418,11 @@ type skippedNode struct {
+@@ -416,6 +416,12 @@ type skippedNode struct {
+ // made if a handle exists with an extra (without the) trailing slash for the
+ // given path.
  func (n *node) getValue(path string, params *Params, skippedNodes *[]skippedNode, unescape bool) (value nodeValue) {
++	// Reset any residue left by a previous call reusing the same backing
++	// array (e.g. the HandleMethodNotAllowed loop in handleHTTPRequest),
++	// otherwise pushes below can reslice past the fixed capacity and panic.
++	if skippedNodes != nil {
++		*skippedNodes = (*skippedNodes)[:0]
++	}
  	var globalParamsCount int16
  
-+	// Callers may reuse skippedNodes across multiple getValue calls within the
-+	// same request (e.g. the HandleMethodNotAllowed loop in handleHTTPRequest),
-+	// so this must start empty rather than accumulate residue from prior calls.
-+	*skippedNodes = (*skippedNodes)[:0]
-+
  walk: // Outer loop for walking the tree
- 	for {
- 		prefix := n.path

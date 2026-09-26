@@ -1,16 +1,27 @@
 diff --git a/src/click/_termui_impl.py b/src/click/_termui_impl.py
-index 1d23026e..14c891d2 100644
+index 1d23026e..18b7c335 100644
 --- a/src/click/_termui_impl.py
 +++ b/src/click/_termui_impl.py
-@@ -449,6 +449,12 @@ def get_pager_file(color: bool | None = None) -> t.Generator[t.TextIO, None, Non
+@@ -439,9 +439,13 @@ def get_pager_file(color: bool | None = None) -> t.Generator[t.TextIO, None, Non
+         # Split streams by capabilities rather than the abstract TextIO /
+         # BinaryIO annotations: buffered text streams can be unwrapped to bytes,
+         # while text-only streams are yielded as-is.
++        owns_buffer = True
+         if _has_binary_buffer(stream):
+-            # Text stream backed by a binary buffer.
++            # Text stream backed by a binary buffer. The buffer is owned by
++            # the original stream (e.g. sys.stdout), so it must not be closed
++            # when the wrapper below is garbage collected.
+             stream = MaybeStripAnsi(stream.buffer, color=color, encoding=encoding)
++            owns_buffer = False
+         elif isinstance(stream, t.BinaryIO):
+             # Binary stream
+             stream = MaybeStripAnsi(stream, color=color, encoding=encoding)
+@@ -449,6 +453,8 @@ def get_pager_file(color: bool | None = None) -> t.Generator[t.TextIO, None, Non
              yield stream
          finally:
              stream.flush()
-+            if isinstance(stream, MaybeStripAnsi):
-+                # Detach the wrapped buffer before this wrapper is garbage
-+                # collected, otherwise its __del__ would close the buffer
-+                # it borrowed (e.g. sys.stdout.buffer), leaving the
-+                # original stream closed as well.
++            if not owns_buffer:
 +                stream.detach()
  
  

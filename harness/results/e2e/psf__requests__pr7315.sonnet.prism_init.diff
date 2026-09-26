@@ -1,22 +1,21 @@
 diff --git a/src/requests/adapters.py b/src/requests/adapters.py
-index c5726aed..c0839deb 100644
+index c5726aed..19cf1089 100644
 --- a/src/requests/adapters.py
 +++ b/src/requests/adapters.py
-@@ -590,8 +590,17 @@ class HTTPAdapter(BaseAdapter):
+@@ -590,8 +590,16 @@ class HTTPAdapter(BaseAdapter):
              using_socks_proxy = proxy_scheme.startswith("socks")
  
          url = request.path_url
 -        if url.startswith("//"):  # Don't confuse urllib3
 -            url = f"/{url.lstrip('/')}"
 +        if url.startswith("//"):
-+            # A path with excess leading slashes (e.g. "//host:port/...")
-+            # can be mistaken by urllib3 for a network-path reference and
-+            # reparsed as an authority. Only trim the extra slashes when
-+            # the first path segment could be confused for a "host:port"
-+            # in that way; otherwise leave the path untouched, since a
-+            # literal leading "/" is significant (e.g. an S3 object key
-+            # that itself starts with "/").
-+            first_segment = url[2:].split("/", 1)[0].split("?", 1)[0].split("#", 1)[0]
++            # A leading "//" only risks confusing urllib3 into treating the
++            # path as a network-path reference (i.e. "//host:port/...") when
++            # the segment right after it looks like a host[:port]. Plain
++            # paths that merely start with an extra slash (e.g. S3 keys like
++            # "//key_with_leading_slash.txt") must be left untouched, or the
++            # resulting request no longer matches a presigned URL signature.
++            first_segment = url[2:].split("/", 1)[0]
 +            if ":" in first_segment:
 +                url = f"/{url.lstrip('/')}"
  

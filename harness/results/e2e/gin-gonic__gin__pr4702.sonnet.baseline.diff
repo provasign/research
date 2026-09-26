@@ -1,24 +1,20 @@
 diff --git a/context.go b/context.go
-index 640e20b..fd3e0c3 100644
+index 640e20b..811dbc8 100644
 --- a/context.go
 +++ b/context.go
-@@ -738,11 +738,17 @@ func (c *Context) SaveUploadedFile(file *multipart.FileHeader, dst string, perm
+@@ -738,10 +738,11 @@ func (c *Context) SaveUploadedFile(file *multipart.FileHeader, dst string, perm
  		mode = perm[0]
  	}
  	dir := filepath.Dir(dst)
-+	dirExists := false
-+	if _, statErr := os.Stat(dir); statErr == nil {
-+		dirExists = true
-+	}
- 	if err = os.MkdirAll(dir, mode); err != nil {
- 		return err
- 	}
--	if err = os.Chmod(dir, mode); err != nil {
+-	if err = os.MkdirAll(dir, mode); err != nil {
 -		return err
-+	if !dirExists {
-+		if err = os.Chmod(dir, mode); err != nil {
+-	}
+-	if err = os.Chmod(dir, mode); err != nil {
++	if _, err = os.Stat(dir); os.IsNotExist(err) {
++		if err = os.MkdirAll(dir, mode); err != nil {
 +			return err
 +		}
++	} else if err != nil {
+ 		return err
  	}
  
- 	out, err := os.Create(dst)

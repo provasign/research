@@ -1,0 +1,57 @@
+diff --git a/src/main/java/org/apache/commons/lang3/ClassUtils.java b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+index 5c2cf099d..dd7d09cc5 100644
+--- a/src/main/java/org/apache/commons/lang3/ClassUtils.java
++++ b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+@@ -18,9 +18,11 @@
+ 
+ import java.lang.reflect.Method;
+ import java.lang.reflect.Modifier;
++import java.util.ArrayDeque;
+ import java.util.ArrayList;
+ import java.util.Collections;
+ import java.util.Comparator;
++import java.util.Deque;
+ import java.util.HashMap;
+ import java.util.HashSet;
+ import java.util.Iterator;
+@@ -1024,7 +1026,39 @@ public static String getShortClassName(final Class<?> cls) {
+         if (cls == null) {
+             return StringUtils.EMPTY;
+         }
+-        return getShortClassName(cls.getName());
++        Class<?> component = cls;
++        int arrayDepth = 0;
++        while (component.isArray()) {
++            arrayDepth++;
++            component = component.getComponentType();
++        }
++        final String className = component.getName();
++        final int lastDotIdx = className.lastIndexOf(PACKAGE_SEPARATOR_CHAR);
++        final StringBuilder out = new StringBuilder(className.length() - lastDotIdx - 1);
++        if (className.indexOf(INNER_CLASS_SEPARATOR_CHAR, lastDotIdx + 1) == -1) {
++            out.append(className, lastDotIdx + 1, className.length());
++        } else {
++            // Use the enclosing class chain to find the actual positions of the '$' separators
++            // introduced by nesting, so that '$' characters that are part of an identifier
++            // (a legal, if unusual, Java identifier character) are left untouched.
++            final Deque<Integer> separatorIndices = new ArrayDeque<>();
++            for (Class<?> enclosing = component.getEnclosingClass(); enclosing != null; enclosing = enclosing.getEnclosingClass()) {
++                separatorIndices.push(enclosing.getName().length());
++            }
++            for (int i = lastDotIdx + 1; i < className.length(); i++) {
++                final char c = className.charAt(i);
++                if (c == INNER_CLASS_SEPARATOR_CHAR && !separatorIndices.isEmpty() && separatorIndices.peek() == i) {
++                    separatorIndices.pop();
++                    out.append(PACKAGE_SEPARATOR_CHAR);
++                } else {
++                    out.append(c);
++                }
++            }
++        }
++        for (int i = 0; i < arrayDepth; i++) {
++            out.append("[]");
++        }
++        return out.toString();
+     }
+ 
+     /**

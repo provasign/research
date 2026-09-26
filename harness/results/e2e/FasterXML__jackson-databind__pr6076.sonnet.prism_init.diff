@@ -1,0 +1,221 @@
+diff --git a/src/main/java/tools/jackson/databind/ser/jackson/JsonValueSerializer.java b/src/main/java/tools/jackson/databind/ser/jackson/JsonValueSerializer.java
+index 3fbdbdc15..1f33899d7 100644
+--- a/src/main/java/tools/jackson/databind/ser/jackson/JsonValueSerializer.java
++++ b/src/main/java/tools/jackson/databind/ser/jackson/JsonValueSerializer.java
+@@ -1,23 +1,30 @@
+ package tools.jackson.databind.ser.jackson;
+ 
++import java.lang.annotation.Annotation;
+ import java.lang.reflect.InvocationTargetException;
+ import java.util.LinkedHashSet;
++import java.util.List;
+ import java.util.Set;
+ import java.util.function.UnaryOperator;
+ 
++import com.fasterxml.jackson.annotation.JsonFormat;
+ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
++import com.fasterxml.jackson.annotation.JsonInclude;
+ import com.fasterxml.jackson.annotation.JsonTypeInfo.As;
+ 
+ import tools.jackson.core.*;
+ import tools.jackson.core.type.WritableTypeId;
+ import tools.jackson.databind.*;
+ import tools.jackson.databind.annotation.JacksonStdImpl;
++import tools.jackson.databind.cfg.MapperConfig;
+ import tools.jackson.databind.introspect.AnnotatedMember;
+ import tools.jackson.databind.jsonFormatVisitors.JsonFormatVisitorWrapper;
++import tools.jackson.databind.jsonFormatVisitors.JsonObjectFormatVisitor;
+ import tools.jackson.databind.jsonFormatVisitors.JsonStringFormatVisitor;
+ import tools.jackson.databind.jsontype.TypeIdResolver;
+ import tools.jackson.databind.jsontype.TypeSerializer;
+ import tools.jackson.databind.ser.BeanSerializer;
++import tools.jackson.databind.ser.impl.PropertySerializerMap;
+ import tools.jackson.databind.ser.std.StdDynamicSerializer;
+ import tools.jackson.databind.util.ClassUtil;
+ 
+@@ -59,6 +66,24 @@ public class JsonValueSerializer
+ 
+     protected final Set<String> _ignoredProperties;
+ 
++    /**
++     * Pseudo-property that exposes the annotations of the {@code @JsonValue}-annotated
++     * accessor itself (as opposed to whatever property this serializer happens to be
++     * used for, if any).
++     */
++    protected final BeanProperty _accessorProperty;
++
++    /**
++     * Property to use when resolving/contextualizing the serializer for the value
++     * returned by {@link #_accessor}: behaves like the (possibly {@code null}) outer
++     * property this serializer is attached to (so e.g. {@code @JsonFormat} on that
++     * outer property, used to control the delegate's shape, keeps working), but also
++     * folds in {@code @JsonInclude} declared directly on the accessor, which would
++     * otherwise never be considered since it belongs to a different member than the
++     * outer property.
++     */
++    protected final BeanProperty _contentProperty;
++
+     /*
+     /**********************************************************************
+     /* Life-cycle
+@@ -83,6 +108,9 @@ public class JsonValueSerializer
+         _accessor = accessor;
+         _forceTypeInformation = true; // gets reconsidered when we are contextualized
+         _ignoredProperties = ignoredProperties;
++        _accessorProperty = new BeanProperty.Std(PropertyName.construct(accessor.getName()),
++                valueType, null, accessor, PropertyMetadata.STD_OPTIONAL);
++        _contentProperty = _accessorProperty;
+     }
+ 
+     protected JsonValueSerializer(JsonValueSerializer src, BeanProperty property,
+@@ -94,6 +122,9 @@ public class JsonValueSerializer
+         _staticTyping = src._staticTyping;
+         _forceTypeInformation = forceTypeInfo;
+         _ignoredProperties = src._ignoredProperties;
++        _accessorProperty = src._accessorProperty;
++        _contentProperty = (property == null) ? _accessorProperty
++                : new AccessorInclusionProperty(property, _accessor);
+     }
+ 
+     public static JsonValueSerializer construct(SerializationConfig config,
+@@ -173,8 +204,7 @@ public class JsonValueSerializer
+                  *   serializer from value serializer; but, alas, there's no access
+                  *   to serializer factory at this point...
+                  */
+-                // I _think_ this can be considered a primary property...
+-                ser = ctxt.findPrimaryPropertySerializer(_valueType, property);
++                ser = ctxt.findPrimaryPropertySerializer(_valueType, _contentProperty);
+                 ser = _withIgnoreProperties(ser, _ignoredProperties);
+                 /* 09-Dec-2010, tatu: Turns out we must add special handling for
+                  *   cases where "native" (aka "natural") type is being serialized,
+@@ -233,11 +263,42 @@ public class JsonValueSerializer
+                 valueSer -> _withIgnoreProperties(valueSer, _ignoredProperties);
+         Class<?> cc = value.getClass();
+         if (_valueType.hasGenericTypes()) {
+-            return _findAndAddDynamic(ctxt,
++            return _findAndAddDynamicForAccessor(ctxt,
+                     ctxt.constructSpecializedType(_valueType, cc),
+                     serTransformer);
+         }
+-        return _findAndAddDynamic(ctxt, cc, serTransformer);
++        return _findAndAddDynamicForAccessor(ctxt, cc, serTransformer);
++    }
++
++    /**
++     * Variant of {@code _findAndAddDynamic} that resolves the value serializer
++     * against {@link #_contentProperty} rather than {@link #_property} (whatever
++     * property this serializer happens to be attached to, if any), so that
++     * annotations like {@code @JsonInclude} placed directly on the accessor are
++     * honored even when the value's runtime type can only be resolved dynamically.
++     */
++    private ValueSerializer<Object> _findAndAddDynamicForAccessor(SerializationContext ctxt,
++            Class<?> type, UnaryOperator<ValueSerializer<Object>> serTransformer)
++    {
++        PropertySerializerMap map = _dynamicValueSerializers;
++        PropertySerializerMap.SerializerAndMapResult result = map.findAndAddSecondarySerializer(type,
++                ctxt, _contentProperty, serTransformer);
++        if (map != result.map) {
++            _dynamicValueSerializers = result.map;
++        }
++        return result.serializer;
++    }
++
++    private ValueSerializer<Object> _findAndAddDynamicForAccessor(SerializationContext ctxt,
++            JavaType type, UnaryOperator<ValueSerializer<Object>> serTransformer)
++    {
++        PropertySerializerMap map = _dynamicValueSerializers;
++        PropertySerializerMap.SerializerAndMapResult result = map.findAndAddSecondarySerializer(type,
++                ctxt, _contentProperty, serTransformer);
++        if (map != result.map) {
++            _dynamicValueSerializers = result.map;
++        }
++        return result.serializer;
+     }
+ 
+     /**
+@@ -299,9 +360,10 @@ public class JsonValueSerializer
+         if (ser == null) {
+             Class<?> cc = value.getClass();
+             if (_valueType.hasGenericTypes()) {
+-                ser = _findAndAddDynamic(ctxt, ctxt.constructSpecializedType(_valueType, cc));
++                ser = _findAndAddDynamicForAccessor(ctxt, ctxt.constructSpecializedType(_valueType, cc),
++                        UnaryOperator.identity());
+             } else {
+-                ser = _findAndAddDynamic(ctxt, cc);
++                ser = _findAndAddDynamicForAccessor(ctxt, cc, UnaryOperator.identity());
+             }
+         }
+ 
+@@ -418,6 +480,72 @@ public class JsonValueSerializer
+     /**********************************************************************
+      */
+ 
++    /**
++     * {@link BeanProperty} that behaves exactly like a given ("outer") property, except
++     * that {@link #findPropertyInclusion} additionally overlays {@code @JsonInclude}
++     * declared directly on the {@code @JsonValue} accessor. Needed because the accessor
++     * belongs to a different member than the outer property, so its own annotations
++     * would otherwise never be considered when resolving the value's serializer.
++     */
++    private static class AccessorInclusionProperty implements BeanProperty
++    {
++        private final BeanProperty _base;
++        private final AnnotatedMember _accessor;
++
++        AccessorInclusionProperty(BeanProperty base, AnnotatedMember accessor) {
++            _base = base;
++            _accessor = accessor;
++        }
++
++        @Override
++        public JsonInclude.Value findPropertyInclusion(MapperConfig<?> config, Class<?> baseType) {
++            JsonInclude.Value v0 = _base.findPropertyInclusion(config, baseType);
++            AnnotationIntrospector intr = config.getAnnotationIntrospector();
++            if (intr != null) {
++                JsonInclude.Value v = intr.findPropertyInclusion(config, _accessor);
++                if (v != null) {
++                    v0 = v0.withOverrides(v);
++                }
++            }
++            return v0;
++        }
++
++        @Override
++        public String getName() { return _base.getName(); }
++        @Override
++        public PropertyName getFullName() { return _base.getFullName(); }
++        @Override
++        public JavaType getType() { return _base.getType(); }
++        @Override
++        public PropertyName getWrapperName() { return _base.getWrapperName(); }
++        @Override
++        public PropertyMetadata getMetadata() { return _base.getMetadata(); }
++        @Override
++        public boolean isRequired() { return _base.isRequired(); }
++        @Override
++        public boolean isVirtual() { return _base.isVirtual(); }
++        @Override
++        public <A extends Annotation> A getAnnotation(Class<A> acls) { return _base.getAnnotation(acls); }
++        @Override
++        public <A extends Annotation> A getContextAnnotation(Class<A> acls) { return _base.getContextAnnotation(acls); }
++        @Override
++        public AnnotatedMember getMember() { return _base.getMember(); }
++        @Override
++        public JsonFormat.Value findPropertyFormat(MapperConfig<?> config, Class<?> baseType) {
++            return _base.findPropertyFormat(config, baseType);
++        }
++        @Override
++        public JsonFormat.Value findFormatOverrides(MapperConfig<?> config) {
++            return _base.findFormatOverrides(config);
++        }
++        @Override
++        public List<PropertyName> findAliases(MapperConfig<?> config) { return _base.findAliases(config); }
++        @Override
++        public void depositSchemaProperty(JsonObjectFormatVisitor objectVisitor, SerializationContext ctxt) {
++            _base.depositSchemaProperty(objectVisitor, ctxt);
++        }
++    }
++
+     /**
+      * Silly little wrapper class we need to re-route type serialization so that we can
+      * override Object to use for type id (logical type) even when asking serialization

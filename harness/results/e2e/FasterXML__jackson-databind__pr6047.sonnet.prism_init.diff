@@ -1,17 +1,19 @@
 diff --git a/src/main/java/tools/jackson/databind/deser/bean/BeanAsArrayDeserializer.java b/src/main/java/tools/jackson/databind/deser/bean/BeanAsArrayDeserializer.java
-index 9efaa2541..c3eb0c57f 100644
+index 9efaa2541..992e3304c 100644
 --- a/src/main/java/tools/jackson/databind/deser/bean/BeanAsArrayDeserializer.java
 +++ b/src/main/java/tools/jackson/databind/deser/bean/BeanAsArrayDeserializer.java
-@@ -390,6 +390,13 @@ public class BeanAsArrayDeserializer
+@@ -390,6 +390,15 @@ public class BeanAsArrayDeserializer
          for (; p.nextToken() != JsonToken.END_ARRAY; ++i) {
              SettableBeanProperty prop = (i < propCount) ? props[i] : null;
              if (prop == null) { // we get null if there are extra elements; maybe otherwise too?
-+                if (i >= propCount && !_ignoreAllUnknown
-+                        && ctxt.isEnabled(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)) {
-+                    ctxt.reportWrongTokenException(this, JsonToken.END_ARRAY,
-+                            "Unexpected JSON values; expected at most %d properties (in JSON Array)",
-+                            propCount);
-+                    // never gets here
++                if (i >= propCount) {
++                    // Ok; extra fields? Let's fail, unless ignoring extra props is fine
++                    if (!_ignoreAllUnknown && ctxt.isEnabled(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)) {
++                        ctxt.reportWrongTokenException(this, JsonToken.END_ARRAY,
++                                "Unexpected JSON values; expected at most %d properties (in JSON Array)",
++                                propCount);
++                        // never gets here
++                    }
 +                }
                  p.skipChildren();
                  continue;

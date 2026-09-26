@@ -1,0 +1,24 @@
+diff --git a/src/main/java/org/apache/commons/lang3/math/Fraction.java b/src/main/java/org/apache/commons/lang3/math/Fraction.java
+index a1dd4a1ae..fcb6831cb 100644
+--- a/src/main/java/org/apache/commons/lang3/math/Fraction.java
++++ b/src/main/java/org/apache/commons/lang3/math/Fraction.java
+@@ -556,10 +556,15 @@ private Fraction addSub(final Fraction fraction, final boolean isAdd) {
+         final int d1 = greatestCommonDivisor(denominator, fraction.denominator);
+         if (d1 == 1) {
+             // result is ((u*v' +/- u'v) / u'v')
+-            final int uvp = mulAndCheck(numerator, fraction.denominator);
+-            final int upv = mulAndCheck(fraction.numerator, denominator);
+-            return new Fraction(isAdd ? addAndCheck(uvp, upv) : subAndCheck(uvp, upv), mulPosAndCheck(denominator,
+-                    fraction.denominator));
++            try {
++                final int uvp = mulAndCheck(numerator, fraction.denominator);
++                final int upv = mulAndCheck(fraction.numerator, denominator);
++                return new Fraction(isAdd ? addAndCheck(uvp, upv) : subAndCheck(uvp, upv), mulPosAndCheck(denominator,
++                        fraction.denominator));
++            } catch (final ArithmeticException ex) {
++                // numerator or denominator overflowed an int, but the reduced
++                // result may still fit; fall through to the BigInteger path below.
++            }
+         }
+         // the quantity 't' requires 65 bits of precision; see knuth 4.5.1
+         // exercise 7. we're going to use a BigInteger.

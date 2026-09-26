@@ -1,0 +1,36 @@
+diff --git a/src/main/java/tools/jackson/databind/ser/std/StdConvertingSerializer.java b/src/main/java/tools/jackson/databind/ser/std/StdConvertingSerializer.java
+index b4beda28a..761841992 100644
+--- a/src/main/java/tools/jackson/databind/ser/std/StdConvertingSerializer.java
++++ b/src/main/java/tools/jackson/databind/ser/std/StdConvertingSerializer.java
+@@ -8,6 +8,7 @@ import tools.jackson.databind.jsontype.TypeSerializer;
+ import tools.jackson.databind.ser.impl.PropertySerializerMap;
+ import tools.jackson.databind.util.ClassUtil;
+ import tools.jackson.databind.util.Converter;
++import tools.jackson.databind.util.NameTransformer;
+ 
+ /**
+  * Serializer implementation where given Java type is first converted
+@@ -155,6 +156,23 @@ public class StdConvertingSerializer
+         return _delegateSerializer;
+     }
+ 
++    @Override
++    public boolean isUnwrappingSerializer() {
++        return (_delegateSerializer != null) && _delegateSerializer.isUnwrappingSerializer();
++    }
++
++    @Override
++    public ValueSerializer<Object> unwrappingSerializer(NameTransformer unwrapper) {
++        if (_delegateSerializer == null) {
++            return this;
++        }
++        ValueSerializer<?> unwrappingDelegate = _delegateSerializer.unwrappingSerializer(unwrapper);
++        if (unwrappingDelegate == _delegateSerializer) {
++            return this;
++        }
++        return withDelegate(_converter, _delegateType, unwrappingDelegate, _property);
++    }
++
+     /*
+     /**********************************************************************
+     /* Serialization

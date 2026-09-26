@@ -1,22 +1,12 @@
-diff --git a/src/click/_termui_impl.py b/src/click/_termui_impl.py
-index 3336c37c..5d7d54bf 100644
---- a/src/click/_termui_impl.py
-+++ b/src/click/_termui_impl.py
-@@ -387,13 +387,16 @@ class ProgressBar(t.Generic[V]):
- 
- class MaybeStripAnsi(io.TextIOWrapper):
-     def __init__(self, stream: t.IO[bytes], *, color: bool, **kwargs: t.Any):
-+        kwargs.setdefault("write_through", True)
-         super().__init__(stream, **kwargs)
-         self.color = color
- 
-     def write(self, text: str) -> int:
-         if not self.color:
-             text = strip_ansi(text)
--        return super().write(text)
-+        rv = super().write(text)
-+        self.flush()
-+        return rv
+diff --git a/src/click/termui.py b/src/click/termui.py
+index 91ef6e19..ed723549 100644
+--- a/src/click/termui.py
++++ b/src/click/termui.py
+@@ -346,6 +346,7 @@ def echo_via_pager(
+     with get_pager_file(color=color) as pager:
+         for text in itertools.chain(text_generator, "\n"):
+             pager.write(text)
++            pager.flush()
  
  
- def _pager_contextmanager(
+ @t.overload

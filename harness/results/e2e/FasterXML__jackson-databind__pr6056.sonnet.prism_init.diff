@@ -1,0 +1,97 @@
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializer.java
+index d37e14218..fdca6a8e7 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializer.java
+@@ -789,7 +789,7 @@ public class BeanDeserializer
+             }
+         }
+         tokens.writeEndObject();
+-        _unwrappedPropertyHandler.processUnwrapped(p, ctxt, bean, tokens);
++        _unwrappedPropertyHandler.processUnwrapped(p, ctxt, bean, tokens, activeView);
+         return bean;
+     }
+ 
+@@ -847,7 +847,7 @@ public class BeanDeserializer
+             }
+         }
+         tokens.writeEndObject();
+-        _unwrappedPropertyHandler.processUnwrapped(p, ctxt, bean, tokens);
++        _unwrappedPropertyHandler.processUnwrapped(p, ctxt, bean, tokens, activeView);
+         return bean;
+     }
+ 
+@@ -914,7 +914,7 @@ public class BeanDeserializer
+                         return ctxt.reportInputMismatch(creatorProp,
+                                 "Cannot create polymorphic instances with unwrapped values");
+                     }
+-                    return _unwrappedPropertyHandler.processUnwrapped(p, ctxt, bean, tokens);
++                    return _unwrappedPropertyHandler.processUnwrapped(p, ctxt, bean, tokens, activeView);
+                 }
+                 continue;
+             }
+@@ -964,7 +964,7 @@ public class BeanDeserializer
+         } catch (Exception e) {
+             return wrapInstantiationProblem(e, ctxt);
+         }
+-        return _unwrappedPropertyHandler.processUnwrapped(p, ctxt, bean, tokens);
++        return _unwrappedPropertyHandler.processUnwrapped(p, ctxt, bean, tokens, activeView);
+     }
+ 
+     /*
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/BuilderBasedDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/BuilderBasedDeserializer.java
+index 03f1c03ca..406b5cbc3 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/BuilderBasedDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/BuilderBasedDeserializer.java
+@@ -647,7 +647,7 @@ public class BuilderBasedDeserializer
+             }
+         }
+         tokens.writeEndObject();
+-        return _unwrappedPropertyHandler.processUnwrapped(p, ctxt, bean, tokens);
++        return _unwrappedPropertyHandler.processUnwrapped(p, ctxt, bean, tokens, activeView);
+     }
+ 
+     @SuppressWarnings("resource")
+@@ -727,7 +727,7 @@ public class BuilderBasedDeserializer
+                 return wrapInstantiationProblem(e, ctxt);
+             }
+         }
+-        return _unwrappedPropertyHandler.processUnwrapped(p, ctxt, builder, tokens);
++        return _unwrappedPropertyHandler.processUnwrapped(p, ctxt, builder, tokens, activeView);
+     }
+ 
+     protected Object deserializeWithUnwrapped(JsonParser p,
+@@ -764,7 +764,7 @@ public class BuilderBasedDeserializer
+             }
+         }
+         tokens.writeEndObject();
+-        return _unwrappedPropertyHandler.processUnwrapped(p, ctxt, builder, tokens);
++        return _unwrappedPropertyHandler.processUnwrapped(p, ctxt, builder, tokens, activeView);
+     }
+ 
+     /*
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/impl/UnwrappedPropertyHandler.java b/src/main/java/com/fasterxml/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
+index 5dadec127..c4159ac41 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
+@@ -55,9 +55,21 @@ public class UnwrappedPropertyHandler
+     public Object processUnwrapped(JsonParser originalParser, DeserializationContext ctxt,
+             Object bean, TokenBuffer buffered)
+         throws IOException
++    {
++        return processUnwrapped(originalParser, ctxt, bean, buffered, null);
++    }
++
++    @SuppressWarnings("resource")
++    public Object processUnwrapped(JsonParser originalParser, DeserializationContext ctxt,
++            Object bean, TokenBuffer buffered, Class<?> activeView)
++        throws IOException
+     {
+         for (int i = 0, len = _properties.size(); i < len; ++i) {
+             SettableBeanProperty prop = _properties.get(i);
++            // [databind#5989]: must honor active view for unwrapped properties too
++            if ((activeView != null) && !prop.visibleInView(activeView)) {
++                continue;
++            }
+             JsonParser p = buffered.asParser(originalParser.streamReadConstraints());
+             p.nextToken();
+             prop.deserializeAndSet(p, ctxt, bean);

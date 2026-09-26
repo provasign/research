@@ -1,13 +1,14 @@
 diff --git a/context.go b/context.go
-index e1d9be4..17b2cdd 100644
+index e1d9be4..c42459f 100644
 --- a/context.go
 +++ b/context.go
-@@ -989,7 +989,7 @@ func (c *Context) ClientIP() string {
+@@ -989,7 +989,8 @@ func (c *Context) ClientIP() string {
  
  	if trusted && c.engine.ForwardedByClientIP && c.engine.RemoteIPHeaders != nil {
  		for _, headerName := range c.engine.RemoteIPHeaders {
 -			ip, valid := c.engine.validateHeader(c.requestHeader(headerName))
-+			ip, valid := c.engine.validateHeader(strings.Join(c.Request.Header.Values(headerName), ","))
++			headerValue := strings.Join(c.Request.Header.Values(headerName), ",")
++			ip, valid := c.engine.validateHeader(headerValue)
  			if valid {
  				return ip
  			}

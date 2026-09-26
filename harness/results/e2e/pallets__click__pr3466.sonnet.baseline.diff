@@ -1,18 +1,48 @@
 diff --git a/src/click/shell_completion.py b/src/click/shell_completion.py
-index 7235f100..377f2cea 100644
+index 7235f100..8ba34272 100644
 --- a/src/click/shell_completion.py
 +++ b/src/click/shell_completion.py
-@@ -44,7 +44,12 @@ def shell_complete(
+@@ -14,6 +14,7 @@ from .core import Option
+ from .core import Parameter
+ from .core import ParameterSource
+ from .utils import echo
++from .utils import get_binary_stream
+ 
+ 
+ def shell_complete(
+@@ -44,16 +45,33 @@ def shell_complete(
      comp = comp_cls(cli, ctx_args, prog_name, complete_var)
  
      if instruction == "source":
 -        echo(comp.source())
-+        # Write as bytes with explicit "\n" line endings. Shell scripts
-+        # must use "\n" even on Windows; if this were written as text,
-+        # Windows would translate "\n" to "\r\n", which breaks the
-+        # generated script (e.g. a stray "\r" makes zsh fail to
-+        # recognize "fi" and raise "parse error near `elif'").
-+        echo(comp.source().encode())
++        _echo_lf(comp.source())
          return 0
  
      if instruction == "complete":
+-        echo(comp.complete())
++        _echo_lf(comp.complete())
+         return 0
+ 
+     return 1
+ 
+ 
++def _echo_lf(message: str) -> None:
++    """Write ``message`` to stdout using ``\\n`` line endings only.
++
++    This output is a shell script that gets ``eval``'d or ``source``'d by
++    the calling shell. On Windows, :func:`~click.echo` writes through a
++    text stream that translates ``\\n`` to ``\\r\\n``. POSIX-style shells
++    that run on Windows (e.g. MSYS2/Git Bash zsh) don't strip the stray
++    ``\\r``, which corrupts multi-line constructs like ``if``/``elif`` and
++    causes a parse error. Writing raw bytes avoids that translation on
++    every platform.
++    """
++    stream = get_binary_stream("stdout")
++    stream.write(message.encode())
++    stream.write(b"\n")
++    stream.flush()
++
++
+ class CompletionItem:
+     """Represents a completion value and metadata about the value. The
+     default metadata is ``type`` to indicate special shell handling,

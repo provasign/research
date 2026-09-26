@@ -1,0 +1,38 @@
+diff --git a/src/main/java/org/apache/commons/lang3/ClassUtils.java b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+index 5c2cf099d..65e80af7f 100644
+--- a/src/main/java/org/apache/commons/lang3/ClassUtils.java
++++ b/src/main/java/org/apache/commons/lang3/ClassUtils.java
+@@ -1012,8 +1012,15 @@ public static String getShortCanonicalName(final String canonicalName) {
+      * Gets the class name minus the package name from a {@link Class}.
+      *
+      * <p>
+-     * This method simply gets the name using {@code Class.getName()} and then calls {@link #getShortClassName(String)}. See
+-     * relevant notes there.
++     * Unlike {@link #getShortClassName(String)}, this method has access to the {@link Class} itself, so it does not need to
++     * rely on heuristics to distinguish package separators, outer classes, and inner classes: it does so using
++     * {@link Class#getEnclosingClass()} and {@link Class#getSimpleName()}. This means a legitimate {@code $} character in a
++     * class name (for example generated or DSL-style identifiers) is not misinterpreted as an inner class separator.
++     * </p>
++     *
++     * <p>
++     * For array, anonymous, and local classes, this method falls back to {@code Class.getName()} and
++     * {@link #getShortClassName(String)}. See relevant notes there.
+      * </p>
+      *
+      * @param cls the class to get the short name for.
+@@ -1024,7 +1031,14 @@ public static String getShortClassName(final Class<?> cls) {
+         if (cls == null) {
+             return StringUtils.EMPTY;
+         }
+-        return getShortClassName(cls.getName());
++        if (cls.isArray() || cls.isAnonymousClass() || cls.isLocalClass()) {
++            return getShortClassName(cls.getName());
++        }
++        final Class<?> enclosingClass = cls.getEnclosingClass();
++        if (enclosingClass == null) {
++            return cls.getSimpleName();
++        }
++        return getShortClassName(enclosingClass) + PACKAGE_SEPARATOR_CHAR + cls.getSimpleName();
+     }
+ 
+     /**

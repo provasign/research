@@ -1,0 +1,60 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java b/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
+index 070c2df39..4ad95000d 100644
+--- a/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
++++ b/src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
+@@ -234,7 +234,9 @@ public class UnwrappedPropertyHandler
+     /**
+      * Helper method to collect property names from a property's deserializer.
+      *
+-     * @return {@code true} if the property deserializer has AnySetter.
++     * @return {@code true} if the property deserializer has AnySetter (or if
++     *    its set of recognized property names cannot be determined, in which
++     *    case we must conservatively assume it may consume any property)
+      *
+      * @since 3.1
+      */
+@@ -244,11 +246,42 @@ public class UnwrappedPropertyHandler
+         if (prop != null) {
+             ValueDeserializer<?> deser = prop.getValueDeserializer();
+             if (deser != null) {
++                if (deser.hasAnySetter()) {
++                    return true;
++                }
+                 // Recursively collect property names
+-            	deser.collectAllPropertyNamesTo(names);
+-                return deser.hasAnySetter();
++                final int sizeBefore = names.size();
++                deser.collectAllPropertyNamesTo(names);
++                // [databind#6001]: a custom `ValueDeserializer` that supports unwrapping
++                // (via `unwrappingDeserializer(...)`) but does not override
++                // `collectAllPropertyNamesTo(...)` contributes no names here -- but this does
++                // NOT mean it recognizes no properties, only that we have no way to know which
++                // ones it does. In that case we cannot safely narrow down the set of properties
++                // routed to it, so fall back to treating it like an "any setter" deserializer so
++                // that unrecognized properties still get buffered and passed to it.
++                if ((names.size() == sizeBefore) && !_declaresKnownPropertyNames(deser)) {
++                    return true;
++                }
+             }
+         }
+         return false;
+     }
++
++    /**
++     * Helper method used to figure out whether given deserializer actually overrides
++     * {@link ValueDeserializer#collectAllPropertyNamesTo} (and so can be trusted to
++     * report an accurate, possibly empty, set of recognized property names) or relies
++     * on the default (no-op) implementation, in which case we have no information about
++     * properties it may (or may not) recognize.
++     *
++     * @since 3.2
++     */
++    private static boolean _declaresKnownPropertyNames(ValueDeserializer<?> deser) {
++        try {
++            return deser.getClass().getMethod("collectAllPropertyNamesTo", Set.class)
++                    .getDeclaringClass() != ValueDeserializer.class;
++        } catch (NoSuchMethodException | SecurityException e) {
++            return false;
++        }
++    }
+ }

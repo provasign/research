@@ -1,0 +1,23 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index 6de42168..78438daa 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -1143,9 +1143,18 @@ class Command:
+     def get_help_option_names(self, ctx: Context) -> list[str]:
+         """Returns the names for the help option."""
+         all_names = set(ctx.help_option_names)
++        existing_dests = {param.name for param in self.params}
+         for param in self.params:
+             all_names.difference_update(param.opts)
+             all_names.difference_update(param.secondary_opts)
++        # Also drop any name that would resolve to the same destination as
++        # an existing parameter (e.g. an argument declared as "help"), even
++        # though its own declaration string ("help") differs from "--help".
++        all_names = {
++            name
++            for name in all_names
++            if _split_opt(name)[1].replace("-", "_").lower() not in existing_dests
++        }
+         return list(all_names)
+ 
+     def get_help_option(self, ctx: Context) -> Option | None:

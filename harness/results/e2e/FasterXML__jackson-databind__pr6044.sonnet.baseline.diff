@@ -1,0 +1,164 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializerBase.java b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializerBase.java
+index 6cb875c15..b889e2553 100644
+--- a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializerBase.java
++++ b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializerBase.java
+@@ -642,6 +642,26 @@ public abstract class BeanDeserializerBase
+                         _beanProperties.remove(prop);
+                         continue;
+                     }
++                } else {
++                    // 26-Sep-2026: external type id may also be attached to the *content*
++                    // type of a Collection/array-valued property (for example a
++                    // `List<Foo>` where `Foo` uses `As.EXTERNAL_PROPERTY`): the sibling
++                    // type id property then applies to every element of the collection,
++                    // so this also needs to be routed through `ExternalTypeHandler`.
++                    JavaType contentType = prop.getType().getContentType();
++                    if (contentType != null) {
++                        TypeDeserializer contentTypeDeser = (TypeDeserializer) contentType.getTypeHandler();
++                        if ((contentTypeDeser != null)
++                                && (contentTypeDeser.getTypeInclusion() == JsonTypeInfo.As.EXTERNAL_PROPERTY)) {
++                            if (extTypes == null) {
++                                extTypes = ExternalTypeHandler.builder(_beanType);
++                            }
++                            extTypes.addExternalForContent(prop, contentTypeDeser,
++                                    prop.findAliases(ctxt.getConfig()));
++                            _beanProperties.remove(prop);
++                            continue;
++                        }
++                    }
+                 }
+             }
+         }
+diff --git a/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java b/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java
+index f538965a7..40ef1703a 100644
+--- a/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java
++++ b/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java
+@@ -398,6 +398,9 @@ public class ExternalTypeHandler
+         if (t == JsonToken.VALUE_NULL) {
+             return null;
+         }
++        if (extProp.isForContentType()) {
++            return _deserializeContentValue(p2, ctxt, extProp, typeId);
++        }
+         // [databind#2747]: invoke subtype deserializer via the known-type-id entry
+         // point so the standard impls skip the wrapper-array re-encoding (which
+         // would otherwise expose a synthetic array in `JsonParser.streamReadContext()`
+@@ -405,6 +408,28 @@ public class ExternalTypeHandler
+         return extProp._typeDeserializer.deserializeTypedWithKnownTypeId(p2, ctxt, typeId);
+     }
+ 
++    /**
++     * Handles the case where the external type id actually applies to the
++     * <b>content</b> type of a Collection/array-valued property (see
++     * {@link #isForContentType()}): resolves the concrete element type from
++     * the type id, narrows the property's (container) type to use it, and lets
++     * the regular container deserializer (with its usual single-value-as-array
++     * handling) take care of the rest, instead of trying to apply the
++     * element's type deserializer directly to the whole container value.
++     */
++    private Object _deserializeContentValue(JsonParser p, DeserializationContext ctxt,
++            ExtTypedProperty extProp, String typeId) throws JacksonException
++    {
++        JavaType containerType = extProp.getProperty().getType();
++        JavaType subtype = extProp._typeDeserializer.getTypeIdResolver().typeFromId(ctxt, typeId);
++        if (subtype != null) {
++            containerType = containerType.withContentType(subtype);
++        }
++        ValueDeserializer<Object> deser = ctxt.findContextualValueDeserializer(containerType,
++                extProp.getProperty());
++        return deser.deserialize(p, ctxt);
++    }
++
+     // 03-Aug-2022, tatu: [databind#3533] to handle absent value matching:
+     @SuppressWarnings("resource")
+     protected final Object _deserializeMissingToken(JsonParser p, DeserializationContext ctxt,
+@@ -439,11 +464,16 @@ public class ExternalTypeHandler
+             prop.set(ctxt, bean, null);
+             return;
+         }
+-        // [databind#2747]: invoke subtype deserializer via the known-type-id entry
+-        // point so the standard impls skip the wrapper-array re-encoding (which
+-        // would otherwise expose a synthetic array in `JsonParser.streamReadContext()`
+-        // to any custom deserializer examining parsing state).
+-        Object value = extProp._typeDeserializer.deserializeTypedWithKnownTypeId(p2, ctxt, typeId);
++        Object value;
++        if (extProp.isForContentType()) {
++            value = _deserializeContentValue(p2, ctxt, extProp, typeId);
++        } else {
++            // [databind#2747]: invoke subtype deserializer via the known-type-id entry
++            // point so the standard impls skip the wrapper-array re-encoding (which
++            // would otherwise expose a synthetic array in `JsonParser.streamReadContext()`
++            // to any custom deserializer examining parsing state).
++            value = extProp._typeDeserializer.deserializeTypedWithKnownTypeId(p2, ctxt, typeId);
++        }
+         prop.set(ctxt, bean, value);
+     }
+ 
+@@ -478,9 +508,29 @@ public class ExternalTypeHandler
+         // [databind#3209]
+         public void addExternal(SettableBeanProperty property, TypeDeserializer typeDeser,
+                 List<PropertyName> valueAliases)
++        {
++            _addExternal(property, typeDeser, valueAliases, false);
++        }
++
++        /**
++         * Variant used when the external type id actually applies to the
++         * <b>content</b> type of a Collection/array-valued {@code property}
++         * (for example a {@code List<Foo>} property where {@code Foo} uses
++         * {@code As.EXTERNAL_PROPERTY}), rather than to the property's own type.
++         *
++         * @since 3.2
++         */
++        public void addExternalForContent(SettableBeanProperty property, TypeDeserializer typeDeser,
++                List<PropertyName> valueAliases)
++        {
++            _addExternal(property, typeDeser, valueAliases, true);
++        }
++
++        private void _addExternal(SettableBeanProperty property, TypeDeserializer typeDeser,
++                List<PropertyName> valueAliases, boolean forContentType)
+         {
+             Integer index = _properties.size();
+-            _properties.add(new ExtTypedProperty(property, typeDeser));
++            _properties.add(new ExtTypedProperty(property, typeDeser, forContentType));
+             _addPropertyIndex(property.getName(), index);
+             _addPropertyIndex(typeDeser.getPropertyName(), index);
+             if (valueAliases != null) {
+@@ -535,13 +585,35 @@ public class ExternalTypeHandler
+         private final TypeDeserializer _typeDeserializer;
+         private final String _typePropertyName;
+ 
++        /**
++         * @since 3.2
++         */
++        private final boolean _forContentType;
++
+         private SettableBeanProperty _typeProperty;
+ 
+-        public ExtTypedProperty(SettableBeanProperty property, TypeDeserializer typeDeser)
++        public ExtTypedProperty(SettableBeanProperty property, TypeDeserializer typeDeser) {
++            this(property, typeDeser, false);
++        }
++
++        public ExtTypedProperty(SettableBeanProperty property, TypeDeserializer typeDeser,
++                boolean forContentType)
+         {
+             _property = property;
+             _typeDeserializer = typeDeser;
+             _typePropertyName = typeDeser.getPropertyName();
++            _forContentType = forContentType;
++        }
++
++        /**
++         * @return {@code true} if the external type id applies to the content
++         *   (element) type of a Collection/array-valued {@link #getProperty()},
++         *   rather than to the property's own type.
++         *
++         * @since 3.2
++         */
++        public boolean isForContentType() {
++            return _forContentType;
+         }
+ 
+         /**

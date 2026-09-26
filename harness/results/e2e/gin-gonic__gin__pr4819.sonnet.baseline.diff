@@ -1,12 +1,13 @@
-diff --git a/gin.go b/gin.go
-index a160727..e7ac9c3 100644
---- a/gin.go
-+++ b/gin.go
-@@ -772,6 +772,7 @@ func (engine *Engine) handleHTTPRequest(c *Context) {
- 			if tree.method == httpMethod {
- 				continue
- 			}
-+			*c.skippedNodes = (*c.skippedNodes)[:0]
- 			if value := tree.root.getValue(rPath, nil, c.skippedNodes, unescape); value.handlers != nil {
- 				allowed = append(allowed, tree.method)
- 			}
+diff --git a/tree.go b/tree.go
+index dc84ff6..530a1ec 100644
+--- a/tree.go
++++ b/tree.go
+@@ -418,6 +418,8 @@ type skippedNode struct {
+ func (n *node) getValue(path string, params *Params, skippedNodes *[]skippedNode, unescape bool) (value nodeValue) {
+ 	var globalParamsCount int16
+ 
++	*skippedNodes = (*skippedNodes)[:0]
++
+ walk: // Outer loop for walking the tree
+ 	for {
+ 		prefix := n.path

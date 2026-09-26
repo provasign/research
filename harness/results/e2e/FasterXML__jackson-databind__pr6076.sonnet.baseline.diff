@@ -1,0 +1,87 @@
+diff --git a/src/main/java/tools/jackson/databind/ser/jackson/JsonValueSerializer.java b/src/main/java/tools/jackson/databind/ser/jackson/JsonValueSerializer.java
+index 3fbdbdc15..699470a97 100644
+--- a/src/main/java/tools/jackson/databind/ser/jackson/JsonValueSerializer.java
++++ b/src/main/java/tools/jackson/databind/ser/jackson/JsonValueSerializer.java
+@@ -13,6 +13,7 @@ import tools.jackson.core.type.WritableTypeId;
+ import tools.jackson.databind.*;
+ import tools.jackson.databind.annotation.JacksonStdImpl;
+ import tools.jackson.databind.introspect.AnnotatedMember;
++import tools.jackson.databind.introspect.AnnotationMap;
+ import tools.jackson.databind.jsonFormatVisitors.JsonFormatVisitorWrapper;
+ import tools.jackson.databind.jsonFormatVisitors.JsonStringFormatVisitor;
+ import tools.jackson.databind.jsontype.TypeIdResolver;
+@@ -160,6 +161,13 @@ public class JsonValueSerializer
+         if (vts != null) {
+             vts = vts.forProperty(ctxt, property);
+         }
++        // [databind#4762]: annotations (like `@JsonInclude`) on the `@JsonValue`-annotated
++        // accessor itself should be honored when resolving the serializer for the value
++        // it returns, not just annotations of the (unrelated) enclosing property. We use
++        // this "accessor property" both for immediate contextual resolution below, and
++        // (via `withResolved()`) as the `_property` retained for later dynamic (by-runtime-type)
++        // serializer lookups, since non-final value types (e.g. `Map`) are resolved lazily.
++        BeanProperty accessorProperty = _accessorAsProperty(property);
+         ValueSerializer<?> ser = _valueSerializer;
+         if (ser == null) {
+             // Can only assign serializer statically if the declared type is final:
+@@ -174,25 +182,52 @@ public class JsonValueSerializer
+                  *   to serializer factory at this point...
+                  */
+                 // I _think_ this can be considered a primary property...
+-                ser = ctxt.findPrimaryPropertySerializer(_valueType, property);
++                ser = ctxt.findPrimaryPropertySerializer(_valueType, accessorProperty);
+                 ser = _withIgnoreProperties(ser, _ignoredProperties);
+                 /* 09-Dec-2010, tatu: Turns out we must add special handling for
+                  *   cases where "native" (aka "natural") type is being serialized,
+                  *   using standard serializer
+                  */
+                 boolean forceTypeInformation = isNaturalTypeWithStdHandling(_valueType.getRawClass(), ser);
+-                return withResolved(property, vts, ser, forceTypeInformation);
++                return withResolved(accessorProperty, vts, ser, forceTypeInformation);
+             }
+             // [databind#2822]: better hold on to "property", regardless
+-            if (property != _property) {
+-                return withResolved(property, vts, ser, _forceTypeInformation);
+-            }
++            // [databind#4762]: `_property` now holds the accessor-derived property (see above);
++            // always refresh it here since a fresh wrapper is built on every call (and
++            // `withResolved()` itself no-ops if nothing has actually changed).
++            return withResolved(accessorProperty, vts, ser, _forceTypeInformation);
+         } else {
+             // 05-Sep-2013, tatu: I _think_ this can be considered a primary property...
+-            ser = ctxt.handlePrimaryContextualization(ser, property);
+-            return withResolved(property, vts, ser, _forceTypeInformation);
++            ser = ctxt.handlePrimaryContextualization(ser, accessorProperty);
++            return withResolved(accessorProperty, vts, ser, _forceTypeInformation);
++        }
++    }
++
++    /**
++     * Helper method for creating a {@link BeanProperty} that exposes the annotations
++     * of the {@code @JsonValue}-annotated accessor itself (such as {@code @JsonInclude}),
++     * so that they are considered when resolving the serializer used for the value
++     * returned by the accessor. Annotations on the accessor take precedence, but
++     * annotations of the enclosing {@code property} (like {@code @JsonFormat} from
++     * [databind#2822]) are still considered as a fallback, as well as for name/wrapper/
++     * metadata, to retain existing contextual information.
++     */
++    private BeanProperty _accessorAsProperty(BeanProperty property)
++    {
++        AnnotatedMember member = _accessor;
++        if (property != null) {
++            AnnotatedMember outerMember = property.getMember();
++            if (outerMember != null) {
++                member = (AnnotatedMember) member.withAnnotations(
++                        AnnotationMap.merge(_accessor._annotationMap(), outerMember._annotationMap()));
++            }
++        }
++        if (property == null) {
++            return new BeanProperty.Std(PropertyName.construct(_accessor.getName()),
++                    _valueType, null, member, PropertyMetadata.STD_REQUIRED_OR_OPTIONAL);
+         }
+-        return this;
++        return new BeanProperty.Std(property.getFullName(), _valueType,
++                property.getWrapperName(), member, property.getMetadata());
+     }
+ 
+     /*
