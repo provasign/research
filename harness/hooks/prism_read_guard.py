@@ -17,10 +17,11 @@ the end of a capped prism read (e.g. lines 200-475 after a 1-200 delivery)
 is never blocked.
 """
 import json
+import os
 import sys
 from pathlib import Path
 
-TRACKER = Path(".prism-read-tracker.json")
+TRACKER_NAME = ".prism-read-tracker.json"
 OVERLAP_THRESHOLD = 0.7  # fraction of the REQUESTED window that must already be covered
 
 
@@ -41,14 +42,18 @@ def main():
     limit = tool_input.get("limit")
     req_to = (offset + limit - 1) if limit else offset + 1999  # unbounded read: treat as huge window
 
-    if not TRACKER.exists():
+    tracker = Path(os.environ.get("CLAUDE_PROJECT_DIR") or ".") / TRACKER_NAME
+    if not tracker.exists():
         return  # nothing tracked yet, allow
 
-    tracked = json.loads(TRACKER.read_text())
+    tracked = json.loads(tracker.read_text())
+    sid = payload.get("session_id")
     best_cov, best_frac = None, 0.0
     for t in tracked:
         if not file_path.endswith(t["file"]):
             continue
+        if sid and t.get("session_id") and t["session_id"] != sid:
+            continue  # delivered in another session; this one never saw it
         frac = overlap_fraction(offset, req_to, t["from"], t["to"])
         if frac > best_frac:
             best_frac, best_cov = frac, t

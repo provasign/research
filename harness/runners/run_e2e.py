@@ -223,6 +223,15 @@ def _install_read_guard_hook(wt: Path) -> None:
         "hooks": [{"type": "command",
                   "command": f"python3 {hooks_dir / 'prism_read_tracker.py'}"}],
     })
+    # The same tracker forgets ranges once the file may have changed: an
+    # edit tool drops that file's ranges, a file-rewriting Bash command drops
+    # all (a stale range denied a Read after an edit + stash pop, jackson
+    # pr5959, 2026-09-26).
+    hooks["PostToolUse"].append({
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash",
+        "hooks": [{"type": "command",
+                  "command": f"python3 {hooks_dir / 'prism_read_tracker.py'}"}],
+    })
     hooks.setdefault("PreToolUse", []).append({
         "matcher": "Read",
         "hooks": [{"type": "command",
