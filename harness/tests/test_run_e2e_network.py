@@ -21,6 +21,14 @@ class NetworkDownTests(unittest.TestCase):
         ok = '{"type":"result","is_error":false,"result":"fixed the econnreset retry in client.py"}'.lower()
         self.assertFalse(run_e2e._network_down(0, ok))
 
+    def test_expired_oauth_is_auth_expired_not_a_loss(self):
+        blob = ('{"type":"result","is_error":true,"num_turns":1,'
+                '"result":"Failed to authenticate: OAuth session expired and could not be refreshed"}').lower()
+        self.assertTrue(run_e2e._auth_expired(0, blob))
+        self.assertTrue(issubclass(run_e2e.AuthExpired, run_e2e.RateLimited))
+        ok = '{"type":"result","is_error":false,"result":"fixed token refresh in auth.py"}'.lower()
+        self.assertFalse(run_e2e._auth_expired(0, ok))
+
     def test_network_down_is_retried_like_a_rate_limit(self):
         self.assertTrue(issubclass(run_e2e.NetworkDown, run_e2e.RateLimited))
 

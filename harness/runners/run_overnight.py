@@ -80,7 +80,10 @@ def run_with_retry(task: dict, arm: str, model: str) -> dict:
             return run_e2e.run_cell(task, arm, model)
         except run_e2e.RateLimited as e:
             msg = str(e)
-            sleep_s = 300 if isinstance(e, run_e2e.NetworkDown) else DEFAULT_RATE_LIMIT_SLEEP
+            sleep_s = 300 if isinstance(e, (run_e2e.NetworkDown, run_e2e.AuthExpired)) else DEFAULT_RATE_LIMIT_SLEEP
+            if isinstance(e, run_e2e.AuthExpired):
+                log("AUTH EXPIRED: the claude CLI lost its login -- run /login (or `claude auth login`); "
+                    "this cell retries every 5 minutes until it succeeds")
             m = re.search(r"(\d+)\s*(second|minute|hour)s?", msg, re.I)
             if m:
                 sleep_s = int(m.group(1)) * UNIT_S[m.group(2).lower()]

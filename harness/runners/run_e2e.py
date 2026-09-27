@@ -122,6 +122,24 @@ class RateLimited(Exception):
     pass
 
 
+# The CLI's OAuth session expired mid-run (2026-09-26 21:16): sessions ended
+# "Failed to authenticate: OAuth session expired and could not be refreshed"
+# after 0-175k tokens and were scored as losses. Wait for a re-login instead.
+AUTH_HINTS = ("failed to authenticate", "oauth session expired", "invalid api key",
+              "please run /login", "authentication_error", "oauth token has expired")
+
+
+def _auth_expired(returncode: int, blob: str) -> bool:
+    """The session ended because the CLI lost its credentials."""
+    if not any(h in blob for h in AUTH_HINTS):
+        return False
+    return returncode != 0 or '"is_error":true' in blob.replace(" ", "") or "failed to authenticate" in blob
+
+
+class AuthExpired(RateLimited):
+    """Retry the same cell after the operator re-authenticates; never score it."""
+
+
 class NetworkDown(RateLimited):
     """Retry the same cell once the network is back; never score it."""
 
@@ -555,6 +573,8 @@ def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
     blob = (r.stdout + r.stderr).lower()
     if r.returncode != 0 and any(h in blob for h in RATE_HINTS):
         raise RateLimited(blob[-300:])
+    if _auth_expired(r.returncode, blob):
+        raise AuthExpired(blob[-300:])
     if _network_down(r.returncode, blob):
         raise NetworkDown(blob[-300:])
     rec = {"wall_s": round(time.monotonic() - t0, 1), "runtimes": runtimes}
