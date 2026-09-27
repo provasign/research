@@ -1,0 +1,699 @@
+{
+ "instance_id": "wide__rich__ProgressColumn_render",
+ "repo": "Textualize/rich",
+ "lang": "python",
+ "base_commit": "9d8f9a372cc5916fd4781fec207ced7ddac2f08f",
+ "old": "render",
+ "new": "render_cell",
+ "source": "seeded",
+ "gold_tool": "rope 1.15.0 Rename(in_hierarchy=True, docs=False)",
+ "instruction": "The method name `render` on `ProgressColumn` (rich/progress.py) is too generic: it is easy to confuse with the many other `render` methods in rich. Rename `ProgressColumn.render` to `render_cell`. The rename must cover the base class, every subclass that overrides it, and every place that calls it, including tests. Do not rename any other `render` method or attribute; they belong to unrelated classes. Behavior must not change: the project must still work and its tests must pass.",
+ "kind": "wide",
+ "patch": "diff --git a/rich/progress.py b/rich/progress.py\nindex c2de125..100ed5a 100644\n--- a/rich/progress.py\n+++ b/rich/progress.py\n@@ -537,12 +537,12 @@ class ProgressColumn(ABC):\n                 if timestamp + self.max_refresh > current_time:\n                     return renderable\n \n-        renderable = self.render(task)\n+        renderable = self.render_cell(task)\n         self._renderable_cache[task.id] = (current_time, renderable)\n         return renderable\n \n     @abstractmethod\n-    def render(self, task: \"Task\") -> RenderableType:\n+    def render_cell(self, task: \"Task\") -> RenderableType:\n         \"\"\"Should return a renderable object.\"\"\"\n \n \n@@ -559,7 +559,7 @@ class RenderableColumn(ProgressColumn):\n         self.renderable = renderable\n         super().__init__(table_column=table_column)\n \n-    def render(self, task: \"Task\") -> RenderableType:\n+    def render_cell(self, task: \"Task\") -> RenderableType:\n         return self.renderable\n \n \n@@ -604,7 +604,7 @@ class SpinnerColumn(ProgressColumn):\n         \"\"\"\n         self.spinner = Spinner(spinner_name, style=spinner_style, speed=speed)\n \n-    def render(self, task: \"Task\") -> RenderableType:\n+    def render_cell(self, task: \"Task\") -> RenderableType:\n         text = (\n             self.finished_text\n             if task.finished\n@@ -632,7 +632,7 @@ class TextColumn(ProgressColumn):\n         self.highlighter = highlighter\n         super().__init__(table_column=table_column or Column(no_wrap=True))\n \n-    def render(self, task: \"Task\") -> Text:\n+    def render_cell(self, task: \"Task\") -> Text:\n         _text = self.text_format.format(task=task)\n         if self.markup:\n             text = Text.from_markup(_text, style=self.style, justify=self.justify)\n@@ -670,7 +670,7 @@ class BarColumn(ProgressColumn):\n         self.pulse_style = pulse_style\n         super().__init__(table_column=table_column)\n \n-    def render(self, task: \"Task\") -> ProgressBar:\n+    def render_cell(self, task: \"Task\") -> ProgressBar:\n         \"\"\"Gets a progress bar widget for a task.\"\"\"\n         return ProgressBar(\n             total=max(0, task.total) if task.total is not None else None,\n@@ -688,7 +688,7 @@ class BarColumn(ProgressColumn):\n class TimeElapsedColumn(ProgressColumn):\n     \"\"\"Renders time elapsed.\"\"\"\n \n-    def render(self, task: \"Task\") -> Text:\n+    def render_cell(self, task: \"Task\") -> Text:\n         \"\"\"Show time elapsed.\"\"\"\n         elapsed = task.finished_time if task.finished else task.elapsed\n         if elapsed is None:\n@@ -753,7 +753,7 @@ class TaskProgressColumn(TextColumn):\n         data_speed = speed / unit\n         return Text(f\"{data_speed:.1f}{suffix} it/s\", style=\"progress.percentage\")\n \n-    def render(self, task: \"Task\") -> Text:\n+    def render_cell(self, task: \"Task\") -> Text:\n         if task.total is None and self.show_speed:\n             return self.render_speed(task.finished_speed or task.speed)\n         text_format = (\n@@ -790,7 +790,7 @@ class TimeRemainingColumn(ProgressColumn):\n         self.elapsed_when_finished = elapsed_when_finished\n         super().__init__(table_column=table_column)\n \n-    def render(self, task: \"Task\") -> Text:\n+    def render_cell(self, task: \"Task\") -> Text:\n         \"\"\"Show time remaining.\"\"\"\n         if self.elapsed_when_finished and task.finished:\n             task_time = task.finished_time\n@@ -820,7 +820,7 @@ class TimeRemainingColumn(ProgressColumn):\n class FileSizeColumn(ProgressColumn):\n     \"\"\"Renders completed filesize.\"\"\"\n \n-    def render(self, task: \"Task\") -> Text:\n+    def render_cell(self, task: \"Task\") -> Text:\n         \"\"\"Show data completed.\"\"\"\n         data_size = filesize.decimal(int(task.completed))\n         return Text(data_size, style=\"progress.filesize\")\n@@ -829,7 +829,7 @@ class FileSizeColumn(ProgressColumn):\n class TotalFileSizeColumn(ProgressColumn):\n     \"\"\"Renders total filesize.\"\"\"\n \n-    def render(self, task: \"Task\") -> Text:\n+    def render_cell(self, task: \"Task\") -> Text:\n         \"\"\"Show data completed.\"\"\"\n         data_size = filesize.decimal(int(task.total)) if task.total is not None else \"\"\n         return Text(data_size, style=\"progress.filesize.total\")\n@@ -851,7 +851,7 @@ class MofNCompleteColumn(ProgressColumn):\n         self.separator = separator\n         super().__init__(table_column=table_column)\n \n-    def render(self, task: \"Task\") -> Text:\n+    def render_cell(self, task: \"Task\") -> Text:\n         \"\"\"Show completed/total.\"\"\"\n         completed = int(task.completed)\n         total = int(task.total) if task.total is not None else \"?\"\n@@ -875,7 +875,7 @@ class DownloadColumn(ProgressColumn):\n         self.binary_units = binary_units\n         super().__init__(table_column=table_column)\n \n-    def render(self, task: \"Task\") -> Text:\n+    def render_cell(self, task: \"Task\") -> Text:\n         \"\"\"Calculate common unit for completed and total.\"\"\"\n         completed = int(task.completed)\n \n@@ -914,7 +914,7 @@ class DownloadColumn(ProgressColumn):\n class TransferSpeedColumn(ProgressColumn):\n     \"\"\"Renders human readable transfer speed.\"\"\"\n \n-    def render(self, task: \"Task\") -> Text:\n+    def render_cell(self, task: \"Task\") -> Text:\n         \"\"\"Show data transfer speed.\"\"\"\n         speed = task.finished_speed or task.speed\n         if speed is None:\ndiff --git a/tests/test_progress.py b/tests/test_progress.py\nindex 20f426a..7be75da 100644\n--- a/tests/test_progress.py\n+++ b/tests/test_progress.py\n@@ -64,19 +64,19 @@ def test_bar_columns():\n def test_text_column():\n     text_column = TextColumn(\"[b]foo\", highlighter=NullHighlighter())\n     task = Task(1, \"test\", 100, 20, _get_time=lambda: 1.0)\n-    text = text_column.render(task)\n+    text = text_column.render_cell(task)\n     assert str(text) == \"foo\"\n \n     text_column = TextColumn(\"[b]bar\", markup=False)\n     task = Task(1, \"test\", 100, 20, _get_time=lambda: 1.0)\n-    text = text_column.render(task)\n+    text = text_column.render_cell(task)\n     assert text == Text(\"[b]bar\")\n \n \n def test_time_elapsed_column():\n     column = TimeElapsedColumn()\n     task = Task(1, \"test\", 100, 20, _get_time=lambda: 1.0)\n-    text = column.render(task)\n+    text = column.render_cell(task)\n     assert str(text) == \"-:--:--\"\n \n \n@@ -107,7 +107,7 @@ def test_compact_time_remaining_column(task_time, formatted):\n     task = SimpleNamespace(finished=False, time_remaining=task_time, total=100)\n     column = TimeRemainingColumn(compact=True)\n \n-    assert str(column.render(task)) == formatted\n+    assert str(column.render_cell(task)) == formatted\n \n \n def test_time_remaining_column_elapsed_when_finished():\n@@ -117,13 +117,13 @@ def test_time_remaining_column_elapsed_when_finished():\n     task = SimpleNamespace(finished=True, finished_time=task_time, total=100)\n     column = TimeRemainingColumn(elapsed_when_finished=True)\n \n-    assert str(column.render(task)) == formatted\n+    assert str(column.render_cell(task)) == formatted\n \n \n def test_renderable_column():\n     column = RenderableColumn(\"foo\")\n     task = Task(1, \"test\", 100, 20, _get_time=lambda: 1.0)\n-    assert column.render(task) == \"foo\"\n+    assert column.render_cell(task) == \"foo\"\n \n \n def test_spinner_column():\n@@ -136,14 +136,14 @@ def test_spinner_column():\n     column = SpinnerColumn()\n     column.set_spinner(\"dots2\")\n     task = Task(1, \"test\", 100, 20, _get_time=get_time)\n-    result = column.render(task)\n+    result = column.render_cell(task)\n     print(repr(result))\n     expected = \"\u28fe\"\n     assert str(result) == expected\n \n     time += 1.0\n     column.spinner.update(speed=0.5)\n-    result = column.render(task)\n+    result = column.render_cell(task)\n     print(repr(result))\n     expected = \"\u287f\"\n     assert str(result) == expected\n@@ -152,7 +152,7 @@ def test_spinner_column():\n def test_download_progress_uses_decimal_units() -> None:\n     column = DownloadColumn()\n     test_task = Task(1, \"test\", 1000, 500, _get_time=lambda: 1.0)\n-    rendered_progress = str(column.render(test_task))\n+    rendered_progress = str(column.render_cell(test_task))\n     expected = \"0.5/1.0 kB\"\n     assert rendered_progress == expected\n \n@@ -160,7 +160,7 @@ def test_download_progress_uses_decimal_units() -> None:\n def test_download_progress_uses_binary_units() -> None:\n     column = DownloadColumn(binary_units=True)\n     test_task = Task(1, \"test\", 1024, 512, _get_time=lambda: 1.0)\n-    rendered_progress = str(column.render(test_task))\n+    rendered_progress = str(column.render_cell(test_task))\n     expected = \"0.5/1.0 KiB\"\n     assert rendered_progress == expected\n \n",
+ "test_patch": "",
+ "fail_to_pass": [],
+ "problem_statement": "The method name `render` on `ProgressColumn` (rich/progress.py) is too generic: it is easy to confuse with the many other `render` methods in rich. Rename `ProgressColumn.render` to `render_cell`. The rename must cover the base class, every subclass that overrides it, and every place that calls it, including tests. Do not rename any other `render` method or attribute; they belong to unrelated classes. Behavior must not change: the project must still work and its tests must pass.",
+ "prompt_source": "wide-mandate",
+ "base_counts": {
+  "benchmarks/benchmarks.py": [
+   2,
+   0
+  ],
+  "rich/align.py": [
+   1,
+   0
+  ],
+  "rich/console.py": [
+   15,
+   0
+  ],
+  "rich/constrain.py": [
+   1,
+   0
+  ],
+  "rich/jupyter.py": [
+   1,
+   0
+  ],
+  "rich/layout.py": [
+   3,
+   0
+  ],
+  "rich/live_render.py": [
+   1,
+   0
+  ],
+  "rich/logging.py": [
+   2,
+   0
+  ],
+  "rich/markdown.py": [
+   2,
+   0
+  ],
+  "rich/markup.py": [
+   1,
+   0
+  ],
+  "rich/measure.py": [
+   3,
+   0
+  ],
+  "rich/panel.py": [
+   2,
+   0
+  ],
+  "rich/pretty.py": [
+   2,
+   0
+  ],
+  "rich/progress.py": [
+   15,
+   0
+  ],
+  "rich/segment.py": [
+   2,
+   0
+  ],
+  "rich/spinner.py": [
+   3,
+   0
+  ],
+  "rich/style.py": [
+   2,
+   0
+  ],
+  "rich/styled.py": [
+   1,
+   0
+  ],
+  "rich/syntax.py": [
+   3,
+   0
+  ],
+  "rich/table.py": [
+   3,
+   0
+  ],
+  "rich/text.py": [
+   4,
+   0
+  ],
+  "tests/render.py": [
+   3,
+   0
+  ],
+  "tests/test_bar.py": [
+   8,
+   0
+  ],
+  "tests/test_block_bar.py": [
+   9,
+   0
+  ],
+  "tests/test_card.py": [
+   5,
+   0
+  ],
+  "tests/test_columns.py": [
+   3,
+   0
+  ],
+  "tests/test_columns_align.py": [
+   3,
+   0
+  ],
+  "tests/test_console.py": [
+   2,
+   0
+  ],
+  "tests/test_emoji.py": [
+   4,
+   0
+  ],
+  "tests/test_inspect.py": [
+   14,
+   0
+  ],
+  "tests/test_log.py": [
+   5,
+   0
+  ],
+  "tests/test_logging.py": [
+   11,
+   0
+  ],
+  "tests/test_markdown.py": [
+   13,
+   0
+  ],
+  "tests/test_markdown_no_hyperlinks.py": [
+   5,
+   0
+  ],
+  "tests/test_markup.py": [
+   27,
+   0
+  ],
+  "tests/test_panel.py": [
+   3,
+   0
+  ],
+  "tests/test_progress.py": [
+   11,
+   0
+  ],
+  "tests/test_style.py": [
+   3,
+   0
+  ],
+  "tests/test_syntax.py": [
+   13,
+   0
+  ],
+  "tests/test_table.py": [
+   3,
+   0
+  ]
+ },
+ "gold_counts": {
+  "benchmarks/benchmarks.py": [
+   2,
+   0
+  ],
+  "rich/align.py": [
+   1,
+   0
+  ],
+  "rich/console.py": [
+   15,
+   0
+  ],
+  "rich/constrain.py": [
+   1,
+   0
+  ],
+  "rich/jupyter.py": [
+   1,
+   0
+  ],
+  "rich/layout.py": [
+   3,
+   0
+  ],
+  "rich/live_render.py": [
+   1,
+   0
+  ],
+  "rich/logging.py": [
+   2,
+   0
+  ],
+  "rich/markdown.py": [
+   2,
+   0
+  ],
+  "rich/markup.py": [
+   1,
+   0
+  ],
+  "rich/measure.py": [
+   3,
+   0
+  ],
+  "rich/panel.py": [
+   2,
+   0
+  ],
+  "rich/pretty.py": [
+   2,
+   0
+  ],
+  "rich/progress.py": [
+   1,
+   14
+  ],
+  "rich/segment.py": [
+   2,
+   0
+  ],
+  "rich/spinner.py": [
+   3,
+   0
+  ],
+  "rich/style.py": [
+   2,
+   0
+  ],
+  "rich/styled.py": [
+   1,
+   0
+  ],
+  "rich/syntax.py": [
+   3,
+   0
+  ],
+  "rich/table.py": [
+   3,
+   0
+  ],
+  "rich/text.py": [
+   4,
+   0
+  ],
+  "tests/render.py": [
+   3,
+   0
+  ],
+  "tests/test_bar.py": [
+   8,
+   0
+  ],
+  "tests/test_block_bar.py": [
+   9,
+   0
+  ],
+  "tests/test_card.py": [
+   5,
+   0
+  ],
+  "tests/test_columns.py": [
+   3,
+   0
+  ],
+  "tests/test_columns_align.py": [
+   3,
+   0
+  ],
+  "tests/test_console.py": [
+   2,
+   0
+  ],
+  "tests/test_emoji.py": [
+   4,
+   0
+  ],
+  "tests/test_inspect.py": [
+   14,
+   0
+  ],
+  "tests/test_log.py": [
+   5,
+   0
+  ],
+  "tests/test_logging.py": [
+   11,
+   0
+  ],
+  "tests/test_markdown.py": [
+   13,
+   0
+  ],
+  "tests/test_markdown_no_hyperlinks.py": [
+   5,
+   0
+  ],
+  "tests/test_markup.py": [
+   27,
+   0
+  ],
+  "tests/test_panel.py": [
+   3,
+   0
+  ],
+  "tests/test_progress.py": [
+   1,
+   10
+  ],
+  "tests/test_style.py": [
+   3,
+   0
+  ],
+  "tests/test_syntax.py": [
+   13,
+   0
+  ],
+  "tests/test_table.py": [
+   3,
+   0
+  ]
+ },
+ "test_modules": [
+  "tests/render.py",
+  "tests/test_bar.py",
+  "tests/test_block_bar.py",
+  "tests/test_card.py",
+  "tests/test_columns.py",
+  "tests/test_columns_align.py",
+  "tests/test_console.py",
+  "tests/test_emoji.py",
+  "tests/test_inspect.py",
+  "tests/test_log.py",
+  "tests/test_logging.py",
+  "tests/test_markdown.py",
+  "tests/test_markdown_no_hyperlinks.py",
+  "tests/test_markup.py",
+  "tests/test_panel.py",
+  "tests/test_progress.py",
+  "tests/test_style.py",
+  "tests/test_syntax.py",
+  "tests/test_table.py"
+ ],
+ "wide_test_files": [
+  "tests/render.py",
+  "tests/test_bar.py",
+  "tests/test_block_bar.py",
+  "tests/test_card.py",
+  "tests/test_columns.py",
+  "tests/test_columns_align.py",
+  "tests/test_console.py",
+  "tests/test_emoji.py",
+  "tests/test_inspect.py",
+  "tests/test_log.py",
+  "tests/test_logging.py",
+  "tests/test_markdown.py",
+  "tests/test_markdown_no_hyperlinks.py",
+  "tests/test_markup.py",
+  "tests/test_panel.py",
+  "tests/test_progress.py",
+  "tests/test_style.py",
+  "tests/test_syntax.py",
+  "tests/test_table.py"
+ ],
+ "pass_to_pass": [
+  "tests/test_bar.py::test_get_pulse_segments",
+  "tests/test_bar.py::test_init",
+  "tests/test_bar.py::test_measure",
+  "tests/test_bar.py::test_pulse",
+  "tests/test_bar.py::test_render",
+  "tests/test_bar.py::test_update",
+  "tests/test_bar.py::test_zero_total",
+  "tests/test_block_bar.py::test_measure",
+  "tests/test_block_bar.py::test_render",
+  "tests/test_block_bar.py::test_repr",
+  "tests/test_block_bar.py::test_zero_total",
+  "tests/test_columns.py::test_render",
+  "tests/test_columns_align.py::test_align",
+  "tests/test_console.py::test_16color_terminal",
+  "tests/test_console.py::test_bell",
+  "tests/test_console.py::test_brokenpipeerror",
+  "tests/test_console.py::test_capture",
+  "tests/test_console.py::test_capture_and_record",
+  "tests/test_console.py::test_capturing_no_stdout_and_no_stderr_files",
+  "tests/test_console.py::test_clear",
+  "tests/test_console.py::test_clear_no_terminal",
+  "tests/test_console.py::test_columns_env",
+  "tests/test_console.py::test_console_null_file",
+  "tests/test_console.py::test_console_options_update",
+  "tests/test_console.py::test_console_options_update_height",
+  "tests/test_console.py::test_console_style",
+  "tests/test_console.py::test_control",
+  "tests/test_console.py::test_detect_color_system",
+  "tests/test_console.py::test_dumb_terminal",
+  "tests/test_console.py::test_export_html",
+  "tests/test_console.py::test_export_html_inline",
+  "tests/test_console.py::test_export_svg",
+  "tests/test_console.py::test_export_svg_specified_unique_id",
+  "tests/test_console.py::test_export_text",
+  "tests/test_console.py::test_force_color",
+  "tests/test_console.py::test_force_color_jupyter",
+  "tests/test_console.py::test_get_style",
+  "tests/test_console.py::test_get_style_default",
+  "tests/test_console.py::test_get_style_error",
+  "tests/test_console.py::test_get_time",
+  "tests/test_console.py::test_height",
+  "tests/test_console.py::test_init",
+  "tests/test_console.py::test_input",
+  "tests/test_console.py::test_input_password",
+  "tests/test_console.py::test_is_alt_screen",
+  "tests/test_console.py::test_is_terminal_broken_file",
+  "tests/test_console.py::test_justify_center",
+  "tests/test_console.py::test_justify_left",
+  "tests/test_console.py::test_justify_none",
+  "tests/test_console.py::test_justify_renderable_center",
+  "tests/test_console.py::test_justify_renderable_left",
+  "tests/test_console.py::test_justify_renderable_none",
+  "tests/test_console.py::test_justify_renderable_right",
+  "tests/test_console.py::test_justify_right",
+  "tests/test_console.py::test_kitty_terminal",
+  "tests/test_console.py::test_lines_env",
+  "tests/test_console.py::test_log",
+  "tests/test_console.py::test_log_milliseconds",
+  "tests/test_console.py::test_markup_highlight",
+  "tests/test_console.py::test_no_color",
+  "tests/test_console.py::test_no_wrap",
+  "tests/test_console.py::test_out",
+  "tests/test_console.py::test_pager",
+  "tests/test_console.py::test_print",
+  "tests/test_console.py::test_print_empty",
+  "tests/test_console.py::test_print_empty_with_end",
+  "tests/test_console.py::test_print_json",
+  "tests/test_console.py::test_print_json_data",
+  "tests/test_console.py::test_print_json_ensure_ascii",
+  "tests/test_console.py::test_print_json_error",
+  "tests/test_console.py::test_print_json_indent_none",
+  "tests/test_console.py::test_print_json_with_default_ensure_ascii",
+  "tests/test_console.py::test_print_multiple",
+  "tests/test_console.py::test_print_newline_start",
+  "tests/test_console.py::test_print_style",
+  "tests/test_console.py::test_print_text",
+  "tests/test_console.py::test_print_text_multiple",
+  "tests/test_console.py::test_print_width_zero",
+  "tests/test_console.py::test_quiet",
+  "tests/test_console.py::test_recording_no_stdout_and_no_stderr_files",
+  "tests/test_console.py::test_reenable_highlighting",
+  "tests/test_console.py::test_render_broken_renderable",
+  "tests/test_console.py::test_render_error",
+  "tests/test_console.py::test_render_group",
+  "tests/test_console.py::test_render_group_fit",
+  "tests/test_console.py::test_render_lines_height_minus_vertical_pad_is_negative",
+  "tests/test_console.py::test_repr",
+  "tests/test_console.py::test_reset_height",
+  "tests/test_console.py::test_save_html",
+  "tests/test_console.py::test_save_svg",
+  "tests/test_console.py::test_save_text",
+  "tests/test_console.py::test_screen",
+  "tests/test_console.py::test_screen_update",
+  "tests/test_console.py::test_screen_update_class",
+  "tests/test_console.py::test_set_console_title",
+  "tests/test_console.py::test_show_cursor",
+  "tests/test_console.py::test_size",
+  "tests/test_console.py::test_size_can_fall_back_to_std_descriptors[False-ValueError-ValueError-ValueError-ValueError-expected_size5]",
+  "tests/test_console.py::test_size_can_fall_back_to_std_descriptors[False-ValueError-ValueError-ValueError-stderr_size4-expected_size4]",
+  "tests/test_console.py::test_size_can_fall_back_to_std_descriptors[False-ValueError-ValueError-stdout_size3-ValueError-expected_size3]",
+  "tests/test_console.py::test_size_can_fall_back_to_std_descriptors[False-ValueError-stdin_size2-ValueError-ValueError-expected_size2]",
+  "tests/test_console.py::test_size_can_fall_back_to_std_descriptors[False-no_descriptor_size1-ValueError-ValueError-ValueError-expected_size1]",
+  "tests/test_console.py::test_size_can_fall_back_to_std_descriptors[True-no_descriptor_size0-ValueError-ValueError-ValueError-expected_size0]",
+  "tests/test_console.py::test_size_properties",
+  "tests/test_console.py::test_soft_wrap",
+  "tests/test_console.py::test_status",
+  "tests/test_console.py::test_truecolor_terminal",
+  "tests/test_console.py::test_tty_compatible",
+  "tests/test_console.py::test_tty_interactive",
+  "tests/test_console.py::test_unicode_error",
+  "tests/test_console.py::test_update_options_markup",
+  "tests/test_console.py::test_update_screen",
+  "tests/test_console.py::test_update_screen_lines",
+  "tests/test_emoji.py::test_no_emoji",
+  "tests/test_emoji.py::test_render",
+  "tests/test_emoji.py::test_replace",
+  "tests/test_emoji.py::test_str_repr",
+  "tests/test_emoji.py::test_variant",
+  "tests/test_emoji.py::test_variant_non_default",
+  "tests/test_inspect.py::test_broken_call_attr",
+  "tests/test_inspect.py::test_can_handle_special_characters_in_docstrings[\\r-\\\\r]",
+  "tests/test_inspect.py::test_can_handle_special_characters_in_docstrings[\\x07-\\\\a]",
+  "tests/test_inspect.py::test_can_handle_special_characters_in_docstrings[\\x08-\\\\b]",
+  "tests/test_inspect.py::test_can_handle_special_characters_in_docstrings[\\x0b-\\\\v]",
+  "tests/test_inspect.py::test_can_handle_special_characters_in_docstrings[\\x0c-\\\\f]",
+  "tests/test_inspect.py::test_inspect_builtin_function_only_python311",
+  "tests/test_inspect.py::test_inspect_coroutine",
+  "tests/test_inspect.py::test_inspect_empty_dict",
+  "tests/test_inspect.py::test_inspect_integer",
+  "tests/test_inspect.py::test_inspect_integer_with_value",
+  "tests/test_inspect.py::test_inspect_module_with_class",
+  "tests/test_inspect.py::test_inspect_swig_edge_case",
+  "tests/test_inspect.py::test_inspect_text",
+  "tests/test_inspect.py::test_object_is_one_of_types[Foo-types11-True]",
+  "tests/test_inspect.py::test_object_is_one_of_types[Foo-types5-True]",
+  "tests/test_inspect.py::test_object_is_one_of_types[Foo-types7-True]",
+  "tests/test_inspect.py::test_object_is_one_of_types[Foo-types9-False]",
+  "tests/test_inspect.py::test_object_is_one_of_types[hi-types0-True]",
+  "tests/test_inspect.py::test_object_is_one_of_types[hi-types2-True]",
+  "tests/test_inspect.py::test_object_is_one_of_types[obj10-types10-True]",
+  "tests/test_inspect.py::test_object_is_one_of_types[obj4-types4-True]",
+  "tests/test_inspect.py::test_object_is_one_of_types[obj6-types6-True]",
+  "tests/test_inspect.py::test_object_is_one_of_types[obj8-types8-False]",
+  "tests/test_inspect.py::test_object_is_one_of_types[str-types1-True]",
+  "tests/test_inspect.py::test_object_is_one_of_types[str-types3-True]",
+  "tests/test_inspect.py::test_object_types_mro[Foo-expected_result5]",
+  "tests/test_inspect.py::test_object_types_mro[FooSubclass-expected_result7]",
+  "tests/test_inspect.py::test_object_types_mro[hi-expected_result2]",
+  "tests/test_inspect.py::test_object_types_mro[obj1-expected_result1]",
+  "tests/test_inspect.py::test_object_types_mro[obj4-expected_result4]",
+  "tests/test_inspect.py::test_object_types_mro[obj6-expected_result6]",
+  "tests/test_inspect.py::test_object_types_mro[object-expected_result0]",
+  "tests/test_inspect.py::test_object_types_mro[str-expected_result3]",
+  "tests/test_inspect.py::test_object_types_mro_as_strings[Foo-expected_result3]",
+  "tests/test_inspect.py::test_object_types_mro_as_strings[FooSubclass-expected_result5]",
+  "tests/test_inspect.py::test_object_types_mro_as_strings[hi-expected_result0]",
+  "tests/test_inspect.py::test_object_types_mro_as_strings[obj2-expected_result2]",
+  "tests/test_inspect.py::test_object_types_mro_as_strings[obj4-expected_result4]",
+  "tests/test_inspect.py::test_object_types_mro_as_strings[str-expected_result1]",
+  "tests/test_inspect.py::test_qualname_in_slots",
+  "tests/test_inspect.py::test_render",
+  "tests/test_log.py::test_justify",
+  "tests/test_log.py::test_log",
+  "tests/test_log.py::test_log_caller_frame_info",
+  "tests/test_logging.py::test_exception",
+  "tests/test_logging.py::test_exception_with_extra_lines",
+  "tests/test_logging.py::test_markup_and_highlight",
+  "tests/test_logging.py::test_stderr_and_stdout_are_none",
+  "tests/test_markdown.py::test_inline_code",
+  "tests/test_markdown.py::test_inline_styles_in_table",
+  "tests/test_markdown.py::test_inline_styles_with_justification",
+  "tests/test_markdown.py::test_markdown_render",
+  "tests/test_markdown.py::test_markdown_table",
+  "tests/test_markdown.py::test_partial_table",
+  "tests/test_markdown.py::test_table_with_empty_cells",
+  "tests/test_markdown_no_hyperlinks.py::test_markdown_render",
+  "tests/test_markup.py::test_adjoint",
+  "tests/test_markup.py::test_escape",
+  "tests/test_markup.py::test_escape_backslash_end",
+  "tests/test_markup.py::test_escape_escape",
+  "tests/test_markup.py::test_events",
+  "tests/test_markup.py::test_events_broken",
+  "tests/test_markup.py::test_markup_error",
+  "tests/test_markup.py::test_markup_escape",
+  "tests/test_markup.py::test_parse",
+  "tests/test_markup.py::test_parse_link",
+  "tests/test_markup.py::test_re_match",
+  "tests/test_markup.py::test_re_no_match",
+  "tests/test_markup.py::test_render",
+  "tests/test_markup.py::test_render_close",
+  "tests/test_markup.py::test_render_close_ambiguous",
+  "tests/test_markup.py::test_render_combine",
+  "tests/test_markup.py::test_render_escape",
+  "tests/test_markup.py::test_render_link",
+  "tests/test_markup.py::test_render_meta",
+  "tests/test_markup.py::test_render_not_tags",
+  "tests/test_markup.py::test_render_overlap",
+  "tests/test_panel.py::test_console_width",
+  "tests/test_panel.py::test_fixed_width",
+  "tests/test_panel.py::test_render_size",
+  "tests/test_panel.py::test_title_text",
+  "tests/test_panel.py::test_title_text_with_border_color",
+  "tests/test_panel.py::test_title_text_with_panel_background",
+  "tests/test_progress.py::test_bar_columns",
+  "tests/test_progress.py::test_columns",
+  "tests/test_progress.py::test_compact_time_remaining_column[0-00:00]",
+  "tests/test_progress.py::test_compact_time_remaining_column[4210-1:10:10]",
+  "tests/test_progress.py::test_compact_time_remaining_column[59-00:59]",
+  "tests/test_progress.py::test_compact_time_remaining_column[71-01:11]",
+  "tests/test_progress.py::test_compact_time_remaining_column[None---:--]",
+  "tests/test_progress.py::test_download_progress_uses_binary_units",
+  "tests/test_progress.py::test_download_progress_uses_decimal_units",
+  "tests/test_progress.py::test_expand_bar",
+  "tests/test_progress.py::test_finished",
+  "tests/test_progress.py::test_live_is_not_started_if_progress_is_disabled",
+  "tests/test_progress.py::test_live_is_started_if_progress_is_enabled",
+  "tests/test_progress.py::test_no_output_if_progress_is_disabled",
+  "tests/test_progress.py::test_no_output_if_progress_is_disabled_non_interactive",
+  "tests/test_progress.py::test_open",
+  "tests/test_progress.py::test_open_text_mode",
+  "tests/test_progress.py::test_progress_create",
+  "tests/test_progress.py::test_progress_max_refresh",
+  "tests/test_progress.py::test_progress_track",
+  "tests/test_progress.py::test_progress_with_none_total_renders_a_pulsing_bar",
+  "tests/test_progress.py::test_render",
+  "tests/test_progress.py::test_renderable_column",
+  "tests/test_progress.py::test_reset",
+  "tests/test_progress.py::test_spinner_column",
+  "tests/test_progress.py::test_task_create",
+  "tests/test_progress.py::test_task_ids",
+  "tests/test_progress.py::test_task_progress_column_speed",
+  "tests/test_progress.py::test_task_start",
+  "tests/test_progress.py::test_task_zero_total",
+  "tests/test_progress.py::test_text_column",
+  "tests/test_progress.py::test_time_elapsed_column",
+  "tests/test_progress.py::test_time_remaining_column",
+  "tests/test_progress.py::test_time_remaining_column_elapsed_when_finished",
+  "tests/test_progress.py::test_track",
+  "tests/test_progress.py::test_track_thread",
+  "tests/test_progress.py::test_using_default_columns",
+  "tests/test_progress.py::test_wrap_file",
+  "tests/test_progress.py::test_wrap_file_task_total",
+  "tests/test_style.py::test_add",
+  "tests/test_style.py::test_ansi_codes",
+  "tests/test_style.py::test_background_style",
+  "tests/test_style.py::test_bgcolor_property",
+  "tests/test_style.py::test_bool",
+  "tests/test_style.py::test_chain",
+  "tests/test_style.py::test_clear_meta_and_links",
+  "tests/test_style.py::test_clear_meta_and_links_clears_hash",
+  "tests/test_style.py::test_color_property",
+  "tests/test_style.py::test_copy",
+  "tests/test_style.py::test_empty",
+  "tests/test_style.py::test_eq",
+  "tests/test_style.py::test_from_meta",
+  "tests/test_style.py::test_get_html_style",
+  "tests/test_style.py::test_hash",
+  "tests/test_style.py::test_iadd",
+  "tests/test_style.py::test_link_id",
+  "tests/test_style.py::test_meta",
+  "tests/test_style.py::test_on",
+  "tests/test_style.py::test_parse",
+  "tests/test_style.py::test_pick_first",
+  "tests/test_style.py::test_render",
+  "tests/test_style.py::test_repr",
+  "tests/test_style.py::test_str",
+  "tests/test_style.py::test_style_stack",
+  "tests/test_style.py::test_test",
+  "tests/test_style.py::test_without_color",
+  "tests/test_syntax.py::test_ansi_theme",
+  "tests/test_syntax.py::test_background_color_override_includes_padding",
+  "tests/test_syntax.py::test_blank_lines",
+  "tests/test_syntax.py::test_from_path",
+  "tests/test_syntax.py::test_from_path_lexer_override",
+  "tests/test_syntax.py::test_from_path_lexer_override_invalid_lexer",
+  "tests/test_syntax.py::test_from_path_unknown_lexer",
+  "tests/test_syntax.py::test_get_line_color_none",
+  "tests/test_syntax.py::test_get_number_styles",
+  "tests/test_syntax.py::test_get_style_for_token",
+  "tests/test_syntax.py::test_highlight_background_color",
+  "tests/test_syntax.py::test_padding_plus_wrap",
+  "tests/test_syntax.py::test_pygments_syntax_theme",
+  "tests/test_syntax.py::test_pygments_syntax_theme_non_str",
+  "tests/test_syntax.py::test_python_render_line_range_indent_guides",
+  "tests/test_syntax.py::test_python_render_simple_indent_guides",
+  "tests/test_syntax.py::test_syntax_guess_lexer",
+  "tests/test_syntax.py::test_syntax_measure",
+  "tests/test_syntax.py::test_syntax_padding",
+  "tests/test_table.py::test_columns_highlight_added_by_add_row",
+  "tests/test_table.py::test_get_row_style",
+  "tests/test_table.py::test_init_append_column",
+  "tests/test_table.py::test_min_width",
+  "tests/test_table.py::test_no_columns",
+  "tests/test_table.py::test_not_renderable",
+  "tests/test_table.py::test_padding_width",
+  "tests/test_table.py::test_render_table",
+  "tests/test_table.py::test_rich_measure",
+  "tests/test_table.py::test_section",
+  "tests/test_table.py::test_vertical_align_top"
+ ],
+ "gold_test_outcomes": {
+  "run": 307,
+  "passed": 299,
+  "failed": [
+   "tests/test_card.py::test_card_render",
+   "tests/test_markdown.py::test_inline_code_in_table_cells",
+   "tests/test_syntax.py::test_option_no_wrap",
+   "tests/test_syntax.py::test_python_render",
+   "tests/test_syntax.py::test_python_render_indent_guides",
+   "tests/test_syntax.py::test_python_render_simple",
+   "tests/test_syntax.py::test_python_render_simple_passing_lexer_instance",
+   "tests/test_syntax.py::test_syntax_highlight_ranges"
+  ]
+ },
+ "gold_sites": 24
+}

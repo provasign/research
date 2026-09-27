@@ -41,6 +41,7 @@ HOOKS_SRC = Path(__file__).resolve().parent.parent / "hooks"
 
 import docker_eval
 import fanout_eval
+import wide_eval
 import seeded_refactor
 import java_eval
 import go_eval
@@ -87,6 +88,8 @@ def _score(task, diff: str) -> dict:
         return {"resolved": False, "empty_diff": True}
     if task.get("kind") == "fanout":
         return fanout_eval.score(task, diff)
+    if task.get("kind") == "wide":
+        return wide_eval.score(task, diff)
     if task.get("kind") == "seeded_refactor":
         return seeded_refactor.score(_repo_for(task), task, diff)
     lang = task.get("lang")
@@ -215,7 +218,9 @@ TOOL_ARTIFACTS = (".grove", ".engine-b", ".prism", "prism.yaml", ".p.diff",
 def _agent_diff(wt: Path, task) -> str:  # noqa: D401
     """The agent's change to NON-test files (test_patch is the harness's job)."""
     docker_eval._sh("git", "-C", str(wt), "add", "-A", check=False)
-    excludes = [f":(exclude){m}" for m in task["test_modules"]]
+    # A wide task's rename covers tests too: its test_modules only select
+    # which tests the scorer runs, they are part of the agent's work.
+    excludes = [] if task.get("kind") == "wide" else [f":(exclude){m}" for m in task["test_modules"]]
     excludes += [f":(exclude){a}" for a in TOOL_ARTIFACTS]
     # pre-installed dependencies (_preinstall_node); gitignored already, this
     # holds even for a repo whose .gitignore misses a nested one
@@ -351,6 +356,18 @@ SEEDED_TAIL = ("\n\nUpdate the source so the project COMPILES again. Every "
                "updated — the change is deliberately wide, so do not stop at the "
                "first few. Verify with `mvn -q compile`. Edit main sources only; "
                "do not modify test files.")
+
+
+# A wide task is a mandated rename: the generic tail ("smallest change",
+# "do not modify tests") contradicts it, so it gets its own. Tests are
+# renamed with the code; the scorer checks every site against a
+# type-aware refactoring tool's result plus build and tests.
+WIDE_TAIL = ("\n\nMake this change across the whole repository -- every "
+             "declaration, override, implementation and call site, in source and "
+             "in tests -- and nothing else. Behavior must not change: the project "
+             "must build and its existing tests must pass. Before declaring it "
+             "done, confirm your test run exercises THIS checkout (not a separately "
+             "installed copy).")
 
 
 # Host toolchains matching each scorer image (docker_eval python:3.12,
@@ -557,7 +574,7 @@ def _upstream_guard_settings() -> str:
 
 def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
     spec = ARMS[arm]
-    tail = SEEDED_TAIL if task.get("kind") == "seeded_refactor" else TASK_TAIL
+    tail = {"seeded_refactor": SEEDED_TAIL, "wide": WIDE_TAIL}.get(task.get("kind"), TASK_TAIL)
     prompt = spec["guidance"] + "\n\nISSUE:\n" + task["problem_statement"] + tail
     cmd = ["claude", "-p", prompt, "--model", model, "--output-format", "json",
            "--dangerously-skip-permissions", "--strict-mcp-config",

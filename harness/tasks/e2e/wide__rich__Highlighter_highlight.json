@@ -1,0 +1,383 @@
+{
+ "instance_id": "wide__rich__Highlighter_highlight",
+ "repo": "Textualize/rich",
+ "lang": "python",
+ "base_commit": "9d8f9a372cc5916fd4781fec207ced7ddac2f08f",
+ "old": "highlight",
+ "new": "apply_highlights",
+ "source": "seeded",
+ "gold_tool": "rope 1.15.0 Rename(in_hierarchy=True, docs=False) + hand-audited rope-unsure occurrences (see notes)",
+ "instruction": "The method name `highlight` on `Highlighter` (rich/highlighter.py) is too generic: rich uses `highlight` for many unrelated arguments, attributes and methods. Rename `Highlighter.highlight` to `apply_highlights`. The rename must cover the base class, every subclass that overrides it, and every place that calls or refers to it, including tests. Do not rename any other `highlight` method, attribute, argument or function; they belong to unrelated classes and APIs. Leave comments, docstrings and other documentation text unchanged. Behavior must not change: the project must still work and its tests must pass.",
+ "kind": "wide",
+ "patch": "diff --git a/examples/rainbow.py b/examples/rainbow.py\nindex 2121a78..e2f63ee 100644\n--- a/examples/rainbow.py\n+++ b/examples/rainbow.py\n@@ -11,7 +11,7 @@ from rich.highlighter import Highlighter\n \n \n class RainbowHighlighter(Highlighter):\n-    def highlight(self, text):\n+    def apply_highlights(self, text):\n         for index in range(len(text)):\n             text.stylize(f\"color({randint(16, 255)})\", index, index + 1)\n \ndiff --git a/rich/highlighter.py b/rich/highlighter.py\nindex df28048..65b0143 100644\n--- a/rich/highlighter.py\n+++ b/rich/highlighter.py\n@@ -35,11 +35,11 @@ class Highlighter(ABC):\n             highlight_text = text.copy()\n         else:\n             raise TypeError(f\"str or Text instance required, not {text!r}\")\n-        self.highlight(highlight_text)\n+        self.apply_highlights(highlight_text)\n         return highlight_text\n \n     @abstractmethod\n-    def highlight(self, text: Text) -> None:\n+    def apply_highlights(self, text: Text) -> None:\n         \"\"\"Apply highlighting in place to text.\n \n         Args:\n@@ -54,7 +54,7 @@ class NullHighlighter(Highlighter):\n \n     \"\"\"\n \n-    def highlight(self, text: Text) -> None:\n+    def apply_highlights(self, text: Text) -> None:\n         \"\"\"Nothing to do\"\"\"\n \n \n@@ -64,7 +64,7 @@ class RegexHighlighter(Highlighter):\n     highlights: ClassVar[Sequence[str]] = []\n     base_style: ClassVar[str] = \"\"\n \n-    def highlight(self, text: Text) -> None:\n+    def apply_highlights(self, text: Text) -> None:\n         \"\"\"Highlight :class:`rich.text.Text` using regular expressions.\n \n         Args:\n@@ -120,8 +120,8 @@ class JSONHighlighter(RegexHighlighter):\n         ),\n     ]\n \n-    def highlight(self, text: Text) -> None:\n-        super().highlight(text)\n+    def apply_highlights(self, text: Text) -> None:\n+        super().apply_highlights(text)\n \n         # Additional work to handle highlighting JSON keys\n         plain = text.plain\ndiff --git a/rich/progress.py b/rich/progress.py\nindex c2de125..230c113 100644\n--- a/rich/progress.py\n+++ b/rich/progress.py\n@@ -639,7 +639,7 @@ class TextColumn(ProgressColumn):\n         else:\n             text = Text(_text, style=self.style, justify=self.justify)\n         if self.highlighter:\n-            self.highlighter.highlight(text)\n+            self.highlighter.apply_highlights(text)\n         return text\n \n \n@@ -765,7 +765,7 @@ class TaskProgressColumn(TextColumn):\n         else:\n             text = Text(_text, style=self.style, justify=self.justify)\n         if self.highlighter:\n-            self.highlighter.highlight(text)\n+            self.highlighter.apply_highlights(text)\n         return text\n \n \ndiff --git a/tests/test_highlighter.py b/tests/test_highlighter.py\nindex d199282..244cc89 100644\n--- a/tests/test_highlighter.py\n+++ b/tests/test_highlighter.py\n@@ -162,7 +162,7 @@ def test_highlight_regex(test: str, spans: List[Span]):\n     \"\"\"Tests for the regular expressions used in ReprHighlighter.\"\"\"\n     text = Text(test)\n     highlighter = ReprHighlighter()\n-    highlighter.highlight(text)\n+    highlighter.apply_highlights(text)\n     print(text.spans)\n     assert text.spans == spans\n \n@@ -171,7 +171,7 @@ def test_highlight_json_with_indent():\n     json_string = json.dumps({\"name\": \"apple\", \"count\": 1}, indent=4)\n     text = Text(json_string)\n     highlighter = JSONHighlighter()\n-    highlighter.highlight(text)\n+    highlighter.apply_highlights(text)\n     assert text.spans == [\n         Span(0, 1, \"json.brace\"),\n         Span(6, 12, \"json.str\"),\n@@ -188,7 +188,7 @@ def test_highlight_json_string_only():\n     json_string = '\"abc\"'\n     text = Text(json_string)\n     highlighter = JSONHighlighter()\n-    highlighter.highlight(text)\n+    highlighter.apply_highlights(text)\n     assert text.spans == [Span(0, 5, \"json.str\")]\n \n \n@@ -196,7 +196,7 @@ def test_highlight_json_empty_string_only():\n     json_string = '\"\"'\n     text = Text(json_string)\n     highlighter = JSONHighlighter()\n-    highlighter.highlight(text)\n+    highlighter.apply_highlights(text)\n     assert text.spans == [Span(0, 2, \"json.str\")]\n \n \n@@ -204,7 +204,7 @@ def test_highlight_json_no_indent():\n     json_string = json.dumps({\"name\": \"apple\", \"count\": 1}, indent=None)\n     text = Text(json_string)\n     highlighter = JSONHighlighter()\n-    highlighter.highlight(text)\n+    highlighter.apply_highlights(text)\n     assert text.spans == [\n         Span(0, 1, \"json.brace\"),\n         Span(1, 7, \"json.str\"),\n@@ -458,6 +458,6 @@ def test_highlight_iso8601_regex(test: str, spans: List[Span]):\n     \"\"\"Tests for the regular expressions used in ISO8601Highlighter.\"\"\"\n     text = Text(test)\n     highlighter = ISO8601Highlighter()\n-    highlighter.highlight(text)\n+    highlighter.apply_highlights(text)\n     print(text.spans)\n     assert text.spans == spans\n",
+ "test_patch": "",
+ "fail_to_pass": [],
+ "problem_statement": "The method name `highlight` on `Highlighter` (rich/highlighter.py) is too generic: rich uses `highlight` for many unrelated arguments, attributes and methods. Rename `Highlighter.highlight` to `apply_highlights`. The rename must cover the base class, every subclass that overrides it, and every place that calls or refers to it, including tests. Do not rename any other `highlight` method, attribute, argument or function; they belong to unrelated classes and APIs. Leave comments, docstrings and other documentation text unchanged. Behavior must not change: the project must still work and its tests must pass.",
+ "prompt_source": "wide-mandate",
+ "base_counts": {
+  "benchmarks/snippets.py": [
+   1,
+   0
+  ],
+  "examples/rainbow.py": [
+   1,
+   0
+  ],
+  "rich/__init__.py": [
+   3,
+   0
+  ],
+  "rich/console.py": [
+   33,
+   0
+  ],
+  "rich/highlighter.py": [
+   6,
+   0
+  ],
+  "rich/json.py": [
+   4,
+   0
+  ],
+  "rich/layout.py": [
+   1,
+   0
+  ],
+  "rich/markdown.py": [
+   1,
+   0
+  ],
+  "rich/measure.py": [
+   1,
+   0
+  ],
+  "rich/palette.py": [
+   1,
+   0
+  ],
+  "rich/panel.py": [
+   8,
+   0
+  ],
+  "rich/progress.py": [
+   2,
+   0
+  ],
+  "rich/syntax.py": [
+   4,
+   0
+  ],
+  "rich/table.py": [
+   18,
+   0
+  ],
+  "rich/tree.py": [
+   11,
+   0
+  ],
+  "tests/test_console.py": [
+   2,
+   0
+  ],
+  "tests/test_highlighter.py": [
+   6,
+   0
+  ],
+  "tests/test_syntax.py": [
+   1,
+   0
+  ],
+  "tests/test_table.py": [
+   5,
+   0
+  ]
+ },
+ "gold_counts": {
+  "benchmarks/snippets.py": [
+   1,
+   0
+  ],
+  "examples/rainbow.py": [
+   0,
+   1
+  ],
+  "rich/__init__.py": [
+   3,
+   0
+  ],
+  "rich/console.py": [
+   33,
+   0
+  ],
+  "rich/highlighter.py": [
+   0,
+   6
+  ],
+  "rich/json.py": [
+   4,
+   0
+  ],
+  "rich/layout.py": [
+   1,
+   0
+  ],
+  "rich/markdown.py": [
+   1,
+   0
+  ],
+  "rich/measure.py": [
+   1,
+   0
+  ],
+  "rich/palette.py": [
+   1,
+   0
+  ],
+  "rich/panel.py": [
+   8,
+   0
+  ],
+  "rich/progress.py": [
+   0,
+   2
+  ],
+  "rich/syntax.py": [
+   4,
+   0
+  ],
+  "rich/table.py": [
+   18,
+   0
+  ],
+  "rich/tree.py": [
+   11,
+   0
+  ],
+  "tests/test_console.py": [
+   2,
+   0
+  ],
+  "tests/test_highlighter.py": [
+   0,
+   6
+  ],
+  "tests/test_syntax.py": [
+   1,
+   0
+  ],
+  "tests/test_table.py": [
+   5,
+   0
+  ]
+ },
+ "test_modules": [
+  "tests/test_console.py",
+  "tests/test_highlighter.py",
+  "tests/test_syntax.py",
+  "tests/test_table.py"
+ ],
+ "wide_test_files": [
+  "tests/test_console.py",
+  "tests/test_highlighter.py",
+  "tests/test_syntax.py",
+  "tests/test_table.py"
+ ],
+ "pass_to_pass": [
+  "tests/test_console.py::test_16color_terminal",
+  "tests/test_console.py::test_bell",
+  "tests/test_console.py::test_brokenpipeerror",
+  "tests/test_console.py::test_capture",
+  "tests/test_console.py::test_capture_and_record",
+  "tests/test_console.py::test_capturing_no_stdout_and_no_stderr_files",
+  "tests/test_console.py::test_clear",
+  "tests/test_console.py::test_clear_no_terminal",
+  "tests/test_console.py::test_columns_env",
+  "tests/test_console.py::test_console_null_file",
+  "tests/test_console.py::test_console_options_update",
+  "tests/test_console.py::test_console_options_update_height",
+  "tests/test_console.py::test_console_style",
+  "tests/test_console.py::test_control",
+  "tests/test_console.py::test_detect_color_system",
+  "tests/test_console.py::test_dumb_terminal",
+  "tests/test_console.py::test_export_html",
+  "tests/test_console.py::test_export_html_inline",
+  "tests/test_console.py::test_export_svg",
+  "tests/test_console.py::test_export_svg_specified_unique_id",
+  "tests/test_console.py::test_export_text",
+  "tests/test_console.py::test_force_color",
+  "tests/test_console.py::test_force_color_jupyter",
+  "tests/test_console.py::test_get_style",
+  "tests/test_console.py::test_get_style_default",
+  "tests/test_console.py::test_get_style_error",
+  "tests/test_console.py::test_get_time",
+  "tests/test_console.py::test_height",
+  "tests/test_console.py::test_init",
+  "tests/test_console.py::test_input",
+  "tests/test_console.py::test_input_password",
+  "tests/test_console.py::test_is_alt_screen",
+  "tests/test_console.py::test_is_terminal_broken_file",
+  "tests/test_console.py::test_justify_center",
+  "tests/test_console.py::test_justify_left",
+  "tests/test_console.py::test_justify_none",
+  "tests/test_console.py::test_justify_renderable_center",
+  "tests/test_console.py::test_justify_renderable_left",
+  "tests/test_console.py::test_justify_renderable_none",
+  "tests/test_console.py::test_justify_renderable_right",
+  "tests/test_console.py::test_justify_right",
+  "tests/test_console.py::test_kitty_terminal",
+  "tests/test_console.py::test_lines_env",
+  "tests/test_console.py::test_log",
+  "tests/test_console.py::test_log_milliseconds",
+  "tests/test_console.py::test_markup_highlight",
+  "tests/test_console.py::test_no_color",
+  "tests/test_console.py::test_no_wrap",
+  "tests/test_console.py::test_out",
+  "tests/test_console.py::test_pager",
+  "tests/test_console.py::test_print",
+  "tests/test_console.py::test_print_empty",
+  "tests/test_console.py::test_print_empty_with_end",
+  "tests/test_console.py::test_print_json",
+  "tests/test_console.py::test_print_json_data",
+  "tests/test_console.py::test_print_json_ensure_ascii",
+  "tests/test_console.py::test_print_json_error",
+  "tests/test_console.py::test_print_json_indent_none",
+  "tests/test_console.py::test_print_json_with_default_ensure_ascii",
+  "tests/test_console.py::test_print_multiple",
+  "tests/test_console.py::test_print_newline_start",
+  "tests/test_console.py::test_print_style",
+  "tests/test_console.py::test_print_text",
+  "tests/test_console.py::test_print_text_multiple",
+  "tests/test_console.py::test_print_width_zero",
+  "tests/test_console.py::test_quiet",
+  "tests/test_console.py::test_recording_no_stdout_and_no_stderr_files",
+  "tests/test_console.py::test_reenable_highlighting",
+  "tests/test_console.py::test_render_broken_renderable",
+  "tests/test_console.py::test_render_error",
+  "tests/test_console.py::test_render_group",
+  "tests/test_console.py::test_render_group_fit",
+  "tests/test_console.py::test_render_lines_height_minus_vertical_pad_is_negative",
+  "tests/test_console.py::test_repr",
+  "tests/test_console.py::test_reset_height",
+  "tests/test_console.py::test_save_html",
+  "tests/test_console.py::test_save_svg",
+  "tests/test_console.py::test_save_text",
+  "tests/test_console.py::test_screen",
+  "tests/test_console.py::test_screen_update",
+  "tests/test_console.py::test_screen_update_class",
+  "tests/test_console.py::test_set_console_title",
+  "tests/test_console.py::test_show_cursor",
+  "tests/test_console.py::test_size",
+  "tests/test_console.py::test_size_can_fall_back_to_std_descriptors[False-ValueError-ValueError-ValueError-ValueError-expected_size5]",
+  "tests/test_console.py::test_size_can_fall_back_to_std_descriptors[False-ValueError-ValueError-ValueError-stderr_size4-expected_size4]",
+  "tests/test_console.py::test_size_can_fall_back_to_std_descriptors[False-ValueError-ValueError-stdout_size3-ValueError-expected_size3]",
+  "tests/test_console.py::test_size_can_fall_back_to_std_descriptors[False-ValueError-stdin_size2-ValueError-ValueError-expected_size2]",
+  "tests/test_console.py::test_size_can_fall_back_to_std_descriptors[False-no_descriptor_size1-ValueError-ValueError-ValueError-expected_size1]",
+  "tests/test_console.py::test_size_can_fall_back_to_std_descriptors[True-no_descriptor_size0-ValueError-ValueError-ValueError-expected_size0]",
+  "tests/test_console.py::test_size_properties",
+  "tests/test_console.py::test_soft_wrap",
+  "tests/test_console.py::test_status",
+  "tests/test_console.py::test_truecolor_terminal",
+  "tests/test_console.py::test_tty_compatible",
+  "tests/test_console.py::test_tty_interactive",
+  "tests/test_console.py::test_unicode_error",
+  "tests/test_console.py::test_update_options_markup",
+  "tests/test_console.py::test_update_screen",
+  "tests/test_console.py::test_update_screen_lines",
+  "tests/test_highlighter.py::test_highlight_iso8601_regex[+07-spans13]",
+  "tests/test_highlighter.py::test_highlight_iso8601_regex[+07:00-spans14]",
+  "tests/test_highlighter.py::test_highlight_iso8601_regex[01:45:36-spans22]",
+  "tests/test_highlighter.py::test_highlight_iso8601_regex[01:45:36.123+07:00-spans23]",
+  "tests/test_highlighter.py::test_highlight_iso8601_regex[01:45:36.123+07:00-spans24]",
+  "tests/test_highlighter.py::test_highlight_iso8601_regex[1721-spans10]",
+  "tests/test_highlighter.py::test_highlight_iso8601_regex[172159+07-spans17]",
+  "tests/test_highlighter.py::test_highlight_iso8601_regex[172159+0700-spans16]",
+  "tests/test_highlighter.py::test_highlight_iso8601_regex[172159-spans11]",
+  "tests/test_highlighter.py::test_highlight_iso8601_regex[17:21-spans9]",
+  "tests/test_highlighter.py::test_highlight_iso8601_regex[17:21:59+07:00-spans15]",
+  "tests/test_highlighter.py::test_highlight_iso8601_regex[2008-08-30+07:00-spans21]",
+  "tests/test_highlighter.py::test_highlight_iso8601_regex[2008-08-30-spans1]",
+  "tests/test_highlighter.py::test_highlight_iso8601_regex[2008-08-30-spans20]",
+  "tests/test_highlighter.py::test_highlight_iso8601_regex[2008-08-30T01:45:36-spans25]",
+  "tests/test_highlighter.py::test_highlight_iso8601_regex[2008-08-30T01:45:36.123Z-spans26]",
+  "tests/test_highlighter.py::test_highlight_iso8601_regex[2008-08-spans0]",
+  "tests/test_highlighter.py::test_highlight_iso8601_regex[2008-243-spans3]",
+  "tests/test_highlighter.py::test_highlight_iso8601_regex[2008-W35-6-spans7]",
+  "tests/test_highlighter.py::test_highlight_iso8601_regex[2008-W35-spans5]",
+  "tests/test_highlighter.py::test_highlight_iso8601_regex[20080830-spans2]",
+  "tests/test_highlighter.py::test_highlight_iso8601_regex[2008243-spans4]",
+  "tests/test_highlighter.py::test_highlight_iso8601_regex[2008W35-spans6]",
+  "tests/test_highlighter.py::test_highlight_iso8601_regex[2008W356-spans8]",
+  "tests/test_highlighter.py::test_highlight_iso8601_regex[Z-spans12]",
+  "tests/test_highlighter.py::test_highlight_json_empty_string_only",
+  "tests/test_highlighter.py::test_highlight_json_no_indent",
+  "tests/test_highlighter.py::test_highlight_json_string_only",
+  "tests/test_highlighter.py::test_highlight_json_with_indent",
+  "tests/test_highlighter.py::test_highlight_regex[\"\"\"hello\"\"\"-spans47]",
+  "tests/test_highlighter.py::test_highlight_regex[\"\"-spans45]",
+  "tests/test_highlighter.py::test_highlight_regex[\"hello\"-spans46]",
+  "tests/test_highlighter.py::test_highlight_regex['''hello'''-spans44]",
+  "tests/test_highlighter.py::test_highlight_regex[''-spans42]",
+  "tests/test_highlighter.py::test_highlight_regex['hello'-spans43]",
+  "tests/test_highlighter.py::test_highlight_regex[-spans0]",
+  "tests/test_highlighter.py::test_highlight_regex[0-00-1-01-2-02-spans33]",
+  "tests/test_highlighter.py::test_highlight_regex[01-23-45-67-89-AB-spans24]",
+  "tests/test_highlighter.py::test_highlight_regex[01-23-45-FF-FE-67-89-AB-spans25]",
+  "tests/test_highlighter.py::test_highlight_regex[0123.4567.89AB-spans28]",
+  "tests/test_highlighter.py::test_highlight_regex[0123.45FF.FE67.89AB-spans29]",
+  "tests/test_highlighter.py::test_highlight_regex[01:23:45:67:89:AB-spans26]",
+  "tests/test_highlighter.py::test_highlight_regex[01:23:45:FF:FE:67:89:AB-spans27]",
+  "tests/test_highlighter.py::test_highlight_regex[78351748-9b32-4e08-ad3e-7e9ff124d541-spans50]",
+  "tests/test_highlighter.py::test_highlight_regex[<foo>-spans2]",
+  "tests/test_highlighter.py::test_highlight_regex[ED-ED-ED-ED-ED-ED-spans31]",
+  "tests/test_highlighter.py::test_highlight_regex[Ed-Ed-Ed-Ed-Ed-Ed-spans32]",
+  "tests/test_highlighter.py::test_highlight_regex[\\\\'foo'-spans48]",
+  "tests/test_highlighter.py::test_highlight_regex[ed-ed-ed-ed-ed-ed-spans30]",
+  "tests/test_highlighter.py::test_highlight_regex[foo=\"bar\"-spans7]",
+  "tests/test_highlighter.py::test_highlight_regex[foo=bar-spans6]",
+  "tests/test_highlighter.py::test_highlight_regex[https://www.youtube.com/@LinusTechTips-spans38]",
+  "tests/test_highlighter.py::test_wrong_type",
+  "tests/test_syntax.py::test_ansi_theme",
+  "tests/test_syntax.py::test_background_color_override_includes_padding",
+  "tests/test_syntax.py::test_blank_lines",
+  "tests/test_syntax.py::test_from_path",
+  "tests/test_syntax.py::test_from_path_lexer_override",
+  "tests/test_syntax.py::test_from_path_lexer_override_invalid_lexer",
+  "tests/test_syntax.py::test_from_path_unknown_lexer",
+  "tests/test_syntax.py::test_get_line_color_none",
+  "tests/test_syntax.py::test_get_number_styles",
+  "tests/test_syntax.py::test_get_style_for_token",
+  "tests/test_syntax.py::test_highlight_background_color",
+  "tests/test_syntax.py::test_padding_plus_wrap",
+  "tests/test_syntax.py::test_pygments_syntax_theme",
+  "tests/test_syntax.py::test_pygments_syntax_theme_non_str",
+  "tests/test_syntax.py::test_python_render_line_range_indent_guides",
+  "tests/test_syntax.py::test_python_render_simple_indent_guides",
+  "tests/test_syntax.py::test_syntax_guess_lexer",
+  "tests/test_syntax.py::test_syntax_measure",
+  "tests/test_syntax.py::test_syntax_padding",
+  "tests/test_table.py::test_columns_highlight_added_by_add_row",
+  "tests/test_table.py::test_get_row_style",
+  "tests/test_table.py::test_init_append_column",
+  "tests/test_table.py::test_min_width",
+  "tests/test_table.py::test_no_columns",
+  "tests/test_table.py::test_not_renderable",
+  "tests/test_table.py::test_padding_width",
+  "tests/test_table.py::test_render_table",
+  "tests/test_table.py::test_rich_measure",
+  "tests/test_table.py::test_section",
+  "tests/test_table.py::test_vertical_align_top"
+ ],
+ "gold_test_outcomes": {
+  "run": 189,
+  "passed": 183,
+  "failed": [
+   "tests/test_syntax.py::test_option_no_wrap",
+   "tests/test_syntax.py::test_python_render",
+   "tests/test_syntax.py::test_python_render_indent_guides",
+   "tests/test_syntax.py::test_python_render_simple",
+   "tests/test_syntax.py::test_python_render_simple_passing_lexer_instance",
+   "tests/test_syntax.py::test_syntax_highlight_ranges"
+  ]
+ },
+ "gold_sites": 15
+}

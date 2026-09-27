@@ -1,0 +1,152 @@
+{
+ "instance_id": "wide__click__Group_get_command",
+ "repo": "pallets/click",
+ "lang": "python",
+ "base_commit": "b67832c2167e5b0ff6764a8c04a0a9087e697b5a",
+ "old": "get_command",
+ "new": "lookup_command",
+ "source": "seeded",
+ "gold_tool": "rope 1.15.0 Rename(in_hierarchy=True, docs=False) + hand-audited rope-unsure occurrences (see notes)",
+ "instruction": "The method name `get_command` on `Group` (src/click/core.py) should say that it looks a subcommand up by name. Rename `Group.get_command` to `lookup_command`. The rename must cover the base class, every subclass that overrides it, and every place that calls or refers to it, including tests. Leave comments, docstrings and other documentation text unchanged. Behavior must not change: the project must still work and its tests must pass.",
+ "kind": "wide",
+ "patch": "diff --git a/examples/aliases/aliases.py b/examples/aliases/aliases.py\nindex 0c0ecdbf..853e89f0 100644\n--- a/examples/aliases/aliases.py\n+++ b/examples/aliases/aliases.py\n@@ -39,9 +39,9 @@ class AliasedGroup(click.Group):\n     file and with a bit of magic.\n     \"\"\"\n \n-    def get_command(self, ctx, cmd_name):\n+    def lookup_command(self, ctx, cmd_name):\n         # Step one: built-in commands as normal\n-        rv = click.Group.get_command(self, ctx, cmd_name)\n+        rv = click.Group.lookup_command(self, ctx, cmd_name)\n         if rv is not None:\n             return rv\n \n@@ -52,7 +52,7 @@ class AliasedGroup(click.Group):\n         # Step three: look up an explicit command alias in the config\n         if cmd_name in cfg.aliases:\n             actual_cmd = cfg.aliases[cmd_name]\n-            return click.Group.get_command(self, ctx, actual_cmd)\n+            return click.Group.lookup_command(self, ctx, actual_cmd)\n \n         # Alternative option: if we did not find an explicit alias we\n         # allow automatic abbreviation of the command.  \"status\" for\n@@ -64,7 +64,7 @@ class AliasedGroup(click.Group):\n         if not matches:\n             return None\n         elif len(matches) == 1:\n-            return click.Group.get_command(self, ctx, matches[0])\n+            return click.Group.lookup_command(self, ctx, matches[0])\n         ctx.fail(f\"Too many matches: {', '.join(sorted(matches))}\")\n \n     def resolve_command(self, ctx, args):\ndiff --git a/examples/complex/complex/cli.py b/examples/complex/complex/cli.py\nindex 81af075c..29a08d48 100644\n--- a/examples/complex/complex/cli.py\n+++ b/examples/complex/complex/cli.py\n@@ -37,7 +37,7 @@ class ComplexCLI(click.Group):\n         rv.sort()\n         return rv\n \n-    def get_command(self, ctx, name):\n+    def lookup_command(self, ctx, name):\n         try:\n             mod = __import__(f\"complex.commands.cmd_{name}\", None, None, [\"cli\"])\n         except ImportError:\ndiff --git a/src/click/core.py b/src/click/core.py\nindex cc8fb47d..6ac801ff 100644\n--- a/src/click/core.py\n+++ b/src/click/core.py\n@@ -73,7 +73,7 @@ def _complete_visible_commands(\n \n     for name in multi.list_commands(ctx):\n         if name.startswith(incomplete):\n-            command = multi.get_command(ctx, name)\n+            command = multi.lookup_command(ctx, name)\n \n             if command is not None and not command.hidden:\n                 yield name, command\n@@ -1759,7 +1759,7 @@ class Group(Command):\n         commands = {}\n \n         for name in self.list_commands(ctx):\n-            command = self.get_command(ctx, name)\n+            command = self.lookup_command(ctx, name)\n \n             if command is None:\n                 continue\n@@ -1928,7 +1928,7 @@ class Group(Command):\n \n         return decorator\n \n-    def get_command(self, ctx: Context, cmd_name: str) -> Command | None:\n+    def lookup_command(self, ctx: Context, cmd_name: str) -> Command | None:\n         \"\"\"Given a context and a command name, this returns a :class:`Command`\n         object if it exists or returns ``None``.\n         \"\"\"\n@@ -1953,7 +1953,7 @@ class Group(Command):\n         \"\"\"\n         commands = []\n         for subcommand in self.list_commands(ctx):\n-            cmd = self.get_command(ctx, subcommand)\n+            cmd = self.lookup_command(ctx, subcommand)\n             # What is this, the tool lied about a command.  Ignore it\n             if cmd is None:\n                 continue\n@@ -2063,13 +2063,13 @@ class Group(Command):\n         cmd_name = make_str(args[0])\n \n         # Get the command\n-        cmd = self.get_command(ctx, cmd_name)\n+        cmd = self.lookup_command(ctx, cmd_name)\n \n         # If we can't find the command but there is a normalization\n         # function available, we try with that one.\n         if cmd is None and ctx.token_normalize_func is not None:\n             cmd_name = ctx.token_normalize_func(cmd_name)\n-            cmd = self.get_command(ctx, cmd_name)\n+            cmd = self.lookup_command(ctx, cmd_name)\n \n         # If we don't find the command we want to show an error message\n         # to the user that it was not provided.  However, there is\n@@ -2142,14 +2142,14 @@ class CommandCollection(Group):\n         \"\"\"Add a group as a source of commands.\"\"\"\n         self.sources.append(group)\n \n-    def get_command(self, ctx: Context, cmd_name: str) -> Command | None:\n-        rv = super().get_command(ctx, cmd_name)\n+    def lookup_command(self, ctx: Context, cmd_name: str) -> Command | None:\n+        rv = super().lookup_command(ctx, cmd_name)\n \n         if rv is not None:\n             return rv\n \n         for source in self.sources:\n-            rv = source.get_command(ctx, cmd_name)\n+            rv = source.lookup_command(ctx, cmd_name)\n \n             if rv is not None:\n                 if self.chain:\ndiff --git a/tests/test_commands.py b/tests/test_commands.py\nindex 35ba65ca..cb369174 100644\n--- a/tests/test_commands.py\n+++ b/tests/test_commands.py\n@@ -328,7 +328,7 @@ def test_subcommand_metavar_marks_optional(\n \n def test_aliased_command_canonical_name(runner):\n     class AliasedGroup(click.Group):\n-        def get_command(self, ctx, cmd_name):\n+        def lookup_command(self, ctx, cmd_name):\n             return push\n \n         def resolve_command(self, ctx, args):\ndiff --git a/tests/typing/typing_aliased_group.py b/tests/typing/typing_aliased_group.py\nindex 404870bb..a474ef96 100644\n--- a/tests/typing/typing_aliased_group.py\n+++ b/tests/typing/typing_aliased_group.py\n@@ -8,15 +8,15 @@ import click\n \n \n class AliasedGroup(click.Group):\n-    def get_command(self, ctx: click.Context, cmd_name: str) -> click.Command | None:\n-        rv = click.Group.get_command(self, ctx, cmd_name)\n+    def lookup_command(self, ctx: click.Context, cmd_name: str) -> click.Command | None:\n+        rv = click.Group.lookup_command(self, ctx, cmd_name)\n         if rv is not None:\n             return rv\n         matches = [x for x in self.list_commands(ctx) if x.startswith(cmd_name)]\n         if not matches:\n             return None\n         elif len(matches) == 1:\n-            return click.Group.get_command(self, ctx, matches[0])\n+            return click.Group.lookup_command(self, ctx, matches[0])\n         ctx.fail(f\"Too many matches: {', '.join(sorted(matches))}\")\n \n     def resolve_command(\n",
+ "test_patch": "",
+ "fail_to_pass": [],
+ "problem_statement": "The method name `get_command` on `Group` (src/click/core.py) should say that it looks a subcommand up by name. Rename `Group.get_command` to `lookup_command`. The rename must cover the base class, every subclass that overrides it, and every place that calls or refers to it, including tests. Leave comments, docstrings and other documentation text unchanged. Behavior must not change: the project must still work and its tests must pass.",
+ "prompt_source": "wide-mandate",
+ "base_counts": {
+  "examples/aliases/aliases.py": [
+   4,
+   0
+  ],
+  "examples/complex/complex/cli.py": [
+   1,
+   0
+  ],
+  "src/click/core.py": [
+   9,
+   0
+  ],
+  "tests/test_commands.py": [
+   1,
+   0
+  ],
+  "tests/typing/typing_aliased_group.py": [
+   3,
+   0
+  ]
+ },
+ "gold_counts": {
+  "examples/aliases/aliases.py": [
+   0,
+   4
+  ],
+  "examples/complex/complex/cli.py": [
+   0,
+   1
+  ],
+  "src/click/core.py": [
+   0,
+   9
+  ],
+  "tests/test_commands.py": [
+   0,
+   1
+  ],
+  "tests/typing/typing_aliased_group.py": [
+   0,
+   3
+  ]
+ },
+ "test_modules": [
+  "tests/test_commands.py",
+  "tests/typing/typing_aliased_group.py"
+ ],
+ "wide_test_files": [
+  "tests/test_commands.py",
+  "tests/typing/typing_aliased_group.py"
+ ],
+ "pass_to_pass": [
+  "tests/test_commands.py::test_abort_exceptions_with_disabled_standalone_mode[EOFError]",
+  "tests/test_commands.py::test_abort_exceptions_with_disabled_standalone_mode[KeyboardInterrupt]",
+  "tests/test_commands.py::test_aliased_command_canonical_name",
+  "tests/test_commands.py::test_auto_shorthelp",
+  "tests/test_commands.py::test_command_no_args_is_help",
+  "tests/test_commands.py::test_command_parse_args_collects_option_prefixes",
+  "tests/test_commands.py::test_custom_parser",
+  "tests/test_commands.py::test_default_maps",
+  "tests/test_commands.py::test_deprecated_empty_help_no_leading_space[-True]",
+  "tests/test_commands.py::test_deprecated_empty_help_no_leading_space[None-True]",
+  "tests/test_commands.py::test_deprecated_in_help_messages[True-None]",
+  "tests/test_commands.py::test_deprecated_in_invocation[True]",
+  "tests/test_commands.py::test_forwarded_params_consistency",
+  "tests/test_commands.py::test_group_add_command_name",
+  "tests/test_commands.py::test_group_invoke_collects_used_option_prefixes",
+  "tests/test_commands.py::test_group_parse_args_collects_base_option_prefixes",
+  "tests/test_commands.py::test_group_with_args[args2-0-obj=obj1\\nmove\\n]",
+  "tests/test_commands.py::test_help_param_priority",
+  "tests/test_commands.py::test_invoked_subcommand",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order0-declaration_order0-expected_order0]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order1-declaration_order1-expected_order1]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order10-declaration_order10-expected_order10]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order11-declaration_order11-expected_order11]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order12-declaration_order12-expected_order12]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order13-declaration_order13-expected_order13]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order14-declaration_order14-expected_order14]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order15-declaration_order15-expected_order15]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order16-declaration_order16-expected_order16]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order17-declaration_order17-expected_order17]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order18-declaration_order18-expected_order18]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order19-declaration_order19-expected_order19]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order2-declaration_order2-expected_order2]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order20-declaration_order20-expected_order20]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order21-declaration_order21-expected_order21]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order22-declaration_order22-expected_order22]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order23-declaration_order23-expected_order23]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order24-declaration_order24-expected_order24]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order25-declaration_order25-expected_order25]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order26-declaration_order26-expected_order26]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order27-declaration_order27-expected_order27]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order28-declaration_order28-expected_order28]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order29-declaration_order29-expected_order29]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order3-declaration_order3-expected_order3]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order30-declaration_order30-expected_order30]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order31-declaration_order31-expected_order31]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order32-declaration_order32-expected_order32]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order33-declaration_order33-expected_order33]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order4-declaration_order4-expected_order4]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order5-declaration_order5-expected_order5]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order6-declaration_order6-expected_order6]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order7-declaration_order7-expected_order7]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order8-declaration_order8-expected_order8]",
+  "tests/test_commands.py::test_iter_params_for_processing[invocation_order9-declaration_order9-expected_order9]",
+  "tests/test_commands.py::test_object_propagation",
+  "tests/test_commands.py::test_other_command_forward",
+  "tests/test_commands.py::test_other_command_invoke",
+  "tests/test_commands.py::test_other_command_invoke_with_defaults[opt_params0-42]",
+  "tests/test_commands.py::test_other_command_invoke_with_defaults[opt_params1-15]",
+  "tests/test_commands.py::test_other_command_invoke_with_defaults[opt_params10-None]",
+  "tests/test_commands.py::test_other_command_invoke_with_defaults[opt_params11-b]",
+  "tests/test_commands.py::test_other_command_invoke_with_defaults[opt_params12-/tmp]",
+  "tests/test_commands.py::test_other_command_invoke_with_defaults[opt_params13-False]",
+  "tests/test_commands.py::test_other_command_invoke_with_defaults[opt_params14-True]",
+  "tests/test_commands.py::test_other_command_invoke_with_defaults[opt_params15-0]",
+  "tests/test_commands.py::test_other_command_invoke_with_defaults[opt_params16-secret]",
+  "tests/test_commands.py::test_other_command_invoke_with_defaults[opt_params2-expected2]",
+  "tests/test_commands.py::test_other_command_invoke_with_defaults[opt_params3-None]",
+  "tests/test_commands.py::test_other_command_invoke_with_defaults[opt_params4-None]",
+  "tests/test_commands.py::test_other_command_invoke_with_defaults[opt_params5-False]",
+  "tests/test_commands.py::test_other_command_invoke_with_defaults[opt_params6-True]",
+  "tests/test_commands.py::test_other_command_invoke_with_defaults[opt_params7-3.14]",
+  "tests/test_commands.py::test_other_command_invoke_with_defaults[opt_params8-expected8]",
+  "tests/test_commands.py::test_other_command_invoke_with_defaults[opt_params9-expected9]",
+  "tests/test_commands.py::test_unknown_command",
+  "tests/test_commands.py::test_unprocessed_options"
+ ],
+ "gold_test_outcomes": {
+  "run": 75,
+  "passed": 75,
+  "failed": []
+ },
+ "gold_sites": 18
+}
