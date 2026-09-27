@@ -163,6 +163,7 @@ def _worktree(task):
 
 def _remove_worktree(wt: Path):
     shutil.rmtree(wt, ignore_errors=True)
+    shutil.rmtree(_cell_m2(wt), ignore_errors=True)
 
 
 # Index/tool artifacts the context tools drop into the worktree. They MUST be
@@ -198,6 +199,9 @@ def _agent_diff(wt: Path, task) -> str:  # noqa: D401
     docker_eval._sh("git", "-C", str(wt), "add", "-A", check=False)
     excludes = [f":(exclude){m}" for m in task["test_modules"]]
     excludes += [f":(exclude){a}" for a in TOOL_ARTIFACTS]
+    # pre-installed dependencies (_preinstall_node); gitignored already, this
+    # holds even for a repo whose .gitignore misses a nested one
+    excludes += [":(exclude,glob)**/node_modules/**"]
     return docker_eval._sh("git", "-C", str(wt), "diff", "--cached", "--", ".",
                            *excludes, check=False)
 
@@ -339,6 +343,11 @@ GO_HOMES = {(1, 25): Path("/opt/homebrew/opt/go@1.25"), (1, 26): Path("/usr/loca
 PINNED_BIN = Path(__file__).resolve().parent.parent / "hooks/pinned-bin"  # pnpm/bun wrappers
 NODE_HOME = Path("/opt/homebrew/opt/node@20")
 GH_EMPTY_CONFIG = Path(tempfile.gettempdir()) / "e2e-gh-empty-config"
+# Host package-manager caches for the agent, harness-owned and shared by every
+# arm (the scorer's ~/.pnpm-eval-store etc. hold linux-container binaries).
+AGENT_PNPM_STORE = Path.home() / ".pnpm-agent-store"
+AGENT_BUN_CACHE = Path.home() / ".bun-agent-cache"
+AGENT_NPM_CACHE = Path.home() / ".npm-agent-cache"
 GCC = Path("/opt/homebrew/bin/gcc-13")
 GXX = Path("/opt/homebrew/bin/g++-13")
 
@@ -363,6 +372,18 @@ def _agent_env(wt: Path, task) -> tuple[dict, dict]:
     env["MAVEN_ARGS"] = (env.get("MAVEN_ARGS", "") + " -Drat.skip=true").strip()
     jdk = 17
     if _is_java(task):
+        # -nsu: resolve a still-unreleased SNAPSHOT parent (jackson-base
+        # 3.3.0-SNAPSHOT) from the cached snapshot the scorer uses.
+        env["MAVEN_ARGS"] += " -nsu"
+        # Repository settings go through MAVEN_OPTS (JVM system properties):
+        # every launcher honours it, including dubbo's jar-based mvnw 3.1.1,
+        # which ignores MAVEN_ARGS.
+        head = _cell_m2(wt)
+        head.mkdir(parents=True, exist_ok=True)
+        AGENT_M2_SEED.mkdir(parents=True, exist_ok=True)
+        env["MAVEN_OPTS"] = (env.get("MAVEN_OPTS", "") +
+                             f" -Dmaven.repo.local={head}"
+                             f" -Dmaven.repo.local.tail={AGENT_M2_SEED},{SCORER_M2_REPO}").strip()
         # same era rule the scorer uses to pick its maven image
         jdk = int(java_eval.image_for(
             java_eval.commit_date(wt, task["base_commit"])).rsplit("-", 1)[1])
@@ -401,8 +422,108 @@ def _agent_env(wt: Path, task) -> tuple[dict, dict]:
         env.pop(k, None)
     GH_EMPTY_CONFIG.mkdir(parents=True, exist_ok=True)
     env["GH_CONFIG_DIR"] = str(GH_EMPTY_CONFIG)
+    # JS/TS: the same stores the harness pre-installs node_modules from
+    # (_preinstall_node), so an agent's own `pnpm install` finds them warm
+    # instead of relinking against another store; pnpm must not fetch the
+    # packageManager-pinned version (zod pins pnpm@10.12.1) -- the scorer
+    # installs with manage-package-manager-versions=false too.
+    env["npm_config_store_dir"] = str(AGENT_PNPM_STORE)
+    env["npm_config_manage_package_manager_versions"] = "false"
+    env["npm_config_cache"] = str(AGENT_NPM_CACHE)
+    # cached registry metadata is good enough; npm/npx/pnpm stop asking the
+    # registry on every call (express has no lockfile: `npm install` works
+    # offline from the warm cache only with this)
+    env["npm_config_prefer_offline"] = "true"
+    env["BUN_INSTALL_CACHE_DIR"] = str(AGENT_BUN_CACHE)
     return env, {"java": jdk, "python": "3.12", "go": f"{go_ver[0]}.{go_ver[1]}", "node": "20",
                  "pnpm": "10.33.2", "bun": "1.2.20", "cc": "gcc-13"}
+
+
+# Maven for the agent: a fresh per-cell local repository (so one cell's
+# `mvn install` never reaches another cell or arm) chained onto two read-only
+# tails -- the scorer's own cache and a harness-owned seed holding whatever
+# the host build needs beyond it (build/warm_agent_m2.py fills it).
+SCORER_M2_REPO = java_eval.M2 / "repository"
+AGENT_M2_SEED = Path.home() / ".m2-agent-seed"
+
+
+def _cell_m2(wt: Path) -> Path:
+    return Path(str(wt) + "-m2")
+
+
+def _pin_java_worktree(wt: Path, task) -> bool:
+    """Give the agent the scorer's build: pin the SNAPSHOT parent POM to its
+    release exactly as java_eval does before scoring, committed on top of
+    base so the agent's diff (and `git status`) never shows it.
+
+    Historical jackson bases name a garbage-collected SNAPSHOT parent; the
+    agent's mvn couldn't resolve it and burned 20-30 turns on it (pr5994
+    hand-built and install-file'd a fake parent; pr5943/pr5959 hand-edited
+    POM copies) while the scorer quietly pinned (2026-09-26 review)."""
+    if not _is_java(task) or not java_eval._pin_snapshot_parent(wt):
+        return False
+    sh = docker_eval._sh
+    sh("git", "-C", str(wt), "-c", "user.name=e2e-harness", "-c", "user.email=e2e-harness@localhost",
+       "-c", "commit.gpgsign=false", "commit", "-q", "-m",
+       "build: pin SNAPSHOT parent POM to its release (harness setup, not part of the task)",
+       "--", "pom.xml")
+    return True
+
+
+NODE_TOOLS = Path.home() / ".e2e-node-tools"   # hooks/pinned-bin wrappers exec these
+NODE_TOOL_VERSIONS = {"pnpm": "10.33.2", "bun": "1.2.20"}
+
+
+def _ensure_node_tools(env: dict) -> None:
+    """Install the pinned pnpm/bun once, with the pinned node's npm. The
+    wrappers otherwise run `npx -y pnpm@X`, which asks the registry on every
+    call: slow, and it fails offline even with the package cached."""
+    for tool, ver in NODE_TOOL_VERSIONS.items():
+        prefix = NODE_TOOLS / f"{tool}-{ver}"
+        if (prefix / "bin" / tool).exists():
+            continue
+        subprocess.run(["npm", "install", "-g", "--no-audit", "--no-fund", "--prefix",
+                        str(prefix), f"{tool}@{ver}"], env=env, check=True,
+                       capture_output=True, text=True, timeout=600)
+
+
+def _node_install_cmd(repo: str) -> str:
+    """The scorer's install command (js_eval.INSTALL_CMD), run on the host
+    with the pinned wrappers and against the agent's store instead of the
+    container's."""
+    cmd = js_eval.INSTALL_CMD[repo].replace("--store-dir /pnpm-store",
+                                            f"--store-dir {AGENT_PNPM_STORE}")
+    for tool, ver in NODE_TOOL_VERSIONS.items():
+        cmd = cmd.replace(f"npx -y {tool}@{ver} ", f"{tool} ")
+    return cmd
+
+
+def _preinstall_node(wt: Path, task) -> dict:
+    """Install a JS/TS task's node_modules before the agent starts, for every
+    arm alike, with the scorer's own install command and the pinned node 20.
+
+    Without it each agent set up node on its own: zod pr6439 tried
+    `nvm use 24`, hono pr5164 went through yarn/npx/bun/bunx (6 turns vs the
+    other arm's 2) -- build churn that landed on either arm at random
+    (2026-09-26 heavy-cell review). node_modules is gitignored in all four
+    repos and excluded from the scored diff; the tree must be clean after."""
+    if task.get("lang") not in ("js", "ts") or task.get("repo") not in js_eval.INSTALL_CMD:
+        return {}
+    env, _ = _agent_env(wt, task)
+    _ensure_node_tools(env)
+    before = docker_eval._sh("git", "-C", str(wt), "status", "--porcelain", check=False)
+    t0 = time.monotonic()
+    r = subprocess.run(["bash", "-c", _node_install_cmd(task["repo"])], cwd=wt, env=env,
+                       capture_output=True, text=True, timeout=1500)
+    if r.returncode != 0:
+        raise RuntimeError(f"node pre-install failed for {task['instance_id']} "
+                           f"(rc={r.returncode}): {(r.stdout + r.stderr)[-400:]}")
+    after = docker_eval._sh("git", "-C", str(wt), "status", "--porcelain", check=False)
+    dirty = "\n".join(sorted(set(after.splitlines()) - set(before.splitlines())))
+    if dirty:
+        raise RuntimeError(f"node pre-install left the tree dirty for "
+                           f"{task['instance_id']}: {dirty[:300]}")
+    return {"node_preinstall_s": round(time.monotonic() - t0, 1)}
 
 
 def _upstream_guard_settings() -> str:
@@ -574,9 +695,20 @@ def _save_diff(task, model: str, arm: str, tag: str, diff: str):
     (OUT / f"{task['instance_id']}.{model}.{arm}{tag}.diff").write_text(diff)
 
 
+def _prepare_build_env(wt: Path, task) -> dict:
+    """Identical for every arm: the Java parent pin and the JS/TS
+    node_modules pre-install, both before any tool indexes the tree."""
+    setup = {}
+    if _pin_java_worktree(wt, task):
+        setup["java_parent_pinned"] = True
+    setup.update(_preinstall_node(wt, task))
+    return setup
+
+
 def run_cell(task: dict, arm: str, model: str, tag: str = "") -> dict:
     repo, wt = _worktree(task)
     try:
+        setup = _prepare_build_env(wt, task)
         if arm in ("mason", "mason_walk"):
             meta = _run_mason(wt, task, arm)
             diff = _agent_diff(wt, task)
@@ -585,7 +717,7 @@ def run_cell(task: dict, arm: str, model: str, tag: str = "") -> dict:
             sc = _score(task, diff)
             return {"task": task["instance_id"], "arm": arm, "model": model,
                     "kind": task.get("kind"), "resolved": sc.get("resolved"),
-                    "diff_lines": diff.count("\n"), **meta, "score": sc}
+                    "diff_lines": diff.count("\n"), **meta, "setup": setup, "score": sc}
         if task.get("kind") == "seeded_refactor":
             # The agent starts from the broken build, not from base.
             seeded_refactor.apply_mutation(wt, task["mutation"])
@@ -606,7 +738,7 @@ def run_cell(task: dict, arm: str, model: str, tag: str = "") -> dict:
     sc = _score(task, diff)
     return {"task": task["instance_id"], "arm": arm, "model": model,
             "kind": task.get("kind"), "resolved": sc.get("resolved"),
-            "diff_lines": diff.count("\n"), **meta, "score": sc}
+            "diff_lines": diff.count("\n"), **meta, "setup": setup, "score": sc}
 
 
 def main():
