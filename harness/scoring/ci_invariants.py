@@ -196,13 +196,46 @@ def engine_sites(prism: Path, query: str, workdir: Path) -> tuple[list[str], dic
     # declaringTypes: the interface/type declaration itself is a change site
     # for languages whose member specs are not separate symbols (Go, TS) —
     # omitting this group from the union is exactly the blind spot §1 fixed.
-    for group in ("declarations", "family", "callers", "declaringTypes"):
+    # supers: same-member declarations on other contracts satisfied by the
+    # family (grafana's private routeService beside RouteService). The engine
+    # reports them as must-change sites (Sites() includes them); omitting the
+    # group hid them whenever the old index happened to place them elsewhere.
+    for group in ("declarations", "family", "callers", "declaringTypes", "supers"):
         for sym in data.get(group, []):
             fp = sym.get("filePath") or sym.get("file", "")
             nm = sym.get("name", "")
             if fp and nm:
-                sites.append(f"{fp}:{nm}")
+                owner = ""
+                if group in ("declarations", "supers"):
+                    owner = _go_interface_owner(workdir, fp, sym.get("qualifiedName", ""))
+                # A Go interface method spec is one edited line; the ground
+                # truth names it by its interface. Report it once, that way.
+                sites.append(f"{fp}:{owner or nm}")
     return sites, data
+
+
+def _go_interface_owner(workdir: Path, fp: str, qualified: str) -> str:
+    """Since astkit v0.15.1 a Go interface method spec is its own symbol
+    (DataKeyCache.GetById), so change-impact reports the edited spec line as
+    file:GetById where the ground truth (written when specs were part of the
+    interface symbol) names file:DataKeyCache. Same line, same edit: report
+    it as the interface, but only when the index says the owner is an
+    interface declared in that file."""
+    if not fp.endswith(".go") or "." not in qualified:
+        return ""
+    owner = qualified.rsplit(".", 1)[0]
+    db = workdir / ".grove" / "grove.db"
+    if not db.exists():
+        return ""
+    import sqlite3
+    try:
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        row = con.execute("SELECT 1 FROM symbols WHERE file_path=? AND name=? AND kind='interface' LIMIT 1",
+                          (fp, owner)).fetchone()
+        con.close()
+    except sqlite3.Error:
+        return ""
+    return owner if row else ""
 
 
 # --- invariant 1: ceiling regression ------------------------------------

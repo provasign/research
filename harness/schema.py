@@ -73,6 +73,8 @@ class Task:
     prompt: str  # the issue text shown to the agent
     ground_truth: list[Site]  # production change-sites the PR touched
     workdir: str = ""  # optional: run in this existing checkout (skip git worktree)
+    # optional: dated evidence for hand corrections to ground_truth
+    ground_truth_notes: list[str] = field(default_factory=list)
 
     @staticmethod
     def load(path: str | Path) -> "Task":
