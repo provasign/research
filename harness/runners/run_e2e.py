@@ -608,6 +608,13 @@ def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
         j = json.loads(r.stdout)
         rec.update(turns=j.get("num_turns"), cost_usd=j.get("total_cost_usd"))
         rec["usage"] = usage_account.cli_usage(j)
+        # The model that actually ran: --model aliases ("sonnet") move to new
+        # releases without notice (2026-09-28 the alias switched from
+        # claude-sonnet-5 to claude-sonnet-5-5 between two cells of one pair).
+        mu = j.get("modelUsage") or {}
+        rec["models_used"] = sorted(mu)
+        if mu:
+            rec["model"] = max(mu, key=lambda m: (mu[m] or {}).get("outputTokens", 0))
         rec["session_id"] = rec["usage"].get("session_id")
         rec["tokens_request"] = rec["usage"]["input_total"]
         u = rec["usage"]["tokens"]

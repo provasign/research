@@ -32,7 +32,10 @@ _ap.add_argument("--manifest", default="results/archive-2026-09-tainted/paired-g
 _ap.add_argument("--out-dir", default="results/overnight-run")
 _ap.add_argument("--native-arm", default="baseline")
 _ap.add_argument("--prism-arm", default="prism_init")
-_ap.add_argument("--model", default="sonnet")
+_ap.add_argument("--model", default="claude-sonnet-5-5",
+                 help="exact model ID; aliases (sonnet, opus, haiku) move between releases")
+_ap.add_argument("--allow-model-alias", action="store_true",
+                 help="accept an alias --model (results then compare across whatever it resolved to)")
 _args = _ap.parse_args()
 
 MANIFEST = Path(_args.manifest)
@@ -44,6 +47,8 @@ REPORT = OUT_DIR / "REPORT.md"
 STATE = OUT_DIR / "state.json"
 
 MODEL = _args.model
+if MODEL in ("sonnet", "opus", "haiku") and not _args.allow_model_alias:
+    _ap.error(f"--model {MODEL} is an alias; pass an exact model ID (e.g. claude-sonnet-5-5) or --allow-model-alias")
 NATIVE_ARM = _args.native_arm
 PRISM_ARM = _args.prism_arm
 TOKEN_FLAG_MULTIPLIER = 1.5
@@ -136,6 +141,13 @@ def main():
         native = run_with_retry(task, NATIVE_ARM, MODEL)
         prism = run_with_retry(task, PRISM_ARM, MODEL)
 
+        # Both arms must have run the requested model: a pair across two
+        # models measures the models, not prism. Stop the run.
+        mismatched = [(arm, rec.get("model")) for arm, rec in (("native", native), ("prism", prism))
+                      if rec.get("model") and not _args.allow_model_alias and rec.get("model") != MODEL]
+        if mismatched:
+            log(f"MODEL MISMATCH on {iid}: requested {MODEL}, got {mismatched} -- stopping the run")
+            raise SystemExit(3)
         n_tok, p_tok = total_tokens(native), total_tokens(prism)
         p_calls = prism_call_count(prism)
         row = {
@@ -143,13 +155,13 @@ def main():
             "native": {"resolved": native.get("resolved"), "turns": native.get("turns"),
                       "tokens": n_tok, "wall_s": native.get("wall_s"),
                       "cost_usd": native.get("cost_usd"), "tool_trace": native.get("tool_trace"),
-                      "session_id": native.get("session_id"),
+                      "session_id": native.get("session_id"), "model": native.get("model"),
                       "runtimes": native.get("runtimes"),
                       "error": native.get("error") or native.get("agent_error")},
             "prism": {"resolved": prism.get("resolved"), "turns": prism.get("turns"),
                      "tokens": p_tok, "wall_s": prism.get("wall_s"),
                      "cost_usd": prism.get("cost_usd"), "tool_trace": prism.get("tool_trace"),
-                     "prism_calls": p_calls, "session_id": prism.get("session_id"),
+                     "prism_calls": p_calls, "session_id": prism.get("session_id"), "model": prism.get("model"),
                      "runtimes": prism.get("runtimes"),
                      "error": prism.get("error") or prism.get("agent_error")},
         }
