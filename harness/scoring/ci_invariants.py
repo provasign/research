@@ -45,6 +45,7 @@ for _d in (_H, _os.path.join(_H, "runners"), _os.path.join(_H, "aggregate"),
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -161,11 +162,17 @@ def fetch_corpus(name: str, spec: dict, corpus_root: Path) -> Path:
 
 def run_prism(prism: Path, workdir: Path, *args: str) -> dict:
     result = subprocess.run(
-        [str(prism), *args, "."], capture_output=True, text=True, cwd=workdir, timeout=300,
+        [str(prism), *args, "."], capture_output=True, text=True, cwd=workdir, timeout=CMD_TIMEOUT,
     )
     if result.returncode != 0:
         raise RuntimeError(f"prism {' '.join(args)} failed in {workdir}: {result.stderr[:400]}")
     return json.loads(result.stdout)
+
+
+# A first index of a corpus on a machine with a cold Go build cache compiles
+# its dependencies once (compiler-backed analysis, prism >= 0.85): grafana
+# takes ~30 min cold, ~60s warm. Any query can trigger that index.
+CMD_TIMEOUT = int(os.environ.get("CI_INVARIANTS_CMD_TIMEOUT", "2700"))
 
 
 def run_index(prism: Path, workdir: Path) -> None:
@@ -174,7 +181,7 @@ def run_index(prism: Path, workdir: Path) -> None:
     The committed baselines were measured on dependency-free corpora, so that
     is the expected state here, not a failure."""
     r = subprocess.run([str(prism), "index", "."], capture_output=True, text=True,
-                       cwd=workdir, timeout=300)
+                       cwd=workdir, timeout=CMD_TIMEOUT)
     if r.returncode not in (0, 3):
         raise subprocess.CalledProcessError(r.returncode, r.args, r.stdout, r.stderr)
 
