@@ -143,7 +143,7 @@ def corpus_snapshot(task: Task, prism: str) -> Iterator[Path]:
             capture_output=True,
         )
         rc, out, err = run_capped([prism, "index", str(snapshot)], timeout=900)
-        if rc != 0:
+        if rc not in (0, 3):  # 3 = index written, compiler-backed analysis missing
             raise RuntimeError(f"{task.id}: index failed: {(err or out)[:500]}")
         yield snapshot
 

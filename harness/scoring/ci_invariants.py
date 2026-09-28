@@ -168,9 +168,19 @@ def run_prism(prism: Path, workdir: Path, *args: str) -> dict:
     return json.loads(result.stdout)
 
 
+def run_index(prism: Path, workdir: Path) -> None:
+    """`prism index`; exit 3 means the index was written but a language's
+    compiler-backed analysis could not run (e.g. dependencies not downloaded).
+    The committed baselines were measured on dependency-free corpora, so that
+    is the expected state here, not a failure."""
+    r = subprocess.run([str(prism), "index", "."], capture_output=True, text=True,
+                       cwd=workdir, timeout=300)
+    if r.returncode not in (0, 3):
+        raise subprocess.CalledProcessError(r.returncode, r.args, r.stdout, r.stderr)
+
+
 def index(prism: Path, workdir: Path) -> None:
-    subprocess.run([str(prism), "index", "."], capture_output=True, text=True,
-                    cwd=workdir, timeout=300, check=True)
+    run_index(prism, workdir)
 
 
 def engine_sites(prism: Path, query: str, workdir: Path) -> tuple[list[str], dict]:
@@ -293,8 +303,7 @@ def check_determinism(prism: Path, corpus_root: Path) -> list[str]:
     def cold_index() -> tuple[int, int]:
         if grove_dir.exists():
             shutil.rmtree(grove_dir)
-        subprocess.run([str(prism), "index", "."], capture_output=True, text=True,
-                        cwd=workdir, timeout=300, check=True)
+        run_index(prism, workdir)
         status = run_prism(prism, workdir, "status")
         return status.get("symbolCount", -1), status.get("edgeCount", -1)
 

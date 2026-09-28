@@ -258,7 +258,9 @@ def run_cell(arm: str, task: Task, corpus: Path, model: str,
             subprocess.run(["git", "-C", str(snapshot), "-c", "user.name=Prism gate", "-c", "user.email=gate@localhost",
                             "-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "base"],
                            check=True, capture_output=True)
-            subprocess.run([binary, "index", str(snapshot)], check=True, capture_output=True, timeout=900)
+            ix = subprocess.run([binary, "index", str(snapshot)], capture_output=True, timeout=900)
+            if ix.returncode not in (0, 3):  # 3 = index written, compiler-backed analysis missing
+                raise subprocess.CalledProcessError(ix.returncode, ix.args, ix.stdout, ix.stderr)
             failure = None
             try:
                 rec = bed.run_arm(arm, task, snapshot, model)

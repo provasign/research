@@ -271,7 +271,7 @@ PRISM_INIT_ARMS = ("prism_init", "prism_init_deferred", "prism_init_no_guard",
                     "prism_body_baseline", "prism_body_exp")
 
 
-def _index_graph(wt: Path, arm: str):
+def _index_graph(wt: Path, arm: str, task=None):
     if arm in PRISM_INIT_ARMS:
         # The real product setup path -- writes .mcp.json with the actual
         # resolved binary + --compact, and a CLAUDE.md with prism's own
@@ -308,10 +308,19 @@ def _index_graph(wt: Path, arm: str):
         # init's own docs say indexing happens automatically on first use, but
         # build it explicitly up front anyway so the agent's first real call
         # never eats first-index latency or a cold-cache miss.
+        # Index with the agent's own pinned toolchains (the node/go/JDK the
+        # agent builds and tests with), and require the compiler-backed
+        # analysis: prism index exits 3 when a language fell back to
+        # name-based resolution (dependencies missing, toolchain absent).
+        # A pair indexed in degraded mode measures a crippled prism, so the
+        # cell stops here instead of being scored (2026-09-27: every TS cell
+        # so far ran with the TypeScript analyzer killed at a 5s budget).
+        env, _ = _agent_env(wt, task)
         r2 = subprocess.run([_prism_bin(arm), "index", str(wt)], capture_output=True,
-                            text=True, timeout=300)
+                            text=True, timeout=3600, env=env)
         if r2.returncode != 0:
-            print(f"  [index] WARN prism index rc={r2.returncode}: {r2.stderr[-200:]}")
+            raise RuntimeError(f"prism index rc={r2.returncode} for {task['instance_id']} "
+                               f"(compiler-backed analysis required): {r2.stderr[-600:]}")
         if arm != "prism_init_no_guard":
             _install_read_guard_hook(wt)
     elif arm.startswith("prism"):
@@ -739,7 +748,28 @@ def _prepare_build_env(wt: Path, task) -> dict:
     if _pin_java_worktree(wt, task):
         setup["java_parent_pinned"] = True
     setup.update(_preinstall_node(wt, task))
+    setup.update(_predownload_go_modules(wt, task))
     return setup
+
+
+def _predownload_go_modules(wt: Path, task) -> dict:
+    """Download a Go task's module dependencies before anything indexes the
+    tree, for every arm alike, with the agent's pinned Go. A developer's
+    checkout has them; without them Go type-checking of every package that
+    imports a missing module is partial (gin: binding and render import
+    go.mongodb.org/mongo-driver)."""
+    if task.get("lang") != "go" or not (wt / "go.mod").exists():
+        return {}
+    env, _ = _agent_env(wt, task)
+    t0 = time.monotonic()
+    r = subprocess.run(["go", "mod", "download"], cwd=wt, env=env,
+                       capture_output=True, text=True, timeout=1500)
+    if r.returncode != 0:
+        raise RuntimeError(f"go mod download failed for {task['instance_id']}: {(r.stdout + r.stderr)[-400:]}")
+    dirty = docker_eval._sh("git", "-C", str(wt), "status", "--porcelain", check=False)
+    if dirty.strip():
+        raise RuntimeError(f"go mod download left the tree dirty for {task['instance_id']}: {dirty[:300]}")
+    return {"go_mod_download_s": round(time.monotonic() - t0, 1)}
 
 
 def run_cell(task: dict, arm: str, model: str, tag: str = "") -> dict:
@@ -758,7 +788,7 @@ def run_cell(task: dict, arm: str, model: str, tag: str = "") -> dict:
         if task.get("kind") == "seeded_refactor":
             # The agent starts from the broken build, not from base.
             seeded_refactor.apply_mutation(wt, task["mutation"])
-        _index_graph(wt, arm)
+        _index_graph(wt, arm, task)
         if model == "local":
             prompt = task["problem_statement"] + TASK_TAIL
             res = run_local_agent.run(
