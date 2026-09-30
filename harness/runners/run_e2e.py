@@ -59,7 +59,7 @@ def _prism_bin(arm: str) -> str:
     without touching the real installed prism)."""
     return PRISM_BIN_FOR_ARM.get(arm, "prism")
 
-OUT = Path("results/e2e")
+OUT = Path(os.environ.get("E2E_OUT", "results/e2e"))
 OUT.mkdir(parents=True, exist_ok=True)
 
 # "ts" tasks (hono, zod, h3) share js_eval: same node:20 image, vitest runner
@@ -396,6 +396,64 @@ GCC = Path("/opt/homebrew/bin/gcc-13")
 GXX = Path("/opt/homebrew/bin/g++-13")
 
 
+AGENT_PY_VENVS = Path.home() / ".cache/prism-bench-venvs"
+
+
+def _is_python(task) -> bool:
+    return task.get("lang") in (None, "python") and task.get("language", "python") == "python"
+
+
+def _python_venv(task) -> Path:
+    """A venv with the task's base-commit project and test deps installed,
+    built once per repo@base with the scorer's own install recipe (so the
+    agent tests against the packages the scorer uses) and reused by every arm
+    and trial. Lives outside the worktree: nothing enters the scored diff."""
+    venv = AGENT_PY_VENVS / f"{task['repo'].replace('/', '__')}@{task['base_commit'][:12]}"
+    if (venv / ".ready").exists():
+        return venv
+    import shutil as _shutil
+    _shutil.rmtree(venv, ignore_errors=True)
+    AGENT_PY_VENVS.mkdir(parents=True, exist_ok=True)
+    src = Path(tempfile.mkdtemp(prefix="venvsrc-"))
+    try:
+        docker_eval._sh("git", "clone", "--local", "--no-checkout", "--quiet", str(_repo_for(task)), str(src), timeout=600)
+        docker_eval._sh("git", "-C", str(src), "checkout", "--quiet", task["base_commit"], timeout=300)
+        subprocess.run([str(PYTHON_HOME / "bin/python3"), "-m", "venv", str(venv)], check=True)
+        extra = " ".join(docker_eval.EXTRA_PIP.get(task["repo"], []))
+        pip = str(venv / "bin/pip")
+        recipe = ("export SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0 PDM_BUILD_SCM_VERSION=0.0.0 "
+                  "HATCH_VCS_PRETEND_VERSION=0.0.0 UV_DYNAMIC_VERSIONING_BYPASS=0.0.0; "
+                  f"{pip} install -q --upgrade pip >/dev/null 2>&1; "
+                  f"({pip} install -q '.[dev]' 2>/dev/null || {pip} install -q '.[test]' 2>/dev/null "
+                  f"|| {pip} install -q '.[tests]' 2>/dev/null || {pip} install -q .); "
+                  f"{pip} install -q --group dev >/dev/null 2>&1; {pip} install -q --group tests >/dev/null 2>&1; "
+                  "for f in requirements/dev.txt requirements-dev.txt requirements/tests.txt "
+                  "requirements/test.txt dev-requirements.txt; do "
+                  f"[ -f \"$f\" ] && {pip} install -q -r \"$f\" >/dev/null 2>&1; done; "
+                  f"{pip} install -q pytest pytest-timeout {extra}")
+        r = subprocess.run(["bash", "-lc", recipe], cwd=src, capture_output=True, text=True, timeout=1800)
+        if r.returncode != 0:
+            raise RuntimeError(f"agent venv build failed for {task['instance_id']}: {r.stderr[-600:]}")
+        (venv / ".ready").write_text(task["base_commit"])
+    finally:
+        _shutil.rmtree(src, ignore_errors=True)
+    return venv
+
+
+def _place_generated_version_files(venv: Path, wt: Path) -> None:
+    """Build backends like hatch-vcs generate pkg/_version.py at install time;
+    a source checkout lacks it, so importing from the worktree fails (urllib3).
+    Copy the installed copy in, only where git ignores that path, so the
+    scored diff can never contain it."""
+    for gen in venv.glob("lib/python*/site-packages/*/_version.py"):
+        pkg = gen.parent.name
+        for dest in (wt / "src" / pkg / "_version.py", wt / pkg / "_version.py"):
+            if dest.parent.is_dir() and not dest.exists():
+                ignored = subprocess.run(["git", "-C", str(wt), "check-ignore", "-q", str(dest)]).returncode == 0
+                if ignored:
+                    shutil.copyfile(gen, dest)
+
+
 def _agent_env(wt: Path, task) -> tuple[dict, dict]:
     """The agent's environment, identical for every arm of a task.
 
@@ -444,10 +502,23 @@ def _agent_env(wt: Path, task) -> tuple[dict, dict]:
         if not need.exists():
             raise RuntimeError(f"pinned runtime missing on host: {need}")
     env["JAVA_HOME"] = str(java_home)
+    py_venv = _python_venv(task) if _is_python(task) else None
     # pnpm/bun wrappers run the exact versions js_eval installs with, through
     # the pinned node's npx (hono uses bun.lock, zod/h3 pnpm 10).
     bins = ":".join(map(str, [java_home / "bin", PYTHON_HOME / "bin",
                               go_home / "bin", NODE_HOME / "bin", PINNED_BIN]))
+    if py_venv:
+        # A developer has the project and its test tools installed. Without
+        # this, every Python cell spent 2-3 calls discovering that the package
+        # is not importable and pytest is missing (2026-09-29 audit: native
+        # 2.2, prism 3.5 friction calls per Python task; Go/Java/TS ~0). The
+        # venv holds the base commit's deps; PYTHONPATH puts the worktree's
+        # own code ahead of the installed copy so edits take effect.
+        bins = str(py_venv / "bin") + ":" + bins
+        env["VIRTUAL_ENV"] = str(py_venv)
+        src = wt / "src"
+        env["PYTHONPATH"] = ":".join(str(x) for x in ([src] if src.is_dir() else []) + [wt])
+        _place_generated_version_files(py_venv, wt)
     env["PATH"] = bins + ":" + env.get("PATH", "")
     # Claude Code's Bash tool runs off a snapshot of a login shell, which
     # re-sorts PATH and puts /opt/homebrew/bin back in front. This ZDOTDIR
