@@ -225,6 +225,10 @@ def _agent_diff(wt: Path, task) -> str:  # noqa: D401
     # pre-installed dependencies (_preinstall_node); gitignored already, this
     # holds even for a repo whose .gitignore misses a nested one
     excludes += [":(exclude,glob)**/node_modules/**"]
+    # Python environments an agent builds in the worktree: click pr3244's
+    # prism cell saved a 24 MB diff of 2,521 .venv-test/ files (2026-09-27).
+    # A repo that tracks such a path would be unusual; none in the bed does.
+    excludes += [f":(exclude,glob){g}" for g in ("**/.venv*/**", "**/venv/**", "**/site-packages/**")]
     return docker_eval._sh("git", "-C", str(wt), "diff", "--cached", "--", ".",
                            *excludes, check=False)
 
