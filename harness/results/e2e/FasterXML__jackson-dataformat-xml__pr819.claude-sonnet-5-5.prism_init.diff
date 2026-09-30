@@ -1,0 +1,75 @@
+diff --git a/src/main/java/tools/jackson/dataformat/xml/JacksonXmlAnnotationIntrospector.java b/src/main/java/tools/jackson/dataformat/xml/JacksonXmlAnnotationIntrospector.java
+index e765cf6d..9c5d502f 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/JacksonXmlAnnotationIntrospector.java
++++ b/src/main/java/tools/jackson/dataformat/xml/JacksonXmlAnnotationIntrospector.java
+@@ -204,6 +204,7 @@ public class JacksonXmlAnnotationIntrospector
+     {
+         PropertyName pn = PropertyName.merge(_findXmlName(a),
+                 super.findNameForSerialization(config, a));
++        pn = _preferWrapperName(a, pn);
+         if (pn == null) {
+             if (_hasOneOf(a, ANNOTATIONS_TO_INFER_XML_PROP)) {
+                 return PropertyName.USE_DEFAULT;
+@@ -217,6 +218,7 @@ public class JacksonXmlAnnotationIntrospector
+     {
+         PropertyName pn = PropertyName.merge(_findXmlName(a),
+                 super.findNameForDeserialization(config, a));
++        pn = _preferWrapperName(a, pn);
+         if (pn == null) {
+             if (_hasOneOf(a, ANNOTATIONS_TO_INFER_XML_PROP)) {
+                 // [dataformat-xml#615]: Return non-empty name so PotentialCreator
+@@ -239,6 +241,20 @@ public class JacksonXmlAnnotationIntrospector
+     /**********************************************************************
+      */
+ 
++    // [dataformat-xml#27]: with explicit wrapper name, use it as logical property
++    // name so that multiple wrapped properties sharing same element name do not conflict
++    private PropertyName _preferWrapperName(Annotated a, PropertyName pn)
++    {
++        if (pn != null) {
++            JacksonXmlElementWrapper w = _findAnnotation(a, JacksonXmlElementWrapper.class);
++            if (w != null && w.useWrapping() && !w.localName().isEmpty()
++                    && _findXmlName(a) != null) {
++                return PropertyName.construct(w.localName(), w.namespace());
++            }
++        }
++        return pn;
++    }
++
+     protected PropertyName _findXmlName(Annotated a)
+     {
+         JacksonXmlProperty pann = _findAnnotation(a, JacksonXmlProperty.class);
+diff --git a/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java b/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java
+index c6540351..233b99c2 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java
++++ b/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java
+@@ -6,6 +6,8 @@ import tools.jackson.databind.*;
+ import tools.jackson.databind.introspect.AnnotatedMember;
+ import tools.jackson.databind.ser.*;
+ import tools.jackson.databind.ser.bean.BeanSerializerBase;
++import tools.jackson.databind.util.NameTransformer;
++import tools.jackson.dataformat.xml.annotation.JacksonXmlProperty;
+ import tools.jackson.dataformat.xml.util.AnnotationUtil;
+ import tools.jackson.dataformat.xml.util.TypeUtil;
+ import tools.jackson.dataformat.xml.util.XmlInfo;
+@@ -41,6 +43,20 @@ public class XmlBeanSerializerModifier
+         for (int i = 0, len = beanProperties.size(); i < len; ++i) {
+             BeanPropertyWriter bpw = beanProperties.get(i);
+             final AnnotatedMember member = bpw.getMember();
++            // [dataformat-xml#27]: property may be named after its wrapper (to avoid
++            // conflicts); element name comes from `@JacksonXmlProperty`
++            JacksonXmlProperty xmlProp = member.getAnnotation(JacksonXmlProperty.class);
++            if (xmlProp != null && !xmlProp.localName().isEmpty()
++                    && !xmlProp.localName().equals(bpw.getName())) {
++                final String elemName = xmlProp.localName();
++                bpw = bpw.rename(new NameTransformer() {
++                    @Override
++                    public String transform(String name) { return elemName; }
++                    @Override
++                    public String reverse(String transformed) { return null; }
++                });
++                beanProperties.set(i, bpw);
++            }
+             String ns = AnnotationUtil.findNamespaceAnnotation(config, intr, member);
+             Boolean isAttribute = AnnotationUtil.findIsAttributeAnnotation(config, intr, member);
+             Boolean isText = AnnotationUtil.findIsTextAnnotation(config, intr, member);

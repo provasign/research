@@ -1,0 +1,92 @@
+diff --git a/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java b/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
+index 04366becd..e09a468c2 100644
+--- a/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
++++ b/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
+@@ -1717,7 +1717,13 @@ ctor.creator()));
+                     old.addAll(prop);
+                 }
+                 // replace the creatorProperty too, if there is one
+-                if (_replaceCreatorProperty(_creatorProperties, prop)) {
++                // [databind#5985]: `prop` itself may no longer carry a Creator
++                // parameter (e.g. mutators dropped due to `READ_ONLY`) yet still
++                // merge, by name, into an existing Creator-backed property (`old`);
++                // that also warrants rescuing the name from the ignoral set, since
++                // it is now a legitimate, usable Creator property name.
++                if (_replaceCreatorProperty(_creatorProperties, prop)
++                        || ((old != null) && (old.getConstructorParameter() != null))) {
+                     // [databind#2001]: New name of property was ignored previously? Remove from ignored
+                     // 01-May-2018, tatu: I have a feeling this will need to be revisited at some point,
+                     //   to avoid removing some types of removals, possibly. But will do for now.
+diff --git a/src/main/java/tools/jackson/databind/introspect/POJOPropertyBuilder.java b/src/main/java/tools/jackson/databind/introspect/POJOPropertyBuilder.java
+index cfbee9f68..225a493ca 100644
+--- a/src/main/java/tools/jackson/databind/introspect/POJOPropertyBuilder.java
++++ b/src/main/java/tools/jackson/databind/introspect/POJOPropertyBuilder.java
+@@ -82,6 +82,17 @@ public class POJOPropertyBuilder
+      */
+     protected boolean _unwrapped;
+ 
++    /**
++     * Explicit names carried by accessors (fields, in practice) that were dropped
++     * during {@link #removeNonVisible} because the property was {@code READ_ONLY}
++     * for deserialization. Retained so that {@link #findExplicitNames} can still
++     * report them, allowing {@code _renameProperties()} to rename (and merge) this
++     * property even though it no longer has any mutators of its own.
++     *
++     * @since 3.2
++     */
++    private Set<PropertyName> _explicitNamesAfterMutatorRemoval;
++
+     public POJOPropertyBuilder(MapperConfig<?> config, AnnotationIntrospector ai,
+             boolean forSerialization, PropertyName internalName) {
+         this(config, ai, forSerialization, internalName, internalName);
+@@ -1011,6 +1022,20 @@ public class POJOPropertyBuilder
+                     parent._collectIgnorals(pn.getSimpleName());
+                 }
+             }
++            // [databind#5985]: Before dropping fields (below), remember any explicit
++            // names they carried: needed so that `_renameProperties()` can still
++            // rename (and thereby merge/rescue-from-ignoral) this now-mutator-less
++            // property, e.g. when a `READ_ONLY` field's explicit name happens to
++            // collide with an unrelated Creator parameter's (implicit) name.
++            if (!_forSerialization && (_fields != null)) {
++                Set<PropertyName> explicitFieldNames = _findExplicitNames(_fields, null);
++                if (explicitFieldNames != null) {
++                    if (_explicitNamesAfterMutatorRemoval == null) {
++                        _explicitNamesAfterMutatorRemoval = new LinkedHashSet<>();
++                    }
++                    _explicitNamesAfterMutatorRemoval.addAll(explicitFieldNames);
++                }
++            }
+             // Remove setters, creators for sure, but fields too if deserializing
+             _setters = null;
+             _ctorParameters = null;
+@@ -1237,7 +1262,12 @@ public class POJOPropertyBuilder
+                 || _anyExplicitsWithoutIgnoral(_getters)
+                 || _anyExplicitsWithoutIgnoral(_setters)
+                 // as per [databind#1317], constructor names are special...
+-                || _anyExplicitNamesWithoutIgnoral(_ctorParameters);
++                || _anyExplicitNamesWithoutIgnoral(_ctorParameters)
++                // [databind#5985]: explicit names of accessors dropped earlier due to
++                // `READ_ONLY` access still count, so this (now mutator-less) property
++                // can be renamed/merged/rescued instead of being silently dropped.
++                || ((_explicitNamesAfterMutatorRemoval != null)
++                        && !_explicitNamesAfterMutatorRemoval.isEmpty());
+     }
+ 
+     // For accessors other than constructor parameters
+@@ -1275,6 +1305,15 @@ public class POJOPropertyBuilder
+         renamed = _findExplicitNames(_getters, renamed);
+         renamed = _findExplicitNames(_setters, renamed);
+         renamed = _findExplicitNames(_ctorParameters, renamed);
++        // [databind#5985]: also include names of accessors dropped earlier due
++        // to `READ_ONLY` access, so a now-mutator-less property may still be
++        // renamed (and merged/rescued) by `_renameProperties()`.
++        if (_explicitNamesAfterMutatorRemoval != null) {
++            if (renamed == null) {
++                renamed = new HashSet<>();
++            }
++            renamed.addAll(_explicitNamesAfterMutatorRemoval);
++        }
+         return (renamed == null) ? Collections.emptySet() : renamed;
+     }
+ 

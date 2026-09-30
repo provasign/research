@@ -1,0 +1,30 @@
+diff --git a/src/werkzeug/routing/matcher.py b/src/werkzeug/routing/matcher.py
+index 9174061b..9f307b1c 100644
+--- a/src/werkzeug/routing/matcher.py
++++ b/src/werkzeug/routing/matcher.py
+@@ -50,6 +50,25 @@ class StateMachineMatcher:
+                     new_state = State()
+                     state.dynamic.append((part, new_state))
+                     state = new_state
++
++        for existing_rule in state.rules:
++            if existing_rule.methods is None or rule.methods is None:
++                overlapping_methods = True
++            else:
++                overlapping_methods = bool(existing_rule.methods & rule.methods)
++
++            if (
++                overlapping_methods
++                and existing_rule.websocket == rule.websocket
++                and existing_rule.alias == rule.alias
++            ):
++                raise ValueError(
++                    f"URL rule {rule!r} is a duplicate of {existing_rule!r}, as they "
++                    "match the same path with overlapping methods. This is not "
++                    "allowed, as it would cause the first rule to always be used "
++                    "and the second one to be silently ignored."
++                )
++
+         state.rules.append(rule)
+ 
+     def update(self) -> None:

@@ -1,0 +1,67 @@
+diff --git a/src/main/java/tools/jackson/databind/jsontype/BasicPolymorphicTypeValidator.java b/src/main/java/tools/jackson/databind/jsontype/BasicPolymorphicTypeValidator.java
+index e961e7454..8bfca6696 100644
+--- a/src/main/java/tools/jackson/databind/jsontype/BasicPolymorphicTypeValidator.java
++++ b/src/main/java/tools/jackson/databind/jsontype/BasicPolymorphicTypeValidator.java
+@@ -283,12 +283,7 @@ public class BasicPolymorphicTypeValidator
+          *    values is not (well) supported.
+          */
+         public Builder allowIfSubTypeIsArray() {
+-            return _appendSubClassMatcher(new TypeMatcher() {
+-                @Override
+-                public boolean match(DatabindContext ctxt, Class<?> clazz) {
+-                    return clazz.isArray();
+-                }
+-            });
++            return _appendSubClassMatcher(new ArrayTypeMatcher());
+         }
+ 
+         /**
+@@ -383,6 +378,14 @@ public class BasicPolymorphicTypeValidator
+      */
+     protected final TypeMatcher[] _subClassMatchers;
+ 
++    // Marker matcher: arrays are allowed only if their element type is allowed too
++    private final static class ArrayTypeMatcher implements TypeMatcher {
++        @Override
++        public boolean match(DatabindContext ctxt, Class<?> clazz) {
++            return clazz.isArray();
++        }
++    }
++
+     protected BasicPolymorphicTypeValidator(Set<Class<?>> invalidBaseTypes,
+             TypeMatcher[] baseTypeMatchers,
+             NameMatcher[] subTypeNameMatchers, TypeMatcher[] subClassMatchers) {
+@@ -437,7 +440,18 @@ public class BasicPolymorphicTypeValidator
+         if (_subClassMatchers != null)  {
+             final Class<?> subClass = subType.getRawClass();
+             for (TypeMatcher m : _subClassMatchers) {
+-                if (m.match(ctxt, subClass)) {
++                if (m instanceof ArrayTypeMatcher) {
++                    if (!subClass.isArray()) {
++                        continue;
++                    }
++                    Class<?> elem = subClass;
++                    while (elem.isArray()) {
++                        elem = elem.getComponentType();
++                    }
++                    if (elem.isPrimitive() || _matchesNonArray(ctxt, elem)) {
++                        return Validity.ALLOWED;
++                    }
++                } else if (m.match(ctxt, subClass)) {
+                     return Validity.ALLOWED;
+                 }
+             }
+@@ -445,4 +459,13 @@ public class BasicPolymorphicTypeValidator
+         // could not decide, callers gets to decide; usually will deny
+         return Validity.INDETERMINATE;
+     }
++
++    private boolean _matchesNonArray(DatabindContext ctxt, Class<?> clazz) {
++        for (TypeMatcher m : _subClassMatchers) {
++            if (!(m instanceof ArrayTypeMatcher) && m.match(ctxt, clazz)) {
++                return true;
++            }
++        }
++        return false;
++    }
+ }

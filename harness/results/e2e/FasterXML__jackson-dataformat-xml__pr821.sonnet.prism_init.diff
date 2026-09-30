@@ -1,0 +1,30 @@
+diff --git a/src/main/java/tools/jackson/dataformat/xml/deser/XmlBeanDeserializerModifier.java b/src/main/java/tools/jackson/dataformat/xml/deser/XmlBeanDeserializerModifier.java
+index 9b25c4d9..e456c307 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/deser/XmlBeanDeserializerModifier.java
++++ b/src/main/java/tools/jackson/dataformat/xml/deser/XmlBeanDeserializerModifier.java
+@@ -5,6 +5,7 @@ import java.util.*;
+ import tools.jackson.databind.*;
+ import tools.jackson.databind.deser.*;
+ import tools.jackson.databind.deser.bean.BeanDeserializerBase;
++import tools.jackson.databind.deser.std.DelegatingDeserializer;
+ import tools.jackson.databind.introspect.AnnotatedMember;
+ import tools.jackson.databind.introspect.BeanPropertyDefinition;
+ import tools.jackson.dataformat.xml.util.AnnotationUtil;
+@@ -82,6 +83,17 @@ public class XmlBeanDeserializerModifier
+     public ValueDeserializer<?> modifyDeserializer(DeserializationConfig config,
+             BeanDescription.Supplier beanDescRef, ValueDeserializer<?> deser0)
+     {
++        // 27-Sep-2026: [dataformat-xml#425] Other modifiers (registered before this one)
++        // may return a `DelegatingDeserializer` instead of the original `BeanDeserializerBase`
++        // (e.g. to intercept/observe deserialization); need to drill through such wrappers
++        // to find and modify the actual bean deserializer, then rebuild the delegation chain,
++        // otherwise wrapping/unwrapping never gets applied.
++        if (deser0 instanceof DelegatingDeserializer) {
++            DelegatingDeserializer delegating = (DelegatingDeserializer) deser0;
++            ValueDeserializer<?> delegatee = delegating.getDelegatee();
++            ValueDeserializer<?> newDelegatee = modifyDeserializer(config, beanDescRef, delegatee);
++            return delegating.replaceDelegatee(newDelegatee);
++        }
+         if (!(deser0 instanceof BeanDeserializerBase)) {
+             return deser0;
+         }

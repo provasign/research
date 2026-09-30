@@ -1,0 +1,36 @@
+diff --git a/CHANGES.rst b/CHANGES.rst
+index 385d97e2..e330a560 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -7,6 +7,8 @@ Unreleased
+ 
+ -   Fix ``AttributeError`` when initializing ``DebuggedApplication`` with
+     ``pin_security=False``. :issue:`3075`
++-   Fix the multipart form parser stripping a genuine trailing ``\r`` byte
++    from a part's data when it was immediately followed by the boundary.
+ 
+ 
+ Version 3.1.4
+diff --git a/src/werkzeug/sansio/multipart.py b/src/werkzeug/sansio/multipart.py
+index 279b25e7..ca155c35 100644
+--- a/src/werkzeug/sansio/multipart.py
++++ b/src/werkzeug/sansio/multipart.py
+@@ -286,8 +286,16 @@ class MultipartDecoder:
+                 data_end = del_index = self.last_newline(data[data_start:]) + data_start
+             more_data = match is None
+ 
+-        # Keep \r\n sequence intact rather than splitting across chunks.
+-        if data_end > data_start and data[data_end - 1] == 0x0D:
++        # Keep \r\n sequence intact rather than splitting across chunks, but
++        # only when data_end was guessed from a trailing newline rather than
++        # an actual boundary match, otherwise a genuine \r at the end of the
++        # part's data (immediately followed by the real boundary) would be
++        # wrongly stripped.
++        if (
++            more_data
++            and data_end > data_start
++            and data[data_end - 1] == 0x0D
++        ):
+             data_end -= 1
+             del_index -= 1
+ 

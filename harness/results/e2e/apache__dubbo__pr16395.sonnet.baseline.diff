@@ -1,17 +1,27 @@
 diff --git a/dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/router/state/BitList.java b/dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/router/state/BitList.java
-index 013a4010e..2a81e257a 100644
+index 013a4010e..dc0fc3478 100644
 --- a/dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/router/state/BitList.java
 +++ b/dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/router/state/BitList.java
-@@ -123,7 +123,11 @@ public class BitList<E> extends AbstractList<E> implements Cloneable {
+@@ -114,16 +114,18 @@ public class BitList<E> extends AbstractList<E> implements Cloneable {
+     }
+ 
+     /**
+-     * And operation between two bitList. Return a new cloned list.
+-     * TailList in source bitList will be totally saved even if it is not appeared in the target bitList.
++     * And operation between two bitList.
++     * If target bitList has no opinion on the tailList (i.e. its tailList is null), source bitList's
++     * tailList is kept as is. Otherwise, target's tailList is the definitive (already filtered) result
++     * and replaces source's tailList.
+      *
+      * @param target target bitList
+-     * @return this bitList only contains those elements contain in both two list and source bitList's tailList
++     * @return this bitList only contains those elements contained in both two lists
+      */
      public synchronized BitList<E> and(BitList<E> target) {
          rootSet.and(target.rootSet);
          if (target.getTailList() != null) {
 -            target.getTailList().forEach(this::addToTailList);
-+            target.getTailList().forEach(e -> {
-+                if (tailList == null || !tailList.contains(e)) {
-+                    addToTailList(e);
-+                }
-+            });
++            this.tailList = new LinkedList<>(target.getTailList());
          }
          return this;
      }

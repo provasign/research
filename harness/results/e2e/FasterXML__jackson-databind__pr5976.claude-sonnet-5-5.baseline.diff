@@ -1,0 +1,31 @@
+diff --git a/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java b/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
+index 04366becd..9c357cb2c 100644
+--- a/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
++++ b/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
+@@ -1577,6 +1577,8 @@ ctor.creator()));
+         // 15-Jan-2023, tatu: Avoid pulling in mutators for Records; Fields mostly
+         //    since there should not be setters.
+         // 22-Jul-2024, tatu: Actually do pull them to fix [databind#4630]
++        final Set<String> ignoredBefore = (_perPropertyIgnoredNames == null) ? null
++                : new HashSet<>(_perPropertyIgnoredNames);
+         final boolean inferMutators = _config.isEnabled(MapperFeature.INFER_PROPERTY_MUTATORS);
+         Iterator<POJOPropertyBuilder> it = props.values().iterator();
+ 
+@@ -1587,6 +1589,17 @@ ctor.creator()));
+             //    addition of ignorals wrt explicit name
+             prop.removeNonVisible(inferMutators, _forSerialization ? null : this);
+         }
++        // Explicit name of a READ_ONLY property may collide with name of another
++        // property that has a creator parameter: that one must not become ignored
++        if (_perPropertyIgnoredNames != null) {
++            for (POJOPropertyBuilder prop : props.values()) {
++                final String name = prop.getName();
++                if (prop.hasConstructorParameter()
++                        && ((ignoredBefore == null) || !ignoredBefore.contains(name))) {
++                    _perPropertyIgnoredNames.remove(name);
++                }
++            }
++        }
+     }
+ 
+     /**

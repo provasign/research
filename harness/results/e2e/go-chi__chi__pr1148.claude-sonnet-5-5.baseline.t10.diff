@@ -1,0 +1,56 @@
+diff --git a/tree.go b/tree.go
+index 74ff43d..a2ef8d3 100644
+--- a/tree.go
++++ b/tree.go
+@@ -7,6 +7,7 @@ package chi
+ import (
+ 	"fmt"
+ 	"net/http"
++	"reflect"
+ 	"regexp"
+ 	"slices"
+ 	"sort"
+@@ -629,8 +630,16 @@ func (n *node) routes() []Route {
+ 	rts := []Route{}
+ 
+ 	n.walk(func(eps endpoints, subroutes Routes) bool {
++		var stub http.Handler
+ 		if eps[mSTUB] != nil && eps[mSTUB].handler != nil && subroutes == nil {
+-			return false
++			stub = eps[mSTUB].handler
++		}
++		isStub := func(h http.Handler) bool {
++			if stub == nil {
++				return false
++			}
++			a, b := reflect.ValueOf(h), reflect.ValueOf(stub)
++			return a.Kind() == reflect.Func && b.Kind() == reflect.Func && a.Pointer() == b.Pointer()
+ 		}
+ 
+ 		// Group methodHandlers by unique patterns
+@@ -650,12 +659,12 @@ func (n *node) routes() []Route {
+ 
+ 		for p, mh := range pats {
+ 			hs := make(map[string]http.Handler)
+-			if mh[mALL] != nil && mh[mALL].handler != nil {
++			if mh[mALL] != nil && mh[mALL].handler != nil && stub == nil {
+ 				hs["*"] = mh[mALL].handler
+ 			}
+ 
+ 			for mt, h := range mh {
+-				if h.handler == nil {
++				if h.handler == nil || isStub(h.handler) {
+ 					continue
+ 				}
+ 				if m, ok := reverseMethodMap[mt]; ok {
+@@ -663,6 +672,10 @@ func (n *node) routes() []Route {
+ 				}
+ 			}
+ 
++			if stub != nil && len(hs) == 0 {
++				continue
++			}
++
+ 			rt := Route{subroutes, hs, p}
+ 			rts = append(rts, rt)
+ 		}

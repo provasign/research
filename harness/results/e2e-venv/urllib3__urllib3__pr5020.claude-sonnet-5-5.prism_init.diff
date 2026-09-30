@@ -1,0 +1,17 @@
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 443cb01b..b3b5776c 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -616,7 +616,11 @@ class HTTPConnection(_HTTPConnection):
+                 exc_info=True,
+             )
+ 
+-        headers = HTTPHeaderDict(httplib_response.msg.items())
++        # RFC 7230 3.2.4: replace each obs-fold with SP.
++        headers = HTTPHeaderDict(
++            (name, re.sub(r"\r?\n[ \t]+", " ", value))
++            for name, value in httplib_response.msg.items()
++        )
+ 
+         response = HTTPResponse(
+             body=httplib_response,

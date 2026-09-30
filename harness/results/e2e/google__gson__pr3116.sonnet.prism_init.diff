@@ -1,86 +1,17 @@
 diff --git a/gson/src/main/java/com/google/gson/stream/JsonReader.java b/gson/src/main/java/com/google/gson/stream/JsonReader.java
-index b96c8269..85a660a6 100644
+index b96c8269..bfa2114d 100644
 --- a/gson/src/main/java/com/google/gson/stream/JsonReader.java
 +++ b/gson/src/main/java/com/google/gson/stream/JsonReader.java
-@@ -272,6 +272,13 @@ public class JsonReader implements Closeable {
-   private int lineNumber = 0;
-   private int lineStart = 0;
- 
-+  /**
-+   * Whether the previous {@code \\u} escape decoded a high surrogate that is still awaiting its
-+   * low surrogate partner from an immediately following {@code \\u} escape. Only used in {@link
-+   * Strictness#STRICT} mode.
-+   */
-+  private boolean pendingHighSurrogateEscape = false;
-+
-   int peeked = PEEKED_NONE;
- 
-   /**
-@@ -1879,7 +1886,29 @@ public class JsonReader implements Closeable {
+@@ -1879,7 +1879,11 @@ public class JsonReader implements Closeable {
            }
          }
          pos += 4;
 -        return (char) result;
-+        char unicodeEscape = (char) result;
-+        if (strictness == Strictness.STRICT && Character.isSurrogate(unicodeEscape)) {
-+          if (Character.isHighSurrogate(unicodeEscape)) {
-+            if (!nextEscapeIsMatchingLowSurrogate()) {
-+              throw syntaxError(
-+                  "Unpaired surrogate code point \\u"
-+                      + Integer.toHexString(unicodeEscape)
-+                      + " is not allowed in strict mode");
-+            }
-+            pendingHighSurrogateEscape = true;
-+          } else {
-+            if (!pendingHighSurrogateEscape) {
-+              throw syntaxError(
-+                  "Unpaired surrogate code point \\u"
-+                      + Integer.toHexString(unicodeEscape)
-+                      + " is not allowed in strict mode");
-+            }
-+            pendingHighSurrogateEscape = false;
-+          }
-+        } else {
-+          pendingHighSurrogateEscape = false;
++        char escapedChar = (char) result;
++        if (strictness == Strictness.STRICT && Character.isSurrogate(escapedChar)) {
++          throw syntaxError("Lone surrogate in \\u escape sequence is not allowed in strict mode");
 +        }
-+        return unicodeEscape;
++        return escapedChar;
  
        case 't':
          return '\t';
-@@ -1918,6 +1947,36 @@ public class JsonReader implements Closeable {
-     }
-   }
- 
-+  /**
-+   * Returns whether the upcoming characters (without consuming them) are a {@code \\u} escape
-+   * sequence that decodes to a low surrogate, i.e. the second half of a surrogate pair. Used to
-+   * validate that a high surrogate {@code \\u} escape is immediately followed by its matching low
-+   * surrogate escape.
-+   */
-+  private boolean nextEscapeIsMatchingLowSurrogate() throws IOException {
-+    if (pos + 6 > limit && !fillBuffer(6)) {
-+      return false;
-+    }
-+    if (buffer[pos] != '\\' || buffer[pos + 1] != 'u') {
-+      return false;
-+    }
-+    int result = 0;
-+    for (int i = pos + 2, end = i + 4; i < end; i++) {
-+      char c = buffer[i];
-+      result <<= 4;
-+      if (c >= '0' && c <= '9') {
-+        result += (c - '0');
-+      } else if (c >= 'a' && c <= 'f') {
-+        result += (c - 'a' + 10);
-+      } else if (c >= 'A' && c <= 'F') {
-+        result += (c - 'A' + 10);
-+      } else {
-+        return false;
-+      }
-+    }
-+    return Character.isLowSurrogate((char) result);
-+  }
-+
-   /**
-    * Throws a new {@link MalformedJsonException} with the given message and information about the
-    * current location.

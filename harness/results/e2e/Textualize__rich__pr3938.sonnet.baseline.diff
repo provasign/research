@@ -1,0 +1,29 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index a3b06bd..36674ca 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
+ - Fixed extraneous blank line on non-interactive disabled `Progress` https://github.com/Textualize/rich/pull/3905
+ - Fixed extra padding on first cell in columns https://github.com/Textualize/rich/pull/3935
+ - Fixed trailing whitespace removed when soft_wrap=True https://github.com/Textualize/rich/pull/3937
++- Fixed background color carrying over onto the following line when soft wrapping is enabled
+ 
+ ### Added
+ 
+diff --git a/rich/console.py b/rich/console.py
+index 994adfc..dc8ab6b 100644
+--- a/rich/console.py
++++ b/rich/console.py
+@@ -1742,7 +1742,11 @@ class Console:
+                 ):
+                     buffer_extend(line)
+             else:
+-                self._buffer.extend(new_segments)
++                buffer_extend = self._buffer.extend
++                for line in Segment.split_and_crop_lines(
++                    new_segments, sys.maxsize, pad=False
++                ):
++                    buffer_extend(line)
+ 
+     def print_json(
+         self,

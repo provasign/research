@@ -1,0 +1,65 @@
+diff --git a/mux.go b/mux.go
+index 37cd500..11f6f3e 100644
+--- a/mux.go
++++ b/mux.go
+@@ -312,7 +312,7 @@ func (mx *Mux) Mount(pattern string, handler http.Handler) {
+ 		subr.MethodNotAllowed(mx.methodNotAllowedHandler)
+ 	}
+ 
+-	mountHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++	mountHandler := &mountStub{func(w http.ResponseWriter, r *http.Request) {
+ 		rctx := RouteContext(r.Context())
+ 
+ 		// shift the url path past the previous subrouter
+@@ -325,7 +325,7 @@ func (mx *Mux) Mount(pattern string, handler http.Handler) {
+ 		}
+ 
+ 		handler.ServeHTTP(w, r)
+-	})
++	}}
+ 
+ 	if pattern == "" || pattern[len(pattern)-1] != '/' {
+ 		mx.handle(mALL|mSTUB, pattern, mountHandler)
+@@ -530,3 +530,8 @@ func methodNotAllowedHandler(methodsAllowed ...methodTyp) func(w http.ResponseWr
+ 		w.Write(nil)
+ 	}
+ }
++
++// mountStub is the handler registered by Mount for the mount's own pattern.
++type mountStub struct{ fn http.HandlerFunc }
++
++func (m *mountStub) ServeHTTP(w http.ResponseWriter, r *http.Request) { m.fn(w, r) }
+diff --git a/tree.go b/tree.go
+index 74ff43d..bbda871 100644
+--- a/tree.go
++++ b/tree.go
+@@ -630,7 +630,18 @@ func (n *node) routes() []Route {
+ 
+ 	n.walk(func(eps endpoints, subroutes Routes) bool {
+ 		if eps[mSTUB] != nil && eps[mSTUB].handler != nil && subroutes == nil {
+-			return false
++			// A mount stub: skip it unless explicit method handlers were
++			// registered on the same pattern.
++			explicit := false
++			for mt, h := range eps {
++				if _, isStub := h.handler.(*mountStub); mt != mSTUB && mt != mALL && h.handler != nil && !isStub {
++					explicit = true
++					break
++				}
++			}
++			if !explicit {
++				return false
++			}
+ 		}
+ 
+ 		// Group methodHandlers by unique patterns
+@@ -658,6 +669,9 @@ func (n *node) routes() []Route {
+ 				if h.handler == nil {
+ 					continue
+ 				}
++				if _, isStub := h.handler.(*mountStub); isStub && eps[mSTUB] != nil && subroutes == nil {
++					continue
++				}
+ 				if m, ok := reverseMethodMap[mt]; ok {
+ 					hs[m] = h.handler
+ 				}

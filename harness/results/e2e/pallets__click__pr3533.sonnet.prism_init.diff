@@ -1,0 +1,35 @@
+diff --git a/CHANGES.rst b/CHANGES.rst
+index a39471f9..f6544cf6 100644
+--- a/CHANGES.rst
++++ b/CHANGES.rst
+@@ -17,6 +17,9 @@ Unreleased
+ -   ``echo_via_pager`` flushes after each write, so passing a generator streams
+     output to the pager incrementally instead of staying hidden until the pipe
+     buffer fills. :issue:`3242` :issue:`2542` :pr:`3534`
++-   Fix ``ValueError: I/O operation on closed file`` when ``echo_via_pager`` is
++    used with :class:`~click.testing.CliRunner`. The internal pager wrapper no
++    longer risks closing the caller's stream when it is garbage collected.
+ 
+ 
+ Version 8.4.1
+diff --git a/src/click/_termui_impl.py b/src/click/_termui_impl.py
+index 3336c37c..997b4faf 100644
+--- a/src/click/_termui_impl.py
++++ b/src/click/_termui_impl.py
+@@ -395,6 +395,16 @@ class MaybeStripAnsi(io.TextIOWrapper):
+             text = strip_ansi(text)
+         return super().write(text)
+ 
++    def __del__(self) -> None:
++        # The wrapped stream belongs to someone else (e.g. it may be
++        # protected by _SkipClose). Detach instead of closing so the
++        # default IOBase.__del__ doesn't close the underlying stream
++        # out from under its owner.
++        try:
++            self.detach()
++        except Exception:
++            pass
++
+ 
+ def _pager_contextmanager(
+     color: bool | None = None,

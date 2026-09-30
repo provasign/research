@@ -1,18 +1,8 @@
 diff --git a/src/utils/request.ts b/src/utils/request.ts
-index 4e57e38..ccfc365 100644
+index 4e57e38..27724f7 100644
 --- a/src/utils/request.ts
 +++ b/src/utils/request.ts
-@@ -320,7 +320,8 @@ export function isMethod(
- /**
-  * Asserts that the incoming request method is of the expected type using `isMethod`.
-  *
-- * If the method is not allowed, it will throw a 405 error with the message "HTTP method is not allowed".
-+ * If the method is not allowed, it will throw a 405 error with the message "HTTP method is not allowed"
-+ * and an `Allow` header listing the expected method(s), as required by RFC 9110.
-  *
-  * If `allowHead` is `true`, it will allow `HEAD` requests to pass if the expected method is `GET`.
-  *
-@@ -336,7 +337,14 @@ export function assertMethod(
+@@ -336,7 +336,14 @@ export function assertMethod(
    allowHead?: boolean,
  ): void {
    if (!isMethod(event, expected, allowHead)) {
@@ -23,7 +13,7 @@ index 4e57e38..ccfc365 100644
 +    }
 +    throw new HTTPError({
 +      status: 405,
-+      headers: { Allow: [...allowed].join(", ") },
++      headers: { allow: [...allowed].join(", ") },
 +    });
    }
  }

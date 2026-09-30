@@ -1,0 +1,629 @@
+diff --git a/src/main/java/com/fasterxml/jackson/databind/DeserializationContext.java b/src/main/java/com/fasterxml/jackson/databind/DeserializationContext.java
+index 62d8efe25..9f9372b7c 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/DeserializationContext.java
++++ b/src/main/java/com/fasterxml/jackson/databind/DeserializationContext.java
+@@ -1145,7 +1145,7 @@ public abstract class DeserializationContext
+     public Object handleUnexpectedToken(Class<?> instClass, JsonParser p)
+         throws IOException
+     {
+-        return handleUnexpectedToken(constructType(instClass), p.getCurrentToken(), p, null);
++        return handleUnexpectedToken(constructType(instClass), p.currentToken(), p, null);
+     }
+ 
+     /**
+@@ -1187,7 +1187,7 @@ public abstract class DeserializationContext
+     public Object handleUnexpectedToken(JavaType targetType, JsonParser p)
+         throws IOException
+     {
+-        return handleUnexpectedToken(targetType, p.getCurrentToken(), p, null);
++        return handleUnexpectedToken(targetType, p.currentToken(), p, null);
+     }
+ 
+     /**
+@@ -1642,7 +1642,7 @@ trailingToken, ClassUtil.nameOf(targetType)
+             JsonToken expToken, String extra)
+     {
+         String msg = String.format("Unexpected token (%s), expected %s",
+-                p.getCurrentToken(), expToken);
++                p.currentToken(), expToken);
+         msg = _colonConcat(msg, extra);
+         return MismatchedInputException.from(p, targetType, msg);
+     }
+@@ -1651,7 +1651,7 @@ trailingToken, ClassUtil.nameOf(targetType)
+             JsonToken expToken, String extra)
+     {
+         String msg = String.format("Unexpected token (%s), expected %s",
+-                p.getCurrentToken(), expToken);
++                p.currentToken(), expToken);
+         msg = _colonConcat(msg, extra);
+         return MismatchedInputException.from(p, targetType, msg);
+     }
+@@ -1887,7 +1887,7 @@ trailingToken, ClassUtil.nameOf(targetType)
+      */
+     @Deprecated
+     public JsonMappingException mappingException(Class<?> targetClass) {
+-        return mappingException(targetClass, _parser.getCurrentToken());
++        return mappingException(targetClass, _parser.currentToken());
+     }
+ 
+     /**
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ObjectMapper.java b/src/main/java/com/fasterxml/jackson/databind/ObjectMapper.java
+index 03bf5f3ef..4683e99ac 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ObjectMapper.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ObjectMapper.java
+@@ -2795,7 +2795,7 @@ public class ObjectMapper
+         _assertNotNull("p", p);
+         // Must check for EOF here before calling readValue(), since that'll choke on it otherwise
+         DeserializationConfig cfg = getDeserializationConfig();
+-        JsonToken t = p.getCurrentToken();
++        JsonToken t = p.currentToken();
+         if (t == null) {
+             t = p.nextToken();
+             if (t == null) {
+@@ -4506,7 +4506,7 @@ public class ObjectMapper
+             //   special requirements by tree reading (no fail on eof)
+             
+             cfg.initialize(p); // since 2.5
+-            JsonToken t = p.getCurrentToken();
++            JsonToken t = p.currentToken();
+             if (t == null) {
+                 t = p.nextToken();
+                 if (t == null) {
+@@ -4551,15 +4551,15 @@ public class ObjectMapper
+         PropertyName expRootName = config.findRootName(rootType);
+         // 12-Jun-2015, tatu: Should try to support namespaces etc but...
+         String expSimpleName = expRootName.getSimpleName();
+-        if (p.getCurrentToken() != JsonToken.START_OBJECT) {
++        if (p.currentToken() != JsonToken.START_OBJECT) {
+             ctxt.reportWrongTokenException(rootType, JsonToken.START_OBJECT,
+                     "Current token not START_OBJECT (needed to unwrap root name '%s'), but %s",
+-                    expSimpleName, p.getCurrentToken());
++                    expSimpleName, p.currentToken());
+         }
+         if (p.nextToken() != JsonToken.FIELD_NAME) {
+             ctxt.reportWrongTokenException(rootType, JsonToken.FIELD_NAME,
+                     "Current token not FIELD_NAME (to contain expected root name '%s'), but %s",
+-                    expSimpleName, p.getCurrentToken());
++                    expSimpleName, p.currentToken());
+         }
+         String actualName = p.getCurrentName();
+         if (!expSimpleName.equals(actualName)) {
+@@ -4574,7 +4574,7 @@ public class ObjectMapper
+         if (p.nextToken() != JsonToken.END_OBJECT) {
+             ctxt.reportWrongTokenException(rootType, JsonToken.END_OBJECT,
+                     "Current token not END_OBJECT (to match wrapper object with root name '%s'), but %s",
+-                    expSimpleName, p.getCurrentToken());
++                    expSimpleName, p.currentToken());
+         }
+         if (config.isEnabled(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)) {
+             _verifyNoTrailingTokens(p, ctxt, rootType);
+@@ -4614,7 +4614,7 @@ public class ObjectMapper
+         // First: must point to a token; if not pointing to one, advance.
+         // This occurs before first read from JsonParser, as well as
+         // after clearing of current token.
+-        JsonToken t = p.getCurrentToken();
++        JsonToken t = p.currentToken();
+         if (t == null) {
+             // and then we must get something...
+             t = p.nextToken();
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ObjectReader.java b/src/main/java/com/fasterxml/jackson/databind/ObjectReader.java
+index 7d59a492b..2e2c1e693 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ObjectReader.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ObjectReader.java
+@@ -352,7 +352,7 @@ public class ObjectReader
+          * This occurs before first read from JsonParser, as well as
+          * after clearing of current token.
+          */
+-        JsonToken t = p.getCurrentToken();
++        JsonToken t = p.currentToken();
+         if (t == null) { // and then we must get something...
+             t = p.nextToken();
+             if (t == null) {
+@@ -2082,7 +2082,7 @@ public class ObjectReader
+             p.setSchema(_schema);
+         }
+ 
+-        JsonToken t = p.getCurrentToken();
++        JsonToken t = p.currentToken();
+         if (t == null) {
+             t = p.nextToken();
+             if (t == null) {
+@@ -2124,7 +2124,7 @@ public class ObjectReader
+         if (_schema != null) {
+             p.setSchema(_schema);
+         }
+-        JsonToken t = p.getCurrentToken();
++        JsonToken t = p.currentToken();
+         if (t == null) {
+             t = p.nextToken();
+             if (t == null) {
+@@ -2173,15 +2173,15 @@ public class ObjectReader
+         // 12-Jun-2015, tatu: Should try to support namespaces etc but...
+         String expSimpleName = expRootName.getSimpleName();
+ 
+-        if (p.getCurrentToken() != JsonToken.START_OBJECT) {
++        if (p.currentToken() != JsonToken.START_OBJECT) {
+             ctxt.reportWrongTokenException(rootType, JsonToken.START_OBJECT,
+                     "Current token not START_OBJECT (needed to unwrap root name '%s'), but %s",
+-                    expSimpleName, p.getCurrentToken());
++                    expSimpleName, p.currentToken());
+         }
+         if (p.nextToken() != JsonToken.FIELD_NAME) {
+             ctxt.reportWrongTokenException(rootType, JsonToken.FIELD_NAME,
+                     "Current token not FIELD_NAME (to contain expected root name '%s'), but %s", 
+-                    expSimpleName, p.getCurrentToken());
++                    expSimpleName, p.currentToken());
+         }
+         String actualName = p.getCurrentName();
+         if (!expSimpleName.equals(actualName)) {
+@@ -2202,7 +2202,7 @@ public class ObjectReader
+         if (p.nextToken() != JsonToken.END_OBJECT) {
+             ctxt.reportWrongTokenException(rootType, JsonToken.END_OBJECT,
+                     "Current token not END_OBJECT (to match wrapper object with root name '%s'), but %s",
+-                    expSimpleName, p.getCurrentToken());
++                    expSimpleName, p.currentToken());
+         }
+         if (_config.isEnabled(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)) {
+             _verifyNoTrailingTokens(p, ctxt, _valueType);
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializer.java
+index a82b945f8..e94891ac4 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializer.java
+@@ -163,7 +163,7 @@ public class BeanDeserializer
+             }
+             return deserializeFromObject(p, ctxt);
+         }
+-        return _deserializeOther(p, ctxt, p.getCurrentToken());
++        return _deserializeOther(p, ctxt, p.currentToken());
+     }
+ 
+     protected final Object _deserializeOther(JsonParser p, DeserializationContext ctxt,
+@@ -398,7 +398,7 @@ public class BeanDeserializer
+         TokenBuffer unknown = null;
+         final Class<?> activeView = _needViewProcesing ? ctxt.getActiveView() : null;
+ 
+-        JsonToken t = p.getCurrentToken();
++        JsonToken t = p.currentToken();
+         List<BeanReferring> referrings = null;
+         for (; t == JsonToken.FIELD_NAME; t = p.nextToken()) {
+             String propName = p.getCurrentName();
+@@ -721,7 +721,7 @@ public class BeanDeserializer
+             Object bean)
+         throws IOException
+     {
+-        JsonToken t = p.getCurrentToken();
++        JsonToken t = p.currentToken();
+         if (t == JsonToken.START_OBJECT) {
+             t = p.nextToken();
+         }
+@@ -788,7 +788,7 @@ public class BeanDeserializer
+         TokenBuffer tokens = new TokenBuffer(p, ctxt);
+         tokens.writeStartObject();
+ 
+-        JsonToken t = p.getCurrentToken();
++        JsonToken t = p.currentToken();
+         for (; t == JsonToken.FIELD_NAME; t = p.nextToken()) {
+             String propName = p.getCurrentName();
+             p.nextToken(); // to point to value
+@@ -914,7 +914,7 @@ public class BeanDeserializer
+         final Class<?> activeView = _needViewProcesing ? ctxt.getActiveView() : null;
+         final ExternalTypeHandler ext = _externalTypeIdHandler.start();
+ 
+-        for (JsonToken t = p.getCurrentToken(); t == JsonToken.FIELD_NAME; t = p.nextToken()) {
++        for (JsonToken t = p.currentToken(); t == JsonToken.FIELD_NAME; t = p.nextToken()) {
+             String propName = p.getCurrentName();
+             t = p.nextToken();
+             SettableBeanProperty prop = _beanProperties.find(propName);
+@@ -970,7 +970,7 @@ public class BeanDeserializer
+         TokenBuffer tokens = new TokenBuffer(p, ctxt);
+         tokens.writeStartObject();
+ 
+-        JsonToken t = p.getCurrentToken();
++        JsonToken t = p.currentToken();
+         for (; t == JsonToken.FIELD_NAME; t = p.nextToken()) {
+             String propName = p.getCurrentName();
+             p.nextToken(); // to point to value
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java b/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java
+index 51c5a0011..ddf3216c4 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java
+@@ -1189,7 +1189,7 @@ public abstract class BeanDeserializerBase
+                 }
+             }
+             // or, Object Ids Jackson explicitly sets
+-            JsonToken t = p.getCurrentToken();
++            JsonToken t = p.currentToken();
+             if (t != null) {
+                 // Most commonly, a scalar (int id, uuid String, ...)
+                 if (t.isScalarValue()) {
+@@ -1457,7 +1457,7 @@ public abstract class BeanDeserializerBase
+                 return bean;
+             }
+         }
+-        boolean value = (p.getCurrentToken() == JsonToken.VALUE_TRUE);
++        boolean value = (p.currentToken() == JsonToken.VALUE_TRUE);
+         return _valueInstantiator.createFromBoolean(ctxt, value);
+     }
+ 
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/BuilderBasedDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/BuilderBasedDeserializer.java
+index 1ed76ce3b..8db4738da 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/BuilderBasedDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/BuilderBasedDeserializer.java
+@@ -264,7 +264,7 @@ public class BuilderBasedDeserializer
+         throws IOException
+     {
+         Object bean = _valueInstantiator.createUsingDefault(ctxt);
+-        for (; p.getCurrentToken() == JsonToken.FIELD_NAME; p.nextToken()) {
++        for (; p.currentToken() == JsonToken.FIELD_NAME; p.nextToken()) {
+             String propName = p.getCurrentName();
+             // Skip field name:
+             p.nextToken();
+@@ -309,7 +309,7 @@ public class BuilderBasedDeserializer
+                 return deserializeWithView(p, ctxt, bean, view);
+             }
+         }
+-        for (; p.getCurrentToken() == JsonToken.FIELD_NAME; p.nextToken()) {
++        for (; p.currentToken() == JsonToken.FIELD_NAME; p.nextToken()) {
+             String propName = p.getCurrentName();
+             // Skip field name:
+             p.nextToken();
+@@ -350,7 +350,7 @@ public class BuilderBasedDeserializer
+         // 04-Jan-2010, tatu: May need to collect unknown properties for polymorphic cases
+         TokenBuffer unknown = null;
+ 
+-        JsonToken t = p.getCurrentToken();
++        JsonToken t = p.currentToken();
+         for (; t == JsonToken.FIELD_NAME; t = p.nextToken()) {
+             String propName = p.getCurrentName();
+             p.nextToken(); // to point to value
+@@ -454,7 +454,7 @@ public class BuilderBasedDeserializer
+                 return deserializeWithView(p, ctxt, builder, view);
+             }
+         }
+-        JsonToken t = p.getCurrentToken();
++        JsonToken t = p.currentToken();
+         // 23-Mar-2010, tatu: In some cases, we start with full JSON object too...
+         if (t == JsonToken.START_OBJECT) {
+             t = p.nextToken();
+@@ -523,7 +523,7 @@ public class BuilderBasedDeserializer
+             Object bean, Class<?> activeView)
+         throws IOException
+     {
+-        JsonToken t = p.getCurrentToken();
++        JsonToken t = p.currentToken();
+         for (; t == JsonToken.FIELD_NAME; t = p.nextToken()) {
+             String propName = p.getCurrentName();
+             // Skip field name:
+@@ -575,7 +575,7 @@ public class BuilderBasedDeserializer
+         }
+ 
+         final Class<?> activeView = _needViewProcesing ? ctxt.getActiveView() : null;
+-        for (; p.getCurrentToken() == JsonToken.FIELD_NAME; p.nextToken()) {
++        for (; p.currentToken() == JsonToken.FIELD_NAME; p.nextToken()) {
+             String propName = p.getCurrentName();
+             p.nextToken();
+             SettableBeanProperty prop = _beanProperties.find(propName);
+@@ -625,7 +625,7 @@ public class BuilderBasedDeserializer
+         tokens.writeStartObject();
+         Object builder = null;
+ 
+-        JsonToken t = p.getCurrentToken();
++        JsonToken t = p.currentToken();
+         for (; t == JsonToken.FIELD_NAME; t = p.nextToken()) {
+             String propName = p.getCurrentName();
+             p.nextToken(); // to point to value
+@@ -687,7 +687,7 @@ public class BuilderBasedDeserializer
+         throws IOException
+     {
+         final Class<?> activeView = _needViewProcesing ? ctxt.getActiveView() : null;
+-        for (JsonToken t = p.getCurrentToken(); t == JsonToken.FIELD_NAME; t = p.nextToken()) {
++        for (JsonToken t = p.currentToken(); t == JsonToken.FIELD_NAME; t = p.nextToken()) {
+             String propName = p.getCurrentName();
+             SettableBeanProperty prop = _beanProperties.find(propName);
+             p.nextToken();
+@@ -742,7 +742,7 @@ public class BuilderBasedDeserializer
+         final Class<?> activeView = _needViewProcesing ? ctxt.getActiveView() : null;
+         final ExternalTypeHandler ext = _externalTypeIdHandler.start();
+ 
+-        for (JsonToken t = p.getCurrentToken(); t == JsonToken.FIELD_NAME; t = p.nextToken()) {
++        for (JsonToken t = p.currentToken(); t == JsonToken.FIELD_NAME; t = p.nextToken()) {
+             String propName = p.getCurrentName();
+             t = p.nextToken();
+             SettableBeanProperty prop = _beanProperties.find(propName);
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/impl/BeanAsArrayBuilderDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/impl/BeanAsArrayBuilderDeserializer.java
+index c583d021b..2cc46847b 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/impl/BeanAsArrayBuilderDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/impl/BeanAsArrayBuilderDeserializer.java
+@@ -350,7 +350,7 @@ public class BeanAsArrayBuilderDeserializer
+         // Let's start with failure
+         String message = "Cannot deserialize a POJO (of type %s) from non-Array representation (token: %s): "
+             + "type/property designed to be serialized as JSON Array";
+-        return ctxt.handleUnexpectedToken(getValueType(ctxt), p.getCurrentToken(), p, message, _beanType.getRawClass().getName(), p.getCurrentToken());
++        return ctxt.handleUnexpectedToken(getValueType(ctxt), p.currentToken(), p, message, _beanType.getRawClass().getName(), p.currentToken());
+         // in future, may allow use of "standard" POJO serialization as well; if so, do:
+         //return _delegate.deserialize(p, ctxt);
+     }
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/impl/BeanAsArrayDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/impl/BeanAsArrayDeserializer.java
+index f51899d1e..678878534 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/impl/BeanAsArrayDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/impl/BeanAsArrayDeserializer.java
+@@ -370,7 +370,7 @@ public class BeanAsArrayDeserializer
+     {
+         String message = "Cannot deserialize a POJO (of type %s) from non-Array representation (token: %s): "
+                 +"type/property designed to be serialized as JSON Array";
+-        return ctxt.handleUnexpectedToken(getValueType(ctxt), p.getCurrentToken(), p, message, _beanType.getRawClass().getName(), p.getCurrentToken());
++        return ctxt.handleUnexpectedToken(getValueType(ctxt), p.currentToken(), p, message, _beanType.getRawClass().getName(), p.currentToken());
+         // in future, may allow use of "standard" POJO serialization as well; if so, do:
+         //return _delegate.deserialize(p, ctxt);
+     }
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/MapDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/MapDeserializer.java
+index fccdf1aab..2ce330d05 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/MapDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/MapDeserializer.java
+@@ -350,7 +350,7 @@ public class MapDeserializer
+                     "no default constructor found");
+         }
+         // Ok: must point to START_OBJECT, FIELD_NAME or END_OBJECT
+-        JsonToken t = p.getCurrentToken();
++        JsonToken t = p.currentToken();
+         if (t != JsonToken.START_OBJECT && t != JsonToken.FIELD_NAME && t != JsonToken.END_OBJECT) {
+             // (empty) String may be ok however; or single-String-arg ctor
+             if (t == JsonToken.VALUE_STRING) {
+@@ -378,7 +378,7 @@ public class MapDeserializer
+         p.setCurrentValue(result);
+         
+         // Ok: must point to START_OBJECT or FIELD_NAME
+-        JsonToken t = p.getCurrentToken();
++        JsonToken t = p.currentToken();
+         if (t != JsonToken.START_OBJECT && t != JsonToken.FIELD_NAME) {
+             return (Map<Object,Object>) ctxt.handleUnexpectedToken(getMapClass(), p);
+         }
+@@ -435,7 +435,7 @@ public class MapDeserializer
+         if (p.isExpectedStartObjectToken()) {
+             keyStr = p.nextFieldName();
+         } else {
+-            JsonToken t = p.getCurrentToken();
++            JsonToken t = p.currentToken();
+             if (t != JsonToken.FIELD_NAME) {
+                 if (t == JsonToken.END_OBJECT) {
+                     return;
+@@ -499,7 +499,7 @@ public class MapDeserializer
+         if (p.isExpectedStartObjectToken()) {
+             key = p.nextFieldName();
+         } else {
+-            JsonToken t = p.getCurrentToken();
++            JsonToken t = p.currentToken();
+             if (t == JsonToken.END_OBJECT) {
+                 return;
+             }
+@@ -638,7 +638,7 @@ public class MapDeserializer
+         if (p.isExpectedStartObjectToken()) {
+             keyStr = p.nextFieldName();
+         } else {
+-            JsonToken t = p.getCurrentToken();
++            JsonToken t = p.currentToken();
+             if (t == JsonToken.END_OBJECT) {
+                 return;
+             }
+@@ -707,7 +707,7 @@ public class MapDeserializer
+         if (p.isExpectedStartObjectToken()) {
+             key = p.nextFieldName();
+         } else {
+-            JsonToken t = p.getCurrentToken();
++            JsonToken t = p.currentToken();
+             if (t == JsonToken.END_OBJECT) {
+                 return;
+             }
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/NumberDeserializers.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/NumberDeserializers.java
+index aa4dad45a..a8a74ee62 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/NumberDeserializers.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/NumberDeserializers.java
+@@ -194,7 +194,7 @@ public class NumberDeserializers
+         @Override
+         public Boolean deserialize(JsonParser p, DeserializationContext ctxt) throws IOException
+         {
+-            JsonToken t = p.getCurrentToken();
++            JsonToken t = p.currentToken();
+             if (t == JsonToken.VALUE_TRUE) {
+                 return Boolean.TRUE;
+             }
+@@ -211,7 +211,7 @@ public class NumberDeserializers
+                 TypeDeserializer typeDeserializer)
+             throws IOException
+         {
+-            JsonToken t = p.getCurrentToken();
++            JsonToken t = p.currentToken();
+             if (t == JsonToken.VALUE_TRUE) {
+                 return Boolean.TRUE;
+             }
+@@ -224,7 +224,7 @@ public class NumberDeserializers
+         protected final Boolean _parseBoolean(JsonParser p, DeserializationContext ctxt)
+             throws IOException
+         {
+-            JsonToken t = p.getCurrentToken();
++            JsonToken t = p.currentToken();
+             if (t == JsonToken.VALUE_NULL) {
+                 return (Boolean) _coerceNullToken(ctxt, _primitive);
+             }
+@@ -293,7 +293,7 @@ public class NumberDeserializers
+ 
+         protected Byte _parseByte(JsonParser p, DeserializationContext ctxt) throws IOException
+         {
+-            JsonToken t = p.getCurrentToken();
++            JsonToken t = p.currentToken();
+             if (t == JsonToken.VALUE_STRING) { // let's do implicit re-parse
+                 String text = p.getText().trim();
+                 if (_hasTextualNull(text)) {
+@@ -363,7 +363,7 @@ public class NumberDeserializers
+ 
+         protected Short _parseShort(JsonParser p, DeserializationContext ctxt) throws IOException
+         {
+-            JsonToken t = p.getCurrentToken();
++            JsonToken t = p.currentToken();
+             if (t == JsonToken.VALUE_NUMBER_INT) {
+                 return p.getShortValue();
+             }
+@@ -622,7 +622,7 @@ public class NumberDeserializers
+             throws IOException
+         {
+             // We accept couple of different types; obvious ones first:
+-            JsonToken t = p.getCurrentToken();
++            JsonToken t = p.currentToken();
+             
+             if (t == JsonToken.VALUE_NUMBER_FLOAT || t == JsonToken.VALUE_NUMBER_INT) { // coercing should work too
+                 return p.getFloatValue();
+@@ -700,7 +700,7 @@ public class NumberDeserializers
+ 
+         protected final Double _parseDouble(JsonParser p, DeserializationContext ctxt) throws IOException
+         {
+-            JsonToken t = p.getCurrentToken();
++            JsonToken t = p.currentToken();
+             if (t == JsonToken.VALUE_NUMBER_INT || t == JsonToken.VALUE_NUMBER_FLOAT) { // coercing should work too
+                 return p.getDoubleValue();
+             }
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/StdDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/StdDeserializer.java
+index f49b66eb3..fd821aa6c 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/StdDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/StdDeserializer.java
+@@ -177,7 +177,7 @@ public abstract class StdDeserializer<T>
+     protected final boolean _parseBooleanPrimitive(DeserializationContext ctxt,
+             JsonParser p, Class<?> targetType) throws IOException
+     {
+-        JsonToken t = p.getCurrentToken();
++        JsonToken t = p.currentToken();
+         if (t == JsonToken.VALUE_TRUE) return true;
+         if (t == JsonToken.VALUE_FALSE) return false;
+         if (t == JsonToken.VALUE_NULL) {
+@@ -536,7 +536,7 @@ public abstract class StdDeserializer<T>
+                 return parsed;
+             }
+         } else {
+-            t = p.getCurrentToken();
++            t = p.currentToken();
+         }
+         return (java.util.Date) ctxt.handleUnexpectedToken(_valueClass, t, p, null);
+     }
+@@ -581,7 +581,7 @@ public abstract class StdDeserializer<T>
+      */
+     protected final String _parseString(JsonParser p, DeserializationContext ctxt) throws IOException
+     {
+-        JsonToken t = p.getCurrentToken();
++        JsonToken t = p.currentToken();
+         if (t == JsonToken.VALUE_STRING) {
+             return p.getText();
+         }
+@@ -626,7 +626,7 @@ public abstract class StdDeserializer<T>
+     protected T _deserializeFromEmpty(JsonParser p, DeserializationContext ctxt)
+         throws IOException
+     {
+-        JsonToken t = p.getCurrentToken();
++        JsonToken t = p.currentToken();
+         if (t == JsonToken.START_ARRAY) {
+             if (ctxt.isEnabled(DeserializationFeature.ACCEPT_EMPTY_ARRAY_AS_NULL_OBJECT)) {
+                 t = p.nextToken();
+@@ -715,10 +715,10 @@ public abstract class StdDeserializer<T>
+                 return parsed;
+             }
+         } else {
+-            t = p.getCurrentToken();
++            t = p.currentToken();
+         }
+         @SuppressWarnings("unchecked")
+-        T result = (T) ctxt.handleUnexpectedToken(getValueType(ctxt), p.getCurrentToken(), p, null);
++        T result = (T) ctxt.handleUnexpectedToken(getValueType(ctxt), p.currentToken(), p, null);
+         return result;
+     }
+ 
+@@ -740,7 +740,7 @@ public abstract class StdDeserializer<T>
+                     ClassUtil.nameOf(_valueClass), JsonToken.START_ARRAY,
+                     "DeserializationFeature.UNWRAP_SINGLE_VALUE_ARRAYS");
+             @SuppressWarnings("unchecked")
+-            T result = (T) ctxt.handleUnexpectedToken(getValueType(ctxt), p.getCurrentToken(), p, msg);
++            T result = (T) ctxt.handleUnexpectedToken(getValueType(ctxt), p.currentToken(), p, msg);
+             return result;
+         }
+         return (T) deserialize(p, ctxt);
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/StringArrayDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/StringArrayDeserializer.java
+index a348a4019..df8fba83c 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/StringArrayDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/StringArrayDeserializer.java
+@@ -144,7 +144,7 @@ public final class StringArrayDeserializer
+             while (true) {
+                 String value = p.nextTextValue();
+                 if (value == null) {
+-                    JsonToken t = p.getCurrentToken();
++                    JsonToken t = p.currentToken();
+                     if (t == JsonToken.END_ARRAY) {
+                         break;
+                     }
+@@ -200,7 +200,7 @@ public final class StringArrayDeserializer
+                  */
+                 String value;
+                 if (p.nextTextValue() == null) {
+-                    JsonToken t = p.getCurrentToken();
++                    JsonToken t = p.currentToken();
+                     if (t == JsonToken.END_ARRAY) {
+                         break;
+                     }
+@@ -264,7 +264,7 @@ public final class StringArrayDeserializer
+             while (true) {
+                 String value = p.nextTextValue();
+                 if (value == null) {
+-                    JsonToken t = p.getCurrentToken();
++                    JsonToken t = p.currentToken();
+                     if (t == JsonToken.END_ARRAY) {
+                         break;
+                     }
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/StringCollectionDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/StringCollectionDeserializer.java
+index 101d03b0f..0628f1f5a 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/StringCollectionDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/StringCollectionDeserializer.java
+@@ -194,7 +194,7 @@ public final class StringCollectionDeserializer
+                     result.add(value);
+                     continue;
+                 }
+-                JsonToken t = p.getCurrentToken();
++                JsonToken t = p.currentToken();
+                 if (t == JsonToken.END_ARRAY) {
+                     break;
+                 }
+@@ -226,7 +226,7 @@ public final class StringCollectionDeserializer
+                  */
+                 String value;
+                 if (p.nextTextValue() == null) {
+-                    JsonToken t = p.getCurrentToken();
++                    JsonToken t = p.currentToken();
+                     if (t == JsonToken.END_ARRAY) {
+                         break;
+                     }
+@@ -275,7 +275,7 @@ public final class StringCollectionDeserializer
+         }
+         // Strings are one of "native" (intrinsic) types, so there's never type deserializer involved
+         JsonDeserializer<String> valueDes = _valueDeserializer;
+-        JsonToken t = p.getCurrentToken();
++        JsonToken t = p.currentToken();
+ 
+         String value;
+         
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/UntypedObjectDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/UntypedObjectDeserializer.java
+index 2f0df1d78..5d2288809 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/UntypedObjectDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/UntypedObjectDeserializer.java
+@@ -487,7 +487,7 @@ public class UntypedObjectDeserializer
+     {
+         String key1;
+ 
+-        JsonToken t = p.getCurrentToken();
++        JsonToken t = p.currentToken();
+         
+         if (t == JsonToken.START_OBJECT) {
+             key1 = p.nextFieldName();
+@@ -565,7 +565,7 @@ public class UntypedObjectDeserializer
+     protected Object mapObject(JsonParser p, DeserializationContext ctxt,
+             Map<Object,Object> m) throws IOException
+     {
+-        JsonToken t = p.getCurrentToken();
++        JsonToken t = p.currentToken();
+         if (t == JsonToken.START_OBJECT) {
+             t = p.nextToken();
+         }

@@ -1,5 +1,5 @@
 diff --git a/src/utils/request.ts b/src/utils/request.ts
-index 4e57e38..2e33153 100644
+index 4e57e38..7641ed3 100644
 --- a/src/utils/request.ts
 +++ b/src/utils/request.ts
 @@ -336,7 +336,14 @@ export function assertMethod(
@@ -7,13 +7,13 @@ index 4e57e38..2e33153 100644
  ): void {
    if (!isMethod(event, expected, allowHead)) {
 -    throw new HTTPError({ status: 405 });
-+    const allowed = Array.isArray(expected) ? [...expected] : [expected];
-+    if (allowHead && !allowed.includes("HEAD")) {
-+      allowed.push("HEAD");
++    const allowed = new Set(typeof expected === "string" ? [expected] : expected);
++    if (allowHead && allowed.has("GET")) {
++      allowed.add("HEAD");
 +    }
 +    throw new HTTPError({
 +      status: 405,
-+      headers: { Allow: allowed.join(", ") },
++      headers: { Allow: [...allowed].join(", ") },
 +    });
    }
  }

@@ -1,0 +1,81 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/jdk/ObjectArrayDeserializer.java b/src/main/java/tools/jackson/databind/deser/jdk/ObjectArrayDeserializer.java
+index d94a7e227..0cf12cb64 100644
+--- a/src/main/java/tools/jackson/databind/deser/jdk/ObjectArrayDeserializer.java
++++ b/src/main/java/tools/jackson/databind/deser/jdk/ObjectArrayDeserializer.java
+@@ -509,6 +509,7 @@ ClassUtil.classNameOf(value), ClassUtil.nameOf(_elementClass)));
+         private final Class<?> _elementType;
+         private final List<Object> _accumulator = new ArrayList<>();
+         private Object[] _array;
++        private List<Object[]> _pendingRebind;
+ 
+         ObjectArrayReferringAccumulator(boolean untyped, Class<?> elementType) {
+             _untyped = untyped;
+@@ -529,7 +530,7 @@ ClassUtil.classNameOf(value), ClassUtil.nameOf(_elementClass)));
+             for (int i = 0, size = _accumulator.size(); i < size; i++) {
+                 if ((_accumulator.get(i) instanceof ArrayReferring ref) && ref.hasId(id)) {
+                     if (_array != null) {
+-                        _array[i] = value;
++                        store(i, value);
+                     } else {
+                         _accumulator.set(i, value);
+                     }
+@@ -540,16 +541,28 @@ ClassUtil.classNameOf(value), ClassUtil.nameOf(_elementClass)));
+                     + "] that wasn't previously seen as unresolved.");
+         }
+ 
+-        // [databind#5909]: no `replaceResolvedItem` here, unlike Collection/Map
+-        // accumulators. The Builder→built rebind path is unreachable for arrays:
+-        //  - Typed arrays (e.g. `Entity[]`) cannot store the Builder instance,
+-        //    so `resolveForwardReference` throws `ArrayStoreException` before
+-        //    any rebind could fire.
+-        //  - Untyped `Object[]` arrays don't trigger the forward-ref accumulator
+-        //    at all because the default element deserializer
+-        //    ({@code UntypedObjectDeserializer}) has no `ObjectIdReader`.
+-        // Regression covered by
+-        // {@code ObjectIdWithBuilder5909Test#forwardReferenceInTypedArrayFailsArrayStoreException}.
++        // [databind#5909]: value may be a Builder that typed array cannot hold; leave slot
++        // empty and remember it so that it can be replaced once the built value is known
++        private void store(int index, Object value) {
++            if (value != null && !_untyped && !_elementType.isInstance(value)) {
++                if (_pendingRebind == null) {
++                    _pendingRebind = new ArrayList<>();
++                }
++                _pendingRebind.add(new Object[] { index, value });
++            } else {
++                _array[index] = value;
++            }
++        }
++
++        void replaceResolvedItem(Object oldItem, Object newItem) {
++            if (_pendingRebind != null) {
++                for (Object[] entry : _pendingRebind) {
++                    if (entry[1] == oldItem) {
++                        _array[(Integer) entry[0]] = newItem;
++                    }
++                }
++            }
++        }
+ 
+         Object[] buildArray() {
+             final int size = _accumulator.size();
+@@ -561,7 +574,7 @@ ClassUtil.classNameOf(value), ClassUtil.nameOf(_elementClass)));
+             for (int i = 0; i < size; i++) {
+                 Object value = _accumulator.get(i);
+                 if (!(value instanceof ArrayReferring)) {
+-                    _array[i] = value;
++                    store(i, value);
+                 }
+             }
+             return _array;
+@@ -583,7 +596,9 @@ ClassUtil.classNameOf(value), ClassUtil.nameOf(_elementClass)));
+             _parent.resolveForwardReference(id, value);
+         }
+ 
+-        // [databind#5909]: no `handleItemRebind` override. The default no-op is
+-        // correct for arrays — see comment in ObjectArrayReferringAccumulator.
++        @Override
++        public void handleItemRebind(Object oldItem, Object newItem) {
++            _parent.replaceResolvedItem(oldItem, newItem);
++        }
+     }
+ }

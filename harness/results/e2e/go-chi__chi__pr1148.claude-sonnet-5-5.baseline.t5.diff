@@ -1,0 +1,74 @@
+diff --git a/tree.go b/tree.go
+index 74ff43d..31494c5 100644
+--- a/tree.go
++++ b/tree.go
+@@ -7,6 +7,7 @@ package chi
+ import (
+ 	"fmt"
+ 	"net/http"
++	"reflect"
+ 	"regexp"
+ 	"slices"
+ 	"sort"
+@@ -629,9 +630,7 @@ func (n *node) routes() []Route {
+ 	rts := []Route{}
+ 
+ 	n.walk(func(eps endpoints, subroutes Routes) bool {
+-		if eps[mSTUB] != nil && eps[mSTUB].handler != nil && subroutes == nil {
+-			return false
+-		}
++		stub := eps[mSTUB] != nil && eps[mSTUB].handler != nil && subroutes == nil
+ 
+ 		// Group methodHandlers by unique patterns
+ 		pats := make(map[string]endpoints)
+@@ -640,6 +639,11 @@ func (n *node) routes() []Route {
+ 			if h.pattern == "" {
+ 				continue
+ 			}
++			// On a mount stub node, skip the mount handler but keep any
++			// method handlers explicitly registered on the same pattern.
++			if stub && sameHandler(h.handler, eps[mSTUB].handler) {
++				continue
++			}
+ 			p, ok := pats[h.pattern]
+ 			if !ok {
+ 				p = endpoints{}
+@@ -857,7 +861,6 @@ func walk(r Routes, walkFn WalkFunc, parentRoute string, parentMw ...func(http.H
+ 			if err := walk(route.SubRoutes, walkFn, parentRoute+route.Pattern, mws...); err != nil {
+ 				return err
+ 			}
+-			continue
+ 		}
+ 
+ 		for method, handler := range route.Handlers {
+@@ -866,6 +869,12 @@ func walk(r Routes, walkFn WalkFunc, parentRoute string, parentMw ...func(http.H
+ 				continue
+ 			}
+ 
++			// A mounted subrouter is registered for every method; only report
++			// methods explicitly registered on the same pattern.
++			if route.SubRoutes != nil && sameHandler(handler, route.Handlers["*"]) {
++				continue
++			}
++
+ 			fullRoute := parentRoute + route.Pattern
+ 			fullRoute = strings.ReplaceAll(fullRoute, "/*/", "/")
+ 
+@@ -883,3 +892,17 @@ func walk(r Routes, walkFn WalkFunc, parentRoute string, parentMw ...func(http.H
+ 
+ 	return nil
+ }
++
++// sameHandler reports whether a and b are the same handler value, without
++// panicking on uncomparable types such as http.HandlerFunc.
++func sameHandler(a, b http.Handler) bool {
++	va, vb := reflect.ValueOf(a), reflect.ValueOf(b)
++	if !va.IsValid() || !vb.IsValid() || va.Kind() != vb.Kind() {
++		return false
++	}
++	switch va.Kind() {
++	case reflect.Func, reflect.Ptr:
++		return va.Pointer() == vb.Pointer()
++	}
++	return false
++}

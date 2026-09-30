@@ -1,0 +1,35 @@
+diff --git a/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java b/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java
+index 2734a6d0..ca461edf 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java
++++ b/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java
+@@ -23,6 +23,18 @@ public class XmlBeanSerializerModifier
+ 
+     public XmlBeanSerializerModifier() { }
+ 
++    private static final class SkipNullSerializer
++        extends tools.jackson.databind.ser.std.StdSerializer<Object>
++    {
++        static final SkipNullSerializer INSTANCE = new SkipNullSerializer();
++
++        private SkipNullSerializer() { super(Object.class); }
++
++        @Override
++        public void serialize(Object value, tools.jackson.core.JsonGenerator g,
++                SerializationContext ctxt) { }
++    }
++
+     /*
+     /**********************************************************
+     /* Overridden methods
+@@ -77,6 +89,11 @@ public class XmlBeanSerializerModifier
+ 
+             // first things first: no wrapping?
+             if (wrapperName == null || wrapperName == PropertyName.NO_NAME) {
++                // Unwrapped `null` Collection/array: write nothing (an empty element
++                // would be read back as a List with one empty element)
++                if (!dynamicWrapping) {
++                    bpw.assignNullSerializer(SkipNullSerializer.INSTANCE);
++                }
+                 continue;
+             }
+             // no local name? Just double the wrapped name for wrapper

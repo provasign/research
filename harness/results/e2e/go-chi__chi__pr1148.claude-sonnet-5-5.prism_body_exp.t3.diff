@@ -1,0 +1,26 @@
+diff --git a/tree.go b/tree.go
+index 74ff43d..9147c03 100644
+--- a/tree.go
++++ b/tree.go
+@@ -629,9 +629,7 @@ func (n *node) routes() []Route {
+ 	rts := []Route{}
+ 
+ 	n.walk(func(eps endpoints, subroutes Routes) bool {
+-		if eps[mSTUB] != nil && eps[mSTUB].handler != nil && subroutes == nil {
+-			return false
+-		}
++		stub := eps[mSTUB] != nil && eps[mSTUB].handler != nil && subroutes == nil
+ 
+ 		// Group methodHandlers by unique patterns
+ 		pats := make(map[string]endpoints)
+@@ -640,6 +638,10 @@ func (n *node) routes() []Route {
+ 			if h.pattern == "" {
+ 				continue
+ 			}
++			// On a mount stub, keep only explicitly registered methods.
++			if stub && (mt == mSTUB || mt == mALL) {
++				continue
++			}
+ 			p, ok := pats[h.pattern]
+ 			if !ok {
+ 				p = endpoints{}

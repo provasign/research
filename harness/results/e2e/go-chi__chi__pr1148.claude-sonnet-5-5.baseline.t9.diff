@@ -1,0 +1,68 @@
+diff --git a/tree.go b/tree.go
+index 74ff43d..3623f94 100644
+--- a/tree.go
++++ b/tree.go
+@@ -133,6 +133,9 @@ type endpoint struct {
+ 
+ 	// parameter keys recorded on handler nodes
+ 	paramKeys []string
++
++	// mounted is true when the handler was installed by Mount
++	mounted bool
+ }
+ 
+ func (s endpoints) Value(method methodTyp) *endpoint {
+@@ -360,19 +363,23 @@ func (n *node) setEndpoint(method methodTyp, handler http.Handler, pattern strin
+ 	if method&mSTUB == mSTUB {
+ 		n.endpoints.Value(mSTUB).handler = handler
+ 	}
++	mounted := method&mSTUB == mSTUB
+ 	if method&mALL == mALL {
+ 		h := n.endpoints.Value(mALL)
++		h.mounted = mounted
+ 		h.handler = handler
+ 		h.pattern = pattern
+ 		h.paramKeys = paramKeys
+ 		for _, m := range methodMap {
+ 			h := n.endpoints.Value(m)
++			h.mounted = mounted
+ 			h.handler = handler
+ 			h.pattern = pattern
+ 			h.paramKeys = paramKeys
+ 		}
+ 	} else {
+ 		h := n.endpoints.Value(method)
++		h.mounted = false
+ 		h.handler = handler
+ 		h.pattern = pattern
+ 		h.paramKeys = paramKeys
+@@ -629,9 +636,6 @@ func (n *node) routes() []Route {
+ 	rts := []Route{}
+ 
+ 	n.walk(func(eps endpoints, subroutes Routes) bool {
+-		if eps[mSTUB] != nil && eps[mSTUB].handler != nil && subroutes == nil {
+-			return false
+-		}
+ 
+ 		// Group methodHandlers by unique patterns
+ 		pats := make(map[string]endpoints)
+@@ -640,6 +644,9 @@ func (n *node) routes() []Route {
+ 			if h.pattern == "" {
+ 				continue
+ 			}
++			if subroutes == nil && h.mounted {
++				continue
++			}
+ 			p, ok := pats[h.pattern]
+ 			if !ok {
+ 				p = endpoints{}
+@@ -663,6 +670,9 @@ func (n *node) routes() []Route {
+ 				}
+ 			}
+ 
++			if len(hs) == 0 {
++				continue
++			}
+ 			rt := Route{subroutes, hs, p}
+ 			rts = append(rts, rt)
+ 		}

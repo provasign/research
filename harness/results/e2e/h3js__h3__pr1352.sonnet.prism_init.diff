@@ -1,0 +1,33 @@
+diff --git a/src/response.ts b/src/response.ts
+index b572a70..89f6493 100644
+--- a/src/response.ts
++++ b/src/response.ts
+@@ -87,7 +87,7 @@ function prepareResponse(
+       ? Promise.resolve(onError(error, event))
+           .catch((error) => error)
+           .then((newVal) => prepareResponse(newVal ?? val, event, config, true))
+-      : errorResponse(error, config.debug);
++      : errorResponse(error, config.debug, (event as any)[kEventRes]?.[kEventResHeaders]);
+   }
+ 
+   // Only set if event.res.headers is accessed
+@@ -240,7 +240,9 @@ function nullBody(method: string, status: number | undefined): boolean | 0 | und
+   )
+ }
+ 
+-function errorResponse(error: HTTPError, debug?: boolean): Response {
++function errorResponse(error: HTTPError, debug?: boolean, preparedHeaders?: Headers): Response {
++  let headers = error.headers ? mergeHeaders(jsonHeaders, error.headers) : new Headers(jsonHeaders);
++  if (preparedHeaders) headers = mergeHeaders(headers, preparedHeaders);
+   return new FastResponse(
+     JSON.stringify(
+       {
+@@ -253,7 +255,7 @@ function errorResponse(error: HTTPError, debug?: boolean): Response {
+     {
+       status: error.status,
+       statusText: error.statusText,
+-      headers: error.headers ? mergeHeaders(jsonHeaders, error.headers) : new Headers(jsonHeaders),
++      headers,
+     },
+   );
+ }

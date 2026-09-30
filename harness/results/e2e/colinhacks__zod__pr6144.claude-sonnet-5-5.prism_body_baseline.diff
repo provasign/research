@@ -1,0 +1,30 @@
+diff --git a/packages/zod/src/v4/core/to-json-schema.ts b/packages/zod/src/v4/core/to-json-schema.ts
+index db7ca4d8..f58a5110 100644
+--- a/packages/zod/src/v4/core/to-json-schema.ts
++++ b/packages/zod/src/v4/core/to-json-schema.ts
+@@ -297,6 +297,7 @@ export function extractDefs<T extends schemas.$ZodType>(
+ 
+     // external is configured
+     const defsSegment = ctx.target === "draft-2020-12" ? "$defs" : "definitions";
++    const escapePointer = (s: string) => s.replace(/~/g, "~0").replace(/\//g, "~1");
+     if (ctx.external) {
+       const externalId = ctx.external.registry.get(entry[0])?.id; // ?? "__shared";// `__schema${ctx.counter++}`;
+ 
+@@ -309,7 +310,7 @@ export function extractDefs<T extends schemas.$ZodType>(
+       // otherwise, add to __shared
+       const id: string = entry[1].defId ?? (entry[1].schema.id as string) ?? `schema${ctx.counter++}`;
+       entry[1].defId = id; // set defId so it will be reused if needed
+-      return { defId: id, ref: `${uriGenerator("__shared")}#/${defsSegment}/${id}` };
++      return { defId: id, ref: `${uriGenerator("__shared")}#/${defsSegment}/${escapePointer(id)}` };
+     }
+ 
+     if (entry[1] === root) {
+@@ -320,7 +321,7 @@ export function extractDefs<T extends schemas.$ZodType>(
+     const uriPrefix = `#`;
+     const defUriPrefix = `${uriPrefix}/${defsSegment}/`;
+     const defId = entry[1].schema.id ?? `__schema${ctx.counter++}`;
+-    return { defId, ref: defUriPrefix + defId };
++    return { defId, ref: defUriPrefix + escapePointer(defId) };
+   };
+ 
+   // stored cached version in `def` property

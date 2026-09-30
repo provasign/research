@@ -1,0 +1,91 @@
+diff --git a/tree.go b/tree.go
+index 74ff43d..0306c9d 100644
+--- a/tree.go
++++ b/tree.go
+@@ -7,6 +7,7 @@ package chi
+ import (
+ 	"fmt"
+ 	"net/http"
++	"reflect"
+ 	"regexp"
+ 	"slices"
+ 	"sort"
+@@ -629,8 +630,9 @@ func (n *node) routes() []Route {
+ 	rts := []Route{}
+ 
+ 	n.walk(func(eps endpoints, subroutes Routes) bool {
++		var stub http.Handler
+ 		if eps[mSTUB] != nil && eps[mSTUB].handler != nil && subroutes == nil {
+-			return false
++			stub = eps[mSTUB].handler
+ 		}
+ 
+ 		// Group methodHandlers by unique patterns
+@@ -640,6 +642,10 @@ func (n *node) routes() []Route {
+ 			if h.pattern == "" {
+ 				continue
+ 			}
++			// Skip the mount stub; keep methods explicitly overridden on it.
++			if stub != nil && (mt == mSTUB || sameHandler(h.handler, stub)) {
++				continue
++			}
+ 			p, ok := pats[h.pattern]
+ 			if !ok {
+ 				p = endpoints{}
+@@ -843,21 +849,40 @@ func Walk(r Routes, walkFn WalkFunc) error {
+ 	return walk(r, walkFn, "")
+ }
+ 
++// sameHandler reports whether a and b are the same handler, without panicking
++// on uncomparable types such as http.HandlerFunc.
++func sameHandler(a, b http.Handler) bool {
++	if a == nil || b == nil {
++		return false
++	}
++	va, vb := reflect.ValueOf(a), reflect.ValueOf(b)
++	if va.Type() != vb.Type() {
++		return false
++	}
++	switch va.Kind() {
++	case reflect.Func, reflect.Pointer:
++		return va.Pointer() == vb.Pointer()
++	}
++	return va.Comparable() && va.Equal(vb)
++}
++
+ func walk(r Routes, walkFn WalkFunc, parentRoute string, parentMw ...func(http.Handler) http.Handler) error {
+ 	for _, route := range r.Routes() {
+ 		mws := slices.Concat(parentMw, r.Middlewares())
+ 
+ 		if route.SubRoutes != nil {
++			subMws := mws
+ 			if handler, ok := route.Handlers["*"]; ok {
+ 				if chain, ok := handler.(*ChainHandler); ok {
+-					mws = append(mws, chain.Middlewares...)
++					subMws = slices.Concat(mws, chain.Middlewares)
+ 				}
+ 			}
+ 
+-			if err := walk(route.SubRoutes, walkFn, parentRoute+route.Pattern, mws...); err != nil {
++			if err := walk(route.SubRoutes, walkFn, parentRoute+route.Pattern, subMws...); err != nil {
+ 				return err
+ 			}
+-			continue
++			// Fall through: handlers registered directly on the mount pattern
++			// (e.g. Get("/bar") alongside Route("/bar")) must be reported too.
+ 		}
+ 
+ 		for method, handler := range route.Handlers {
+@@ -866,6 +891,12 @@ func walk(r Routes, walkFn WalkFunc, parentRoute string, parentMw ...func(http.H
+ 				continue
+ 			}
+ 
++			// On a mount, every method is registered with the mount handler itself;
++			// only report methods explicitly overridden on the same pattern.
++			if route.SubRoutes != nil && sameHandler(handler, route.Handlers["*"]) {
++				continue
++			}
++
+ 			fullRoute := parentRoute + route.Pattern
+ 			fullRoute = strings.ReplaceAll(fullRoute, "/*/", "/")
+ 

@@ -1,0 +1,95 @@
+diff --git a/src/main/java/tools/jackson/dataformat/xml/deser/WrapperHandlingDeserializer.java b/src/main/java/tools/jackson/dataformat/xml/deser/WrapperHandlingDeserializer.java
+index 7c0cea82..86ff2489 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/deser/WrapperHandlingDeserializer.java
++++ b/src/main/java/tools/jackson/dataformat/xml/deser/WrapperHandlingDeserializer.java
+@@ -44,11 +44,22 @@ public class WrapperHandlingDeserializer
+     }
+ 
+     public WrapperHandlingDeserializer(BeanDeserializerBase delegate, Set<String> namesToWrap)
++    {
++        this((ValueDeserializer<?>) delegate, namesToWrap);
++    }
++
++    /**
++     * Constructor that also accepts delegates that are not {@link BeanDeserializerBase}
++     * but (possibly nested) {@link DelegatingDeserializer}s around one, as added by
++     * other {@code ValueDeserializerModifier}s.
++     */
++    public WrapperHandlingDeserializer(ValueDeserializer<?> delegate, Set<String> namesToWrap)
+     {
+         super(delegate);
+         _namesToWrap = namesToWrap;
+-        _type = delegate.getValueType();
+-        _caseInsensitive = delegate.isCaseInsensitive();
++        BeanDeserializerBase bean = _verifyDeserType(delegate);
++        _type = bean.getValueType();
++        _caseInsensitive = bean.isCaseInsensitive();
+     }
+ 
+     /*
+@@ -61,11 +72,8 @@ public class WrapperHandlingDeserializer
+     protected ValueDeserializer<?> newDelegatingInstance(ValueDeserializer<?> newDelegatee0) {
+         // [dataformat-xml#762]: need to support creating new instance when delegatee
+         // changes, e.g. when @JsonUnwrapped triggers creation of unwrapping deserializer
+-        if (!(newDelegatee0 instanceof BeanDeserializerBase newDelegatee)) {
+-            throw new IllegalArgumentException("Cannot change delegate to be of type "
+-                    +newDelegatee0.getClass().getName());
+-        }
+-        return new WrapperHandlingDeserializer(newDelegatee, _namesToWrap);
++        _verifyDeserType(newDelegatee0);
++        return new WrapperHandlingDeserializer(newDelegatee0, _namesToWrap);
+     }
+ 
+     @Override
+@@ -77,10 +85,11 @@ public class WrapperHandlingDeserializer
+             vt = ctxt.constructType(_delegatee.handledType());
+         }
+         ValueDeserializer<?> del = ctxt.handleSecondaryContextualization(_delegatee, property, vt);
+-        BeanDeserializerBase newDelegatee = _verifyDeserType(del);
++        BeanDeserializerBase bean = _verifyDeserType(del);
++        ValueDeserializer<?> newDelegatee = del;
+         
+         // Let's go through the properties now...
+-        Iterator<SettableBeanProperty> it = newDelegatee.properties();
++        Iterator<SettableBeanProperty> it = bean.properties();
+         HashSet<String> unwrappedNames = null;
+         while (it.hasNext()) {
+             SettableBeanProperty prop = it.next();
+@@ -186,6 +195,9 @@ public class WrapperHandlingDeserializer
+ 
+     protected BeanDeserializerBase _verifyDeserType(ValueDeserializer<?> deser)
+     {
++        while (deser instanceof DelegatingDeserializer dd && !(deser instanceof WrapperHandlingDeserializer)) {
++            deser = dd.getDelegatee();
++        }
+         if (!(deser instanceof BeanDeserializerBase bdb)) {
+             throw new IllegalArgumentException("Can not change delegate to be of type "
+                     +deser.getClass().getName());
+diff --git a/src/main/java/tools/jackson/dataformat/xml/deser/XmlBeanDeserializerModifier.java b/src/main/java/tools/jackson/dataformat/xml/deser/XmlBeanDeserializerModifier.java
+index 9b25c4d9..e45fb164 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/deser/XmlBeanDeserializerModifier.java
++++ b/src/main/java/tools/jackson/dataformat/xml/deser/XmlBeanDeserializerModifier.java
+@@ -5,6 +5,7 @@ import java.util.*;
+ import tools.jackson.databind.*;
+ import tools.jackson.databind.deser.*;
+ import tools.jackson.databind.deser.bean.BeanDeserializerBase;
++import tools.jackson.databind.deser.std.DelegatingDeserializer;
+ import tools.jackson.databind.introspect.AnnotatedMember;
+ import tools.jackson.databind.introspect.BeanPropertyDefinition;
+ import tools.jackson.dataformat.xml.util.AnnotationUtil;
+@@ -83,6 +84,15 @@ public class XmlBeanDeserializerModifier
+             BeanDescription.Supplier beanDescRef, ValueDeserializer<?> deser0)
+     {
+         if (!(deser0 instanceof BeanDeserializerBase)) {
++            // [dataformat-xml#...]: other modifiers may have wrapped the bean deserializer
++            // in a delegating one; still need wrapper handling
++            ValueDeserializer<?> d = deser0;
++            while (d instanceof DelegatingDeserializer dd) {
++                d = dd.getDelegatee();
++            }
++            if (d instanceof BeanDeserializerBase && !(deser0 instanceof WrapperHandlingDeserializer)) {
++                return new WrapperHandlingDeserializer(deser0, null);
++            }
+             return deser0;
+         }
+         /* 17-Aug-2013, tatu: One important special case first: if we have one "XML Text"

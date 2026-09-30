@@ -1,0 +1,21 @@
+diff --git a/src/main/java/tools/jackson/dataformat/xml/ser/ToXmlGenerator.java b/src/main/java/tools/jackson/dataformat/xml/ser/ToXmlGenerator.java
+index ed21a45b..f07e82c8 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/ser/ToXmlGenerator.java
++++ b/src/main/java/tools/jackson/dataformat/xml/ser/ToXmlGenerator.java
+@@ -438,6 +438,16 @@ public class ToXmlGenerator
+             setNextName(new QName(XMLConstants.W3C_XML_SCHEMA_INSTANCE_NS_URI,
+                     "type", "xsi"));
+             setNextIsAttribute(true);
++        } else if (name.isEmpty()) {
++            // Empty property name (used, for example, as the "unnamed" text
++            // pseudo-property produced when reading XML text content into an
++            // untyped `Map`, as happens with `@JsonAnySetter`) cannot be written
++            // as a wrapping element (that would produce invalid, empty-named XML
++            // tags); instead write its value as unwrapped textual content of
++            // the parent element.
++            ns = (_nextName == null) ? "" : _nextName.getNamespaceURI();
++            setNextName(new QName(ns, name));
++            setNextIsUnwrapped(true);
+         } else {
+             // Should this ever get called?
+             ns = (_nextName == null) ? "" : _nextName.getNamespaceURI();

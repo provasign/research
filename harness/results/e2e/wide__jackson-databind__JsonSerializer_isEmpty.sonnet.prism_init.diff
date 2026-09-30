@@ -1,0 +1,618 @@
+diff --git a/src/main/java/com/fasterxml/jackson/databind/JsonSerializer.java b/src/main/java/com/fasterxml/jackson/databind/JsonSerializer.java
+index 5ddca81b6..6fc4fd145 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/JsonSerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/JsonSerializer.java
+@@ -200,12 +200,12 @@ public abstract class JsonSerializer<T>
+      *<p>
+      * Default implementation will consider only null values to be empty.
+      *
+-     * @deprecated Since 2.5 Use {@link #isEmpty(SerializerProvider, Object)} instead;
++     * @deprecated Since 2.5 Use {@link #isEmptyValue(SerializerProvider, Object)} instead;
+      *   will be removed from 3.0
+      */
+     @Deprecated
+     public boolean isEmpty(T value) {
+-        return isEmpty(null, value);
++        return isEmptyValue(null, value);
+     }
+ 
+     /**
+@@ -219,7 +219,7 @@ public abstract class JsonSerializer<T>
+      *
+      * @since 2.5
+      */
+-    public boolean isEmpty(SerializerProvider provider, T value) {
++    public boolean isEmptyValue(SerializerProvider provider, T value) {
+         return (value == null);
+     }
+ 
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ext/CoreXMLSerializers.java b/src/main/java/com/fasterxml/jackson/databind/ext/CoreXMLSerializers.java
+index c56eb368f..b13d2d189 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ext/CoreXMLSerializers.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ext/CoreXMLSerializers.java
+@@ -72,8 +72,8 @@ public class CoreXMLSerializers extends Serializers.Base
+         }
+ 
+         @Override
+-        public boolean isEmpty(SerializerProvider provider, XMLGregorianCalendar value) {
+-            return _delegate.isEmpty(provider, _convert(value));
++        public boolean isEmptyValue(SerializerProvider provider, XMLGregorianCalendar value) {
++            return _delegate.isEmptyValue(provider, _convert(value));
+         }
+ 
+         @Override
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ext/SqlBlobSerializer.java b/src/main/java/com/fasterxml/jackson/databind/ext/SqlBlobSerializer.java
+index 503285599..dae692677 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ext/SqlBlobSerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ext/SqlBlobSerializer.java
+@@ -35,7 +35,7 @@ extends StdScalarSerializer<Blob>
+     }
+ 
+     @Override
+-    public boolean isEmpty(SerializerProvider provider, Blob value) {
++    public boolean isEmptyValue(SerializerProvider provider, Blob value) {
+         // Could see if "length == 0" but that might be expensive operation
+         return (value == null);
+     }
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/BeanPropertyWriter.java b/src/main/java/com/fasterxml/jackson/databind/ser/BeanPropertyWriter.java
+index 8a5158237..481b76aa9 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/BeanPropertyWriter.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/BeanPropertyWriter.java
+@@ -713,7 +713,7 @@ public class BeanPropertyWriter extends PropertyWriter // which extends
+         // and then see if we must suppress certain values (default, empty)
+         if (_suppressableValue != null) {
+             if (MARKER_FOR_EMPTY == _suppressableValue) {
+-                if (ser.isEmpty(prov, value)) {
++                if (ser.isEmptyValue(prov, value)) {
+                     return;
+                 }
+             } else if (_suppressableValue.equals(value)) {
+@@ -785,7 +785,7 @@ public class BeanPropertyWriter extends PropertyWriter // which extends
+         // and then see if we must suppress certain values (default, empty)
+         if (_suppressableValue != null) {
+             if (MARKER_FOR_EMPTY == _suppressableValue) {
+-                if (ser.isEmpty(prov, value)) { // can NOT suppress entries in
++                if (ser.isEmptyValue(prov, value)) { // can NOT suppress entries in
+                                                 // tabular output
+                     serializeAsPlaceholder(bean, gen, prov);
+                     return;
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/ContainerSerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/ContainerSerializer.java
+index d716dc6ce..801fe369d 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/ContainerSerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/ContainerSerializer.java
+@@ -93,7 +93,7 @@ public abstract class ContainerSerializer<T>
+ 
+ // since 2.5: should be declared abstract in future (2.9?)
+ //    @Override
+-//    public abstract boolean isEmpty(SerializerProvider prov, T value);
++//    public abstract boolean isEmptyValue(SerializerProvider prov, T value);
+ 
+     /**
+      * Method called to determine if the given value (of type handled by
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/VirtualBeanPropertyWriter.java b/src/main/java/com/fasterxml/jackson/databind/ser/VirtualBeanPropertyWriter.java
+index 56e6b2abf..4ccbd5188 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/VirtualBeanPropertyWriter.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/VirtualBeanPropertyWriter.java
+@@ -167,7 +167,7 @@ public abstract class VirtualBeanPropertyWriter
+         }
+         if (_suppressableValue != null) {
+             if (MARKER_FOR_EMPTY == _suppressableValue) {
+-                if (ser.isEmpty(prov, value)) {
++                if (ser.isEmptyValue(prov, value)) {
+                     return;
+                 }
+             } else if (_suppressableValue.equals(value)) {
+@@ -217,7 +217,7 @@ public abstract class VirtualBeanPropertyWriter
+         }
+         if (_suppressableValue != null) {
+             if (MARKER_FOR_EMPTY == _suppressableValue) {
+-                if (ser.isEmpty(prov, value)) {
++                if (ser.isEmptyValue(prov, value)) {
+                     serializeAsPlaceholder(bean, gen, prov);
+                     return;
+                 }
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/impl/IndexedListSerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/impl/IndexedListSerializer.java
+index dc4b32056..5858092cd 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/impl/IndexedListSerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/impl/IndexedListSerializer.java
+@@ -47,7 +47,7 @@ public final class IndexedListSerializer
+      */
+ 
+     @Override
+-    public boolean isEmpty(SerializerProvider prov, List<?> value) {
++    public boolean isEmptyValue(SerializerProvider prov, List<?> value) {
+         return value.isEmpty();
+     }
+ 
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/impl/IteratorSerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/impl/IteratorSerializer.java
+index 10aba9b65..be84e3e00 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/impl/IteratorSerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/impl/IteratorSerializer.java
+@@ -26,7 +26,7 @@ public class IteratorSerializer
+     }
+ 
+     @Override
+-    public boolean isEmpty(SerializerProvider prov, Iterator<?> value) {
++    public boolean isEmptyValue(SerializerProvider prov, Iterator<?> value) {
+         return !value.hasNext();
+     }
+ 
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/impl/MapEntrySerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/impl/MapEntrySerializer.java
+index 1bff1c254..31a0ee7c8 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/impl/MapEntrySerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/impl/MapEntrySerializer.java
+@@ -296,7 +296,7 @@ public class MapEntrySerializer
+     }
+ 
+     @Override
+-    public boolean isEmpty(SerializerProvider prov, Entry<?, ?> entry)
++    public boolean isEmptyValue(SerializerProvider prov, Entry<?, ?> entry)
+     {
+         Object value = entry.getValue();
+         if (value == null) {
+@@ -320,7 +320,7 @@ public class MapEntrySerializer
+             }
+         }
+         if (_suppressableValue == MARKER_FOR_EMPTY) {
+-            return valueSer.isEmpty(prov, value);
++            return valueSer.isEmptyValue(prov, value);
+         }
+         return _suppressableValue.equals(value);
+     }
+@@ -391,7 +391,7 @@ public class MapEntrySerializer
+             // also may need to skip non-empty values:
+             if (_suppressableValue != null) {
+                 if (_suppressableValue == MARKER_FOR_EMPTY) {
+-                    if (valueSer.isEmpty(provider, valueElem)) {
++                    if (valueSer.isEmptyValue(provider, valueElem)) {
+                         return;
+                     }
+                 }
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/impl/StringArraySerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/impl/StringArraySerializer.java
+index c8fb0ccea..16ac68553 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/impl/StringArraySerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/impl/StringArraySerializer.java
+@@ -140,7 +140,7 @@ public class StringArraySerializer
+     }
+ 
+     @Override
+-    public boolean isEmpty(SerializerProvider prov, String[] value) {
++    public boolean isEmptyValue(SerializerProvider prov, String[] value) {
+         return (value.length == 0);
+     }
+ 
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/impl/UnwrappingBeanPropertyWriter.java b/src/main/java/com/fasterxml/jackson/databind/ser/impl/UnwrappingBeanPropertyWriter.java
+index 2e77b9c5d..197e6e988 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/impl/UnwrappingBeanPropertyWriter.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/impl/UnwrappingBeanPropertyWriter.java
+@@ -103,7 +103,7 @@ public class UnwrappingBeanPropertyWriter
+         }
+         if (_suppressableValue != null) {
+             if (MARKER_FOR_EMPTY == _suppressableValue) {
+-                if (ser.isEmpty(prov, value)) {
++                if (ser.isEmptyValue(prov, value)) {
+                     return;
+                 }
+             } else if (_suppressableValue.equals(value)) {
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/ByteArraySerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/ByteArraySerializer.java
+index 015850109..48482d791 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/ByteArraySerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/ByteArraySerializer.java
+@@ -37,7 +37,7 @@ public class ByteArraySerializer extends StdSerializer<byte[]>
+     }
+ 
+     @Override
+-    public boolean isEmpty(SerializerProvider prov, byte[] value) {
++    public boolean isEmptyValue(SerializerProvider prov, byte[] value) {
+         return value.length == 0;
+     }
+ 
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/CollectionSerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/CollectionSerializer.java
+index 75202d273..a25c08c07 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/CollectionSerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/CollectionSerializer.java
+@@ -80,7 +80,7 @@ public class CollectionSerializer
+      */
+ 
+     @Override
+-    public boolean isEmpty(SerializerProvider prov, Collection<?> value) {
++    public boolean isEmptyValue(SerializerProvider prov, Collection<?> value) {
+         return value.isEmpty();
+     }
+ 
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/DateTimeSerializerBase.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/DateTimeSerializerBase.java
+index 71b28e911..7d4d87c9b 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/DateTimeSerializerBase.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/DateTimeSerializerBase.java
+@@ -138,7 +138,7 @@ df0.getClass().getName()));
+      */
+ 
+     @Override
+-    public boolean isEmpty(SerializerProvider serializers, T value) {
++    public boolean isEmptyValue(SerializerProvider serializers, T value) {
+         // 09-Mar-2017, tatu: as per [databind#1550] timestamp 0 is NOT "empty"; but
+         //   with versions up to 2.8.x this was the case. Fixed for 2.9.
+ //        return _timestamp(value) == 0L;
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/EnumSetSerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/EnumSetSerializer.java
+index d2d14f84f..5365a2525 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/EnumSetSerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/EnumSetSerializer.java
+@@ -38,7 +38,7 @@ public class EnumSetSerializer
+     }
+ 
+     @Override
+-    public boolean isEmpty(SerializerProvider prov, EnumSet<? extends Enum<?>> value) {
++    public boolean isEmptyValue(SerializerProvider prov, EnumSet<? extends Enum<?>> value) {
+         return value.isEmpty();
+     }
+ 
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/IterableSerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/IterableSerializer.java
+index 4116ef603..b4a23b987 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/IterableSerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/IterableSerializer.java
+@@ -38,7 +38,7 @@ public class IterableSerializer
+     }
+ 
+     @Override
+-    public boolean isEmpty(SerializerProvider prov, Iterable<?> value) {
++    public boolean isEmptyValue(SerializerProvider prov, Iterable<?> value) {
+         // Not really good way to implement this, but has to do for now:
+         return !value.iterator().hasNext();
+     }
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/JsonValueSerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/JsonValueSerializer.java
+index a60bf8226..d987f02dd 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/JsonValueSerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/JsonValueSerializer.java
+@@ -187,7 +187,7 @@ public class JsonValueSerializer
+      */
+ 
+     @Override // since 2.12
+-    public boolean isEmpty(SerializerProvider ctxt, Object bean)
++    public boolean isEmptyValue(SerializerProvider ctxt, Object bean)
+     {
+         // 31-Oct-2020, tatu: Should perhaps catch access issue here... ?
+         Object referenced = _accessor.getValue(bean);
+@@ -202,7 +202,7 @@ public class JsonValueSerializer
+                 throw new RuntimeJsonMappingException(e);
+             }
+         }
+-        return ser.isEmpty(ctxt, referenced);
++        return ser.isEmptyValue(ctxt, referenced);
+     }
+ 
+     /*
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/MapSerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/MapSerializer.java
+index 37048b170..2cf522001 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/MapSerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/MapSerializer.java
+@@ -625,7 +625,7 @@ public class MapSerializer
+     }
+ 
+     @Override
+-    public boolean isEmpty(SerializerProvider prov, Map<?,?> value)
++    public boolean isEmptyValue(SerializerProvider prov, Map<?,?> value)
+     {
+         if (value.isEmpty()) {
+             return true;
+@@ -648,7 +648,7 @@ public class MapSerializer
+                     return false;
+                 }
+                 if (checkEmpty) {
+-                    if (!valueSer.isEmpty(prov, elemValue)) {
++                    if (!valueSer.isEmptyValue(prov, elemValue)) {
+                         return false;
+                     }
+                 } else if ((supp == null) || !supp.equals(elemValue)) {
+@@ -672,7 +672,7 @@ public class MapSerializer
+                 return false;
+             }
+             if (checkEmpty) {
+-                if (!valueSer.isEmpty(prov, elemValue)) {
++                if (!valueSer.isEmptyValue(prov, elemValue)) {
+                     return false;
+                 }
+             } else if ((supp == null) || !supp.equals(elemValue)) {
+@@ -853,7 +853,7 @@ public class MapSerializer
+                 }
+                 // also may need to skip non-empty values:
+                 if (checkEmpty) {
+-                    if (valueSer.isEmpty(provider, valueElem)) {
++                    if (valueSer.isEmptyValue(provider, valueElem)) {
+                         continue;
+                     }
+                 } else if (suppressableValue != null) {
+@@ -956,7 +956,7 @@ public class MapSerializer
+                 }
+                 // also may need to skip non-empty values:
+                 if (checkEmpty) {
+-                    if (valueSer.isEmpty(provider, valueElem)) {
++                    if (valueSer.isEmptyValue(provider, valueElem)) {
+                         continue;
+                     }
+                 } else if (suppressableValue != null) {
+@@ -1012,7 +1012,7 @@ public class MapSerializer
+                 }
+                 // also may need to skip non-empty values:
+                 if (checkEmpty) {
+-                    if (valueSer.isEmpty(provider, valueElem)) {
++                    if (valueSer.isEmptyValue(provider, valueElem)) {
+                         continue;
+                     }
+                 } else if (suppressableValue != null) {
+@@ -1076,7 +1076,7 @@ public class MapSerializer
+                 }
+                 // also may need to skip non-empty values:
+                 if (checkEmpty) {
+-                    if (valueSer.isEmpty(provider, valueElem)) {
++                    if (valueSer.isEmptyValue(provider, valueElem)) {
+                         continue;
+                     }
+                 } else if (suppressableValue != null) {
+@@ -1238,7 +1238,7 @@ public class MapSerializer
+                 valueSer = _findSerializer(provider, value);
+             }
+             if (_suppressableValue == MARKER_FOR_EMPTY) {
+-                if (valueSer.isEmpty(provider, value)) {
++                if (valueSer.isEmptyValue(provider, value)) {
+                     return;
+                 }
+             } else if ((_suppressableValue != null)
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/NumberSerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/NumberSerializer.java
+index 56c2391da..cb525ab44 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/NumberSerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/NumberSerializer.java
+@@ -131,7 +131,7 @@ public class NumberSerializer
+         }
+ 
+         @Override
+-        public boolean isEmpty(SerializerProvider prov, Object value) {
++        public boolean isEmptyValue(SerializerProvider prov, Object value) {
+             // As per [databind#2513], should not delegate; also, never empty (numbers do
+             // have "default value" to filter by, just not "empty"
+             return false;
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/ObjectArraySerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/ObjectArraySerializer.java
+index 3cfb21042..ee7e80a34 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/ObjectArraySerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/ObjectArraySerializer.java
+@@ -182,7 +182,7 @@ public class ObjectArraySerializer
+     }
+ 
+     @Override
+-    public boolean isEmpty(SerializerProvider prov, Object[] value) {
++    public boolean isEmptyValue(SerializerProvider prov, Object[] value) {
+         return value.length == 0;
+     }
+ 
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/ReferenceTypeSerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/ReferenceTypeSerializer.java
+index 6585d29af..a38a4da4a 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/ReferenceTypeSerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/ReferenceTypeSerializer.java
+@@ -326,7 +326,7 @@ public abstract class ReferenceTypeSerializer<T>
+      */
+ 
+     @Override
+-    public boolean isEmpty(SerializerProvider provider, T value)
++    public boolean isEmptyValue(SerializerProvider provider, T value)
+     {
+         // First, absent value (note: null check is just sanity check here)
+         if (!_isValuePresent(value)) {
+@@ -348,7 +348,7 @@ public abstract class ReferenceTypeSerializer<T>
+             }
+         }
+         if (_suppressableValue == MARKER_FOR_EMPTY) {
+-            return ser.isEmpty(provider, contents);
++            return ser.isEmptyValue(provider, contents);
+         }
+         return _suppressableValue.equals(contents);
+     }
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/SerializableSerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/SerializableSerializer.java
+index 93efb6858..079286709 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/SerializableSerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/SerializableSerializer.java
+@@ -27,7 +27,7 @@ public class SerializableSerializer
+     protected SerializableSerializer() { super(JsonSerializable.class); }
+ 
+     @Override
+-    public boolean isEmpty(SerializerProvider serializers, JsonSerializable value) {
++    public boolean isEmptyValue(SerializerProvider serializers, JsonSerializable value) {
+         if (value instanceof JsonSerializable.Base) {
+             return ((JsonSerializable.Base) value).isEmpty(serializers);
+         }
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/StaticListSerializerBase.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/StaticListSerializerBase.java
+index a641266db..f06c5d576 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/StaticListSerializerBase.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/StaticListSerializerBase.java
+@@ -101,7 +101,7 @@ public abstract class StaticListSerializerBase<T extends Collection<?>>
+     }
+ 
+     @Override
+-    public boolean isEmpty(SerializerProvider provider, T value) {
++    public boolean isEmptyValue(SerializerProvider provider, T value) {
+         return (value == null) || (value.isEmpty());
+     }
+ 
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/StdArraySerializers.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/StdArraySerializers.java
+index fbf05de4c..9d8c493f5 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/StdArraySerializers.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/StdArraySerializers.java
+@@ -131,7 +131,7 @@ public class StdArraySerializers
+         }
+ 
+         @Override
+-        public boolean isEmpty(SerializerProvider prov, boolean[] value) {
++        public boolean isEmptyValue(SerializerProvider prov, boolean[] value) {
+             return value.length == 0;
+         }
+ 
+@@ -211,7 +211,7 @@ public class StdArraySerializers
+         }
+ 
+         @Override
+-        public boolean isEmpty(SerializerProvider prov, short[] value) {
++        public boolean isEmptyValue(SerializerProvider prov, short[] value) {
+             return value.length == 0;
+         }
+ 
+@@ -275,7 +275,7 @@ public class StdArraySerializers
+         public CharArraySerializer() { super(char[].class); }
+ 
+         @Override
+-        public boolean isEmpty(SerializerProvider prov, char[] value) {
++        public boolean isEmptyValue(SerializerProvider prov, char[] value) {
+             return value.length == 0;
+         }
+ 
+@@ -384,7 +384,7 @@ public class StdArraySerializers
+         }
+ 
+         @Override
+-        public boolean isEmpty(SerializerProvider prov, int[] value) {
++        public boolean isEmptyValue(SerializerProvider prov, int[] value) {
+             return value.length == 0;
+         }
+ 
+@@ -459,7 +459,7 @@ public class StdArraySerializers
+         }
+ 
+         @Override
+-        public boolean isEmpty(SerializerProvider prov, long[] value) {
++        public boolean isEmptyValue(SerializerProvider prov, long[] value) {
+             return value.length == 0;
+         }
+ 
+@@ -543,7 +543,7 @@ public class StdArraySerializers
+         }
+ 
+         @Override
+-        public boolean isEmpty(SerializerProvider prov, float[] value) {
++        public boolean isEmptyValue(SerializerProvider prov, float[] value) {
+             return value.length == 0;
+         }
+ 
+@@ -649,7 +649,7 @@ public class StdArraySerializers
+         }
+ 
+         @Override
+-        public boolean isEmpty(SerializerProvider prov, double[] value) {
++        public boolean isEmptyValue(SerializerProvider prov, double[] value) {
+             return value.length == 0;
+         }
+ 
+@@ -734,7 +734,7 @@ public class StdArraySerializers
+         }
+ 
+         @Override
+-        public boolean isEmpty(SerializerProvider prov, float[] value) {
++        public boolean isEmptyValue(SerializerProvider prov, float[] value) {
+             return value.length == 0;
+         }
+ 
+@@ -822,7 +822,7 @@ public class StdArraySerializers
+         }
+ 
+         @Override
+-        public boolean isEmpty(SerializerProvider prov, double[] value) {
++        public boolean isEmptyValue(SerializerProvider prov, double[] value) {
+             return value.length == 0;
+         }
+ 
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/StdDelegatingSerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/StdDelegatingSerializer.java
+index de94c4367..3d5e3ca4f 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/StdDelegatingSerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/StdDelegatingSerializer.java
+@@ -197,7 +197,7 @@ public class StdDelegatingSerializer
+     }
+ 
+     @Override
+-    public boolean isEmpty(SerializerProvider ctxt, Object value)
++    public boolean isEmptyValue(SerializerProvider ctxt, Object value)
+     {
+         Object delegateValue = convertValue(ctxt, value);
+         if (delegateValue == null) {
+@@ -206,7 +206,7 @@ public class StdDelegatingSerializer
+         if (_delegateSerializer == null) { // best we can do for now, too costly to look up
+             return (value == null);
+         }
+-        return _delegateSerializer.isEmpty(ctxt, delegateValue);
++        return _delegateSerializer.isEmptyValue(ctxt, delegateValue);
+     }
+ 
+     /*
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/StringSerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/StringSerializer.java
+index 7c1a97c79..2be88a668 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/StringSerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/StringSerializer.java
+@@ -30,7 +30,7 @@ public final class StringSerializer
+     public StringSerializer() { super(String.class, false); }
+ 
+     @Override
+-    public boolean isEmpty(SerializerProvider prov, Object value) {
++    public boolean isEmptyValue(SerializerProvider prov, Object value) {
+         String str = (String) value;
+         return str.isEmpty();
+     }
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/ToEmptyObjectSerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/ToEmptyObjectSerializer.java
+index 5d9182a18..3f98b50ad 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/ToEmptyObjectSerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/ToEmptyObjectSerializer.java
+@@ -53,7 +53,7 @@ public class ToEmptyObjectSerializer
+     }
+ 
+     @Override
+-    public boolean isEmpty(SerializerProvider provider, Object value) {
++    public boolean isEmptyValue(SerializerProvider provider, Object value) {
+         return true;
+     }
+ 
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/ToStringSerializerBase.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/ToStringSerializerBase.java
+index 034c2a3a9..e428e6379 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/ToStringSerializerBase.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/ToStringSerializerBase.java
+@@ -30,7 +30,7 @@ public abstract class ToStringSerializerBase
+     }
+ 
+     @Override
+-    public boolean isEmpty(SerializerProvider prov, Object value) {
++    public boolean isEmptyValue(SerializerProvider prov, Object value) {
+         return valueToString(value).isEmpty();
+     }
+ 
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/UUIDSerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/UUIDSerializer.java
+index db614690d..ab51b5e51 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/UUIDSerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/UUIDSerializer.java
+@@ -47,7 +47,7 @@ public class UUIDSerializer
+     }
+ 
+     @Override
+-    public boolean isEmpty(SerializerProvider prov, UUID value)
++    public boolean isEmptyValue(SerializerProvider prov, UUID value)
+     {
+         // Null UUID is empty, so...
+         return value.getLeastSignificantBits() == 0L
+diff --git a/src/test/java/com/fasterxml/jackson/databind/ser/TestEmptyClass.java b/src/test/java/com/fasterxml/jackson/databind/ser/TestEmptyClass.java
+index 269abfe98..0796bb206 100644
+--- a/src/test/java/com/fasterxml/jackson/databind/ser/TestEmptyClass.java
++++ b/src/test/java/com/fasterxml/jackson/databind/ser/TestEmptyClass.java
+@@ -47,7 +47,7 @@ public class TestEmptyClass
+         }
+ 
+         @Override
+-        public boolean isEmpty(SerializerProvider provider, NonZero value) {
++        public boolean isEmptyValue(SerializerProvider provider, NonZero value) {
+             if (value == null) return true;
+             return (value.nr == 0);
+         }
+diff --git a/src/test/java/com/fasterxml/jackson/databind/ser/filter/JsonInclude4464Test.java b/src/test/java/com/fasterxml/jackson/databind/ser/filter/JsonInclude4464Test.java
+index d52fd3022..0e0e4fbc9 100644
+--- a/src/test/java/com/fasterxml/jackson/databind/ser/filter/JsonInclude4464Test.java
++++ b/src/test/java/com/fasterxml/jackson/databind/ser/filter/JsonInclude4464Test.java
+@@ -29,7 +29,7 @@ public class JsonInclude4464Test {
+         }
+ 
+         @Override
+-        public boolean isEmpty(SerializerProvider provider, Bar value) {
++        public boolean isEmptyValue(SerializerProvider provider, Bar value) {
+             return "I_AM_EMPTY".equals(value.getName());
+         }
+     }

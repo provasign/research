@@ -1,0 +1,19 @@
+diff --git a/src/main/java/tools/jackson/dataformat/xml/ser/ToXmlGenerator.java b/src/main/java/tools/jackson/dataformat/xml/ser/ToXmlGenerator.java
+index ed21a45b..51348606 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/ser/ToXmlGenerator.java
++++ b/src/main/java/tools/jackson/dataformat/xml/ser/ToXmlGenerator.java
+@@ -431,6 +431,14 @@ public class ToXmlGenerator
+             _reportError("Can not write a property name, expecting a value");
+         }
+ 
++        // [dataformat-xml#611]: Map (typically populated via `@JsonAnySetter`) may
++        // contain XML "text" content under the default unnamed-text-property key ("");
++        // such a value must be written as unwrapped text, not as an element with an
++        // empty name (which would produce mangled/invalid XML).
++        if (name.isEmpty()) {
++            setNextIsUnwrapped(true);
++        }
++
+         String ns;
+         // 30-Jan-2024, tatu: Surprise!
+         if (XmlWriteFeature.AUTO_DETECT_XSI_TYPE.enabledIn(_formatFeatures)

@@ -1,0 +1,51 @@
+diff --git a/gson/src/main/java/com/google/gson/internal/bind/JsonTreeReader.java b/gson/src/main/java/com/google/gson/internal/bind/JsonTreeReader.java
+index 44be5ad0..fc4560e2 100644
+--- a/gson/src/main/java/com/google/gson/internal/bind/JsonTreeReader.java
++++ b/gson/src/main/java/com/google/gson/internal/bind/JsonTreeReader.java
+@@ -362,8 +362,10 @@ public final class JsonTreeReader extends JsonReader {
+     expect(JsonToken.NAME);
+     Iterator<?> i = (Iterator<?>) peekStack();
+     Map.Entry<?, ?> entry = (Map.Entry<?, ?>) i.next();
++    String name = (String) entry.getKey();
++    pathNames[stackSize - 1] = name;
+     push(entry.getValue());
+-    push(new JsonPrimitive((String) entry.getKey()));
++    push(new JsonPrimitive(name));
+   }
+ 
+   private void push(Object newTop) {
+diff --git a/gson/src/main/java/com/google/gson/stream/JsonReader.java b/gson/src/main/java/com/google/gson/stream/JsonReader.java
+index 47668b0f..83a7407f 100644
+--- a/gson/src/main/java/com/google/gson/stream/JsonReader.java
++++ b/gson/src/main/java/com/google/gson/stream/JsonReader.java
+@@ -1957,19 +1957,27 @@ public class JsonReader implements Closeable {
+             if (p == PEEKED_NONE) {
+               p = reader.doPeek();
+             }
++            String name;
+             switch (p) {
+               case PEEKED_DOUBLE_QUOTED_NAME:
+-                reader.peeked = PEEKED_DOUBLE_QUOTED;
++                name = reader.nextQuotedValue('"');
++                reader.peeked = PEEKED_BUFFERED;
++                reader.peekedString = name;
+                 break;
+               case PEEKED_SINGLE_QUOTED_NAME:
+-                reader.peeked = PEEKED_SINGLE_QUOTED;
++                name = reader.nextQuotedValue('\'');
++                reader.peeked = PEEKED_BUFFERED;
++                reader.peekedString = name;
+                 break;
+               case PEEKED_UNQUOTED_NAME:
+-                reader.peeked = PEEKED_UNQUOTED;
++                name = reader.nextUnquotedValue();
++                reader.peeked = PEEKED_BUFFERED;
++                reader.peekedString = name;
+                 break;
+               default:
+                 throw reader.unexpectedTokenError("a name");
+             }
++            reader.pathNames[reader.stackSize - 1] = name;
+           }
+         };
+   }

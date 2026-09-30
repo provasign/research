@@ -1,0 +1,13 @@
+diff --git a/packages/zod/src/v4/core/memoizer.ts b/packages/zod/src/v4/core/memoizer.ts
+index 72a85db7..fd54a90e 100644
+--- a/packages/zod/src/v4/core/memoizer.ts
++++ b/packages/zod/src/v4/core/memoizer.ts
+@@ -56,6 +56,8 @@ function isRecursive(inst: $ZodType, stack: Set<object>): boolean {
+     // `for...in` skips symbols, so a cycle through a declared symbol key would read as non-recursive
+     if (shape) for (const key of Reflect.ownKeys(shape)) check(shape[key]);
+     for (const key in def) {
++      // A structural edge to a child schema is always a plain value; a getter (e.g. `defaultValue`, `catchValue`) computes a substitute value on read, and invoking it here would run a user callback as a side effect of recursion detection.
++      if (Object.getOwnPropertyDescriptor(def, key)?.get) continue;
+       const value = def[key];
+       if (!value || typeof value !== "object") continue;
+       if (value._zod) check(value);

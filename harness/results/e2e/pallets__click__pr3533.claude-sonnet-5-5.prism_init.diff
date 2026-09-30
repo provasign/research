@@ -1,0 +1,15 @@
+diff --git a/src/click/_termui_impl.py b/src/click/_termui_impl.py
+index 3336c37c..1842ca06 100644
+--- a/src/click/_termui_impl.py
++++ b/src/click/_termui_impl.py
+@@ -452,6 +452,10 @@ def get_pager_file(color: bool | None = None) -> t.Generator[t.TextIO, None, Non
+             yield stream
+         finally:
+             stream.flush()
++            # Detach so garbage collecting the wrapper doesn't close the
++            # underlying stream, which we don't own.
++            if isinstance(stream, MaybeStripAnsi):
++                stream.detach()
+ 
+ 
+ @contextlib.contextmanager

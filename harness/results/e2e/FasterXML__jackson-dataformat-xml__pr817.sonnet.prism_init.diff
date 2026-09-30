@@ -1,0 +1,91 @@
+diff --git a/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java b/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
+index 9d108d9c..122c9c22 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
++++ b/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
+@@ -574,6 +574,11 @@ public class FromXmlParser
+             }
+             String name = _xmlTokens.getLocalName();
+             _streamReadContext.setCurrentName(name);
++            // [dataformat-xml#449]: track that this object has a "real" element
++            // child, as opposed to just attributes, so trailing/leading
++            // whitespace-only text can still be exposed as text content when
++            // there is no such child (e.g. an attribute-bearing leaf element)
++            _streamReadContext.markHasElementChild();
+ 
+             // Ok: virtual wrapping can be done by simply repeating current START_ELEMENT.
+             // Couple of ways to do it; but start by making _xmlTokens replay the thing...
+@@ -643,7 +648,11 @@ public class FromXmlParser
+ 
+                     if (token == XmlTokenStream.XML_END_ELEMENT) {
+                         if (_streamReadContext.inArray()) {
+-                            if (XmlTokenStream._allWs(_currText)) {
++                            // [dataformat-xml#449]: only genuinely empty text (no content
++                            // at all) should be exposed as an empty Object; whitespace-only
++                            // text may be significant (e.g. bound via `@JacksonXmlText`) and
++                            // must be preserved as the (String) value instead.
++                            if (_currText == null || _currText.isEmpty()) {
+                                 // 06-Jan-2015, tatu: as per [dataformat-xml#180], need to
+                                 //    expose as empty Object, not null (or, worse, as used to
+                                 //    be done, by swallowing the token)
+@@ -676,8 +685,15 @@ XmlTokenStream.XML_END_ELEMENT, XmlTokenStream.XML_START_ELEMENT, token));
+                         _nextToken = JsonToken.PROPERTY_NAME;
+                         return _updateToken(JsonToken.START_OBJECT);
+                     } else if (XmlTokenStream._allWs(_currText)) {
+-                        token = _nextToken();
+-                        continue;
++                        // [dataformat-xml#449]: genuinely empty text, or whitespace
++                        // occurring alongside a "real" element child, is ignorable;
++                        // but non-empty whitespace-only text is this (attribute-bearing)
++                        // element's actual (sole so far) content and must be preserved.
++                        if ((_currText == null) || _currText.isEmpty()
++                                || _streamReadContext.hasElementChild()) {
++                            token = _nextToken();
++                            continue;
++                        }
+                     }
+                 } else if (_streamReadContext.inArray()) {
+                     // [dataformat-xml#319] Aaaaand for Arrays too
+diff --git a/src/main/java/tools/jackson/dataformat/xml/deser/XmlReadContext.java b/src/main/java/tools/jackson/dataformat/xml/deser/XmlReadContext.java
+index 1e8809ca..022f0eb5 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/deser/XmlReadContext.java
++++ b/src/main/java/tools/jackson/dataformat/xml/deser/XmlReadContext.java
+@@ -39,6 +39,16 @@ public final class XmlReadContext
+     protected String _currentName;
+     protected Object _currentValue;
+ 
++    /**
++     * Flag set once a "real" (element-backed) child property has been reported
++     * for this context, as opposed to just attributes: used to distinguish
++     * trailing/inter-element ignorable whitespace from whitespace-only text
++     * that is the sole content of an (attribute-bearing) element.
++     *
++     * @since 3.2
++     */
++    protected boolean _hasElementChild;
++
+     protected Set<String> _namesToWrap;
+ 
+     /**
+@@ -91,6 +101,7 @@ public final class XmlReadContext
+         _columnNr = colNr;
+         _currentName = null;
+         _currentValue = null;
++        _hasElementChild = false;
+         _namesToWrap = null;
+         // _nestingDepth is fine since reused instance at same nesting level
+         if (_dups != null) {
+@@ -215,6 +226,14 @@ public final class XmlReadContext
+         return (_namesToWrap != null) && _namesToWrap.contains(localName);
+     }
+ 
++    public boolean hasElementChild() {
++        return _hasElementChild;
++    }
++
++    public void markHasElementChild() {
++        _hasElementChild = true;
++    }
++
+     protected void convertToArray() {
+         _type = TYPE_ARRAY;
+     }

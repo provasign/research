@@ -1,0 +1,40 @@
+diff --git a/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java b/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java
+index 2734a6d0..1e035a2a 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java
++++ b/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java
+@@ -77,6 +77,11 @@ public class XmlBeanSerializerModifier
+ 
+             // first things first: no wrapping?
+             if (wrapperName == null || wrapperName == PropertyName.NO_NAME) {
++                // null unwrapped Collections/arrays: write nothing (else "<name/>" would
++                // deserialize back as a non-null List with one empty element)
++                if (!dynamicWrapping && bpw.getClass() == BeanPropertyWriter.class) {
++                    beanProperties.set(i, new SkipNullIndexedWriter(bpw));
++                }
+                 continue;
+             }
+             // no local name? Just double the wrapped name for wrapper
+@@ -92,6 +97,23 @@ public class XmlBeanSerializerModifier
+         return beanProperties;
+     }
+     
++    private static class SkipNullIndexedWriter extends BeanPropertyWriter
++    {
++        SkipNullIndexedWriter(BeanPropertyWriter base) {
++            super(base);
++        }
++
++        @Override
++        public void serializeAsProperty(Object bean, tools.jackson.core.JsonGenerator g,
++                SerializationContext ctxt) throws Exception
++        {
++            if (get(bean) == null) {
++                return;
++            }
++            super.serializeAsProperty(bean, g, ctxt);
++        }
++    }
++
+     @Override
+     public ValueSerializer<?> modifySerializer(SerializationConfig config,
+             BeanDescription.Supplier beanDescRefc, ValueSerializer<?> serializer)

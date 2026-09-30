@@ -1,0 +1,25 @@
+diff --git a/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java b/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
+index 04366becd..c7113b46b 100644
+--- a/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
++++ b/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
+@@ -1706,6 +1706,20 @@ ctor.creator()));
+             */
+         }
+ 
++        // [databind#5983]: explicit name of a READ_ONLY property is added to ignorals,
++        // but a creator parameter with that (implicit) name must still be assigned
++        if (_perPropertyIgnoredNames != null && !_isRecordType) {
++            for (POJOPropertyBuilder prop : props.values()) {
++                final String name = prop.getName();
++                if (prop.hasConstructorParameter() && _perPropertyIgnoredNames.contains(name)) {
++                    if (_nonRescuedIgnoredPropertyNames == null) {
++                        _nonRescuedIgnoredPropertyNames = new HashSet<>(_perPropertyIgnoredNames);
++                    }
++                    _perPropertyIgnoredNames.remove(name);
++                }
++            }
++        }
++
+         // and if any were renamed, merge back in...
+         if (renamed != null) {
+             for (POJOPropertyBuilder prop : renamed) {

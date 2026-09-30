@@ -1,44 +1,45 @@
 diff --git a/command.go b/command.go
-index d1fc008e..3cb72a00 100644
+index d1fc008e..ceffecb1 100644
 --- a/command.go
 +++ b/command.go
-@@ -13,6 +13,14 @@ const (
+@@ -13,6 +13,8 @@ const (
  	ignoreFlagPrefix = "test."
  
  	commandContextKey = contextKey("cli.context")
 +
-+	// preParsedFlagsKey tracks, for a single top-level Run invocation, which
-+	// flags have already had PreParse called on them. This allows a flag
-+	// instance that is shared between a parent command and one of its
-+	// subcommands to be initialized only once per Run, instead of once per
-+	// command level, which would otherwise discard a value already
-+	// populated from an env var or other source.
-+	preParsedFlagsKey = contextKey("cli.preparsed-flags")
++	preParsedFlagsContextKey = contextKey("cli.preParsedFlags")
  )
  
  type contextKey string
 diff --git a/command_run.go b/command_run.go
-index 87fa7e7f..10b53bd7 100644
+index 87fa7e7f..869c1a1a 100644
 --- a/command_run.go
 +++ b/command_run.go
-@@ -141,10 +141,20 @@ func (cmd *Command) run(ctx context.Context, osArgs []string) (_ context.Context
+@@ -136,12 +136,27 @@ func (cmd *Command) run(ctx context.Context, osArgs []string) (_ context.Context
+ 
+ 	if cmd.parent == nil {
+ 		cmd.setupCommandGraph()
++		ctx = context.WithValue(ctx, preParsedFlagsContextKey, make(map[Flag]struct{}))
+ 	}
+ 
  	var rargs Args = &stringSliceArgs{v: osArgs}
  	var args Args = &stringSliceArgs{rargs.Tail()}
  
-+	preParsedFlags, ok := ctx.Value(preParsedFlagsKey).(map[Flag]struct{})
-+	if !ok {
-+		preParsedFlags = map[Flag]struct{}{}
-+		ctx = context.WithValue(ctx, preParsedFlagsKey, preParsedFlags)
-+	}
++	preParsed, _ := ctx.Value(preParsedFlagsContextKey).(map[Flag]struct{})
 +
  	for _, f := range cmd.allFlags() {
-+		if _, seen := preParsedFlags[f]; seen {
-+			continue
++		// A flag instance may be shared between a command and one or more
++		// of its subcommands (a common pattern for "global" flags). Only
++		// run PreParse for it once per top-level Run invocation, since
++		// PreParse re-creates the flag's underlying value and would
++		// otherwise discard anything already set on it (from the command
++		// line, env vars, or files) by an ancestor command in the same run.
++		if preParsed != nil {
++			if _, ok := preParsed[f]; ok {
++				continue
++			}
++			preParsed[f] = struct{}{}
 +		}
  		if err := f.PreParse(); err != nil {
  			return ctx, err
  		}
-+		preParsedFlags[f] = struct{}{}
- 	}
- 
- 	var err error

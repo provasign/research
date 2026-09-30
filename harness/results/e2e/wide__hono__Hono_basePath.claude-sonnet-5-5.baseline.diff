@@ -1,0 +1,269 @@
+diff --git a/src/adapter/cloudflare-pages/handler.test.ts b/src/adapter/cloudflare-pages/handler.test.ts
+index 56dfa602..f34e19ad 100644
+--- a/src/adapter/cloudflare-pages/handler.test.ts
++++ b/src/adapter/cloudflare-pages/handler.test.ts
+@@ -66,10 +66,10 @@ describe('Adapter for Cloudflare Pages', () => {
+     })
+   })
+ 
+-  it('Should not use `basePath()` if path argument is not passed', async () => {
++  it('Should not use `withBasePath()` if path argument is not passed', async () => {
+     const request = new Request('http://localhost/api/error')
+     const eventContext = createEventContext({ request })
+-    const app = new Hono().basePath('/api')
++    const app = new Hono().withBasePath('/api')
+ 
+     app.onError((e) => {
+       throw e
+diff --git a/src/adapter/vercel/handler.test.ts b/src/adapter/vercel/handler.test.ts
+index 669c3bd9..696c9da6 100644
+--- a/src/adapter/vercel/handler.test.ts
++++ b/src/adapter/vercel/handler.test.ts
+@@ -22,7 +22,7 @@ describe('Adapter for Next.js', () => {
+   })
+ 
+   it('Should not use `route()` if path argument is not passed', async () => {
+-    const app = new Hono().basePath('/api')
++    const app = new Hono().withBasePath('/api')
+ 
+     app.onError((e) => {
+       throw e
+diff --git a/src/client/client.test.ts b/src/client/client.test.ts
+index abc261d9..eaf647ff 100644
+--- a/src/client/client.test.ts
++++ b/src/client/client.test.ts
+@@ -775,8 +775,8 @@ describe('Merge path with `app.route()`', () => {
+     expect(data.ok).toBe(true)
+   })
+ 
+-  it('Should have correct types - basePath() then get()', async () => {
+-    const base = new Hono<Env>().basePath('/api')
++  it('Should have correct types - withBasePath() then get()', async () => {
++    const base = new Hono<Env>().withBasePath('/api')
+     const app = base.get('/search', (c) => c.json({ ok: true }))
+     type AppType = typeof app
+     const client = hc<AppType>('http://localhost')
+@@ -786,9 +786,9 @@ describe('Merge path with `app.route()`', () => {
+     expect(data.ok).toBe(true)
+   })
+ 
+-  it('Should have correct types - basePath(), route(), get()', async () => {
++  it('Should have correct types - withBasePath(), route(), get()', async () => {
+     const book = new Hono().get('/', (c) => c.json({ ok: true }))
+-    const app = new Hono().basePath('/v1').route('/book', book)
++    const app = new Hono().withBasePath('/v1').route('/book', book)
+     type AppType = typeof app
+     const client = hc<AppType>('http://localhost')
+     const res = await client.v1.book.$get()
+@@ -803,7 +803,7 @@ describe('Merge path with `app.route()`', () => {
+       okUndefined?: boolean
+     }
+     const result: Result = { ok: true }
+-    const base = new Hono<Env>().basePath('/api')
++    const base = new Hono<Env>().withBasePath('/api')
+     const app = base.get('/search', (c) => c.json(result))
+     type AppType = typeof app
+     const client = hc<AppType>('http://localhost')
+@@ -837,7 +837,7 @@ describe('Merge path with `app.route()`', () => {
+     type Results = Result[]
+ 
+     const results: Results = [{ ok: true }]
+-    const base = new Hono<Env>().basePath('/api')
++    const base = new Hono<Env>().withBasePath('/api')
+     const app = base.get('/searchArray', (c) => c.json(results))
+     type AppType = typeof app
+     const client = hc<AppType>('http://localhost')
+@@ -901,7 +901,7 @@ describe('Merge path with `app.route()`', () => {
+   })
+ 
+   describe('With a blank path', () => {
+-    const app = new Hono().basePath('/api/v1')
++    const app = new Hono().withBasePath('/api/v1')
+     const routes = app.route(
+       '/me',
+       new Hono().route(
+@@ -926,7 +926,7 @@ describe('Merge path with `app.route()`', () => {
+   })
+ 
+   describe('With endpoint pathname', () => {
+-    const app = new Hono().basePath('/api/v1')
++    const app = new Hono().withBasePath('/api/v1')
+     const routes = app.route(
+       '/me',
+       new Hono().route(
+diff --git a/src/hono-base.ts b/src/hono-base.ts
+index 387fe89b..100bc7ba 100644
+--- a/src/hono-base.ts
++++ b/src/hono-base.ts
+@@ -218,7 +218,7 @@ class Hono<
+     path: SubPath,
+     app: Hono<SubEnv, SubSchema, SubBasePath, SubCurrentPath>
+   ): Hono<E, MergeSchemaPath<SubSchema, MergePath<BasePath, SubPath>> | S, BasePath, CurrentPath> {
+-    const subApp = this.basePath(path)
++    const subApp = this.withBasePath(path)
+     app.routes.map((r) => {
+       let handler
+       if (app.errorHandler === errorHandler) {
+@@ -235,7 +235,7 @@ class Hono<
+   }
+ 
+   /**
+-   * `.basePath()` allows base paths to be specified.
++   * `.withBasePath()` allows base paths to be specified.
+    *
+    * @see {@link https://hono.dev/docs/api/routing#base-path}
+    *
+@@ -244,10 +244,10 @@ class Hono<
+    *
+    * @example
+    * ```ts
+-   * const api = new Hono().basePath('/api')
++   * const api = new Hono().withBasePath('/api')
+    * ```
+    */
+-  basePath<SubPath extends string>(
++  withBasePath<SubPath extends string>(
+     path: SubPath
+   ): Hono<E, S, MergePath<BasePath, SubPath>, MergePath<BasePath, SubPath>> {
+     const subApp = this.#clone()
+diff --git a/src/hono.test.ts b/src/hono.test.ts
+index 01a51dbf..ef930941 100644
+--- a/src/hono.test.ts
++++ b/src/hono.test.ts
+@@ -255,7 +255,7 @@ describe('Register handlers without a path', () => {
+   })
+ 
+   describe('With specifying basePath', () => {
+-    const app = new Hono().basePath('/about')
++    const app = new Hono().withBasePath('/about')
+ 
+     app.get((c) => {
+       return c.text('About')
+@@ -425,18 +425,18 @@ describe('Routing', () => {
+   it('Nested route', async () => {
+     const app = new Hono()
+ 
+-    const book = app.basePath('/book')
++    const book = app.withBasePath('/book')
+     book.get('/', (c) => c.text('get /book'))
+     book.get('/:id', (c) => {
+       return c.text('get /book/' + c.req.param('id'))
+     })
+     book.post('/', (c) => c.text('post /book'))
+ 
+-    const user = app.basePath('/user')
++    const user = app.withBasePath('/user')
+     user.get('/login', (c) => c.text('get /user/login'))
+     user.post('/register', (c) => c.text('post /user/register'))
+ 
+-    const appForEachUser = user.basePath(':id')
++    const appForEachUser = user.withBasePath(':id')
+     appForEachUser.get('/profile', (c) => c.text('get /user/' + c.req.param('id') + '/profile'))
+ 
+     app.get('/add-path-after-route-call', (c) => c.text('get /add-path-after-route-call'))
+@@ -489,7 +489,7 @@ describe('Routing', () => {
+ 
+   it('Nested route - subApp with basePath', async () => {
+     const app = new Hono()
+-    const book = new Hono().basePath('/book')
++    const book = new Hono().withBasePath('/book')
+     book.get('/', (c) => c.text('get /book'))
+     app.route('/api', book)
+ 
+@@ -533,9 +533,9 @@ describe('Routing', () => {
+       ])
+     })
+ 
+-    it('Should merge the basePath of a subApp created with basePath()', () => {
++    it('Should merge the basePath of a subApp created with withBasePath()', () => {
+       const app = new Hono()
+-      const sub = new Hono().basePath('/book')
++      const sub = new Hono().withBasePath('/book')
+       sub.get('/:id', (c) => c.text('book'))
+       app.route('/api', sub)
+ 
+@@ -1803,9 +1803,9 @@ describe('Hono with `app.route`', () => {
+       })
+     })
+ 
+-    describe('With app.get(...handler) and app.basePath()', () => {
++    describe('With app.get(...handler) and app.withBasePath()', () => {
+       const app = new Hono()
+-      const about = new Hono().basePath('/about')
++      const about = new Hono().withBasePath('/about')
+       about.get((c) => c.text('me'))
+       app.route('/', about)
+ 
+@@ -2668,7 +2668,7 @@ describe('app.mount()', () => {
+     })
+     app.mount('/another-app2/sub-slash/', anotherApp)
+ 
+-    const api = new Hono().basePath('/api')
++    const api = new Hono().withBasePath('/api')
+     api.mount('/another-app', anotherApp)
+ 
+     it('Should return responses from Hono app', async () => {
+@@ -2733,7 +2733,7 @@ describe('app.mount()', () => {
+       expect(await res.text()).toBe('AnotherApp')
+     })
+ 
+-    it('Should return responses from AnotherApp - with `basePath()`', async () => {
++    it('Should return responses from AnotherApp - with `withBasePath()`', async () => {
+       const res = await api.request('/api/another-app')
+       expect(res.status).toBe(200)
+       expect(await res.text()).toBe('AnotherApp')
+@@ -3725,8 +3725,8 @@ describe('Compatible with extended Hono classes, such Zod OpenAPI Hono.', () =>
+       return this
+     }
+     // @ts-ignore
+-    basePath(path: string) {
+-      return new ExtendedHono(super.basePath(path))
++    withBasePath(path: string) {
++      return new ExtendedHono(super.withBasePath(path))
+     }
+   }
+   const a = new ExtendedHono()
+@@ -3773,7 +3773,7 @@ describe('Generics for Bindings and Variables', () => {
+   })
+ })
+ 
+-describe('app.basePath() with the internal #clone()', () => {
++describe('app.withBasePath() with the internal #clone()', () => {
+   const app = new Hono()
+     .notFound((c) => {
+       return c.text('Custom not found', 404)
+@@ -3781,7 +3781,7 @@ describe('app.basePath() with the internal #clone()', () => {
+     .onError((error, c) => {
+       return c.text(`Custom error "${error.message}"`, 500)
+     })
+-    .basePath('/api')
++    .withBasePath('/api')
+     .get('/test', async () => {
+       throw new Error('API Test error')
+     })
+diff --git a/src/middleware/method-not-allowed/index.test.ts b/src/middleware/method-not-allowed/index.test.ts
+index d9c17dba..784c45f1 100644
+--- a/src/middleware/method-not-allowed/index.test.ts
++++ b/src/middleware/method-not-allowed/index.test.ts
+@@ -172,7 +172,7 @@ describe('Method Not Allowed Middleware', () => {
+   })
+ 
+   it('works when installed in an app mounted using app.route()', async () => {
+-    const api = new Hono().basePath('/v1')
++    const api = new Hono().withBasePath('/v1')
+     api.use(methodNotAllowed({ app: api }))
+     api.get('/resource', (c) => c.text('GET'))
+     api.post('/resource', (c) => c.text('POST'))
+diff --git a/src/types.test.ts b/src/types.test.ts
+index fb93582c..c0b0ee87 100644
+--- a/src/types.test.ts
++++ b/src/types.test.ts
+@@ -176,7 +176,7 @@ describe('HandlerInterface', () => {
+   })
+ 
+   describe('Without path', () => {
+-    const app = new Hono<Env>().basePath('/foo/:foo')
++    const app = new Hono<Env>().withBasePath('/foo/:foo')
+ 
+     it('With basePath and path params', () => {
+       const route = app.get(async (c) => {

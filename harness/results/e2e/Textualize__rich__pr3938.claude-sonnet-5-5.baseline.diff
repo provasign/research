@@ -1,0 +1,25 @@
+diff --git a/rich/console.py b/rich/console.py
+index 994adfc..d8714e0 100644
+--- a/rich/console.py
++++ b/rich/console.py
+@@ -1723,12 +1723,15 @@ class Console:
+                 for renderable in renderables:
+                     extend(render(renderable, render_options))
+             else:
++                apply_style = self.get_style(style)
+                 for renderable in renderables:
+-                    extend(
+-                        Segment.apply_style(
+-                            render(renderable, render_options), self.get_style(style)
+-                        )
+-                    )
++                    for segment in Segment.apply_style(
++                        render(renderable, render_options), apply_style
++                    ):
++                        if segment.text == "\n" and not segment.control:
++                            # Don't let the style bleed onto the next line
++                            segment = Segment("\n")
++                        new_segments.append(segment)
+             if new_line_start:
+                 if (
+                     len("".join(segment.text for segment in new_segments).splitlines())

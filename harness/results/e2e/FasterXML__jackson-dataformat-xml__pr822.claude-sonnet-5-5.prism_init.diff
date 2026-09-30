@@ -1,0 +1,16 @@
+diff --git a/src/main/java/tools/jackson/dataformat/xml/ser/ToXmlGenerator.java b/src/main/java/tools/jackson/dataformat/xml/ser/ToXmlGenerator.java
+index ed21a45b..e60be245 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/ser/ToXmlGenerator.java
++++ b/src/main/java/tools/jackson/dataformat/xml/ser/ToXmlGenerator.java
+@@ -445,6 +445,11 @@ public class ToXmlGenerator
+             _nameToEncode.localPart = name;
+             _nameProcessor.encodeName(_nameToEncode);
+             setNextName(new QName(_nameToEncode.namespace, _nameToEncode.localPart));
++            // Empty name is used for text segments (for example via "any setter"
++            // Maps), so write value as text, not as an element with empty name
++            if (name.isEmpty()) {
++                _nextIsUnwrapped = true;
++            }
+         }
+         return this;
+     }

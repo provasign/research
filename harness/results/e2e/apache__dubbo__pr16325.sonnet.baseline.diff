@@ -1,0 +1,68 @@
+diff --git a/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/DescriptorUtils.java b/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/DescriptorUtils.java
+index e8f34431e..02f194a84 100644
+--- a/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/DescriptorUtils.java
++++ b/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/DescriptorUtils.java
+@@ -32,6 +32,7 @@ import java.io.IOException;
+ import java.io.InputStream;
+ import java.util.Arrays;
+ import java.util.List;
++import java.util.Objects;
+ 
+ /**
+  * The MetaUtils provides utility methods for working with service descriptors and method descriptors.
+@@ -81,6 +82,9 @@ public final class DescriptorUtils {
+         } else {
+             result = findReflectionMethodDescriptor(serviceDescriptor, originalMethodName);
+         }
++        if (result == null) {
++            throw new UnimplementedException("method:" + originalMethodName);
++        }
+         return result;
+     }
+ 
+@@ -110,16 +114,41 @@ public final class DescriptorUtils {
+             // Response foo(Request)
+             // void foo(Request,StreamObserver<Response>)
+             if (methodDescriptors.size() == 2) {
+-                if (methodDescriptors.get(1).getRpcType() == MethodDescriptor.RpcType.SERVER_STREAM) {
+-                    methodDescriptor = methodDescriptors.get(0);
+-                } else if (methodDescriptors.get(0).getRpcType() == MethodDescriptor.RpcType.SERVER_STREAM) {
+-                    methodDescriptor = methodDescriptors.get(1);
++                MethodDescriptor first = methodDescriptors.get(0);
++                MethodDescriptor second = methodDescriptors.get(1);
++                if (second.getRpcType() == MethodDescriptor.RpcType.SERVER_STREAM
++                        && isGeneratedUnaryStreamPair(first, second)) {
++                    methodDescriptor = first;
++                } else if (first.getRpcType() == MethodDescriptor.RpcType.SERVER_STREAM
++                        && isGeneratedUnaryStreamPair(second, first)) {
++                    methodDescriptor = second;
+                 }
+             }
+         }
+         return methodDescriptor;
+     }
+ 
++    /**
++     * Checks whether the {@code unary} and {@code stream} method descriptors describe the same
++     * underlying request/response types, i.e. the {@code stream} descriptor is the compiler
++     * generated {@link MethodDescriptor.RpcType#SERVER_STREAM} counterpart of the {@code unary}
++     * method rather than an unrelated, accidentally overloaded method sharing the same name.
++     */
++    private static boolean isGeneratedUnaryStreamPair(MethodDescriptor unary, MethodDescriptor stream) {
++        if (unary.getRpcType() != MethodDescriptor.RpcType.UNARY) {
++            return false;
++        }
++        Class<?>[] unaryParameterClasses = unary.getParameterClasses();
++        Class<?>[] streamActualRequestTypes = stream.getActualRequestTypes();
++        if (unaryParameterClasses.length != 1
++                || streamActualRequestTypes == null
++                || streamActualRequestTypes.length == 0) {
++            return false;
++        }
++        return Objects.equals(unaryParameterClasses[0], streamActualRequestTypes[0])
++                && Objects.equals(unary.getReturnClass(), stream.getActualResponseType());
++    }
++
+     public static MethodDescriptor findTripleMethodDescriptor(
+             ServiceDescriptor serviceDescriptor, String methodName, InputStream rawMessage) throws IOException {
+         MethodDescriptor methodDescriptor = findReflectionMethodDescriptor(serviceDescriptor, methodName);

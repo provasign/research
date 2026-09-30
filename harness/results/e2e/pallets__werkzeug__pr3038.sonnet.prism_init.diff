@@ -1,0 +1,36 @@
+diff --git a/src/werkzeug/routing/matcher.py b/src/werkzeug/routing/matcher.py
+index 9174061b..ed10607f 100644
+--- a/src/werkzeug/routing/matcher.py
++++ b/src/werkzeug/routing/matcher.py
+@@ -50,6 +50,31 @@ class StateMachineMatcher:
+                     new_state = State()
+                     state.dynamic.append((part, new_state))
+                     state = new_state
++
++        methods: set[str] | None
++        if rule.methods is None:
++            methods = None
++        else:
++            methods = set(rule.methods)
++
++        for existing_rule in state.rules:
++            if existing_rule.websocket != rule.websocket:
++                continue
++
++            existing_methods = (
++                None if existing_rule.methods is None else set(existing_rule.methods)
++            )
++            if (
++                methods is None
++                or existing_methods is None
++                or not methods.isdisjoint(existing_methods)
++            ):
++                raise ValueError(
++                    f"URL rule {rule!r} is a duplicate of {existing_rule!r} and"
++                    " would silently override it. Use a distinct URL or"
++                    " methods."
++                )
++
+         state.rules.append(rule)
+ 
+     def update(self) -> None:

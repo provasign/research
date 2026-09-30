@@ -1,0 +1,52 @@
+diff --git a/src/main/java/tools/jackson/databind/jsontype/BasicPolymorphicTypeValidator.java b/src/main/java/tools/jackson/databind/jsontype/BasicPolymorphicTypeValidator.java
+index e961e7454..b09641223 100644
+--- a/src/main/java/tools/jackson/databind/jsontype/BasicPolymorphicTypeValidator.java
++++ b/src/main/java/tools/jackson/databind/jsontype/BasicPolymorphicTypeValidator.java
+@@ -1,5 +1,6 @@
+ package tools.jackson.databind.jsontype;
+ 
++import java.lang.reflect.Modifier;
+ import java.util.*;
+ import java.util.regex.Pattern;
+ 
+@@ -438,6 +439,13 @@ public class BasicPolymorphicTypeValidator
+             final Class<?> subClass = subType.getRawClass();
+             for (TypeMatcher m : _subClassMatchers) {
+                 if (m.match(ctxt, subClass)) {
++                    // [CVE-2026-54513]: accepting an array type must not implicitly
++                    // accept an arbitrary, instantiable element type: such an element
++                    // never gets a type id of its own (it matches the array's resolved
++                    // component type exactly), so it must be checked here instead.
++                    if (subClass.isArray() && !_isArrayElementTypeSafe(ctxt, subClass)) {
++                        return Validity.INDETERMINATE;
++                    }
+                     return Validity.ALLOWED;
+                 }
+             }
+@@ -445,4 +453,26 @@ public class BasicPolymorphicTypeValidator
+         // could not decide, callers gets to decide; usually will deny
+         return Validity.INDETERMINATE;
+     }
++
++    private boolean _isArrayElementTypeSafe(DatabindContext ctxt, Class<?> arrayClass)
++    {
++        Class<?> elementClass = arrayClass.getComponentType();
++        while (elementClass.isArray()) {
++            elementClass = elementClass.getComponentType();
++        }
++        // Non-final element types always get their own, separately validated type id
++        // for values stored in the array (default typing always includes a type id for
++        // non-final declared types); only a final element type can be smuggled in
++        // without ever going through a subtype check of its own, so that's what needs
++        // to be checked here.
++        if (elementClass.isPrimitive() || !Modifier.isFinal(elementClass.getModifiers())) {
++            return true;
++        }
++        for (TypeMatcher m : _subClassMatchers) {
++            if (m.match(ctxt, elementClass)) {
++                return true;
++            }
++        }
++        return false;
++    }
+ }

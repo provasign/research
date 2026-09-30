@@ -1,0 +1,29 @@
+diff --git a/gson/src/main/java/com/google/gson/internal/bind/TypeAdapterRuntimeTypeWrapper.java b/gson/src/main/java/com/google/gson/internal/bind/TypeAdapterRuntimeTypeWrapper.java
+index 60675037..0140b589 100644
+--- a/gson/src/main/java/com/google/gson/internal/bind/TypeAdapterRuntimeTypeWrapper.java
++++ b/gson/src/main/java/com/google/gson/internal/bind/TypeAdapterRuntimeTypeWrapper.java
+@@ -23,6 +23,7 @@ import com.google.gson.stream.JsonWriter;
+ import java.io.IOException;
+ import java.lang.reflect.Type;
+ import java.lang.reflect.TypeVariable;
++import java.lang.reflect.WildcardType;
+ 
+ final class TypeAdapterRuntimeTypeWrapper<T> extends TypeAdapter<T> {
+   private final Gson context;
+@@ -100,8 +101,14 @@ final class TypeAdapterRuntimeTypeWrapper<T> extends TypeAdapter<T> {
+ 
+   /** Finds a compatible runtime type if it is more specific */
+   private static Type getRuntimeTypeIfMoreSpecific(Type type, Object value) {
+-    if (value != null && (type instanceof Class<?> || type instanceof TypeVariable<?>)) {
+-      type = value.getClass();
++    if (value != null) {
++      Type bound = type;
++      if (bound instanceof WildcardType) {
++        bound = ((WildcardType) bound).getUpperBounds()[0];
++      }
++      if (bound instanceof Class<?> || bound instanceof TypeVariable<?>) {
++        return value.getClass();
++      }
+     }
+     return type;
+   }

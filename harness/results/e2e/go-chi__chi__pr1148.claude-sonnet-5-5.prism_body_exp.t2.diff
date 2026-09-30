@@ -1,0 +1,44 @@
+diff --git a/tree.go b/tree.go
+index 74ff43d..a6e5fc5 100644
+--- a/tree.go
++++ b/tree.go
+@@ -7,6 +7,7 @@ package chi
+ import (
+ 	"fmt"
+ 	"net/http"
++	"reflect"
+ 	"regexp"
+ 	"slices"
+ 	"sort"
+@@ -629,15 +630,18 @@ func (n *node) routes() []Route {
+ 	rts := []Route{}
+ 
+ 	n.walk(func(eps endpoints, subroutes Routes) bool {
++		// A stub without subroutes is a Mount placeholder; only report methods
++		// explicitly registered on the same pattern (i.e. not the mount handler).
++		var stub http.Handler
+ 		if eps[mSTUB] != nil && eps[mSTUB].handler != nil && subroutes == nil {
+-			return false
++			stub = eps[mSTUB].handler
+ 		}
+ 
+ 		// Group methodHandlers by unique patterns
+ 		pats := make(map[string]endpoints)
+ 
+ 		for mt, h := range eps {
+-			if h.pattern == "" {
++			if h.pattern == "" || (stub != nil && sameFunc(h.handler, stub)) {
+ 				continue
+ 			}
+ 			p, ok := pats[h.pattern]
+@@ -883,3 +887,10 @@ func walk(r Routes, walkFn WalkFunc, parentRoute string, parentMw ...func(http.H
+ 
+ 	return nil
+ }
++
++// sameFunc reports whether a and b are http.HandlerFuncs with the same code.
++func sameFunc(a, b http.Handler) bool {
++	af, ok1 := a.(http.HandlerFunc)
++	bf, ok2 := b.(http.HandlerFunc)
++	return ok1 && ok2 && reflect.ValueOf(af).Pointer() == reflect.ValueOf(bf).Pointer()
++}

@@ -1,0 +1,124 @@
+diff --git a/src/click/exceptions.py b/src/click/exceptions.py
+index 6272c38a..bebc3684 100644
+--- a/src/click/exceptions.py
++++ b/src/click/exceptions.py
+@@ -48,7 +48,7 @@ class ClickException(Exception):
+         self.show_color = resolve_color_default()
+         self.message = message
+ 
+-    def format_message(self) -> str:
++    def render_message(self) -> str:
+         return self.message
+ 
+     def __str__(self) -> str:
+@@ -59,7 +59,7 @@ class ClickException(Exception):
+             file = get_text_stderr()
+ 
+         echo(
+-            _("Error: {message}").format(message=self.format_message()),
++            _("Error: {message}").format(message=self.render_message()),
+             file=file,
+             color=self.show_color,
+         )
+@@ -105,7 +105,7 @@ class UsageError(ClickException):
+             color = self.ctx.color
+             echo(f"{self.ctx.get_usage()}\n{hint}", file=file, color=color)
+         echo(
+-            _("Error: {message}").format(message=self.format_message()),
++            _("Error: {message}").format(message=self.render_message()),
+             file=file,
+             color=color,
+         )
+@@ -143,7 +143,7 @@ class BadParameter(UsageError):
+         self.param = param
+         self.param_hint = param_hint
+ 
+-    def format_message(self) -> str:
++    def render_message(self) -> str:
+         if self.param_hint is not None:
+             param_hint = self.param_hint
+         elif self.param is not None:
+@@ -181,7 +181,7 @@ class MissingParameter(BadParameter):
+         super().__init__(message or "", ctx, param, param_hint)
+         self.param_type = param_type
+ 
+-    def format_message(self) -> str:
++    def render_message(self) -> str:
+         if self.param_hint is not None:
+             param_hint: cabc.Sequence[str] | str | None = self.param_hint
+         elif self.param is not None:
+@@ -259,7 +259,7 @@ class NoSuchOption(UsageError):
+             possibilities_ = None
+         self.possibilities = possibilities_
+ 
+-    def format_message(self) -> str:
++    def render_message(self) -> str:
+         if not self.possibilities:
+             return self.message
+         return f"{self.message} {_format_possibilities(self.possibilities)}"
+@@ -295,7 +295,7 @@ class NoSuchCommand(UsageError):
+             possibilities_ = None
+         self.possibilities = possibilities_
+ 
+-    def format_message(self) -> str:
++    def render_message(self) -> str:
+         if not self.possibilities:
+             return self.message
+         return f"{self.message} {_format_possibilities(self.possibilities)}"
+@@ -336,7 +336,7 @@ class NoArgsIsHelpError(UsageError):
+         super().__init__(ctx.get_help(), ctx=ctx)
+ 
+     def show(self, file: t.IO[t.Any] | None = None) -> None:
+-        echo(self.format_message(), file=file, err=True, color=self.ctx.color)
++        echo(self.render_message(), file=file, err=True, color=self.ctx.color)
+ 
+ 
+ class FileError(ClickException):
+@@ -353,7 +353,7 @@ class FileError(ClickException):
+         self.ui_filename = format_filename(filename)
+         self.filename = filename
+ 
+-    def format_message(self) -> str:
++    def render_message(self) -> str:
+         return _("Could not open file {filename!r}: {message}").format(
+             filename=self.ui_filename, message=self.message
+         )
+diff --git a/tests/test_arguments.py b/tests/test_arguments.py
+index f4b45233..fd9082a1 100644
+--- a/tests/test_arguments.py
++++ b/tests/test_arguments.py
+@@ -196,7 +196,7 @@ def test_nargs_envvar(runner, nargs, value, expect):
+ 
+     if isinstance(expect, str):
+         assert isinstance(result.exception, click.BadParameter)
+-        assert expect in result.exception.format_message()
++        assert expect in result.exception.render_message()
+     else:
+         assert result.return_value == expect
+ 
+diff --git a/tests/test_testing.py b/tests/test_testing.py
+index a7508b97..11a118fb 100644
+--- a/tests/test_testing.py
++++ b/tests/test_testing.py
+@@ -227,7 +227,7 @@ def test_with_color():
+ 
+ def test_with_color_errors():
+     class CLIError(ClickException):
+-        def format_message(self) -> str:
++        def render_message(self) -> str:
+             return click.style(self.message, fg="red")
+ 
+     @click.command()
+diff --git a/tests/test_types.py b/tests/test_types.py
+index 1ab2547d..f8cb3f9d 100644
+--- a/tests/test_types.py
++++ b/tests/test_types.py
+@@ -289,7 +289,7 @@ def test_file_surrogates(type, tmp_path):
+ 
+ 
+ def test_file_error_surrogates():
+-    message = FileError(filename="\udcff").format_message()
++    message = FileError(filename="\udcff").render_message()
+     assert message == "Could not open file '�': unknown error"
+ 
+ 

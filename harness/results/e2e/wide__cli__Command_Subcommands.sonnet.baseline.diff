@@ -1,0 +1,569 @@
+diff --git a/app.go b/app.go
+index a6c1976c..51b2672a 100644
+--- a/app.go
++++ b/app.go
+@@ -265,7 +265,7 @@ func (a *App) newRootCommand() *Command {
+ 		After:                  a.After,
+ 		Action:                 a.Action,
+ 		OnUsageError:           a.OnUsageError,
+-		Subcommands:            a.Commands,
++		Commands:               a.Commands,
+ 		Flags:                  a.Flags,
+ 		flagCategories:         a.flagCategories,
+ 		HideHelp:               a.HideHelp,
+diff --git a/app_test.go b/app_test.go
+index 5d2373e7..330d5ca0 100644
+--- a/app_test.go
++++ b/app_test.go
+@@ -64,7 +64,7 @@ func ExampleApp_Run_subcommand() {
+ 				Aliases:     []string{"hi"},
+ 				Usage:       "use it to see a description",
+ 				Description: "This is how we describe hello the function",
+-				Subcommands: []*Command{
++				Commands: []*Command{
+ 					{
+ 						Name:        "english",
+ 						Aliases:     []string{"en"},
+@@ -548,7 +548,7 @@ func TestApp_RunDefaultCommandWithSubCommand(t *testing.T) {
+ 					{
+ 						Name:    "foobar",
+ 						Aliases: []string{"f"},
+-						Subcommands: []*Command{
++						Commands: []*Command{
+ 							{Name: "jimbob", Aliases: []string{"j"}},
+ 							{Name: "carly"},
+ 						},
+@@ -985,7 +985,7 @@ func TestApp_UseShortOptionHandlingSubCommand(t *testing.T) {
+ 			return nil
+ 		},
+ 	}
+-	command.Subcommands = []*Command{subCommand}
++	command.Commands = []*Command{subCommand}
+ 	app.Commands = []*Command{command}
+ 
+ 	err := app.Run([]string{"", "cmd", "sub", "-on", expected})
+@@ -1007,7 +1007,7 @@ func TestApp_UseShortOptionHandlingSubCommand_missing_value(t *testing.T) {
+ 			&StringFlag{Name: "name", Aliases: []string{"n"}},
+ 		},
+ 	}
+-	command.Subcommands = []*Command{subCommand}
++	command.Commands = []*Command{subCommand}
+ 	app.Commands = []*Command{command}
+ 
+ 	err := app.Run([]string{"", "cmd", "sub", "-n"})
+@@ -1204,7 +1204,7 @@ func TestApp_SetStdin_Subcommand(t *testing.T) {
+ 		Commands: []*Command{
+ 			{
+ 				Name: "command",
+-				Subcommands: []*Command{
++				Commands: []*Command{
+ 					{
+ 						Name: "subcommand",
+ 						Action: func(c *Context) error {
+@@ -1524,7 +1524,7 @@ func TestRequiredFlagAppRunBehavior(t *testing.T) {
+ 			appRunInput: []string{"myCLI", "myCommand", "mySubCommand"},
+ 			appCommands: []*Command{{
+ 				Name: "myCommand",
+-				Subcommands: []*Command{{
++				Commands: []*Command{{
+ 					Name:  "mySubCommand",
+ 					Flags: []Flag{&StringFlag{Name: "requiredFlag", Required: true}},
+ 				}},
+@@ -1550,7 +1550,7 @@ func TestRequiredFlagAppRunBehavior(t *testing.T) {
+ 			appRunInput: []string{"myCLI", "myCommand", "mySubCommand", "--help"},
+ 			appCommands: []*Command{{
+ 				Name: "myCommand",
+-				Subcommands: []*Command{{
++				Commands: []*Command{{
+ 					Name:  "mySubCommand",
+ 					Flags: []Flag{&StringFlag{Name: "requiredFlag", Required: true}},
+ 				}},
+@@ -1577,7 +1577,7 @@ func TestRequiredFlagAppRunBehavior(t *testing.T) {
+ 			appRunInput: []string{"myCLI", "myCommand", "mySubCommand", "--optional", "cats"},
+ 			appCommands: []*Command{{
+ 				Name: "myCommand",
+-				Subcommands: []*Command{{
++				Commands: []*Command{{
+ 					Name:  "mySubCommand",
+ 					Flags: []Flag{&StringFlag{Name: "requiredFlag", Required: true}, &StringFlag{Name: "optional"}},
+ 				}},
+@@ -1603,7 +1603,7 @@ func TestRequiredFlagAppRunBehavior(t *testing.T) {
+ 			appRunInput: []string{"myCLI", "myCommand", "mySubCommand", "--requiredFlag", "cats"},
+ 			appCommands: []*Command{{
+ 				Name: "myCommand",
+-				Subcommands: []*Command{{
++				Commands: []*Command{{
+ 					Name:  "mySubCommand",
+ 					Flags: []Flag{&StringFlag{Name: "requiredFlag", Required: true}},
+ 					Action: func(c *Context) error {
+@@ -1868,7 +1868,7 @@ func TestApp_Run_CommandWithSubcommandHasHelpTopic(t *testing.T) {
+ 			cmd := &Command{
+ 				Name:        "foo",
+ 				Description: "descriptive wall of text about how it does foo things",
+-				Subcommands: []*Command{subCmdBar, subCmdBaz},
++				Commands:    []*Command{subCmdBar, subCmdBaz},
+ 				Action:      func(c *Context) error { return nil },
+ 			}
+ 
+@@ -1909,7 +1909,7 @@ func TestApp_Run_SubcommandFullPath(t *testing.T) {
+ 	cmd := &Command{
+ 		Name:        "foo",
+ 		Description: "foo commands",
+-		Subcommands: []*Command{subCmd},
++		Commands:    []*Command{subCmd},
+ 	}
+ 	app.Commands = []*Command{cmd}
+ 
+@@ -1943,7 +1943,7 @@ func TestApp_Run_SubcommandHelpName(t *testing.T) {
+ 	cmd := &Command{
+ 		Name:        "foo",
+ 		Description: "foo commands",
+-		Subcommands: []*Command{subCmd},
++		Commands:    []*Command{subCmd},
+ 	}
+ 	app.Commands = []*Command{cmd}
+ 
+@@ -1978,7 +1978,7 @@ func TestApp_Run_CommandHelpName(t *testing.T) {
+ 		Name:        "foo",
+ 		HelpName:    "custom",
+ 		Description: "foo commands",
+-		Subcommands: []*Command{subCmd},
++		Commands:    []*Command{subCmd},
+ 	}
+ 	app.Commands = []*Command{cmd}
+ 
+@@ -2014,7 +2014,7 @@ func TestApp_Run_CommandSubcommandHelpName(t *testing.T) {
+ 		Name:        "foo",
+ 		Usage:       "foo commands",
+ 		Description: "This is a description",
+-		Subcommands: []*Command{subCmd},
++		Commands:    []*Command{subCmd},
+ 	}
+ 	app.Commands = []*Command{cmd}
+ 
+@@ -2356,7 +2356,7 @@ func TestApp_Run_SubcommandDoesNotOverwriteErrorFromBefore(t *testing.T) {
+ 	app := &App{
+ 		Commands: []*Command{
+ 			{
+-				Subcommands: []*Command{
++				Commands: []*Command{
+ 					{
+ 						Name: "sub",
+ 					},
+@@ -2636,7 +2636,7 @@ func TestWhenExitSubCommandWithCodeThenAppQuitUnexpectedly(t *testing.T) {
+ 	app.Commands = []*Command{
+ 		{
+ 			Name: "cmd",
+-			Subcommands: []*Command{
++			Commands: []*Command{
+ 				{
+ 					Name: "subcmd",
+ 					Action: func(c *Context) error {
+@@ -2737,7 +2737,7 @@ func TestFlagAction(t *testing.T) {
+ 				Name:   "c1",
+ 				Flags:  []Flag{stringFlag},
+ 				Action: func(ctx *Context) error { return nil },
+-				Subcommands: []*Command{
++				Commands: []*Command{
+ 					{
+ 						Name:   "sub1",
+ 						Action: func(ctx *Context) error { return nil },
+@@ -3101,7 +3101,7 @@ func TestPersistentFlag(t *testing.T) {
+ 						Destination: &appOverrideCmdInt,
+ 					},
+ 				},
+-				Subcommands: []*Command{
++				Commands: []*Command{
+ 					{
+ 						Name: "subcmd",
+ 						Flags: []Flag{
+diff --git a/command.go b/command.go
+index f648b922..bf9ce01b 100644
+--- a/command.go
++++ b/command.go
+@@ -37,7 +37,7 @@ type Command struct {
+ 	// Execute this function if a usage error occurs.
+ 	OnUsageError OnUsageErrorFunc
+ 	// List of child commands
+-	Subcommands []*Command
++	Commands []*Command
+ 	// List of flags to parse
+ 	Flags          []Flag
+ 	flagCategories FlagCategories
+@@ -97,7 +97,7 @@ func (c *Command) FullName() string {
+ }
+ 
+ func (cmd *Command) Command(name string) *Command {
+-	for _, c := range cmd.Subcommands {
++	for _, c := range cmd.Commands {
+ 		if c.HasName(name) {
+ 			return c
+ 		}
+@@ -110,7 +110,7 @@ func (c *Command) setup(ctx *Context) {
+ 	if c.Command(helpCommand.Name) == nil && !c.HideHelp {
+ 		if !c.HideHelpCommand {
+ 			helpCommand.HelpName = fmt.Sprintf("%s %s", c.HelpName, helpName)
+-			c.Subcommands = append(c.Subcommands, helpCommand)
++			c.Commands = append(c.Commands, helpCommand)
+ 		}
+ 	}
+ 
+@@ -124,19 +124,19 @@ func (c *Command) setup(ctx *Context) {
+ 	}
+ 
+ 	c.categories = newCommandCategories()
+-	for _, command := range c.Subcommands {
++	for _, command := range c.Commands {
+ 		c.categories.AddCommand(command.Category, command)
+ 	}
+ 	sort.Sort(c.categories.(*commandCategories))
+ 
+ 	var newCmds []*Command
+-	for _, scmd := range c.Subcommands {
++	for _, scmd := range c.Commands {
+ 		if scmd.HelpName == "" {
+ 			scmd.HelpName = fmt.Sprintf("%s %s", c.HelpName, scmd.Name)
+ 		}
+ 		newCmds = append(newCmds, scmd)
+ 	}
+-	c.Subcommands = newCmds
++	c.Commands = newCmds
+ }
+ 
+ func (c *Command) Run(cCtx *Context, arguments ...string) (err error) {
+@@ -237,8 +237,8 @@ func (c *Command) Run(cCtx *Context, arguments ...string) (err error) {
+ 
+ 			if hasDefault {
+ 				dc := cCtx.App.Command(cCtx.App.DefaultCommand)
+-				defaultHasSubcommands = len(dc.Subcommands) > 0
+-				for _, dcSub := range dc.Subcommands {
++				defaultHasSubcommands = len(dc.Commands) > 0
++				for _, dcSub := range dc.Commands {
+ 					if checkStringSliceIncludes(name, dcSub.Names()) {
+ 						isDefaultSubcommand = true
+ 						break
+@@ -395,7 +395,7 @@ func (c *Command) VisibleCategories() []CommandCategory {
+ // VisibleCommands returns a slice of the Commands with Hidden=false
+ func (c *Command) VisibleCommands() []*Command {
+ 	var ret []*Command
+-	for _, command := range c.Subcommands {
++	for _, command := range c.Commands {
+ 		if !command.Hidden {
+ 			ret = append(ret, command)
+ 		}
+diff --git a/command_test.go b/command_test.go
+index 10c616bc..011ec85d 100644
+--- a/command_test.go
++++ b/command_test.go
+@@ -241,7 +241,7 @@ func TestCommand_OnUsageError_WithSubcommand(t *testing.T) {
+ 		Commands: []*Command{
+ 			{
+ 				Name: "bar",
+-				Subcommands: []*Command{
++				Commands: []*Command{
+ 					{
+ 						Name: "baz",
+ 					},
+@@ -276,7 +276,7 @@ func TestCommand_Run_SubcommandsCanUseErrWriter(t *testing.T) {
+ 			{
+ 				Name:  "bar",
+ 				Usage: "this is for testing",
+-				Subcommands: []*Command{
++				Commands: []*Command{
+ 					{
+ 						Name:  "baz",
+ 						Usage: "this is for testing",
+@@ -384,10 +384,10 @@ func TestCommand_NoVersionFlagOnCommands(t *testing.T) {
+ 		Version: "some version",
+ 		Commands: []*Command{
+ 			{
+-				Name:        "bar",
+-				Usage:       "this is for testing",
+-				Subcommands: []*Command{{}}, // some subcommand
+-				HideHelp:    true,
++				Name:     "bar",
++				Usage:    "this is for testing",
++				Commands: []*Command{{}}, // some subcommand
++				HideHelp: true,
+ 				Action: func(c *Context) error {
+ 					if len(c.Command.VisibleFlags()) != 0 {
+ 						t.Fatal("unexpected flag on command")
+@@ -408,9 +408,9 @@ func TestCommand_CanAddVFlagOnCommands(t *testing.T) {
+ 		Writer:  io.Discard,
+ 		Commands: []*Command{
+ 			{
+-				Name:        "bar",
+-				Usage:       "this is for testing",
+-				Subcommands: []*Command{{}}, // some subcommand
++				Name:     "bar",
++				Usage:    "this is for testing",
++				Commands: []*Command{{}}, // some subcommand
+ 				Flags: []Flag{
+ 					&BoolFlag{
+ 						Name: "v",
+@@ -436,7 +436,7 @@ func TestCommand_VisibleSubcCommands(t *testing.T) {
+ 	c := &Command{
+ 		Name:  "bar",
+ 		Usage: "this is for testing",
+-		Subcommands: []*Command{
++		Commands: []*Command{
+ 			subc1,
+ 			{
+ 				Name:   "subc2",
+@@ -496,9 +496,9 @@ func TestCommand_RunSubcommandWithDefault(t *testing.T) {
+ 				},
+ 			},
+ 			{
+-				Name:        "bar",
+-				Usage:       "this is for testing",
+-				Subcommands: []*Command{{}}, // some subcommand
++				Name:     "bar",
++				Usage:    "this is for testing",
++				Commands: []*Command{{}}, // some subcommand
+ 				Action: func(*Context) error {
+ 					return nil
+ 				},
+diff --git a/context_test.go b/context_test.go
+index d7476a1e..3502835d 100644
+--- a/context_test.go
++++ b/context_test.go
+@@ -148,7 +148,7 @@ func TestContext_Value_InvalidFlagAccessHandler(t *testing.T) {
+ 		Commands: []*Command{
+ 			{
+ 				Name: "command",
+-				Subcommands: []*Command{
++				Commands: []*Command{
+ 					{
+ 						Name: "subcommand",
+ 						Action: func(ctx *Context) error {
+diff --git a/docs.go b/docs.go
+index 8b1c9c8a..45a0bc31 100644
+--- a/docs.go
++++ b/docs.go
+@@ -91,10 +91,10 @@ func prepareCommands(commands []*Command, level int) []string {
+ 		coms = append(coms, prepared)
+ 
+ 		// recursively iterate subcommands
+-		if len(command.Subcommands) > 0 {
++		if len(command.Commands) > 0 {
+ 			coms = append(
+ 				coms,
+-				prepareCommands(command.Subcommands, level+1)...,
++				prepareCommands(command.Commands, level+1)...,
+ 			)
+ 		}
+ 	}
+diff --git a/fish.go b/fish.go
+index 222792fa..99fd9a24 100644
+--- a/fish.go
++++ b/fish.go
+@@ -99,11 +99,11 @@ func (a *App) prepareFishCommands(commands []*Command, allCommands *[]string, pr
+ 		)
+ 
+ 		// recursively iterate subcommands
+-		if len(command.Subcommands) > 0 {
++		if len(command.Commands) > 0 {
+ 			completions = append(
+ 				completions,
+ 				a.prepareFishCommands(
+-					command.Subcommands, allCommands, command.Names(),
++					command.Commands, allCommands, command.Names(),
+ 				)...,
+ 			)
+ 		}
+diff --git a/fish_test.go b/fish_test.go
+index dcc618f7..10a0a169 100644
+--- a/fish_test.go
++++ b/fish_test.go
+@@ -60,7 +60,7 @@ func testApp() *App {
+ 		},
+ 		Name:  "config",
+ 		Usage: "another usage test",
+-		Subcommands: []*Command{{
++		Commands: []*Command{{
+ 			Aliases: []string{"s", "ss"},
+ 			Flags: []Flag{
+ 				&StringFlag{Name: "sub-flag", Aliases: []string{"sub-fl", "s"}},
+@@ -110,7 +110,7 @@ func() { ... }
+ 
+ Should be a part of the same code block
+ `,
+-		Subcommands: []*Command{{
++		Commands: []*Command{{
+ 			Aliases: []string{"su"},
+ 			Flags: []Flag{
+ 				&BoolFlag{
+diff --git a/godoc-current.txt b/godoc-current.txt
+index 4f426b7a..2a3dbb2e 100644
+--- a/godoc-current.txt
++++ b/godoc-current.txt
+@@ -483,7 +483,7 @@ type Command struct {
+ 	// Execute this function if a usage error occurs.
+ 	OnUsageError OnUsageErrorFunc
+ 	// List of child commands
+-	Subcommands []*Command
++	Commands []*Command
+ 	// List of flags to parse
+ 	Flags []Flag
+ 
+diff --git a/help.go b/help.go
+index 3100ecd7..b29b89e7 100644
+--- a/help.go
++++ b/help.go
+@@ -70,8 +70,8 @@ var helpCommand = &Command{
+ 		}
+ 
+ 		// Case 3, 5
+-		if (len(cCtx.Command.Subcommands) == 1 && !cCtx.Command.HideHelp) ||
+-			(len(cCtx.Command.Subcommands) == 0 && cCtx.Command.HideHelp) {
++		if (len(cCtx.Command.Commands) == 1 && !cCtx.Command.HideHelp) ||
++			(len(cCtx.Command.Commands) == 0 && cCtx.Command.HideHelp) {
+ 			templ := cCtx.Command.CustomHelpTemplate
+ 			if templ == "" {
+ 				templ = CommandHelpTemplate
+@@ -225,7 +225,7 @@ func DefaultCompleteWithFlags(cmd *Command) func(cCtx *Context) {
+ 		}
+ 
+ 		if cmd != nil {
+-			printCommandSuggestions(cmd.Subcommands, cCtx.App.Writer)
++			printCommandSuggestions(cmd.Commands, cCtx.App.Writer)
+ 			return
+ 		}
+ 
+@@ -242,14 +242,14 @@ func ShowCommandHelpAndExit(c *Context, command string, code int) {
+ // ShowCommandHelp prints help for the given command
+ func ShowCommandHelp(ctx *Context, command string) error {
+ 	commands := ctx.App.Commands
+-	if ctx.Command.Subcommands != nil {
+-		commands = ctx.Command.Subcommands
++	if ctx.Command.Commands != nil {
++		commands = ctx.Command.Commands
+ 	}
+ 	for _, c := range commands {
+ 		if c.HasName(command) {
+ 			if !c.HideHelp {
+-				if !c.HideHelpCommand && len(c.Subcommands) != 0 && c.Command(helpName) == nil {
+-					c.Subcommands = append(c.Subcommands, helpCommandDontUse)
++				if !c.HideHelpCommand && len(c.Commands) != 0 && c.Command(helpName) == nil {
++					c.Commands = append(c.Commands, helpCommandDontUse)
+ 				}
+ 				if HelpFlag != nil {
+ 					c.appendFlag(HelpFlag)
+@@ -257,7 +257,7 @@ func ShowCommandHelp(ctx *Context, command string) error {
+ 			}
+ 			templ := c.CustomHelpTemplate
+ 			if templ == "" {
+-				if len(c.Subcommands) == 0 {
++				if len(c.Commands) == 0 {
+ 					templ = CommandHelpTemplate
+ 				} else {
+ 					templ = SubcommandHelpTemplate
+@@ -273,7 +273,7 @@ func ShowCommandHelp(ctx *Context, command string) error {
+ 	if ctx.App.CommandNotFound == nil {
+ 		errMsg := fmt.Sprintf("No help topic for '%v'", command)
+ 		if ctx.App.Suggest {
+-			if suggestion := SuggestCommand(ctx.Command.Subcommands, command); suggestion != "" {
++			if suggestion := SuggestCommand(ctx.Command.Commands, command); suggestion != "" {
+ 				errMsg += ". " + suggestion
+ 			}
+ 		}
+diff --git a/help_test.go b/help_test.go
+index 2d44cf4e..d7299dfa 100644
+--- a/help_test.go
++++ b/help_test.go
+@@ -221,8 +221,8 @@ func Test_helpCommand_HelpName(t *testing.T) {
+ 				Name: "app",
+ 				Commands: []*Command{
+ 					{
+-						Name:        "cmd",
+-						Subcommands: []*Command{{Name: "subcmd"}},
++						Name:     "cmd",
++						Commands: []*Command{{Name: "subcmd"}},
+ 					},
+ 				},
+ 				Writer: buf,
+@@ -357,7 +357,7 @@ func TestShowCommandHelp_AppendHelp(t *testing.T) {
+ 						HideHelp:        tt.hideHelp,
+ 						HideHelpCommand: tt.hideHelpCommand,
+ 						Action:          func(ctx *Context) error { return ShowCommandHelp(ctx, "subcmd") },
+-						Subcommands:     []*Command{{Name: "subcmd"}},
++						Commands:        []*Command{{Name: "subcmd"}},
+ 					},
+ 				},
+ 				Writer: buf,
+@@ -587,7 +587,7 @@ func TestHelpNameConsistency(t *testing.T) {
+ 		{
+ 			Name:               "command1",
+ 			CustomHelpTemplate: `{{.HelpName}}`,
+-			Subcommands: []*Command{
++			Commands: []*Command{
+ 				{
+ 					Name:               "subcommand1",
+ 					CustomHelpTemplate: `{{.HelpName}}`,
+@@ -745,7 +745,7 @@ func TestShowSubcommandHelp_SubcommandUsageText(t *testing.T) {
+ 		Commands: []*Command{
+ 			{
+ 				Name: "frobbly",
+-				Subcommands: []*Command{
++				Commands: []*Command{
+ 					{
+ 						Name:      "bobbly",
+ 						UsageText: "this is usage text",
+@@ -769,7 +769,7 @@ func TestShowSubcommandHelp_MultiLine_SubcommandUsageText(t *testing.T) {
+ 		Commands: []*Command{
+ 			{
+ 				Name: "frobbly",
+-				Subcommands: []*Command{
++				Commands: []*Command{
+ 					{
+ 						Name: "bobbly",
+ 						UsageText: `This is a
+@@ -1249,7 +1249,7 @@ func TestHideHelpCommand_WithSubcommands(t *testing.T) {
+ 		Commands: []*Command{
+ 			{
+ 				Name: "dummy",
+-				Subcommands: []*Command{
++				Commands: []*Command{
+ 					{
+ 						Name: "dummy2",
+ 					},
+@@ -1330,7 +1330,7 @@ func TestDefaultCompleteWithFlags(t *testing.T) {
+ 			}},
+ 			cmd: &Command{
+ 				Name: "putz",
+-				Subcommands: []*Command{
++				Commands: []*Command{
+ 					{Name: "futz"},
+ 				},
+ 				Flags: []Flag{
+@@ -1541,7 +1541,7 @@ func TestWrappedSubcommandHelp(t *testing.T) {
+ 				Action: func(c *Context) error {
+ 					return nil
+ 				},
+-				Subcommands: []*Command{
++				Commands: []*Command{
+ 					{
+ 						Name:      "grok",
+ 						Usage:     "remove an existing template",
+@@ -1610,7 +1610,7 @@ func TestWrappedHelpSubcommand(t *testing.T) {
+ 				Action: func(c *Context) error {
+ 					return nil
+ 				},
+-				Subcommands: []*Command{
++				Commands: []*Command{
+ 					{
+ 						Name:      "grok",
+ 						Usage:     "remove an existing template",
+diff --git a/testdata/godoc-v3.x.txt b/testdata/godoc-v3.x.txt
+index 4f426b7a..2a3dbb2e 100644
+--- a/testdata/godoc-v3.x.txt
++++ b/testdata/godoc-v3.x.txt
+@@ -483,7 +483,7 @@ type Command struct {
+ 	// Execute this function if a usage error occurs.
+ 	OnUsageError OnUsageErrorFunc
+ 	// List of child commands
+-	Subcommands []*Command
++	Commands []*Command
+ 	// List of flags to parse
+ 	Flags []Flag
+ 

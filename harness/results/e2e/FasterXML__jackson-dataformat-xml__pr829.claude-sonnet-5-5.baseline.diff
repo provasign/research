@@ -1,0 +1,37 @@
+diff --git a/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java b/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
+index 1df7eeb6..faee07c2 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
++++ b/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
+@@ -514,6 +514,15 @@ public class FromXmlParser
+     */
+ 
+ //    public JsonToken nextToken0() throws JacksonException
++    /**
++     * Accessor for checking whether the current START_OBJECT is a synthetic one,
++     * exposed for an empty Array element (see [dataformat-xml#180]) and immediately
++     * followed by END_OBJECT.
++     */
++    public boolean isEmptyArrayElementObject() {
++        return (_currToken == JsonToken.START_OBJECT) && (_nextToken == JsonToken.END_OBJECT);
++    }
++
+     @Override
+     public JsonToken nextToken() throws JacksonException
+     {
+diff --git a/src/main/java/tools/jackson/dataformat/xml/deser/WrapperHandlingDeserializer.java b/src/main/java/tools/jackson/dataformat/xml/deser/WrapperHandlingDeserializer.java
+index 7c0cea82..33a02021 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/deser/WrapperHandlingDeserializer.java
++++ b/src/main/java/tools/jackson/dataformat/xml/deser/WrapperHandlingDeserializer.java
+@@ -138,6 +138,12 @@ public class WrapperHandlingDeserializer
+     public Object deserializeWithType(JsonParser p, DeserializationContext ctxt, TypeDeserializer typeDeserializer)
+         throws JacksonException
+     {
++        // Empty element in an array, with polymorphic type: no type id can be
++        // present, so must be a `null`
++        if ((p instanceof FromXmlParser xp) && xp.isEmptyArrayElementObject()) {
++            p.nextToken();
++            return null;
++        }
+         _configureParser(p);
+         return _delegatee.deserializeWithType(p, ctxt, typeDeserializer);
+     }

@@ -1,0 +1,29 @@
+diff --git a/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java b/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
+index 9d108d9c..6b0772a9 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
++++ b/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
+@@ -643,7 +643,7 @@ public class FromXmlParser
+ 
+                     if (token == XmlTokenStream.XML_END_ELEMENT) {
+                         if (_streamReadContext.inArray()) {
+-                            if (XmlTokenStream._allWs(_currText)) {
++                            if (_currText.isEmpty()) {
+                                 // 06-Jan-2015, tatu: as per [dataformat-xml#180], need to
+                                 //    expose as empty Object, not null (or, worse, as used to
+                                 //    be done, by swallowing the token)
+@@ -675,13 +675,13 @@ XmlTokenStream.XML_END_ELEMENT, XmlTokenStream.XML_START_ELEMENT, token));
+                         _nextIsLeadingMixed = true;
+                         _nextToken = JsonToken.PROPERTY_NAME;
+                         return _updateToken(JsonToken.START_OBJECT);
+-                    } else if (XmlTokenStream._allWs(_currText)) {
++                    } else if (_currText.isEmpty()) {
+                         token = _nextToken();
+                         continue;
+                     }
+                 } else if (_streamReadContext.inArray()) {
+                     // [dataformat-xml#319] Aaaaand for Arrays too
+-                    if (XmlTokenStream._allWs(_currText)) {
++                    if (_currText.isEmpty()) {
+                         token = _nextToken();
+                         continue;
+                     }

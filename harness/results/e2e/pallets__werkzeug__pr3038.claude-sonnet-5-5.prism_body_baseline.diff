@@ -1,0 +1,26 @@
+diff --git a/src/werkzeug/routing/matcher.py b/src/werkzeug/routing/matcher.py
+index 9174061b..2e5521b8 100644
+--- a/src/werkzeug/routing/matcher.py
++++ b/src/werkzeug/routing/matcher.py
+@@ -50,6 +50,21 @@ class StateMachineMatcher:
+                     new_state = State()
+                     state.dynamic.append((part, new_state))
+                     state = new_state
++        for existing in state.rules:
++            if (
++                existing.websocket == rule.websocket
++                and existing.strict_slashes == rule.strict_slashes
++                and (
++                    existing.methods is None
++                    or rule.methods is None
++                    or not existing.methods.isdisjoint(rule.methods)
++                )
++            ):
++                raise ValueError(
++                    f"A rule for {rule.rule!r} with overlapping methods is"
++                    " already registered."
++                )
++
+         state.rules.append(rule)
+ 
+     def update(self) -> None:

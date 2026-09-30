@@ -1,17 +1,16 @@
 diff --git a/src/request.ts b/src/request.ts
-index 45d48801..67c7d44b 100644
+index 45d48801..4e1ef6f1 100644
 --- a/src/request.ts
 +++ b/src/request.ts
-@@ -227,7 +227,11 @@ export class HonoRequest<P extends string = '/', I extends Input['out'] = {}> {
+@@ -227,7 +227,10 @@ export class HonoRequest<P extends string = '/', I extends Input['out'] = {}> {
          if (anyCachedKey === 'json') {
            body = JSON.stringify(body)
          }
 -        return new Response(body)[key]()
-+        return new Response(body, {
-+          headers: {
-+            'content-type': raw.headers.get('content-type') || '',
-+          },
-+        })[key]()
++        const contentType = raw.headers.get('content-type')
++        return new Response(body, contentType ? { headers: { 'content-type': contentType } } : undefined)[
++          key
++        ]()
        })
      }
  

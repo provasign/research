@@ -1,0 +1,57 @@
+diff --git a/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java b/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
+index 1df7eeb6..725993e2 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
++++ b/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
+@@ -110,6 +110,14 @@ public class FromXmlParser
+      */
+     protected boolean _nextIsLeadingMixed;
+ 
++    /**
++     * Flag set when a leaf-level array element was marked with
++     * {@code xsi:nil="true"}: such an element must be exposed as an
++     * actual {@code null} value, not as an empty Object (see
++     * [dataformat-xml#180] for the empty-Object handling this overrides).
++     */
++    protected boolean _nextIsNilLeaf;
++
+     /*
+     /**********************************************************************
+     /* Parsing state, parsed values
+@@ -561,6 +569,11 @@ public class FromXmlParser
+             // If we thought we might get leaf, no such luck
+             if (_mayBeLeaf) {
+                 // leave _mayBeLeaf set, as we start a new context
++                // [dataformat-xml#559]: remember `xsi:nil` marker here too, for the
++                // case of a singleton Collection value being started as an Object
++                // (later possibly converted into a single-element array); otherwise
++                // this element's END_ELEMENT would be seen without knowing it was nil.
++                _nextIsNilLeaf = _xmlTokens.hasXsiNil();
+                 _nextToken = JsonToken.PROPERTY_NAME;
+                 _streamReadContext = _streamReadContext.createChildObjectContext(-1, -1);
+                 return _updateToken(JsonToken.START_OBJECT);
+@@ -568,6 +581,9 @@ public class FromXmlParser
+             if (_streamReadContext.inArray()) {
+                 // Yup: in array, so this element could be verified; but it won't be
+                 // reported anyway, and we need to process following event.
++                // [dataformat-xml#559]: need to remember `xsi:nil` marker here,
++                // before it gets consumed by the following _nextToken() call.
++                _nextIsNilLeaf = _xmlTokens.hasXsiNil();
+                 token = _nextToken();
+                 _mayBeLeaf = true;
+                 continue;
+@@ -600,6 +616,15 @@ public class FromXmlParser
+                 if (_mayBeLeaf) {
+                     _mayBeLeaf = false;
+                     if (_streamReadContext.inArray()) {
++                        // [dataformat-xml#559]: `xsi:nil` marked leaf must be exposed
++                        //    as actual null value, not as empty Object, so that
++                        //    polymorphic (typed) elements of a Collection can be
++                        //    null without requiring a type id.
++                        if (_nextIsNilLeaf) {
++                            _nextIsNilLeaf = false;
++                            _streamReadContext.valueStarted();
++                            return _updateToken(JsonToken.VALUE_NULL);
++                        }
+                         // 06-Jan-2015, tatu: as per [dataformat-xml#180], need to
+                         //    expose as empty Object, not null
+                         _nextToken = JsonToken.END_OBJECT;

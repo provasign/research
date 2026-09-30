@@ -1,0 +1,28 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java b/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java
+index f538965a7..e7712aaa6 100644
+--- a/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java
++++ b/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java
+@@ -167,6 +167,11 @@ public class ExternalTypeHandler
+                     _typeIds[it.next()] = typeId;
+                 }
+             } else {
++                Class<?> view = ctxt.getActiveView();
++                if (view != null && !prop.getProperty().visibleInView(view)) {
++                    p.skipChildren();
++                    return true;
++                }
+                 TokenBuffer tokens = _bufferValueWithPinnedContext(ctxt, p);
+                 _tokens[index] = tokens;
+                 while (it.hasNext()) {
+@@ -188,6 +193,11 @@ public class ExternalTypeHandler
+             p.skipChildren();
+             canDeserialize = (bean != null) && (_tokens[index] != null);
+         } else {
++            Class<?> view = ctxt.getActiveView();
++            if (view != null && !prop.getProperty().visibleInView(view)) {
++                p.skipChildren();
++                return true;
++            }
+             @SuppressWarnings("resource")
+             TokenBuffer tokens = _bufferValueWithPinnedContext(ctxt, p);
+             _tokens[index] = tokens;

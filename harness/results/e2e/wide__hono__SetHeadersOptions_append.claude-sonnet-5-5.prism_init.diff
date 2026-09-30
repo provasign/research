@@ -1,0 +1,188 @@
+diff --git a/src/context.test.ts b/src/context.test.ts
+index 670a08a3..a5ce6cd3 100644
+--- a/src/context.test.ts
++++ b/src/context.test.ts
+@@ -138,7 +138,7 @@ describe('Context', () => {
+ 
+   it('c.header() - append', async () => {
+     c.header('X-Foo', 'Bar')
+-    c.header('X-Foo', 'Buzz', { append: true })
++    c.header('X-Foo', 'Buzz', { appendValue: true })
+     const res = c.body('Hi')
+     const foo = res.headers.get('X-Foo')
+     expect(foo).toBe('Bar, Buzz')
+@@ -172,7 +172,7 @@ describe('Context', () => {
+ 
+   it('Should set headers if already this.#headers is created by `c.header()`', async () => {
+     c.header('X-Foo', 'Bar')
+-    c.header('X-Foo', 'Buzz', { append: true })
++    c.header('X-Foo', 'Buzz', { appendValue: true })
+     const res = c.body('Hi', {
+       headers: {
+         'X-Message': 'Hi',
+@@ -183,7 +183,7 @@ describe('Context', () => {
+   })
+ 
+   it('c.header() - append, c.html()', async () => {
+-    c.header('X-Foo', 'Bar', { append: true })
++    c.header('X-Foo', 'Bar', { appendValue: true })
+     const res = await c.html('<h1>This rendered fine</h1>')
+     expect(res.headers.get('content-type')).toMatch(/^text\/html/)
+   })
+@@ -200,7 +200,7 @@ describe('Context', () => {
+   })
+ 
+   it('c.header() - clear the header when append is true', async () => {
+-    c.header('X-Foo', 'Bar', { append: true })
++    c.header('X-Foo', 'Bar', { appendValue: true })
+     c.header('X-Foo', undefined)
+     expect(c.res.headers.get('X-Foo')).toBe(null)
+   })
+@@ -214,7 +214,7 @@ describe('Context', () => {
+   })
+ 
+   it('c.body() - content-type cannot be overridden by the default response when append headers', async () => {
+-    c.header('Vary', 'Accept-Encoding', { append: true })
++    c.header('Vary', 'Accept-Encoding', { appendValue: true })
+     c.res
+     c.header('Content-Type', 'text/html')
+     const res = c.body('<h1>Hi</h1>')
+@@ -222,14 +222,14 @@ describe('Context', () => {
+   })
+ 
+   it('c.body() - content-type can set explicitly via c.res.headers', async () => {
+-    c.header('Vary', 'Accept-Encoding', { append: true })
++    c.header('Vary', 'Accept-Encoding', { appendValue: true })
+     c.res.headers.set('Content-Type', 'text/html')
+     const res = c.body('<h1>Hi</h1>')
+     expect(res.headers.get('Content-Type')).toMatch('text/html')
+   })
+ 
+   it('c.body() - Different header settings require ensuring order', async () => {
+-    c.header('Vary', 'Accept-Encoding', { append: true })
++    c.header('Vary', 'Accept-Encoding', { appendValue: true })
+     c.header('Content-Type', 'image/png')
+     c.res.headers.set('Content-Type', 'text/html')
+     const res = c.body('<h1>Hi</h1>')
+diff --git a/src/context.ts b/src/context.ts
+index 61dad2e3..7677dc08 100644
+--- a/src/context.ts
++++ b/src/context.ts
+@@ -252,7 +252,7 @@ type ContextOptions<E extends Env> = {
+ }
+ 
+ interface SetHeadersOptions {
+-  append?: boolean
++  appendValue?: boolean
+ }
+ 
+ interface SetHeaders {
+@@ -508,9 +508,9 @@ export class Context<
+    *   c.header('X-Message', 'Hello!')
+    *   c.header('Content-Type', 'text/plain')
+    *
+-   *   // Append multiple headers using the append option (e.g. Vary)
+-   *   c.header('Vary', 'Accept-Encoding', { append: true })
+-   *   c.header('Vary', 'User-Agent', { append: true })
++   *   // Append multiple headers using the appendValue option (e.g. Vary)
++   *   c.header('Vary', 'Accept-Encoding', { appendValue: true })
++   *   c.header('Vary', 'User-Agent', { appendValue: true })
+    *
+    *   return c.body('Thank you for coming')
+    * })
+@@ -523,7 +523,7 @@ export class Context<
+     const headers = this.#res ? this.#res.headers : (this.#preparedHeaders ??= new Headers())
+     if (value === undefined) {
+       headers.delete(name)
+-    } else if (options?.append) {
++    } else if (options?.appendValue) {
+       headers.append(name, value)
+     } else {
+       headers.set(name, value)
+diff --git a/src/helper/cookie/index.ts b/src/helper/cookie/index.ts
+index 4602a8db..990346e9 100644
+--- a/src/helper/cookie/index.ts
++++ b/src/helper/cookie/index.ts
+@@ -98,7 +98,7 @@ export const generateCookie = (name: string, value: string, opt?: CookieOptions)
+ 
+ export const setCookie = (c: Context, name: string, value: string, opt?: CookieOptions): void => {
+   const cookie = generateCookie(name, value, opt)
+-  c.header('Set-Cookie', cookie, { append: true })
++  c.header('Set-Cookie', cookie, { appendValue: true })
+ }
+ 
+ export const generateSignedCookie = async (
+@@ -135,7 +135,7 @@ export const setSignedCookie = async (
+   opt?: CookieOptions
+ ): Promise<void> => {
+   const cookie = await generateSignedCookie(name, value, secret, opt)
+-  c.header('set-cookie', cookie, { append: true })
++  c.header('set-cookie', cookie, { appendValue: true })
+ }
+ 
+ export const deleteCookie = (c: Context, name: string, opt?: CookieOptions): string | undefined => {
+diff --git a/src/middleware/cache/index.ts b/src/middleware/cache/index.ts
+index 5cd52409..da4a85c5 100644
+--- a/src/middleware/cache/index.ts
++++ b/src/middleware/cache/index.ts
+@@ -241,7 +241,7 @@ export const cache = (options: {
+         let [name, value] = directive.trim().split('=', 2)
+         name = name.toLowerCase()
+         if (!existingDirectives.includes(name)) {
+-          c.header('Cache-Control', `${name}${value ? `=${value}` : ''}`, { append: true })
++          c.header('Cache-Control', `${name}${value ? `=${value}` : ''}`, { appendValue: true })
+         }
+       }
+     }
+diff --git a/src/middleware/cors/index.test.ts b/src/middleware/cors/index.test.ts
+index 5568d952..ca05f9ab 100644
+--- a/src/middleware/cors/index.test.ts
++++ b/src/middleware/cors/index.test.ts
+@@ -280,7 +280,7 @@ describe('CORS by Middleware', () => {
+   it('Append "Origin" to Vary header on OPTIONS preflight, if response has some Vary header', async () => {
+     const testApp = new Hono()
+     testApp.use('/api/*', async (c, next) => {
+-      c.header('Vary', 'Accept-Encoding', { append: true })
++      c.header('Vary', 'Accept-Encoding', { appendValue: true })
+       await next()
+     })
+     testApp.use(
+diff --git a/src/middleware/cors/index.ts b/src/middleware/cors/index.ts
+index d02ae92e..2509c77b 100644
+--- a/src/middleware/cors/index.ts
++++ b/src/middleware/cors/index.ts
+@@ -158,7 +158,7 @@ export const cors = (options?: CORSOptions): MiddlewareHandler => {
+     // Suppose the server sends a response with an Access-Control-Allow-Origin value with an explicit origin (rather than the "*" wildcard).
+     // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Origin
+     if (opts.origin !== '*') {
+-      c.header('Vary', 'Origin', { append: true })
++      c.header('Vary', 'Origin', { appendValue: true })
+     }
+   }
+ }
+diff --git a/src/middleware/jsx-renderer/index.test.tsx b/src/middleware/jsx-renderer/index.test.tsx
+index 63e9ddc4..b683db08 100644
+--- a/src/middleware/jsx-renderer/index.test.tsx
++++ b/src/middleware/jsx-renderer/index.test.tsx
+@@ -358,7 +358,7 @@ d.replaceWith(c.content)
+     app.use(jsxRenderer(async ({ children }) => <div>{children}</div>, { stream: true }))
+     app.get('/', (c) => {
+       c.header('X-Message-Set', 'Hello')
+-      c.header('X-Message-Append', 'Hello', { append: true })
++      c.header('X-Message-Append', 'Hello', { appendValue: true })
+       return c.render('Hi', { title: 'Hi' })
+     })
+     const res = await app.request('/')
+diff --git a/src/middleware/serve-static/index.ts b/src/middleware/serve-static/index.ts
+index de792fd8..5fda8c08 100644
+--- a/src/middleware/serve-static/index.ts
++++ b/src/middleware/serve-static/index.ts
+@@ -110,7 +110,7 @@ export const serveStatic = <E extends Env = Env>(
+           if (compressedContent) {
+             content = compressedContent
+             c.header('Content-Encoding', encoding)
+-            c.header('Vary', 'Accept-Encoding', { append: true })
++            c.header('Vary', 'Accept-Encoding', { appendValue: true })
+             break
+           }
+         }

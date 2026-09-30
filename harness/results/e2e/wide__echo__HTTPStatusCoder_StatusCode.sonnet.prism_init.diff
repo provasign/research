@@ -1,0 +1,231 @@
+diff --git a/echo.go b/echo.go
+index 1a86100..78619c6 100644
+--- a/echo.go
++++ b/echo.go
+@@ -458,7 +458,7 @@ func DefaultHTTPErrorHandler(exposeError bool) HTTPErrorHandler {
+ 		code := http.StatusInternalServerError
+ 		var sc HTTPStatusCoder
+ 		if errors.As(err, &sc) {
+-			if tmp := sc.StatusCode(); tmp != 0 {
++			if tmp := sc.HTTPStatus(); tmp != 0 {
+ 				code = tmp
+ 			}
+ 		}
+diff --git a/echo_test.go b/echo_test.go
+index 7d2266c..eacfd5a 100644
+--- a/echo_test.go
++++ b/echo_test.go
+@@ -1308,7 +1308,7 @@ type customError struct {
+ 	Message string
+ }
+ 
+-func (ce *customError) StatusCode() int {
++func (ce *customError) HTTPStatus() int {
+ 	return ce.Code
+ }
+ 
+diff --git a/httperror.go b/httperror.go
+index 8cb10c8..e5bb6cb 100644
+--- a/httperror.go
++++ b/httperror.go
+@@ -37,7 +37,7 @@ var (
+ 
+ // HTTPStatusCoder is an interface that errors can implement to produce status code for HTTP response
+ type HTTPStatusCoder interface {
+-	StatusCode() int
++	HTTPStatus() int
+ }
+ 
+ // StatusCode returns status code from err if it implements HTTPStatusCoder interface.
+@@ -45,7 +45,7 @@ type HTTPStatusCoder interface {
+ func StatusCode(err error) int {
+ 	var sc HTTPStatusCoder
+ 	if errors.As(err, &sc) {
+-		return sc.StatusCode()
++		return sc.HTTPStatus()
+ 	}
+ 	return 0
+ }
+@@ -111,8 +111,8 @@ type HTTPError struct {
+ 	err     error
+ }
+ 
+-// StatusCode returns status code for HTTP response
+-func (he *HTTPError) StatusCode() int {
++// HTTPStatus returns status code for HTTP response
++func (he *HTTPError) HTTPStatus() int {
+ 	return he.Code
+ }
+ 
+@@ -145,7 +145,7 @@ type httpError struct {
+ 	code int
+ }
+ 
+-func (he httpError) StatusCode() int {
++func (he httpError) HTTPStatus() int {
+ 	return he.code
+ }
+ 
+diff --git a/httperror_external_test.go b/httperror_external_test.go
+index 91acdca..018c9fa 100644
+--- a/httperror_external_test.go
++++ b/httperror_external_test.go
+@@ -36,7 +36,7 @@ type apiError struct {
+ 	Body any
+ }
+ 
+-func (e *apiError) StatusCode() int {
++func (e *apiError) HTTPStatus() int {
+ 	return e.Code
+ }
+ 
+diff --git a/httperror_test.go b/httperror_test.go
+index 778a186..80d2f0a 100644
+--- a/httperror_test.go
++++ b/httperror_test.go
+@@ -18,7 +18,7 @@ func TestHTTPError_StatusCode(t *testing.T) {
+ 	code := 0
+ 	var sc HTTPStatusCoder
+ 	if errors.As(err, &sc) {
+-		code = sc.StatusCode()
++		code = sc.HTTPStatus()
+ 	}
+ 	assert.Equal(t, http.StatusBadRequest, code)
+ }
+diff --git a/middleware/body_limit_test.go b/middleware/body_limit_test.go
+index 68d904d..51cecc4 100644
+--- a/middleware/body_limit_test.go
++++ b/middleware/body_limit_test.go
+@@ -42,7 +42,7 @@ func TestBodyLimitConfig_ToMiddleware(t *testing.T) {
+ 	mw, err = BodyLimitConfig{LimitBytes: 2}.ToMiddleware()
+ 	assert.NoError(t, err)
+ 	he := mw(h)(c).(echo.HTTPStatusCoder)
+-	assert.Equal(t, http.StatusRequestEntityTooLarge, he.StatusCode())
++	assert.Equal(t, http.StatusRequestEntityTooLarge, he.HTTPStatus())
+ 
+ 	// Based on content read (within limit)
+ 	req = httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(hw))
+@@ -65,7 +65,7 @@ func TestBodyLimitConfig_ToMiddleware(t *testing.T) {
+ 	mw, err = BodyLimitConfig{LimitBytes: 2}.ToMiddleware()
+ 	assert.NoError(t, err)
+ 	he = mw(h)(c).(echo.HTTPStatusCoder)
+-	assert.Equal(t, http.StatusRequestEntityTooLarge, he.StatusCode())
++	assert.Equal(t, http.StatusRequestEntityTooLarge, he.HTTPStatus())
+ }
+ 
+ func TestBodyLimitAfterDecompressUsesDecodedSize(t *testing.T) {
+@@ -108,7 +108,7 @@ func TestBodyLimitReader(t *testing.T) {
+ 	// read all should return ErrStatusRequestEntityTooLarge
+ 	_, err := io.ReadAll(reader)
+ 	he := err.(echo.HTTPStatusCoder)
+-	assert.Equal(t, http.StatusRequestEntityTooLarge, he.StatusCode())
++	assert.Equal(t, http.StatusRequestEntityTooLarge, he.HTTPStatus())
+ 
+ 	// reset reader and read two bytes must succeed
+ 	bt := make([]byte, 2)
+diff --git a/middleware/decompress_test.go b/middleware/decompress_test.go
+index fadfa7f..509d684 100644
+--- a/middleware/decompress_test.go
++++ b/middleware/decompress_test.go
+@@ -295,7 +295,7 @@ func TestDecompress_ExceedsLimit(t *testing.T) {
+ 	assert.Error(t, err)
+ 	he, ok := err.(echo.HTTPStatusCoder)
+ 	assert.True(t, ok)
+-	assert.Equal(t, http.StatusRequestEntityTooLarge, he.StatusCode())
++	assert.Equal(t, http.StatusRequestEntityTooLarge, he.HTTPStatus())
+ }
+ 
+ func TestDecompress_AtExactLimit(t *testing.T) {
+@@ -347,7 +347,7 @@ func TestDecompress_ZipBomb(t *testing.T) {
+ 	assert.Error(t, err)
+ 	he, ok := err.(echo.HTTPStatusCoder)
+ 	assert.True(t, ok)
+-	assert.Equal(t, http.StatusRequestEntityTooLarge, he.StatusCode())
++	assert.Equal(t, http.StatusRequestEntityTooLarge, he.HTTPStatus())
+ }
+ 
+ func TestDecompress_UnlimitedExplicit(t *testing.T) {
+@@ -451,7 +451,7 @@ func TestDecompress_MultipleReads(t *testing.T) {
+ 	assert.Error(t, err)
+ 	he, ok := err.(echo.HTTPStatusCoder)
+ 	assert.True(t, ok)
+-	assert.Equal(t, http.StatusRequestEntityTooLarge, he.StatusCode())
++	assert.Equal(t, http.StatusRequestEntityTooLarge, he.HTTPStatus())
+ }
+ 
+ func TestDecompress_LargePayloadDosPrevention(t *testing.T) {
+@@ -481,7 +481,7 @@ func TestDecompress_LargePayloadDosPrevention(t *testing.T) {
+ 	assert.Error(t, err)
+ 	he, ok := err.(echo.HTTPStatusCoder)
+ 	assert.True(t, ok)
+-	assert.Equal(t, http.StatusRequestEntityTooLarge, he.StatusCode())
++	assert.Equal(t, http.StatusRequestEntityTooLarge, he.HTTPStatus())
+ }
+ 
+ func BenchmarkDecompress_WithLimit(b *testing.B) {
+diff --git a/middleware/static.go b/middleware/static.go
+index 200f96a..940c1fe 100644
+--- a/middleware/static.go
++++ b/middleware/static.go
+@@ -271,7 +271,7 @@ func (config StaticConfig) ToMiddleware() (echo.MiddlewareFunc, error) {
+ 				var he echo.HTTPStatusCoder
+ 				if (c.Path() != "" && c.RouteInfo().Method != echo.RouteNotFound) ||
+ 					!errors.As(err, &he) ||
+-					!config.HTML5 || he.StatusCode() != http.StatusNotFound {
++					!config.HTML5 || he.HTTPStatus() != http.StatusNotFound {
+ 					return err
+ 				}
+ 				// In HTML5 mode, serve index for a router-level 404.
+diff --git a/rfc9457.go b/rfc9457.go
+index 2719b53..3851203 100644
+--- a/rfc9457.go
++++ b/rfc9457.go
+@@ -35,8 +35,8 @@ func (pe *ProblemError) Error() string {
+ 	return fmt.Sprintf("code=%d, message=%v", pe.Status, msg)
+ }
+ 
+-// StatusCode returns status code for HTTP response, implementing HTTPStatusCoder interface.
+-func (pe *ProblemError) StatusCode() int {
++// HTTPStatus returns status code for HTTP response, implementing HTTPStatusCoder interface.
++func (pe *ProblemError) HTTPStatus() int {
+ 	return pe.Status
+ }
+ 
+@@ -84,7 +84,7 @@ func ProblemDetailsHTTPErrorHandler(exposeError bool) HTTPErrorHandler {
+ 
+ 			var sc HTTPStatusCoder
+ 			if errors.As(err, &sc) {
+-				pe.Status = sc.StatusCode()
++				pe.Status = sc.HTTPStatus()
+ 			}
+ 
+ 			var he *HTTPError
+diff --git a/rfc9457_test.go b/rfc9457_test.go
+index aa871e8..59f6b7a 100644
+--- a/rfc9457_test.go
++++ b/rfc9457_test.go
+@@ -179,9 +179,9 @@ func TestProblemError_Error(t *testing.T) {
+ 	assert.Equal(t, "code=418, message=I'm a teapot: brewing", pe.Error())
+ }
+ 
+-func TestProblemError_StatusCode(t *testing.T) {
++func TestProblemError_HTTPStatus(t *testing.T) {
+ 	pe := &ProblemError{Status: http.StatusTeapot}
+-	assert.Equal(t, http.StatusTeapot, pe.StatusCode())
++	assert.Equal(t, http.StatusTeapot, pe.HTTPStatus())
+ }
+ 
+ func TestProblemDetailsHTTPErrorHandler_DoesNotMutateSharedProblem(t *testing.T) {
+diff --git a/router_test.go b/router_test.go
+index 22c1dc7..da38b35 100644
+--- a/router_test.go
++++ b/router_test.go
+@@ -981,7 +981,7 @@ func TestRouterHandleMethodOptions(t *testing.T) {
+ 			if tc.expectStatus >= 400 {
+ 				assert.Error(t, err)
+ 				he := err.(HTTPStatusCoder)
+-				assert.Equal(t, tc.expectStatus, he.StatusCode())
++				assert.Equal(t, tc.expectStatus, he.HTTPStatus())
+ 			} else {
+ 				assert.NoError(t, err)
+ 				assert.Equal(t, tc.expectStatus, rec.Code)

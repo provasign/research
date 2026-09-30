@@ -1,0 +1,454 @@
+diff --git a/packages/docs/content/error-customization.mdx b/packages/docs/content/error-customization.mdx
+index c8f96fca..1f66b436 100644
+--- a/packages/docs/content/error-customization.mdx
++++ b/packages/docs/content/error-customization.mdx
+@@ -168,7 +168,7 @@ Unlike `iss.inst`, `iss.schema` is always the schema, even when a check originat
+ ```ts
+ z.config({
+   customError: (iss) => {
+-    const meta = iss.schema && z.globalRegistry.get(iss.schema);
++    const meta = iss.schema && z.globalRegistry.getMeta(iss.schema);
+     return `${meta?.title ?? "Field"} is invalid.`;
+   },
+ });
+diff --git a/packages/docs/content/metadata.mdx b/packages/docs/content/metadata.mdx
+index 34f78626..ca9c4c01 100644
+--- a/packages/docs/content/metadata.mdx
++++ b/packages/docs/content/metadata.mdx
+@@ -27,7 +27,7 @@ const mySchema = z.string();
+ 
+ myRegistry.add(mySchema, { description: "A cool schema!"});
+ myRegistry.has(mySchema); // => true
+-myRegistry.get(mySchema); // => { description: "A cool schema!" }
++myRegistry.getMeta(mySchema); // => { description: "A cool schema!" }
+ myRegistry.remove(mySchema);
+ myRegistry.clear(); // wipe registry
+ ```
+diff --git a/packages/docs/content/v4/index.mdx b/packages/docs/content/v4/index.mdx
+index d4141308..387c98be 100644
+--- a/packages/docs/content/v4/index.mdx
++++ b/packages/docs/content/v4/index.mdx
+@@ -435,7 +435,7 @@ To add schemas to your registry:
+ const emailSchema = z.string().email();
+ 
+ myRegistry.add(emailSchema, { title: "Email address", description: "..." });
+-myRegistry.get(emailSchema);
++myRegistry.getMeta(emailSchema);
+ // => { title: "Email address", ... }
+ ```
+ 
+diff --git a/packages/zod/src/v4/classic/schemas.ts b/packages/zod/src/v4/classic/schemas.ts
+index a342c42b..a0fe94f2 100644
+--- a/packages/zod/src/v4/classic/schemas.ts
++++ b/packages/zod/src/v4/classic/schemas.ts
+@@ -266,7 +266,7 @@ export const ZodType: core.$constructor<ZodType> = /*@__PURE__*/ core.$construct
+     },
+     meta(...args: any[]): any {
+       // overloaded: meta() returns the registered metadata, meta(data) returns a clone with `data` registered. The mapped type picks up the second overload, so we accept variadic any-args and return `any` to satisfy both at runtime.
+-      if (args.length === 0) return core.globalRegistry.get(this);
++      if (args.length === 0) return core.globalRegistry.getMeta(this);
+       const cl = this.clone();
+       core.globalRegistry.add(cl, args[0]);
+       return cl;
+@@ -347,7 +347,7 @@ export const ZodType: core.$constructor<ZodType> = /*@__PURE__*/ core.$construct
+     },
+     // Reads through to the registry on every access, so it must not cache.
+     get description(): string | undefined {
+-      return core.globalRegistry.get(this as unknown as ZodType)?.description;
++      return core.globalRegistry.getMeta(this as unknown as ZodType)?.description;
+     },
+     // No setter: `schema._def = x` throws, as it did when `_def` was a non-writable own property.
+     get _def(): core.$ZodTypeDef {
+diff --git a/packages/zod/src/v4/classic/tests/describe-meta-checks.test.ts b/packages/zod/src/v4/classic/tests/describe-meta-checks.test.ts
+index 46a6ab7a..db057ad8 100644
+--- a/packages/zod/src/v4/classic/tests/describe-meta-checks.test.ts
++++ b/packages/zod/src/v4/classic/tests/describe-meta-checks.test.ts
+@@ -4,14 +4,14 @@ import * as z from "../index.js";
+ describe("z.describe() check", () => {
+   it("registers description in globalRegistry", () => {
+     const schema = z.string().check(z.describe("A string"));
+-    expect(z.globalRegistry.get(schema)?.description).toBe("A string");
++    expect(z.globalRegistry.getMeta(schema)?.description).toBe("A string");
+   });
+ });
+ 
+ describe("z.meta() check", () => {
+   it("registers metadata in globalRegistry", () => {
+     const schema = z.number().check(z.meta({ title: "Age", description: "User's age" }));
+-    const meta = z.globalRegistry.get(schema);
++    const meta = z.globalRegistry.getMeta(schema);
+     expect(meta?.title).toBe("Age");
+     expect(meta?.description).toBe("User's age");
+   });
+@@ -20,7 +20,7 @@ describe("z.meta() check", () => {
+ describe("combined usage", () => {
+   it("works with multiple checks", () => {
+     const schema = z.string().check(z.describe("Email address"), z.meta({ title: "Email" }));
+-    const meta = z.globalRegistry.get(schema);
++    const meta = z.globalRegistry.getMeta(schema);
+     expect(meta?.description).toBe("Email address");
+     expect(meta?.title).toBe("Email");
+   });
+diff --git a/packages/zod/src/v4/classic/tests/description.test.ts b/packages/zod/src/v4/classic/tests/description.test.ts
+index 8a3dd1b2..e674e53e 100644
+--- a/packages/zod/src/v4/classic/tests/description.test.ts
++++ b/packages/zod/src/v4/classic/tests/description.test.ts
+@@ -19,7 +19,7 @@ test(".describe", () => {
+ test("adding description with z.globalRegistry", () => {
+   const schema = z.string();
+   z.core.globalRegistry.add(schema, { description });
+-  z.core.globalRegistry.get(schema);
++  z.core.globalRegistry.getMeta(schema);
+   expect(schema.description).toEqual(description);
+ });
+ 
+diff --git a/packages/zod/src/v4/classic/tests/from-json-schema.test.ts b/packages/zod/src/v4/classic/tests/from-json-schema.test.ts
+index 9e80bca1..24d7811d 100644
+--- a/packages/zod/src/v4/classic/tests/from-json-schema.test.ts
++++ b/packages/zod/src/v4/classic/tests/from-json-schema.test.ts
+@@ -940,7 +940,7 @@ test("unrecognized keys stored in globalRegistry by default", () => {
+     "x-custom": "custom value",
+   });
+ 
+-  const meta = z.globalRegistry.get(schema);
++  const meta = z.globalRegistry.getMeta(schema);
+   expect(meta).toBeDefined();
+   expect(meta?.title).toBe("My String");
+   expect(meta?.deprecated).toBe(true);
+@@ -964,13 +964,13 @@ test("unrecognized keys stored in custom registry", () => {
+   );
+ 
+   // Should be in custom registry
+-  const meta = customRegistry.get(schema);
++  const meta = customRegistry.getMeta(schema);
+   expect(meta).toBeDefined();
+   expect(meta?.title).toBe("Age");
+   expect(meta?.deprecated).toBe(true);
+ 
+   // Should NOT be in globalRegistry
+-  expect(z.globalRegistry.get(schema)).toBeUndefined();
++  expect(z.globalRegistry.getMeta(schema)).toBeUndefined();
+ });
+ 
+ test("$id and id are captured as metadata", () => {
+@@ -983,7 +983,7 @@ test("$id and id are captured as metadata", () => {
+     },
+     { registry: customRegistry }
+   );
+-  expect(customRegistry.get(schema1)?.$id).toBe("https://example.com/schemas/user");
++  expect(customRegistry.getMeta(schema1)?.$id).toBe("https://example.com/schemas/user");
+ 
+   const schema2 = fromJSONSchema(
+     {
+@@ -992,7 +992,7 @@ test("$id and id are captured as metadata", () => {
+     },
+     { registry: customRegistry }
+   );
+-  expect(customRegistry.get(schema2)?.id).toBe("legacy-id");
++  expect(customRegistry.getMeta(schema2)?.id).toBe("legacy-id");
+ });
+ 
+ test("x-* extension keys are captured as metadata", () => {
+@@ -1008,7 +1008,7 @@ test("x-* extension keys are captured as metadata", () => {
+     { registry: customRegistry }
+   );
+ 
+-  const meta = customRegistry.get(schema);
++  const meta = customRegistry.getMeta(schema);
+   expect(meta?.["x-openapi-example"]).toBe("example value");
+   expect(meta?.["x-internal"]).toBe(true);
+   expect(meta?.["x-tags"]).toEqual(["api", "public"]);
+@@ -1038,7 +1038,7 @@ test("metadata on nested schemas", () => {
+   );
+ 
+   // Verify parent schema has its metadata
+-  expect(customRegistry.get(parentSchema)?.title).toBe("User");
++  expect(customRegistry.getMeta(parentSchema)?.title).toBe("User");
+ 
+   // We can't easily access nested schemas directly, but we can verify the registry is being used correctly by checking a separate schema
+   const simpleSchema = fromJSONSchema(
+@@ -1048,7 +1048,7 @@ test("metadata on nested schemas", () => {
+     },
+     { registry: customRegistry }
+   );
+-  expect(customRegistry.get(simpleSchema)?.title).toBe("Simple");
++  expect(customRegistry.getMeta(simpleSchema)?.title).toBe("Simple");
+ });
+ 
+ test("no metadata added when no unrecognized keys", () => {
+@@ -1065,7 +1065,7 @@ test("no metadata added when no unrecognized keys", () => {
+   );
+ 
+   // description is handled via .describe(), so it shouldn't be in metadata. All other keys are recognized, so no metadata should be added
+-  expect(customRegistry.get(schema)).toBeUndefined();
++  expect(customRegistry.getMeta(schema)).toBeUndefined();
+ });
+ 
+ test("writeOnly and examples are captured as metadata", () => {
+@@ -1080,7 +1080,7 @@ test("writeOnly and examples are captured as metadata", () => {
+     { registry: customRegistry }
+   );
+ 
+-  const meta = customRegistry.get(schema);
++  const meta = customRegistry.getMeta(schema);
+   expect(meta?.writeOnly).toBe(true);
+   expect(meta?.examples).toEqual(["password123", "secret"]);
+ });
+@@ -1097,7 +1097,7 @@ test("$comment and $anchor are captured as metadata", () => {
+     { registry: customRegistry }
+   );
+ 
+-  const meta = customRegistry.get(schema);
++  const meta = customRegistry.getMeta(schema);
+   expect(meta?.$comment).toBe("This is a developer note");
+   expect(meta?.$anchor).toBe("my-anchor");
+ });
+@@ -1118,7 +1118,7 @@ test("contentEncoding and contentMediaType are stored as metadata", () => {
+   expect(schema.parse("aGVsbG8gd29ybGQ=")).toBe("aGVsbG8gd29ybGQ=");
+ 
+   // Content keywords should be in metadata
+-  const meta = customRegistry.get(schema);
++  const meta = customRegistry.getMeta(schema);
+   expect(meta?.contentEncoding).toBe("base64");
+   expect(meta?.contentMediaType).toBe("image/png");
+ });
+@@ -1227,7 +1227,7 @@ test("description and unrecognized metadata coexist on the same schema", () => {
+     { registry: customRegistry }
+   );
+   expect(schema.description).toBe("A custom string");
+-  expect(customRegistry.get(schema)?.["x-custom"]).toBe("value");
++  expect(customRegistry.getMeta(schema)?.["x-custom"]).toBe("value");
+ });
+ 
+ test("circular input throws a clear error", () => {
+@@ -1304,7 +1304,7 @@ test("__proto__ annotation key reaches the registry", () => {
+   const registry = z.registry<Record<string, unknown>>();
+   const schema = fromJSONSchema(JSON.parse(`{ "type": "string", "__proto__": { "custom": 1 } }`), { registry });
+ 
+-  const meta = registry.get(schema)!;
++  const meta = registry.getMeta(schema)!;
+   expect(Object.prototype.hasOwnProperty.call(meta, "__proto__")).toBe(true);
+   expect(meta.__proto__).toEqual({ custom: 1 });
+ });
+diff --git a/packages/zod/src/v4/classic/tests/issue-schema.test.ts b/packages/zod/src/v4/classic/tests/issue-schema.test.ts
+index 8026be9a..2a4d2a1b 100644
+--- a/packages/zod/src/v4/classic/tests/issue-schema.test.ts
++++ b/packages/zod/src/v4/classic/tests/issue-schema.test.ts
+@@ -13,7 +13,7 @@ function captureMeta(): { seen: (z.core.GlobalMeta | undefined)[] } {
+   const seen: (z.core.GlobalMeta | undefined)[] = [];
+   z.config({
+     customError: (issue) => {
+-      seen.push(issue.schema && z.globalRegistry.get(issue.schema));
++      seen.push(issue.schema && z.globalRegistry.getMeta(issue.schema));
+       return undefined;
+     },
+   });
+@@ -168,7 +168,7 @@ test("`inst` keeps its meaning and `schema` stays off the finalized issue", () =
+ test("every error map kind receives the owning schema", () => {
+   const seen: Record<string, z.core.GlobalMeta | undefined> = {};
+   const capture = (key: string) => (issue: { schema?: z.core.$ZodType | undefined }) => {
+-    seen[key] = issue.schema && z.globalRegistry.get(issue.schema);
++    seen[key] = issue.schema && z.globalRegistry.getMeta(issue.schema);
+     return undefined;
+   };
+ 
+diff --git a/packages/zod/src/v4/classic/tests/registries.test.ts b/packages/zod/src/v4/classic/tests/registries.test.ts
+index 10d1e0b1..06c26546 100644
+--- a/packages/zod/src/v4/classic/tests/registries.test.ts
++++ b/packages/zod/src/v4/classic/tests/registries.test.ts
+@@ -13,7 +13,7 @@ test("globalRegistry", () => {
+ 
+   a.register(z.globalRegistry, { field: "sup" });
+   expect(z.globalRegistry.has(a)).toEqual(true);
+-  expect(z.globalRegistry.get(a)).toEqual({ field: "sup" });
++  expect(z.globalRegistry.getMeta(a)).toEqual({ field: "sup" });
+ 
+   z.globalRegistry.remove(a);
+   expect(z.globalRegistry.has(a)).toEqual(false);
+@@ -28,12 +28,12 @@ test("z.registry", () => {
+ 
+   const a = z.string();
+   fieldRegistry.add(a, { name: "hello", description: "world" });
+-  const a_meta = fieldRegistry.get(a);
++  const a_meta = fieldRegistry.getMeta(a);
+   expect(a_meta).toEqual({ name: "hello", description: "world" });
+ 
+   fieldRegistry.remove(a);
+   expect(fieldRegistry.has(a)).toEqual(false);
+-  expect(fieldRegistry.get(a)).toEqual(undefined);
++  expect(fieldRegistry.getMeta(a)).toEqual(undefined);
+ });
+ 
+ test("z.registry no metadata", () => {
+@@ -42,7 +42,7 @@ test("z.registry no metadata", () => {
+   const a = z.string();
+   fieldRegistry.add(a);
+   fieldRegistry.add(z.number());
+-  expect(fieldRegistry.get(a)).toEqual(undefined);
++  expect(fieldRegistry.getMeta(a)).toEqual(undefined);
+   expect(fieldRegistry.has(a)).toEqual(true);
+ });
+ 
+@@ -96,7 +96,7 @@ test("output type in registry meta", () => {
+   reg.add(a, { out: "asdf" });
+   // @ts-expect-error
+   reg.add(a, 1234);
+-  expectTypeOf(reg.get(a)).toEqualTypeOf<{ out: string } | undefined>();
++  expectTypeOf(reg.getMeta(a)).toEqualTypeOf<{ out: string } | undefined>();
+ });
+ 
+ test("output type in registry meta - objects and arrays", () => {
+@@ -106,7 +106,7 @@ test("output type in registry meta - objects and arrays", () => {
+ 
+   // @ts-expect-error
+   reg.add(a, { name: "hello", examples: "world" });
+-  expectTypeOf(reg.get(a)).toEqualTypeOf<{ name: string; examples: string[] } | undefined>();
++  expectTypeOf(reg.getMeta(a)).toEqualTypeOf<{ name: string; examples: string[] } | undefined>();
+ });
+ 
+ test("input type in registry meta", () => {
+@@ -115,7 +115,7 @@ test("input type in registry meta", () => {
+   reg.add(a, { in: 1234 });
+   // @ts-expect-error
+   reg.add(a, "1234");
+-  expectTypeOf(reg.get(a)).toEqualTypeOf<{ in: number } | undefined>();
++  expectTypeOf(reg.getMeta(a)).toEqualTypeOf<{ in: number } | undefined>();
+ });
+ 
+ test("input type in registry meta - objects and arrays", () => {
+@@ -125,7 +125,7 @@ test("input type in registry meta - objects and arrays", () => {
+ 
+   // @ts-expect-error
+   reg.add(a, { name: "hello", examples: "world" });
+-  expectTypeOf(reg.get(a)).toEqualTypeOf<{ name: string; examples: number[] } | undefined>();
++  expectTypeOf(reg.getMeta(a)).toEqualTypeOf<{ name: string; examples: number[] } | undefined>();
+ });
+ 
+ test(".meta method", () => {
+@@ -180,7 +180,7 @@ test("function meta without replacement", () => {
+     },
+   });
+ 
+-  expect(myReg.get(mySchema)!.defaulter("hello", true)).toEqual(5);
++  expect(myReg.getMeta(mySchema)!.defaulter("hello", true)).toEqual(5);
+ });
+ 
+ test("function meta with replacement", () => {
+@@ -195,7 +195,7 @@ test("function meta with replacement", () => {
+     },
+   });
+ 
+-  expect(myReg.get(mySchema)!.defaulter("hello", true)).toEqual(5);
++  expect(myReg.getMeta(mySchema)!.defaulter("hello", true)).toEqual(5);
+ });
+ 
+ test("test .clear()", () => {
+diff --git a/packages/zod/src/v4/core/api.ts b/packages/zod/src/v4/core/api.ts
+index 5b10d5ef..24533657 100644
+--- a/packages/zod/src/v4/core/api.ts
++++ b/packages/zod/src/v4/core/api.ts
+@@ -1737,7 +1737,7 @@ export function describe<T>(description: string): checks.$ZodCheck<T> {
+   const ch = new checks.$ZodCheck({ check: "describe" });
+   ch._zod.onattach = [
+     (inst) => {
+-      const existing = registries.globalRegistry.get(inst) ?? {};
++      const existing = registries.globalRegistry.getMeta(inst) ?? {};
+       registries.globalRegistry.add(inst, { ...existing, description });
+     },
+   ];
+@@ -1750,7 +1750,7 @@ export function meta<T>(metadata: registries.GlobalMeta): checks.$ZodCheck<T> {
+   const ch = new checks.$ZodCheck({ check: "meta" });
+   ch._zod.onattach = [
+     (inst) => {
+-      const existing = registries.globalRegistry.get(inst) ?? {};
++      const existing = registries.globalRegistry.getMeta(inst) ?? {};
+       registries.globalRegistry.add(inst, { ...existing, ...metadata });
+     },
+   ];
+diff --git a/packages/zod/src/v4/core/registries.ts b/packages/zod/src/v4/core/registries.ts
+index cdd19e79..7a855212 100644
+--- a/packages/zod/src/v4/core/registries.ts
++++ b/packages/zod/src/v4/core/registries.ts
+@@ -57,13 +57,13 @@ export class $ZodRegistry<Meta extends MetadataType = MetadataType, Schema exten
+     return this;
+   }
+ 
+-  get<S extends Schema>(schema: S): $replace<Meta, S> | undefined {
++  getMeta<S extends Schema>(schema: S): $replace<Meta, S> | undefined {
+     // return this._map.get(schema) as any;
+ 
+     // inherit metadata
+     const p = schema._zod.parent as Schema;
+     if (p) {
+-      const pm: any = { ...(this.get(p) ?? {}) };
++      const pm: any = { ...(this.getMeta(p) ?? {}) };
+       delete pm.id; // do not inherit id
+       const f = { ...pm, ...this._map.get(schema) } as any;
+       return Object.keys(f).length ? f : undefined;
+diff --git a/packages/zod/src/v4/core/to-json-schema.ts b/packages/zod/src/v4/core/to-json-schema.ts
+index f5ded646..0c93c9be 100644
+--- a/packages/zod/src/v4/core/to-json-schema.ts
++++ b/packages/zod/src/v4/core/to-json-schema.ts
+@@ -271,7 +271,7 @@ export function processSchema<T extends schemas.$ZodType>(
+   }
+ 
+   // metadata
+-  const meta = ctx.metadataRegistry.get(schema);
++  const meta = ctx.metadataRegistry.getMeta(schema);
+   if (meta) assignProps(result.schema, meta);
+ 
+   if (ctx.io === "input" && isTransforming(schema)) {
+@@ -314,7 +314,7 @@ export function extractDefs<T extends schemas.$ZodType>(
+   // Track ids to detect duplicates across different schemas
+   const idToSchema = new Map<string, schemas.$ZodType>();
+   for (const entry of ctx.seen.entries()) {
+-    const id = ctx.metadataRegistry.get(entry[0])?.id;
++    const id = ctx.metadataRegistry.getMeta(entry[0])?.id;
+     if (id) {
+       const existing = idToSchema.get(id);
+       if (existing && existing !== entry[0]) {
+@@ -333,7 +333,7 @@ export function extractDefs<T extends schemas.$ZodType>(
+     // external is configured
+     const defsSegment = ctx.target === "draft-2020-12" ? "$defs" : "definitions";
+     if (ctx.external) {
+-      const externalId = ctx.external.registry.get(entry[0])?.id; // ?? "__shared";// `__schema${ctx.counter++}`;
++      const externalId = ctx.external.registry.getMeta(entry[0])?.id; // ?? "__shared";// `__schema${ctx.counter++}`;
+ 
+       // check if schema is in the external registry
+       const uriGenerator = ctx.external.uri ?? ((id: string) => id);
+@@ -408,7 +408,7 @@ export function extractDefs<T extends schemas.$ZodType>(
+ 
+     // extract schemas that are in the external registry
+     if (ctx.external) {
+-      const ext = ctx.external.registry.get(entry[0])?.id;
++      const ext = ctx.external.registry.getMeta(entry[0])?.id;
+       if (schema !== entry[0] && ext) {
+         extractToDef(entry);
+         continue;
+@@ -416,7 +416,7 @@ export function extractDefs<T extends schemas.$ZodType>(
+     }
+ 
+     // extract schemas with `id` meta
+-    const id = ctx.metadataRegistry.get(entry[0])?.id;
++    const id = ctx.metadataRegistry.getMeta(entry[0])?.id;
+     if (id) {
+       extractToDef(entry);
+       continue;
+@@ -699,7 +699,7 @@ export function finalize<T extends schemas.$ZodType>(
+   }
+ 
+   if (ctx.external?.uri) {
+-    const id = ctx.external.registry.get(schema)?.id;
++    const id = ctx.external.registry.getMeta(schema)?.id;
+     if (!id) throw new Error("Schema is missing an `id` property");
+     result.$id = ctx.external.uri(id);
+   }
+@@ -708,7 +708,7 @@ export function finalize<T extends schemas.$ZodType>(
+   assignProps(result, root.defId ? root.schema : (root.def ?? root.schema));
+ 
+   // The `id` in `.meta()` is a Zod-specific registration tag used to extract schemas into $defs — it is not user-facing JSON Schema metadata. Strip it from the output body where it would otherwise leak. The id is preserved implicitly via the $defs key (and via $ref paths).
+-  const rootMetaId = ctx.metadataRegistry.get(schema)?.id;
++  const rootMetaId = ctx.metadataRegistry.getMeta(schema)?.id;
+   if (rootMetaId !== undefined && result.id === rootMetaId) delete result.id;
+ 
+   // build defs object. With `external`, `defs` is the shared object every schema writes into, so the same entries are reassigned on every call. Without it, `defs` is fresh per call and must be rebuilt.

@@ -1,42 +1,44 @@
+diff --git a/context.go b/context.go
+index 8222073..6f5eb7f 100644
+--- a/context.go
++++ b/context.go
+@@ -95,6 +95,17 @@ func (x *Context) Reset() {
+ 	x.parentCtx = nil
+ }
+ 
++// addMethodAllowed appends method to the list of methods allowed for the
++// current route, skipping it if it's already present.
++func (x *Context) addMethodAllowed(method methodTyp) {
++	for _, m := range x.methodsAllowed {
++		if m == method {
++			return
++		}
++	}
++	x.methodsAllowed = append(x.methodsAllowed, method)
++}
++
+ // URLParam returns the corresponding URL parameter value from the request
+ // routing context.
+ func (x *Context) URLParam(key string) string {
 diff --git a/tree.go b/tree.go
-index 9f56549..8e0fa9e 100644
+index 9f56549..1370e12 100644
 --- a/tree.go
 +++ b/tree.go
-@@ -479,7 +479,9 @@ func (n *node) findRoute(rctx *Context, method methodTyp, path string) *node {
+@@ -479,7 +479,7 @@ func (n *node) findRoute(rctx *Context, method methodTyp, path string) *node {
  							if endpoints == mALL || endpoints == mSTUB {
  								continue
  							}
 -							rctx.methodsAllowed = append(rctx.methodsAllowed, endpoints)
-+							if !methodTypInSlice(endpoints, rctx.methodsAllowed) {
-+								rctx.methodsAllowed = append(rctx.methodsAllowed, endpoints)
-+							}
++							rctx.addMethodAllowed(endpoints)
  						}
  
  						// flag that the routing context found a route, but not a corresponding
-@@ -525,7 +527,9 @@ func (n *node) findRoute(rctx *Context, method methodTyp, path string) *node {
+@@ -525,7 +525,7 @@ func (n *node) findRoute(rctx *Context, method methodTyp, path string) *node {
  					if endpoints == mALL || endpoints == mSTUB {
  						continue
  					}
 -					rctx.methodsAllowed = append(rctx.methodsAllowed, endpoints)
-+					if !methodTypInSlice(endpoints, rctx.methodsAllowed) {
-+						rctx.methodsAllowed = append(rctx.methodsAllowed, endpoints)
-+					}
++					rctx.addMethodAllowed(endpoints)
  				}
  
  				// flag that the routing context found a route, but not a corresponding
-@@ -709,6 +713,15 @@ func equalHandlers(a, b http.Handler) bool {
- 	return false
- }
- 
-+func methodTypInSlice(m methodTyp, methods []methodTyp) bool {
-+	for _, me := range methods {
-+		if me == m {
-+			return true
-+		}
-+	}
-+	return false
-+}
-+
- func (n *node) walk(fn func(eps endpoints, subroutes Routes) bool) bool {
- 	// Visit the leaf values if any
- 	if (n.endpoints != nil || n.subroutes != nil) && fn(n.endpoints, n.subroutes) {

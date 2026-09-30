@@ -1,17 +1,24 @@
-diff --git a/src/main/java/tools/jackson/dataformat/xml/deser/XmlTokenStream.java b/src/main/java/tools/jackson/dataformat/xml/deser/XmlTokenStream.java
-index 1f1df9bb..c5700d47 100644
---- a/src/main/java/tools/jackson/dataformat/xml/deser/XmlTokenStream.java
-+++ b/src/main/java/tools/jackson/dataformat/xml/deser/XmlTokenStream.java
-@@ -364,6 +364,12 @@ public class XmlTokenStream
-     protected void repeatStartElement()
-     {
- //System.out.println(" XmlTokenStream.repeatStartElement() for <"+_localName+">, _currentWrapper was: "+_currentWrapper);
-+        // element marked `xsi:nil="true"` has no actual content; must NOT be
-+        // wrapped as a (single-element) array as that would prevent it from
-+        // being exposed as `null` and instead produce an empty/1-item List.
-+        if (_xsiNilFound) {
-+            return;
-+        }
-         // sanity check: can only be used when just returned START_ELEMENT:
-         if (_currentState != XML_START_ELEMENT) {
-             // 14-May-2020, tatu: Looks like we DO end up here with empty Lists; if so,
+diff --git a/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java b/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
+index 71055132..c7b0ce65 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
++++ b/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
+@@ -577,7 +577,9 @@ public class FromXmlParser
+ 
+             // Ok: virtual wrapping can be done by simply repeating current START_ELEMENT.
+             // Couple of ways to do it; but start by making _xmlTokens replay the thing...
+-            if (_streamReadContext.shouldWrap(name)) {
++            // [dataformat-xml#609]: except if `xsi:nil="true"`, which means `null` value,
++            // not a single-element unwrapped list/array to wrap.
++            if (_streamReadContext.shouldWrap(name) && !_xmlTokens.hasXsiNil()) {
+                 _xmlTokens.repeatStartElement();
+             }
+ 
+@@ -775,7 +777,7 @@ _currText);
+             }
+             String name = _xmlTokens.getLocalName();
+             _streamReadContext.setCurrentName(name);
+-            if (_streamReadContext.shouldWrap(name)) {
++            if (_streamReadContext.shouldWrap(name) && !_xmlTokens.hasXsiNil()) {
+ //System.out.println("REPEAT from nextTextValue()");
+                 _xmlTokens.repeatStartElement();
+             }

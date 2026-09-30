@@ -1,0 +1,82 @@
+diff --git a/gson/src/main/java/com/google/gson/internal/bind/JsonTreeReader.java b/gson/src/main/java/com/google/gson/internal/bind/JsonTreeReader.java
+index 44be5ad0..fc4560e2 100644
+--- a/gson/src/main/java/com/google/gson/internal/bind/JsonTreeReader.java
++++ b/gson/src/main/java/com/google/gson/internal/bind/JsonTreeReader.java
+@@ -362,8 +362,10 @@ public final class JsonTreeReader extends JsonReader {
+     expect(JsonToken.NAME);
+     Iterator<?> i = (Iterator<?>) peekStack();
+     Map.Entry<?, ?> entry = (Map.Entry<?, ?>) i.next();
++    String name = (String) entry.getKey();
++    pathNames[stackSize - 1] = name;
+     push(entry.getValue());
+-    push(new JsonPrimitive((String) entry.getKey()));
++    push(new JsonPrimitive(name));
+   }
+ 
+   private void push(Object newTop) {
+diff --git a/gson/src/main/java/com/google/gson/stream/JsonReader.java b/gson/src/main/java/com/google/gson/stream/JsonReader.java
+index 47668b0f..1b9e8e87 100644
+--- a/gson/src/main/java/com/google/gson/stream/JsonReader.java
++++ b/gson/src/main/java/com/google/gson/stream/JsonReader.java
+@@ -1154,6 +1154,17 @@ public class JsonReader implements Closeable {
+           // Fall back to parse as a double below.
+         }
+         break;
++      case PEEKED_BUFFERED:
++        // peekedString was already populated, e.g. by promoteNameToValue()
++        try {
++          long result = Long.parseLong(peekedString);
++          peeked = PEEKED_NONE;
++          pathIndices[stackSize - 1]++;
++          return result;
++        } catch (NumberFormatException ignored) {
++          // Fall back to parse as a double below.
++        }
++        break;
+       default:
+         throw unexpectedTokenError("a long");
+     }
+@@ -1405,6 +1416,16 @@ public class JsonReader implements Closeable {
+       } catch (NumberFormatException ignored) {
+         // Fall back to parse as a double below.
+       }
++    } else if (p == PEEKED_BUFFERED) {
++      // peekedString was already populated, e.g. by promoteNameToValue()
++      try {
++        result = Integer.parseInt(peekedString);
++        peeked = PEEKED_NONE;
++        pathIndices[stackSize - 1]++;
++        return result;
++      } catch (NumberFormatException ignored) {
++        // Fall back to parse as a double below.
++      }
+     } else {
+       throw unexpectedTokenError("an int");
+     }
+@@ -1957,19 +1978,23 @@ public class JsonReader implements Closeable {
+             if (p == PEEKED_NONE) {
+               p = reader.doPeek();
+             }
++            String result;
+             switch (p) {
+               case PEEKED_DOUBLE_QUOTED_NAME:
+-                reader.peeked = PEEKED_DOUBLE_QUOTED;
++                result = reader.nextQuotedValue('"');
+                 break;
+               case PEEKED_SINGLE_QUOTED_NAME:
+-                reader.peeked = PEEKED_SINGLE_QUOTED;
++                result = reader.nextQuotedValue('\'');
+                 break;
+               case PEEKED_UNQUOTED_NAME:
+-                reader.peeked = PEEKED_UNQUOTED;
++                result = reader.nextUnquotedValue();
+                 break;
+               default:
+                 throw reader.unexpectedTokenError("a name");
+             }
++            reader.peeked = PEEKED_BUFFERED;
++            reader.peekedString = result;
++            reader.pathNames[reader.stackSize - 1] = result;
+           }
+         };
+   }

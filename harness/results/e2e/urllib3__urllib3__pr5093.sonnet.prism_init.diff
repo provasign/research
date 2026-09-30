@@ -1,0 +1,38 @@
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 8a89488d..80252ff0 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -840,12 +840,18 @@ class HTTPSConnection(HTTPConnection):
+             # ``ProxyManager.__init__``.
+             if self.proxy_is_forwarding and self.proxy_config is not None:
+                 ssl_context = self.proxy_config.ssl_context
++                cert_reqs = (
++                    ssl_context.verify_mode
++                    if ssl_context is not None
++                    else self.cert_reqs
++                )
+             else:
+                 ssl_context = self.ssl_context
++                cert_reqs = self.cert_reqs
+ 
+             sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+                 sock=sock,
+-                cert_reqs=self.cert_reqs,
++                cert_reqs=cert_reqs,
+                 ssl_version=self.ssl_version,
+                 ssl_minimum_version=self.ssl_minimum_version,
+                 ssl_maximum_version=self.ssl_maximum_version,
+@@ -915,9 +921,12 @@ class HTTPSConnection(HTTPConnection):
+         # `_connect_tls_proxy` is called when self._tunnel_host is truthy.
+         proxy_config = typing.cast(ProxyConfig, self.proxy_config)
+         ssl_context = proxy_config.ssl_context
++        cert_reqs = (
++            ssl_context.verify_mode if ssl_context is not None else self.cert_reqs
++        )
+         sock_and_verified = _ssl_wrap_socket_and_match_hostname(
+             sock,
+-            cert_reqs=self.cert_reqs,
++            cert_reqs=cert_reqs,
+             ssl_version=self.ssl_version,
+             ssl_minimum_version=self.ssl_minimum_version,
+             ssl_maximum_version=self.ssl_maximum_version,

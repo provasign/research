@@ -1,60 +1,64 @@
-diff --git a/command.go b/command.go
-index d1fc008e..59b3a030 100644
---- a/command.go
-+++ b/command.go
-@@ -205,6 +205,28 @@ func (cmd *Command) allFlags() []Flag {
- 	return flags
- }
- 
-+// preParseStateResetter is implemented by flags which track whether
-+// PreParse has already applied them, so that a flag instance shared
-+// between a parent command and one of its subcommands isn't re-applied
-+// (and its value discarded) partway through a single Run.
-+type preParseStateResetter interface {
-+	resetPreParseState()
-+}
-+
-+// resetFlagsPreParseState clears the "already applied" bit tracked by flags
-+// across the whole command tree so each top-level Run starts from a clean
-+// slate, regardless of whether previous Run calls left that bit set.
-+func resetFlagsPreParseState(cmd *Command) {
-+	for _, fl := range cmd.allFlags() {
-+		if r, ok := fl.(preParseStateResetter); ok {
-+			r.resetPreParseState()
-+		}
-+	}
-+	for _, subCmd := range cmd.Commands {
-+		resetFlagsPreParseState(subCmd)
-+	}
-+}
-+
- // useShortOptionHandling traverses Lineage() for *any* ancestors
- // with UseShortOptionHandling
- func (cmd *Command) useShortOptionHandling() bool {
 diff --git a/command_run.go b/command_run.go
-index 87fa7e7f..d567c68f 100644
+index 87fa7e7f..88469222 100644
 --- a/command_run.go
 +++ b/command_run.go
-@@ -136,6 +136,7 @@ func (cmd *Command) run(ctx context.Context, osArgs []string) (_ context.Context
+@@ -90,10 +90,30 @@ outer:
+ // arguments are parsed according to the Flag and Command
+ // definitions and the matching Action functions are run.
+ func (cmd *Command) Run(ctx context.Context, osArgs []string) (deferErr error) {
++	cmd.resetFlagsForRun()
+ 	_, deferErr = cmd.run(ctx, osArgs)
+ 	return deferErr
+ }
  
- 	if cmd.parent == nil {
- 		cmd.setupCommandGraph()
-+		resetFlagsPreParseState(cmd)
- 	}
- 
- 	var rargs Args = &stringSliceArgs{v: osArgs}
++// resetFlagsForRun clears any "already applied" state left over on this
++// command's flags (and those of all of its subcommands) from a previous,
++// independent Run invocation. Flag instances -- and in particular ones
++// shared between a command and its subcommands -- persist across separate
++// Run calls (e.g. an app run multiple times in a test, or interactively),
++// so without this their values from the previous invocation would leak
++// into the next one.
++func (cmd *Command) resetFlagsForRun() {
++	for _, f := range cmd.allFlags() {
++		if r, ok := f.(interface{ resetForRun() }); ok {
++			r.resetForRun()
++		}
++	}
++
++	for _, sub := range cmd.Commands {
++		sub.resetFlagsForRun()
++	}
++}
++
+ func (cmd *Command) run(ctx context.Context, osArgs []string) (_ context.Context, deferErr error) {
+ 	tracef("running with arguments %[1]q (cmd=%[2]q)", osArgs, cmd.Name)
+ 	cmd.setupDefaults(osArgs)
 diff --git a/flag_bool_with_inverse.go b/flag_bool_with_inverse.go
-index bc12c25a..7ac3c257 100644
+index bc12c25a..80707184 100644
 --- a/flag_bool_with_inverse.go
 +++ b/flag_bool_with_inverse.go
-@@ -68,6 +68,15 @@ func (bif *BoolWithInverseFlag) inversePrefix() string {
+@@ -59,6 +59,14 @@ func (bif *BoolWithInverseFlag) IsLocal() bool {
+ 	return bif.Local
+ }
+ 
++// resetForRun clears the "already applied" state so that a fresh top-level
++// Run invocation re-initializes the flag's value, even though the flag
++// instance (and its applied/hasBeenSet state) may be shared and reused
++// across multiple, independent Run calls (e.g. in tests).
++func (bif *BoolWithInverseFlag) resetForRun() {
++	bif.applied = false
++}
++
+ func (bif *BoolWithInverseFlag) inversePrefix() string {
+ 	if bif.InversePrefix == "" {
+ 		bif.InversePrefix = DefaultInverseBoolPrefix
+@@ -68,6 +76,14 @@ func (bif *BoolWithInverseFlag) inversePrefix() string {
  }
  
  func (bif *BoolWithInverseFlag) PreParse() error {
-+	// if the flag has already been applied to a flag set (e.g. because the
-+	// same flag instance is shared between a parent command and one of its
-+	// subcommands) then re-running PreParse would recreate bif.value and
-+	// discard any value already read from the command line, env vars, or
++	// if the flag has already been applied (e.g. it is shared between a
++	// parent command and one of its subcommands) then re-initializing it
++	// here would discard any value already set on it from the CLI, env, or
 +	// other sources.
 +	if bif.applied {
 +		return nil
@@ -63,33 +67,32 @@ index bc12c25a..7ac3c257 100644
  	count := bif.Config.Count
  	if count == nil {
  		count = &bif.count
-@@ -92,6 +101,14 @@ func (bif *BoolWithInverseFlag) PreParse() error {
+diff --git a/flag_impl.go b/flag_impl.go
+index ab97da87..71748c57 100644
+--- a/flag_impl.go
++++ b/flag_impl.go
+@@ -148,6 +148,14 @@ func (f *FlagBase[T, C, V]) PostParse() error {
  	return nil
  }
  
-+// resetPreParseState clears the applied bit set by PreParse so that the next
-+// top-level Run of a Command tree starts from a clean slate, even though a
-+// single Run may legitimately call PreParse more than once for the same flag
-+// instance when it is shared between a parent command and its subcommands.
-+func (bif *BoolWithInverseFlag) resetPreParseState() {
-+	bif.applied = false
++// resetForRun clears the "already applied" state so that a fresh top-level
++// Run invocation re-initializes the flag's value, even though the flag
++// instance (and its applied/hasBeenSet state) may be shared and reused
++// across multiple, independent Run calls (e.g. in tests).
++func (f *FlagBase[T, C, V]) resetForRun() {
++	f.applied = false
 +}
 +
- func (bif *BoolWithInverseFlag) PostParse() error {
- 	tracef("postparse (flag=%[1]q)", bif.Name)
- 
-diff --git a/flag_impl.go b/flag_impl.go
-index ab97da87..5adb7c50 100644
---- a/flag_impl.go
-+++ b/flag_impl.go
-@@ -157,6 +157,15 @@ func (f *FlagBase[T, C, V]) setMultiValueParsingConfig(c multiValueParsingConfig
+ // pass configuration of parsing to value
+ func (f *FlagBase[T, C, V]) setMultiValueParsingConfig(c multiValueParsingConfig) {
+ 	tracef("setMultiValueParsingConfig %T, %+v", f.value, f.value)
+@@ -157,6 +165,14 @@ func (f *FlagBase[T, C, V]) setMultiValueParsingConfig(c multiValueParsingConfig
  }
  
  func (f *FlagBase[T, C, V]) PreParse() error {
-+	// if the flag has already been applied to a flag set (e.g. because the
-+	// same flag instance is shared between a parent command and one of its
-+	// subcommands) then re-running PreParse would recreate f.value and
-+	// discard any value already read from the command line, env vars, or
++	// if the flag has already been applied (e.g. it is shared between a
++	// parent command and one of its subcommands) then re-initializing it
++	// here would discard any value already set on it from the CLI, env, or
 +	// other sources.
 +	if f.applied {
 +		return nil
@@ -98,18 +101,3 @@ index ab97da87..5adb7c50 100644
  	newVal := f.Value
  
  	if f.Destination == nil {
-@@ -175,6 +184,14 @@ func (f *FlagBase[T, C, V]) PreParse() error {
- 	return nil
- }
- 
-+// resetPreParseState clears the applied bit set by PreParse so that the next
-+// top-level Run of a Command tree starts from a clean slate, even though a
-+// single Run may legitimately call PreParse more than once for the same flag
-+// instance when it is shared between a parent command and its subcommands.
-+func (f *FlagBase[T, C, V]) resetPreParseState() {
-+	f.applied = false
-+}
-+
- // Set applies given value from string
- func (f *FlagBase[T, C, V]) Set(_ string, val string) error {
- 	tracef("apply (flag=%[1]q)", f.Name)

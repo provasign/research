@@ -1,0 +1,255 @@
+diff --git a/src/main/java/tools/jackson/dataformat/xml/JacksonXmlAnnotationIntrospector.java b/src/main/java/tools/jackson/dataformat/xml/JacksonXmlAnnotationIntrospector.java
+index e765cf6d..1bf3576b 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/JacksonXmlAnnotationIntrospector.java
++++ b/src/main/java/tools/jackson/dataformat/xml/JacksonXmlAnnotationIntrospector.java
+@@ -246,6 +246,48 @@ public class JacksonXmlAnnotationIntrospector
+             // [dataformat-xml#665]: empty localName should not produce an
+             //   empty-string PropertyName (causes "Duplicate creator property"
+             //   on records); return null so that the implicit name is used.
++            String localName = pann.localName();
++            if (localName != null && !localName.isEmpty()) {
++                // [dataformat-xml#27]: when combined with an active element wrapper
++                //   on the same accessor, the local name only designates the XML
++                //   element used for individual items of the wrapped collection, not
++                //   the property's own identity. Using it as the property name would
++                //   make two differently-wrapped properties that happen to share an
++                //   item name (e.g. "item") collide into a single property. Use the
++                //   wrapper's own (necessarily distinct-per-property) name for identity
++                //   instead; the item name itself is recovered separately via
++                //   findXmlPropertyInnerName(). This also covers constructor
++                //   parameters, which (unlike fields/getters/setters) have no other
++                //   way to get a name without a "-parameters" compile flag, so they
++                //   still need *some* explicit name here, just not the item one.
++                JacksonXmlElementWrapper wrapper = _findAnnotation(a, JacksonXmlElementWrapper.class);
++                if (wrapper != null && wrapper.useWrapping()) {
++                    String wrapperLocalName = wrapper.localName();
++                    if (wrapperLocalName != null && !wrapperLocalName.isEmpty()) {
++                        return PropertyName.construct(wrapperLocalName, wrapper.namespace());
++                    }
++                    return null;
++                }
++                return PropertyName.construct(localName, pann.namespace());
++            }
++        }
++        return null;
++    }
++
++    /*
++    /**********************************************************************
++    /* XmlAnnotationIntrospector, findXmlPropertyInnerName
++    /**********************************************************************
++     */
++
++    // [dataformat-xml#27]: expose the per-item element name for wrapped
++    // collections independently of the property's own identity (see
++    // _findXmlName() above).
++    @Override
++    public PropertyName findXmlPropertyInnerName(MapperConfig<?> config, Annotated ann)
++    {
++        JacksonXmlProperty pann = _findAnnotation(ann, JacksonXmlProperty.class);
++        if (pann != null) {
+             String localName = pann.localName();
+             if (localName != null && !localName.isEmpty()) {
+                 return PropertyName.construct(localName, pann.namespace());
+diff --git a/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanPropertyWriter.java b/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanPropertyWriter.java
+index 118bf6a2..31d8aeb7 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanPropertyWriter.java
++++ b/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanPropertyWriter.java
+@@ -80,7 +80,10 @@ public class XmlBeanPropertyWriter
+             PropertyName wrapperName, PropertyName wrappedName,
+             ValueSerializer<Object> serializer, boolean dynamicWrapping)
+     {
+-        super(wrapped);
++        // [dataformat-xml#27]: the per-item element name (`wrappedName`) may now differ
++        // from the wrapped property's own name; rename so `serializeAsProperty()` (which
++        // writes `_name` for the item element) uses the item name, not the property name.
++        super(wrapped, wrappedName);
+         _wrapperQName = _qname(wrapperName);
+         _wrappedQName = _qname(wrappedName);
+         _dynamicWrapping = dynamicWrapping;
+diff --git a/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java b/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java
+index c6540351..67ba0f12 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java
++++ b/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java
+@@ -4,6 +4,7 @@ import java.util.*;
+ 
+ import tools.jackson.databind.*;
+ import tools.jackson.databind.introspect.AnnotatedMember;
++import tools.jackson.databind.introspect.BeanPropertyDefinition;
+ import tools.jackson.databind.ser.*;
+ import tools.jackson.databind.ser.bean.BeanSerializerBase;
+ import tools.jackson.dataformat.xml.util.AnnotationUtil;
+@@ -38,6 +39,7 @@ public class XmlBeanSerializerModifier
+             BeanDescription.Supplier beanDescRef, List<BeanPropertyWriter> beanProperties)
+     {
+         final AnnotationIntrospector intr = config.getAnnotationIntrospector();
++        final List<BeanPropertyDefinition> propDefs = beanDescRef.get().findProperties();
+         for (int i = 0, len = beanProperties.size(); i < len; ++i) {
+             BeanPropertyWriter bpw = beanProperties.get(i);
+             final AnnotatedMember member = bpw.getMember();
+@@ -66,13 +68,18 @@ public class XmlBeanSerializerModifier
+             } else {
+                 continue;
+             }
+-            PropertyName wrappedName = PropertyName.construct(bpw.getName(), ns);
+             PropertyName wrapperName = bpw.getWrapperName();
+ 
+             // first things first: no wrapping?
+             if (wrapperName == null || wrapperName == PropertyName.NO_NAME) {
+                 continue;
+             }
++            // [dataformat-xml#27]: the per-item element name is no longer necessarily
++            // the property's own name (that would risk colliding with a differently-
++            // wrapped property using the same item name); look it up directly instead.
++            PropertyName itemName = _findWrappedItemName(config, intr, propDefs, bpw);
++            PropertyName wrappedName = (itemName != null) ? itemName
++                    : PropertyName.construct(bpw.getName(), ns);
+             // no local name? Just double the wrapped name for wrapper
+             String localName = wrapperName.getSimpleName();
+             if (localName == null || localName.length() == 0) {
+@@ -98,4 +105,31 @@ public class XmlBeanSerializerModifier
+         }
+         return new XmlBeanSerializer((BeanSerializerBase) serializer);
+     }
++
++    // [dataformat-xml#27]: `@JacksonXmlProperty` may live on any of the property's
++    // accessors (field, getter, setter, constructor parameter), not necessarily the
++    // one `bpw.getMember()` points to; check them all.
++    private static PropertyName _findWrappedItemName(SerializationConfig config,
++            AnnotationIntrospector intr, List<BeanPropertyDefinition> propDefs, BeanPropertyWriter bpw)
++    {
++        for (BeanPropertyDefinition propDef : propDefs) {
++            if (!propDef.getName().equals(bpw.getName())) {
++                continue;
++            }
++            for (AnnotatedMember member : new AnnotatedMember[] {
++                    propDef.getGetter(), propDef.getField(),
++                    propDef.getSetter(), propDef.getConstructorParameter()
++            }) {
++                if (member == null) {
++                    continue;
++                }
++                PropertyName pn = AnnotationUtil.findXmlPropertyInnerName(config, intr, member);
++                if (pn != null) {
++                    return pn;
++                }
++            }
++            break;
++        }
++        return null;
++    }
+ }
+diff --git a/src/main/java/tools/jackson/dataformat/xml/util/AnnotationUtil.java b/src/main/java/tools/jackson/dataformat/xml/util/AnnotationUtil.java
+index 14b27ca4..84781749 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/util/AnnotationUtil.java
++++ b/src/main/java/tools/jackson/dataformat/xml/util/AnnotationUtil.java
+@@ -1,6 +1,7 @@
+ package tools.jackson.dataformat.xml.util;
+ 
+ import tools.jackson.databind.AnnotationIntrospector;
++import tools.jackson.databind.PropertyName;
+ import tools.jackson.databind.cfg.MapperConfig;
+ import tools.jackson.databind.introspect.AnnotatedMember;
+ 
+@@ -65,4 +66,21 @@ public class AnnotationUtil
+         }
+         return null;
+     }
++
++    // [dataformat-xml#27]: per-item element name for wrapped collections, kept
++    // separate from the property's own (identity) name.
++    public static PropertyName findXmlPropertyInnerName(MapperConfig<?> config,
++            AnnotationIntrospector ai,
++            AnnotatedMember prop)
++    {
++        for (AnnotationIntrospector intr : ai.allIntrospectors()) {
++            if (intr instanceof AnnotationIntrospector.XmlExtensions) {
++                PropertyName pn = ((AnnotationIntrospector.XmlExtensions) intr).findXmlPropertyInnerName(config, prop);
++                if (pn != null) {
++                    return pn;
++                }
++            }
++        }
++        return null;
++    }
+ }
+diff --git a/src/test/java/tools/jackson/dataformat/xml/tofix/ConflictingGetters27Test.java b/src/test/java/tools/jackson/dataformat/xml/tofix/ConflictingGetters27Test.java
+deleted file mode 100644
+index 2a488c6e..00000000
+--- a/src/test/java/tools/jackson/dataformat/xml/tofix/ConflictingGetters27Test.java
++++ /dev/null
+@@ -1,74 +0,0 @@
+-package tools.jackson.dataformat.xml.tofix;
+-
+-import org.junit.jupiter.api.Test;
+-
+-import com.fasterxml.jackson.annotation.JsonRootName;
+-
+-import tools.jackson.dataformat.xml.XmlMapper;
+-import tools.jackson.dataformat.xml.XmlTestUtil;
+-import tools.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;
+-import tools.jackson.dataformat.xml.annotation.JacksonXmlProperty;
+-import tools.jackson.dataformat.xml.testutil.failure.JacksonTestFailureExpected;
+-
+-import static org.junit.jupiter.api.Assertions.assertNotNull;
+-
+-// For [dataformat-xml#27]
+-public class ConflictingGetters27Test extends XmlTestUtil
+-{
+-    // [dataformat-xml#27]
+-    @JsonRootName("output")
+-    static class Bean {
+-        public BeanInfo[] beanInfo;
+-        public BeanInfo[] beanOther;
+-
+-        @JacksonXmlElementWrapper(localName = "beanInfo")
+-        @JacksonXmlProperty(localName = "item")
+-        public BeanInfo[] getBeanInfo() {
+-            return beanInfo;
+-        }
+-
+-        public void setBeanInfo(BeanInfo[] beanInfo) {
+-            this.beanInfo = beanInfo;
+-        }
+-
+-        @JacksonXmlElementWrapper(localName = "beanOther")
+-        @JacksonXmlProperty(localName = "item")
+-        public BeanInfo[] getBeanOther() {
+-            return beanOther;
+-        }
+-
+-        public void setBeanOther(BeanInfo[] beanOther) {
+-            this.beanOther = beanOther;
+-        }
+-    }    
+-    static class BeanInfo {
+-        public String name;
+-
+-        public BeanInfo() { }
+-        public BeanInfo(String n) { name = n; }
+-    }
+-
+-    /*
+-    /**********************************************************************
+-    /* Test methods
+-    /**********************************************************************
+-     */
+-
+-    // [dataformat-xml#27]
+-    @JacksonTestFailureExpected
+-    @Test
+-    public void testIssue27() throws Exception
+-    {
+-        XmlMapper mapper = new XmlMapper();
+-
+-        Bean bean = new Bean();
+-        BeanInfo beanInfo = new BeanInfo("name");
+-        BeanInfo beanOther = new BeanInfo("name");
+-        bean.setBeanInfo(new BeanInfo[] { beanInfo });
+-        bean.setBeanOther(new BeanInfo[] { beanOther });
+-
+-        String json = mapper.writeValueAsString(bean);
+-        assertNotNull(json);
+-//        System.out.println(output);
+-    }
+-}

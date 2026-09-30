@@ -1,0 +1,46 @@
+diff --git a/tree.go b/tree.go
+index 74ff43d..e086e92 100644
+--- a/tree.go
++++ b/tree.go
+@@ -7,6 +7,7 @@ package chi
+ import (
+ 	"fmt"
+ 	"net/http"
++	"reflect"
+ 	"regexp"
+ 	"slices"
+ 	"sort"
+@@ -629,8 +630,9 @@ func (n *node) routes() []Route {
+ 	rts := []Route{}
+ 
+ 	n.walk(func(eps endpoints, subroutes Routes) bool {
++		var stub http.Handler
+ 		if eps[mSTUB] != nil && eps[mSTUB].handler != nil && subroutes == nil {
+-			return false
++			stub = eps[mSTUB].handler
+ 		}
+ 
+ 		// Group methodHandlers by unique patterns
+@@ -640,6 +642,9 @@ func (n *node) routes() []Route {
+ 			if h.pattern == "" {
+ 				continue
+ 			}
++			if stub != nil && (mt == mSTUB || sameHandler(h.handler, stub)) {
++				continue
++			}
+ 			p, ok := pats[h.pattern]
+ 			if !ok {
+ 				p = endpoints{}
+@@ -883,3 +888,12 @@ func walk(r Routes, walkFn WalkFunc, parentRoute string, parentMw ...func(http.H
+ 
+ 	return nil
+ }
++
++// sameHandler reports whether a and b are the same func handler.
++func sameHandler(a, b http.Handler) bool {
++	if a == nil || b == nil {
++		return a == b
++	}
++	va, vb := reflect.ValueOf(a), reflect.ValueOf(b)
++	return va.Kind() == reflect.Func && vb.Kind() == reflect.Func && va.Pointer() == vb.Pointer()
++}

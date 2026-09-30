@@ -1,0 +1,514 @@
+diff --git a/src/main/java/com/fasterxml/jackson/databind/JsonSerializer.java b/src/main/java/com/fasterxml/jackson/databind/JsonSerializer.java
+index 5ddca81b6..3327817a6 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/JsonSerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/JsonSerializer.java
+@@ -40,7 +40,7 @@ import com.fasterxml.jackson.databind.util.NameTransformer;
+  * to implement
+  * {@link com.fasterxml.jackson.databind.ser.ContextualSerializer},
+  * which allows specialization of serializers: call to
+- * {@link com.fasterxml.jackson.databind.ser.ContextualSerializer#createContextual}
++ * {@link com.fasterxml.jackson.databind.ser.ContextualSerializer#createContextualSerializer}
+  * is passed information on property, and can create a newly configured
+  * serializer for handling that particular property.
+  *<p>
+diff --git a/src/main/java/com/fasterxml/jackson/databind/SerializerProvider.java b/src/main/java/com/fasterxml/jackson/databind/SerializerProvider.java
+index a5817b695..6d96e6907 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/SerializerProvider.java
++++ b/src/main/java/com/fasterxml/jackson/databind/SerializerProvider.java
+@@ -563,7 +563,7 @@ public abstract class SerializerProvider
+      * if and as necessary.
+      *<p>
+      * Note: this call will also contextualize serializer (call
+-     * {@code serializer.createContextual()}) before returning it.
++     * {@code serializer.createContextualSerializer()}) before returning it.
+      *
+      * @throws JsonMappingException if there are fatal problems with
+      *   accessing suitable serializer; including that of not
+@@ -607,7 +607,7 @@ public abstract class SerializerProvider
+      * to handle polymorphic types.
+      *<p>
+      * Note: this call will also contextualize serializer (call
+-     * {@code serializer.createContextual()}) before returning it.
++     * {@code serializer.createContextualSerializer()}) before returning it.
+      *
+      * @param property When creating secondary serializers, property for which
+      *   serializer is needed: annotations of the property (or bean that contains it)
+@@ -774,7 +774,7 @@ public abstract class SerializerProvider
+      * Serializer returned SHOULD NOT handle type information; caller will (have to) add
+      * suitable wrapping if necessary.
+      *<p>
+-     * Note: this call will also contextualize serializer (call {@code createContextual()}
++     * Note: this call will also contextualize serializer (call {@code createContextualSerializer()}
+      * before returning it, if applicable (implements {@code ContextualSerializer})
+      *
+      * @param valueType Type of values to serialize
+@@ -1125,7 +1125,7 @@ public abstract class SerializerProvider
+     {
+         if (ser != null) {
+             if (ser instanceof ContextualSerializer) {
+-                ser = ((ContextualSerializer) ser).createContextual(this, property);
++                ser = ((ContextualSerializer) ser).createContextualSerializer(this, property);
+             }
+         }
+         return ser;
+@@ -1153,7 +1153,7 @@ public abstract class SerializerProvider
+     {
+         if (ser != null) {
+             if (ser instanceof ContextualSerializer) {
+-                ser = ((ContextualSerializer) ser).createContextual(this, property);
++                ser = ((ContextualSerializer) ser).createContextualSerializer(this, property);
+             }
+         }
+         return ser;
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ext/CoreXMLSerializers.java b/src/main/java/com/fasterxml/jackson/databind/ext/CoreXMLSerializers.java
+index c56eb368f..a263cbc35 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ext/CoreXMLSerializers.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ext/CoreXMLSerializers.java
+@@ -107,7 +107,7 @@ public class CoreXMLSerializers extends Serializers.Base
+         }
+ 
+         @Override
+-        public JsonSerializer<?> createContextual(SerializerProvider prov, BeanProperty property)
++        public JsonSerializer<?> createContextualSerializer(SerializerProvider prov, BeanProperty property)
+                 throws JsonMappingException {
+             JsonSerializer<?> ser = prov.handlePrimaryContextualization(_delegate, property);
+             if (ser != _delegate) {
+@@ -137,7 +137,7 @@ public class CoreXMLSerializers extends Serializers.Base
+         }
+ 
+         @Override
+-        public JsonSerializer<?> createContextual(SerializerProvider serializers, BeanProperty property)
++        public JsonSerializer<?> createContextualSerializer(SerializerProvider serializers, BeanProperty property)
+             throws JsonMappingException
+         {
+             JsonFormat.Value format = findFormatOverrides(serializers, property, handledType());
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/BasicSerializerFactory.java b/src/main/java/com/fasterxml/jackson/databind/ser/BasicSerializerFactory.java
+index 5e6814c32..c8bdb875a 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/BasicSerializerFactory.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/BasicSerializerFactory.java
+@@ -619,7 +619,7 @@ public abstract class BasicSerializerFactory
+             MapLikeType mlt = (MapLikeType) type;
+             /* 29-Sep-2012, tatu: This is actually too early to (try to) find
+              *  key serializer from property annotations, and can lead to caching
+-             *  issues (see [databind#75]). Instead, must be done from 'createContextual()' call.
++             *  issues (see [databind#75]). Instead, must be done from 'createContextualSerializer()' call.
+              *  But we do need to check class annotations.
+              */
+             JsonSerializer<Object> keySerializer = _findKeySerializer(prov, beanDesc.getClassInfo());
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/ContextualSerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/ContextualSerializer.java
+index 0dd90a010..8fec60a81 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/ContextualSerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/ContextualSerializer.java
+@@ -35,6 +35,6 @@ public interface ContextualSerializer
+      *
+      * @throws JsonMappingException
+      */
+-    public JsonSerializer<?> createContextual(SerializerProvider prov, BeanProperty property)
++    public JsonSerializer<?> createContextualSerializer(SerializerProvider prov, BeanProperty property)
+         throws JsonMappingException;
+ }
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/impl/MapEntrySerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/impl/MapEntrySerializer.java
+index 1bff1c254..11b22f0a6 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/impl/MapEntrySerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/impl/MapEntrySerializer.java
+@@ -180,7 +180,7 @@ public class MapEntrySerializer
+     }
+ 
+     @Override
+-    public JsonSerializer<?> createContextual(SerializerProvider provider,
++    public JsonSerializer<?> createContextualSerializer(SerializerProvider provider,
+             BeanProperty property) throws JsonMappingException
+     {
+         JsonSerializer<?> ser = null;
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/impl/StringArraySerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/impl/StringArraySerializer.java
+index c8fb0ccea..f4d60ef1f 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/impl/StringArraySerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/impl/StringArraySerializer.java
+@@ -80,7 +80,7 @@ public class StringArraySerializer
+      */
+ 
+     @Override
+-    public JsonSerializer<?> createContextual(SerializerProvider provider,
++    public JsonSerializer<?> createContextualSerializer(SerializerProvider provider,
+             BeanProperty property)
+         throws JsonMappingException
+     {
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/impl/TypeWrappedSerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/impl/TypeWrappedSerializer.java
+index 62ad61d6c..a7ad76b9d 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/impl/TypeWrappedSerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/impl/TypeWrappedSerializer.java
+@@ -51,7 +51,7 @@ public final class TypeWrappedSerializer
+      */
+ 
+     @Override // since 2.9
+-    public JsonSerializer<?> createContextual(SerializerProvider provider, BeanProperty property)
++    public JsonSerializer<?> createContextualSerializer(SerializerProvider provider, BeanProperty property)
+         throws JsonMappingException
+     {
+         // 13-Mar-2017, tatu: Should we call `TypeSerializer.forProperty()`?
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/ArraySerializerBase.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/ArraySerializerBase.java
+index 3a2739feb..28d60ffa9 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/ArraySerializerBase.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/ArraySerializerBase.java
+@@ -90,7 +90,7 @@ public abstract class ArraySerializerBase<T>
+             Boolean unwrapSingle);
+ 
+     @Override
+-    public JsonSerializer<?> createContextual(SerializerProvider serializers,
++    public JsonSerializer<?> createContextualSerializer(SerializerProvider serializers,
+             BeanProperty property) throws JsonMappingException
+     {
+         Boolean unwrapSingle = null;
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/AsArraySerializerBase.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/AsArraySerializerBase.java
+index a24108070..7278a46e0 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/AsArraySerializerBase.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/AsArraySerializerBase.java
+@@ -163,11 +163,11 @@ public abstract class AsArraySerializerBase<T>
+     /**
+      * This method is needed to resolve contextual annotations like
+      * per-property overrides, as well as do recursive call
+-     * to <code>createContextual</code> of content serializer, if
++     * to <code>createContextualSerializer</code> of content serializer, if
+      * known statically.
+      */
+     @Override
+-    public JsonSerializer<?> createContextual(SerializerProvider serializers,
++    public JsonSerializer<?> createContextualSerializer(SerializerProvider serializers,
+             BeanProperty property)
+         throws JsonMappingException
+     {
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/BeanSerializerBase.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/BeanSerializerBase.java
+index 4c63e00df..6dcea4f4c 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/BeanSerializerBase.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/BeanSerializerBase.java
+@@ -429,7 +429,7 @@ public abstract class BeanSerializerBase
+ 
+     @SuppressWarnings("incomplete-switch")
+     @Override
+-    public JsonSerializer<?> createContextual(SerializerProvider provider,
++    public JsonSerializer<?> createContextualSerializer(SerializerProvider provider,
+             BeanProperty property)
+         throws JsonMappingException
+     {
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/BooleanSerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/BooleanSerializer.java
+index 6733f8aac..166169d03 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/BooleanSerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/BooleanSerializer.java
+@@ -45,7 +45,7 @@ public final class BooleanSerializer
+     }
+ 
+     @Override
+-    public JsonSerializer<?> createContextual(SerializerProvider serializers,
++    public JsonSerializer<?> createContextualSerializer(SerializerProvider serializers,
+             BeanProperty property) throws JsonMappingException
+     {
+         // 16-Mar-2021, tatu: As per [databind#3080], was passing wrapper type
+@@ -137,7 +137,7 @@ public final class BooleanSerializer
+         }
+ 
+         @Override
+-        public JsonSerializer<?> createContextual(SerializerProvider serializers,
++        public JsonSerializer<?> createContextualSerializer(SerializerProvider serializers,
+                 BeanProperty property) throws JsonMappingException
+         {
+             JsonFormat.Value format = findFormatOverrides(serializers,
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/DateTimeSerializerBase.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/DateTimeSerializerBase.java
+index 71b28e911..e6f7e1cc4 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/DateTimeSerializerBase.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/DateTimeSerializerBase.java
+@@ -58,7 +58,7 @@ public abstract class DateTimeSerializerBase<T>
+     public abstract DateTimeSerializerBase<T> withFormat(Boolean timestamp, DateFormat customFormat);
+ 
+     @Override
+-    public JsonSerializer<?> createContextual(SerializerProvider serializers,
++    public JsonSerializer<?> createContextualSerializer(SerializerProvider serializers,
+             BeanProperty property) throws JsonMappingException
+     {
+         // Note! Should not skip if `property` null since that'd skip check
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/EnumSerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/EnumSerializer.java
+index 43464c5b6..0c5503dbc 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/EnumSerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/EnumSerializer.java
+@@ -132,7 +132,7 @@ public class EnumSerializer
+      * choice here, however.
+      */
+     @Override
+-    public JsonSerializer<?> createContextual(SerializerProvider serializers,
++    public JsonSerializer<?> createContextualSerializer(SerializerProvider serializers,
+             BeanProperty property) throws JsonMappingException
+     {
+         JsonFormat.Value format = findFormatOverrides(serializers,
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/InetAddressSerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/InetAddressSerializer.java
+index c9adfe70d..8fd62a0bc 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/InetAddressSerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/InetAddressSerializer.java
+@@ -46,7 +46,7 @@ public class InetAddressSerializer
+     }
+ 
+     @Override
+-    public JsonSerializer<?> createContextual(SerializerProvider serializers,
++    public JsonSerializer<?> createContextualSerializer(SerializerProvider serializers,
+             BeanProperty property) throws JsonMappingException
+     {
+         JsonFormat.Value format = findFormatOverrides(serializers,
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/JsonValueSerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/JsonValueSerializer.java
+index a60bf8226..ed1cb59c2 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/JsonValueSerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/JsonValueSerializer.java
+@@ -34,7 +34,7 @@ import com.fasterxml.jackson.databind.util.ClassUtil;
+  * Implementation note: we will post-process resulting serializer
+  * (much like what is done with {@link BeanSerializer})
+  * to figure out actual serializers for final types.
+- *  This must be done from {@link #createContextual} method, and NOT from constructor;
++ *  This must be done from {@link #createContextualSerializer} method, and NOT from constructor;
+  * otherwise we could end up with an infinite loop.
+  */
+ @SuppressWarnings("serial")
+@@ -216,7 +216,7 @@ public class JsonValueSerializer
+      * statically figure out what the result type must be.
+      */
+     @Override
+-    public JsonSerializer<?> createContextual(SerializerProvider ctxt,
++    public JsonSerializer<?> createContextualSerializer(SerializerProvider ctxt,
+             BeanProperty property)
+         throws JsonMappingException
+     {
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/MapSerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/MapSerializer.java
+index 37048b170..8c2867f80 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/MapSerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/MapSerializer.java
+@@ -475,7 +475,7 @@ public class MapSerializer
+      */
+ 
+     @Override
+-    public JsonSerializer<?> createContextual(SerializerProvider provider,
++    public JsonSerializer<?> createContextualSerializer(SerializerProvider provider,
+             BeanProperty property)
+         throws JsonMappingException
+     {
+@@ -696,7 +696,7 @@ public class MapSerializer
+     /**
+      * Accessor for currently assigned key serializer. Note that
+      * this may return null during construction of <code>MapSerializer</code>:
+-     * depedencies are resolved during {@link #createContextual} method
++     * depedencies are resolved during {@link #createContextualSerializer} method
+      * (which can be overridden by custom implementations), but for some
+      * dynamic types, it is possible that serializer is only resolved
+      * during actual serialization.
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/NumberSerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/NumberSerializer.java
+index 56c2391da..139a3e1b5 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/NumberSerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/NumberSerializer.java
+@@ -47,7 +47,7 @@ public class NumberSerializer
+     }
+ 
+     @Override
+-    public JsonSerializer<?> createContextual(SerializerProvider prov,
++    public JsonSerializer<?> createContextualSerializer(SerializerProvider prov,
+             BeanProperty property) throws JsonMappingException
+     {
+         JsonFormat.Value format = findFormatOverrides(prov, property, handledType());
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/NumberSerializers.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/NumberSerializers.java
+index be7e956a2..d6a6fce41 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/NumberSerializers.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/NumberSerializers.java
+@@ -96,7 +96,7 @@ public class NumberSerializers {
+         }
+ 
+         @Override
+-        public JsonSerializer<?> createContextual(SerializerProvider prov,
++        public JsonSerializer<?> createContextualSerializer(SerializerProvider prov,
+                 BeanProperty property) throws JsonMappingException
+         {
+             JsonFormat.Value format = findFormatOverrides(prov, property, handledType());
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/ObjectArraySerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/ObjectArraySerializer.java
+index 3cfb21042..093203035 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/ObjectArraySerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/ObjectArraySerializer.java
+@@ -122,7 +122,7 @@ public class ObjectArraySerializer
+      */
+ 
+     @Override
+-    public JsonSerializer<?> createContextual(SerializerProvider serializers,
++    public JsonSerializer<?> createContextualSerializer(SerializerProvider serializers,
+             BeanProperty property)
+         throws JsonMappingException
+     {
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/ReferenceTypeSerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/ReferenceTypeSerializer.java
+index 6585d29af..4470f5b3b 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/ReferenceTypeSerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/ReferenceTypeSerializer.java
+@@ -196,7 +196,7 @@ public abstract class ReferenceTypeSerializer<T>
+      */
+ 
+     @Override
+-    public JsonSerializer<?> createContextual(SerializerProvider provider,
++    public JsonSerializer<?> createContextualSerializer(SerializerProvider provider,
+             BeanProperty property) throws JsonMappingException
+     {
+         TypeSerializer typeSer = _valueTypeSerializer;
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/StaticListSerializerBase.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/StaticListSerializerBase.java
+index a641266db..e2ae5275d 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/StaticListSerializerBase.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/StaticListSerializerBase.java
+@@ -61,7 +61,7 @@ public abstract class StaticListSerializerBase<T extends Collection<?>>
+ 
+     @SuppressWarnings("unchecked")
+     @Override
+-    public JsonSerializer<?> createContextual(SerializerProvider serializers,
++    public JsonSerializer<?> createContextualSerializer(SerializerProvider serializers,
+             BeanProperty property)
+         throws JsonMappingException
+     {
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/StdArraySerializers.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/StdArraySerializers.java
+index fbf05de4c..22b9be49d 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/StdArraySerializers.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/StdArraySerializers.java
+@@ -553,7 +553,7 @@ public class StdArraySerializers
+         }
+ 
+         @Override
+-        public JsonSerializer<?> createContextual(SerializerProvider ctxt, BeanProperty property)
++        public JsonSerializer<?> createContextualSerializer(SerializerProvider ctxt, BeanProperty property)
+             throws JsonMappingException
+         {
+             JsonFormat.Value format = findFormatOverrides(ctxt, property,
+@@ -563,7 +563,7 @@ public class StdArraySerializers
+                     return BinaryFloatArraySerializer.instance;
+                 }
+             }
+-            return super.createContextual(ctxt, property);
++            return super.createContextualSerializer(ctxt, property);
+         }
+ 
+         @Override
+@@ -659,7 +659,7 @@ public class StdArraySerializers
+         }
+ 
+         @Override
+-        public JsonSerializer<?> createContextual(SerializerProvider ctxt, BeanProperty property)
++        public JsonSerializer<?> createContextualSerializer(SerializerProvider ctxt, BeanProperty property)
+             throws JsonMappingException
+         {
+             JsonFormat.Value format = findFormatOverrides(ctxt, property,
+@@ -669,7 +669,7 @@ public class StdArraySerializers
+                     return BinaryDoubleArraySerializer.instance;
+                 }
+             }
+-            return super.createContextual(ctxt, property);
++            return super.createContextualSerializer(ctxt, property);
+         }
+         
+         @Override
+@@ -739,7 +739,7 @@ public class StdArraySerializers
+         }
+ 
+         @Override
+-        public JsonSerializer<?> createContextual(SerializerProvider ctxt, BeanProperty property)
++        public JsonSerializer<?> createContextualSerializer(SerializerProvider ctxt, BeanProperty property)
+                 throws JsonMappingException
+         {
+             JsonFormat.Value format = findFormatOverrides(ctxt, property,
+@@ -827,7 +827,7 @@ public class StdArraySerializers
+         }
+ 
+         @Override
+-        public JsonSerializer<?> createContextual(SerializerProvider ctxt, BeanProperty property)
++        public JsonSerializer<?> createContextualSerializer(SerializerProvider ctxt, BeanProperty property)
+                 throws JsonMappingException
+         {
+             JsonFormat.Value format = findFormatOverrides(ctxt, property,
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/StdDelegatingSerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/StdDelegatingSerializer.java
+index de94c4367..1ac6b221f 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/StdDelegatingSerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/StdDelegatingSerializer.java
+@@ -103,7 +103,7 @@ public class StdDelegatingSerializer
+     }
+ 
+     @Override
+-    public JsonSerializer<?> createContextual(SerializerProvider provider, BeanProperty property)
++    public JsonSerializer<?> createContextualSerializer(SerializerProvider provider, BeanProperty property)
+         throws JsonMappingException
+     {
+         JsonSerializer<?> delSer = _delegateSerializer;
+@@ -315,8 +315,8 @@ public class StdDelegatingSerializer
+         JsonSerializer<Object> ser = serializers.findValueSerializer(value.getClass());
+         // ... so we need to do it separately
+         if (ser instanceof ContextualSerializer) {
+-            // 25-Jan-2025, tatu: Should we hold on to `BeanProperty` from `createContextual`?
+-            ser = (JsonSerializer<Object>)((ContextualSerializer) ser).createContextual(serializers, null);
++            // 25-Jan-2025, tatu: Should we hold on to `BeanProperty` from `createContextualSerializer`?
++            ser = (JsonSerializer<Object>)((ContextualSerializer) ser).createContextualSerializer(serializers, null);
+         }
+         return ser;
+     }
+diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/UUIDSerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/UUIDSerializer.java
+index db614690d..86b5546e4 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/ser/std/UUIDSerializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/UUIDSerializer.java
+@@ -55,7 +55,7 @@ public class UUIDSerializer
+     }
+ 
+     @Override
+-    public JsonSerializer<?> createContextual(SerializerProvider serializers,
++    public JsonSerializer<?> createContextualSerializer(SerializerProvider serializers,
+             BeanProperty property) throws JsonMappingException
+     {
+         JsonFormat.Value format = findFormatOverrides(serializers,
+diff --git a/src/test/java/com/fasterxml/jackson/databind/contextual/ContextualKeyTypesTest.java b/src/test/java/com/fasterxml/jackson/databind/contextual/ContextualKeyTypesTest.java
+index 449f8d36f..2ab809feb 100644
+--- a/src/test/java/com/fasterxml/jackson/databind/contextual/ContextualKeyTypesTest.java
++++ b/src/test/java/com/fasterxml/jackson/databind/contextual/ContextualKeyTypesTest.java
+@@ -49,7 +49,7 @@ public class ContextualKeyTypesTest extends DatabindTestUtil
+         }
+ 
+         @Override
+-        public JsonSerializer<?> createContextual(SerializerProvider prov, BeanProperty property)
++        public JsonSerializer<?> createContextualSerializer(SerializerProvider prov, BeanProperty property)
+         {
+             return new ContextualKeySerializer(_prefix+":");
+         }
+diff --git a/src/test/java/com/fasterxml/jackson/databind/contextual/ContextualSerializationTest.java b/src/test/java/com/fasterxml/jackson/databind/contextual/ContextualSerializationTest.java
+index efc754f58..3afb17cc3 100644
+--- a/src/test/java/com/fasterxml/jackson/databind/contextual/ContextualSerializationTest.java
++++ b/src/test/java/com/fasterxml/jackson/databind/contextual/ContextualSerializationTest.java
+@@ -139,7 +139,7 @@ public class ContextualSerializationTest
+         }
+ 
+         @Override
+-        public JsonSerializer<?> createContextual(SerializerProvider prov, BeanProperty property)
++        public JsonSerializer<?> createContextualSerializer(SerializerProvider prov, BeanProperty property)
+         {
+             String prefix = "UNKNOWN";
+             Prefix ann = null;
+@@ -178,7 +178,7 @@ public class ContextualSerializationTest
+         }
+ 
+         @Override
+-        public JsonSerializer<?> createContextual(SerializerProvider prov, BeanProperty property)
++        public JsonSerializer<?> createContextualSerializer(SerializerProvider prov, BeanProperty property)
+         {
+             return new ContextualAndResolvable(isResolved, isContextual+1);
+         }
+@@ -208,7 +208,7 @@ public class ContextualSerializationTest
+         }
+ 
+         @Override
+-        public JsonSerializer<?> createContextual(SerializerProvider prov, BeanProperty property)
++        public JsonSerializer<?> createContextualSerializer(SerializerProvider prov, BeanProperty property)
+         {
+             if (property == null) {
+                 return new AccumulatingContextual(desc+"/ROOT");
+diff --git a/src/test/java/com/fasterxml/jackson/databind/struct/TestPOJOAsArrayPolymorphic.java b/src/test/java/com/fasterxml/jackson/databind/struct/TestPOJOAsArrayPolymorphic.java
+index 49d1b23f2..4fd751626 100644
+--- a/src/test/java/com/fasterxml/jackson/databind/struct/TestPOJOAsArrayPolymorphic.java
++++ b/src/test/java/com/fasterxml/jackson/databind/struct/TestPOJOAsArrayPolymorphic.java
+@@ -34,7 +34,7 @@ public class TestPOJOAsArrayPolymorphic extends DatabindTestUtil
+     public void testPolymorphicAsArray() throws Exception
+     {
+         // 20-Sep-2019, taut: this fails to add shape information, due to class annotations
+-        //   not being checked due to missing `property` for `createContextual()`
++        //   not being checked due to missing `property` for `createContextualSerializer()`
+ 
+         String json = MAPPER.writeValueAsString(new DirectLayout());
+ 

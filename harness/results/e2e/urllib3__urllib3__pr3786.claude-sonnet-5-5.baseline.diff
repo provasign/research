@@ -1,0 +1,53 @@
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 84e1dab9..5dc22be4 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -760,6 +760,13 @@ class HTTPSConnection(HTTPConnection):
+             server_hostname: str = self.host
+             tls_in_tls = False
+ 
++            # In forwarding mode the TLS connection is to the proxy, so only
++            # the proxy's TLS settings apply.
++            forwarding_to_proxy = (
++                self.proxy_is_forwarding and self.proxy_config is not None
++            )
++            proxy_config = self.proxy_config
++
+             # Do we need to establish a tunnel?
+             if self.proxy_is_tunneling:
+                 # We're tunneling to an HTTPS origin so need to do TLS-in-TLS.
+@@ -777,7 +784,7 @@ class HTTPSConnection(HTTPConnection):
+                 # Override the host with the one we're requesting data from.
+                 server_hostname = typing.cast(str, self._tunnel_host)
+ 
+-            if self.server_hostname is not None:
++            if self.server_hostname is not None and not forwarding_to_proxy:
+                 server_hostname = self.server_hostname
+ 
+             is_time_off = datetime.date.today() < RECENT_DATE
+@@ -806,10 +813,22 @@ class HTTPSConnection(HTTPConnection):
+                 key_file=self.key_file,
+                 key_password=self.key_password,
+                 server_hostname=server_hostname_rm_dot,
+-                ssl_context=self.ssl_context,
++                ssl_context=(
++                    proxy_config.ssl_context
++                    if forwarding_to_proxy and proxy_config
++                    else self.ssl_context
++                ),
+                 tls_in_tls=tls_in_tls,
+-                assert_hostname=self.assert_hostname,
+-                assert_fingerprint=self.assert_fingerprint,
++                assert_hostname=(
++                    proxy_config.assert_hostname
++                    if forwarding_to_proxy and proxy_config
++                    else self.assert_hostname
++                ),
++                assert_fingerprint=(
++                    proxy_config.assert_fingerprint
++                    if forwarding_to_proxy and proxy_config
++                    else self.assert_fingerprint
++                ),
+             )
+             self.sock = sock_and_verified.socket
+ 

@@ -1,0 +1,168 @@
+diff --git a/src/h3.ts b/src/h3.ts
+index f64ebc3..8a8ac5d 100644
+--- a/src/h3.ts
++++ b/src/h3.ts
+@@ -54,7 +54,7 @@ export class H3Core implements H3CoreType {
+       event.context.params = route.params;
+       event.context.matchedRoute = route.data;
+     }
+-    const routeHandler = route?.data.handler || NoHandler;
++    const routeHandler = route?.data.handlerFn || NoHandler;
+     const middleware = this["~getMiddleware"](event, route as unknown as undefined);
+     return middleware.length > 0
+       ? callMiddleware(event, middleware, routeHandler)
+@@ -166,7 +166,7 @@ export const H3 = /* @__PURE__ */ (() => {
+       this["~addRoute"]({
+         method: _method as HTTPMethod,
+         route,
+-        handler: toEventHandler(handler)!,
++        handlerFn: toEventHandler(handler)!,
+         middleware: opts?.middleware,
+         meta: { ...(handler as EventHandler).meta, ...opts?.meta },
+       });
+diff --git a/src/tracing.ts b/src/tracing.ts
+index b65adfc..9c14fb4 100644
+--- a/src/tracing.ts
++++ b/src/tracing.ts
+@@ -79,7 +79,7 @@ export function tracingPlugin(traceOpts?: TracingPluginOptions): H3Plugin {
+     h3["~routes"] = h3["~routes"].map((route) => {
+       return {
+         ...route,
+-        handler: wrapEventHandler(route.handler),
++        handlerFn: wrapEventHandler(route.handlerFn),
+         middleware: route.middleware ? route.middleware.map((m) => wrapMiddleware(m)) : undefined,
+       } satisfies H3Route;
+     });
+@@ -95,7 +95,7 @@ export function tracingPlugin(traceOpts?: TracingPluginOptions): H3Plugin {
+         // eslint-disable-next-line unicorn/prefer-at
+         const lastRoute = instance["~routes"][instance["~routes"].length - 1];
+         if (lastRoute) {
+-          lastRoute.handler = wrapEventHandler(lastRoute.handler);
++          lastRoute.handlerFn = wrapEventHandler(lastRoute.handlerFn);
+           lastRoute.middleware = lastRoute.middleware?.map((m) => wrapMiddleware(m));
+         }
+ 
+diff --git a/src/types/h3.ts b/src/types/h3.ts
+index f0de69b..9f226ed 100644
+--- a/src/types/h3.ts
++++ b/src/types/h3.ts
+@@ -55,7 +55,7 @@ export interface H3Route {
+   method?: HTTPMethod;
+   middleware?: Middleware[];
+   meta?: H3RouteMeta;
+-  handler: EventHandler;
++  handlerFn: EventHandler;
+ }
+ 
+ // --- H3 App ---
+diff --git a/test/route.test.ts b/test/route.test.ts
+index 8f74960..044cbe3 100644
+--- a/test/route.test.ts
++++ b/test/route.test.ts
+@@ -51,7 +51,7 @@ describe("defineRoute", () => {
+       route: "/api/test",
+       method: "GET",
+       meta: { custom: "value" },
+-      handler: expect.any(Function),
++      handlerFn: expect.any(Function),
+     });
+   });
+ 
+diff --git a/test/router.test.ts b/test/router.test.ts
+index c5f9d88..8ae54ba 100644
+--- a/test/router.test.ts
++++ b/test/router.test.ts
+@@ -198,7 +198,7 @@ describeMatrix("router", (t, { it, expect, describe }) => {
+           expect(event.context.matchedRoute).toMatchObject({
+             method: "GET",
+             route: "/test/:template",
+-            handler: expect.any(Function),
++            handlerFn: expect.any(Function),
+           });
+           return "200";
+         });
+diff --git a/test/tracing.test.ts b/test/tracing.test.ts
+index dff06d8..fb1a87f 100644
+--- a/test/tracing.test.ts
++++ b/test/tracing.test.ts
+@@ -765,7 +765,7 @@ describe("tracing channels for H3Core instances", () => {
+       app["~routes"].push({
+         method: "GET",
+         route: "/test",
+-        handler: routeHandler,
++        handlerFn: routeHandler,
+       });
+ 
+       // Apply tracing plugin
+@@ -829,7 +829,7 @@ describe("tracing channels for H3Core instances", () => {
+       app["~routes"].push({
+         method: "GET",
+         route: "/test",
+-        handler: routeHandler,
++        handlerFn: routeHandler,
+       });
+ 
+       // Apply tracing plugin
+@@ -886,7 +886,7 @@ describe("tracing channels for H3Core instances", () => {
+       app["~routes"].push({
+         method: "GET",
+         route: "/test",
+-        handler: routeHandler,
++        handlerFn: routeHandler,
+         middleware: [routeMiddleware],
+       });
+ 
+@@ -942,7 +942,7 @@ describe("tracing channels for H3Core instances", () => {
+       app["~routes"].push({
+         method: "GET",
+         route: "/async",
+-        handler: asyncHandler,
++        handlerFn: asyncHandler,
+       });
+ 
+       // Apply tracing plugin
+@@ -999,7 +999,7 @@ describe("tracing channels for H3Core instances", () => {
+       app["~routes"].push({
+         method: "GET",
+         route: "/error",
+-        handler: errorHandler,
++        handlerFn: errorHandler,
+       });
+ 
+       // Apply tracing plugin
+@@ -1057,7 +1057,7 @@ describe("tracing channels for H3Core instances", () => {
+       app["~routes"].push({
+         method: "GET",
+         route: "/test",
+-        handler: routeHandler,
++        handlerFn: routeHandler,
+       });
+ 
+       // Apply tracing plugin with traceMiddleware disabled
+@@ -1117,7 +1117,7 @@ describe("tracing channels for H3Core instances", () => {
+       app["~routes"].push({
+         method: "GET",
+         route: "/test",
+-        handler: routeHandler,
++        handlerFn: routeHandler,
+       });
+ 
+       // Apply tracing plugin with traceRoutes disabled
+@@ -1171,7 +1171,7 @@ describe("wrapHandlerWithTracing", () => {
+ 
+       app["~findRoute"] = (event: any) => {
+         if (event.url.pathname === "/test" && event.req.method === "GET") {
+-          return { data: { method: "GET", route: "/test", handler: routeHandler }, params: {} };
++          return { data: { method: "GET", route: "/test", handlerFn: routeHandler }, params: {} };
+         }
+         return undefined;
+       };
+@@ -1211,7 +1211,7 @@ describe("wrapHandlerWithTracing", () => {
+       const routeHandler = wrapHandlerWithTracing(() => "ok");
+ 
+       app["~findRoute"] = () => ({
+-        data: { method: "GET" as const, route: "/test", handler: routeHandler },
++        data: { method: "GET" as const, route: "/test", handlerFn: routeHandler },
+         params: {},
+       });
+ 

@@ -1,0 +1,59 @@
+diff --git a/mux.go b/mux.go
+index 37cd500..b08e54e 100644
+--- a/mux.go
++++ b/mux.go
+@@ -285,6 +285,9 @@ func (mx *Mux) Route(pattern string, fn func(r Router)) Router {
+ 	return subRouter
+ }
+ 
++// mountHandlerFunc is a pointer-typed (hence comparable) mount handler.
++type mountHandlerFunc struct{ http.HandlerFunc }
++
+ // Mount attaches another http.Handler or chi Router as a subrouter along a routing
+ // path. It's very useful to split up a large API as many independent routers and
+ // compose them as a single service using Mount. See _examples/.
+@@ -312,7 +315,7 @@ func (mx *Mux) Mount(pattern string, handler http.Handler) {
+ 		subr.MethodNotAllowed(mx.methodNotAllowedHandler)
+ 	}
+ 
+-	mountHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++	mountHandler := &mountHandlerFunc{func(w http.ResponseWriter, r *http.Request) {
+ 		rctx := RouteContext(r.Context())
+ 
+ 		// shift the url path past the previous subrouter
+@@ -325,7 +328,7 @@ func (mx *Mux) Mount(pattern string, handler http.Handler) {
+ 		}
+ 
+ 		handler.ServeHTTP(w, r)
+-	})
++	}}
+ 
+ 	if pattern == "" || pattern[len(pattern)-1] != '/' {
+ 		mx.handle(mALL|mSTUB, pattern, mountHandler)
+diff --git a/tree.go b/tree.go
+index 74ff43d..85b0ee0 100644
+--- a/tree.go
++++ b/tree.go
+@@ -629,9 +629,7 @@ func (n *node) routes() []Route {
+ 	rts := []Route{}
+ 
+ 	n.walk(func(eps endpoints, subroutes Routes) bool {
+-		if eps[mSTUB] != nil && eps[mSTUB].handler != nil && subroutes == nil {
+-			return false
+-		}
++		isStub := eps[mSTUB] != nil && eps[mSTUB].handler != nil && subroutes == nil
+ 
+ 		// Group methodHandlers by unique patterns
+ 		pats := make(map[string]endpoints)
+@@ -640,6 +638,11 @@ func (n *node) routes() []Route {
+ 			if h.pattern == "" {
+ 				continue
+ 			}
++			// A mount stub shares its node with any explicit method routes on
++			// the same pattern; skip only the stub's own entries.
++			if isStub && (mt == mSTUB || h.handler == eps[mSTUB].handler) {
++				continue
++			}
+ 			p, ok := pats[h.pattern]
+ 			if !ok {
+ 				p = endpoints{}

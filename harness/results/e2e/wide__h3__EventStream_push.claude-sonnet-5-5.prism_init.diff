@@ -1,0 +1,148 @@
+diff --git a/docs/1.guide/901.advanced/2.websocket.md b/docs/1.guide/901.advanced/2.websocket.md
+index 9245059..92de6f3 100644
+--- a/docs/1.guide/901.advanced/2.websocket.md
++++ b/docs/1.guide/901.advanced/2.websocket.md
+@@ -118,7 +118,7 @@ app.get("/", (event) => {
+ 
+   // Send a message every second
+   const interval = setInterval(async () => {
+-    await eventStream.push("Hello world");
++    await eventStream.pushMessage("Hello world");
+   }, 1000);
+ 
+   // cleanup the interval when the connection is terminated or the writer is closed
+diff --git a/docs/2.utils/2.response.md b/docs/2.utils/2.response.md
+index 7c624db..1a147cb 100644
+--- a/docs/2.utils/2.response.md
++++ b/docs/2.utils/2.response.md
+@@ -24,7 +24,7 @@ app.get("/sse", (event) => {
+ 
+   // Send a message every second
+   const interval = setInterval(async () => {
+-    await eventStream.push("Hello world");
++    await eventStream.pushMessage("Hello world");
+   }, 1000);
+ 
+   // cleanup the interval and close the stream when the connection is terminated
+diff --git a/examples/server-sent-events.mjs b/examples/server-sent-events.mjs
+index 6da9b3a..77a9308 100644
+--- a/examples/server-sent-events.mjs
++++ b/examples/server-sent-events.mjs
+@@ -7,7 +7,7 @@ app.get("/", (event) => {
+ 
+   // Send a message every second
+   const interval = setInterval(async () => {
+-    await eventStream.push("Hello world");
++    await eventStream.pushMessage("Hello world");
+   }, 1000);
+ 
+   // cleanup the interval when the connection is terminated or the writer is closed
+diff --git a/src/utils/internal/event-stream.ts b/src/utils/internal/event-stream.ts
+index 709eef8..adad51e 100644
+--- a/src/utils/internal/event-stream.ts
++++ b/src/utils/internal/event-stream.ts
+@@ -32,11 +32,11 @@ export class EventStream {
+   /**
+    * Publish new event(s) for the client
+    */
+-  async push(message: string): Promise<void>;
+-  async push(message: string[]): Promise<void>;
+-  async push(message: EventStreamMessage): Promise<void>;
+-  async push(message: EventStreamMessage[]): Promise<void>;
+-  async push(message: EventStreamMessage | EventStreamMessage[] | string | string[]) {
++  async pushMessage(message: string): Promise<void>;
++  async pushMessage(message: string[]): Promise<void>;
++  async pushMessage(message: EventStreamMessage): Promise<void>;
++  async pushMessage(message: EventStreamMessage[]): Promise<void>;
++  async pushMessage(message: EventStreamMessage | EventStreamMessage[] | string | string[]) {
+     if (typeof message === "string") {
+       await this._sendEvent({ data: message });
+       return;
+diff --git a/test/sse.test.ts b/test/sse.test.ts
+index 2135dea..1d29652 100644
+--- a/test/sse.test.ts
++++ b/test/sse.test.ts
+@@ -14,18 +14,18 @@ describeMatrix("sse", (t, { it, expect }) => {
+         if (counter++ === 3) {
+           clearInterval(clear);
+           eventStream.close();
+-          return; // TODO: eventStream.push should auto disable after close!
++          return; // TODO: eventStream.pushMessage should auto disable after close!
+         }
+         if (sendComment) {
+           eventStream.pushComment("hello world");
+         } else if (includeMeta) {
+-          eventStream.push({
++          eventStream.pushMessage({
+             id: String(counter),
+             event: "custom-event",
+             data: "hello world",
+           });
+         } else {
+-          eventStream.push("hello world");
++          eventStream.pushMessage("hello world");
+         }
+       });
+       return eventStream.send();
+diff --git a/test/unit/sse.test.ts b/test/unit/sse.test.ts
+index b224884..e19c01e 100644
+--- a/test/unit/sse.test.ts
++++ b/test/unit/sse.test.ts
+@@ -148,9 +148,9 @@ describe("sse (unit)", () => {
+       await stream.close();
+ 
+       // First push after close should not throw
+-      await stream.push("msg1");
++      await stream.pushMessage("msg1");
+       // Second push should also silently skip (not retry on broken stream)
+-      await stream.push("msg2");
++      await stream.pushMessage("msg2");
+     });
+ 
+     it("pushComment stops retrying after write failure", async () => {
+@@ -171,11 +171,11 @@ describe("sse (unit)", () => {
+       (stream as any)._writer.write = writeSpy;
+       (stream as any)._writerIsClosed = false;
+ 
+-      await stream.push("test");
++      await stream.pushMessage("test");
+       expect((stream as any)._writerIsClosed).toBe(true);
+ 
+       writeSpy.mockClear();
+-      await stream.push("test2");
++      await stream.pushMessage("test2");
+       expect(writeSpy).not.toHaveBeenCalled();
+     });
+ 
+@@ -203,11 +203,11 @@ describe("sse (unit)", () => {
+       (stream as any)._writer.write = writeSpy;
+       (stream as any)._writerIsClosed = false;
+ 
+-      await stream.push([{ data: "msg1" }, { data: "msg2" }]);
++      await stream.pushMessage([{ data: "msg1" }, { data: "msg2" }]);
+       expect((stream as any)._writerIsClosed).toBe(true);
+ 
+       writeSpy.mockClear();
+-      await stream.push([{ data: "msg3" }]);
++      await stream.pushMessage([{ data: "msg3" }]);
+       expect(writeSpy).not.toHaveBeenCalled();
+     });
+ 
+@@ -217,7 +217,7 @@ describe("sse (unit)", () => {
+ 
+       // Pause and buffer data so flush has something to write
+       stream.pause();
+-      await stream.push("buffered");
++      await stream.pushMessage("buffered");
+ 
+       const writeSpy = vi.fn().mockRejectedValue(new Error("write failed"));
+       (stream as any)._writer.write = writeSpy;
+@@ -228,7 +228,7 @@ describe("sse (unit)", () => {
+ 
+       // Subsequent writes should be skipped
+       writeSpy.mockClear();
+-      await stream.push("after-flush");
++      await stream.pushMessage("after-flush");
+       expect(writeSpy).not.toHaveBeenCalled();
+     });
+   });

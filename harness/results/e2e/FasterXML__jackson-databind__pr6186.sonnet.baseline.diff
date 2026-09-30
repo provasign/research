@@ -1,15 +1,24 @@
 diff --git a/src/main/java/com/fasterxml/jackson/databind/ser/std/InetSocketAddressSerializer.java b/src/main/java/com/fasterxml/jackson/databind/ser/std/InetSocketAddressSerializer.java
-index 8720fddfd..e01e52990 100644
+index 8720fddfd..2cfd3bc1a 100644
 --- a/src/main/java/com/fasterxml/jackson/databind/ser/std/InetSocketAddressSerializer.java
 +++ b/src/main/java/com/fasterxml/jackson/databind/ser/std/InetSocketAddressSerializer.java
-@@ -34,6 +34,10 @@ public class InetSocketAddressSerializer
-             } else { // otherwise use name
-                 str = str.substring(0, ix);
-             }
-+        } else if (addr == null && str.indexOf(':') >= 0 && str.charAt(0) != '[') {
-+            // Unresolved address with an IPv6 literal host name: bracket it so the
-+            // port can be distinguished from the address's own hextets.
-+            str = "[" + str + "]";
-         }
- 
-         g.writeString(str + ":" + value.getPort());
+@@ -23,7 +23,18 @@ public class InetSocketAddressSerializer
+         throws IOException
+     {
+         InetAddress addr = value.getAddress();
+-        String str = addr == null ? value.getHostName() : addr.toString().trim();
++        if (addr == null) {
++            // Unresolved address: no InetAddress to consult, so we must guess from
++            // the host name whether it's an IPv6 literal (already-bracketed names,
++            // as produced by the deserializer for "[...]:port" input, are left as-is).
++            String hostName = value.getHostName();
++            String str = (hostName.indexOf(':') >= 0 && !hostName.startsWith("["))
++                    ? "[" + hostName + "]"
++                    : hostName;
++            g.writeString(str + ":" + value.getPort());
++            return;
++        }
++        String str = addr.toString().trim();
+         int ix = str.indexOf('/');
+         if (ix >= 0) {
+             if (ix == 0) { // missing host name; use address

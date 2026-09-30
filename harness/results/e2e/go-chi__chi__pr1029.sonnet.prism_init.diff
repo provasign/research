@@ -1,17 +1,26 @@
-diff --git a/mux.go b/mux.go
-index 37cd500..3b67039 100644
---- a/mux.go
-+++ b/mux.go
-@@ -523,7 +523,12 @@ func (mx *Mux) updateRouteHandler() {
- // methods for the route.
- func methodNotAllowedHandler(methodsAllowed ...methodTyp) func(w http.ResponseWriter, r *http.Request) {
- 	return func(w http.ResponseWriter, r *http.Request) {
-+		seen := make(map[methodTyp]struct{}, len(methodsAllowed))
- 		for _, m := range methodsAllowed {
-+			if _, ok := seen[m]; ok {
-+				continue
-+			}
-+			seen[m] = struct{}{}
- 			w.Header().Add("Allow", reverseMethodMap[m])
- 		}
- 		w.WriteHeader(405)
+diff --git a/tree.go b/tree.go
+index 9f56549..e7bc9ed 100644
+--- a/tree.go
++++ b/tree.go
+@@ -479,7 +479,9 @@ func (n *node) findRoute(rctx *Context, method methodTyp, path string) *node {
+ 							if endpoints == mALL || endpoints == mSTUB {
+ 								continue
+ 							}
+-							rctx.methodsAllowed = append(rctx.methodsAllowed, endpoints)
++							if !slices.Contains(rctx.methodsAllowed, endpoints) {
++								rctx.methodsAllowed = append(rctx.methodsAllowed, endpoints)
++							}
+ 						}
+ 
+ 						// flag that the routing context found a route, but not a corresponding
+@@ -525,7 +527,9 @@ func (n *node) findRoute(rctx *Context, method methodTyp, path string) *node {
+ 					if endpoints == mALL || endpoints == mSTUB {
+ 						continue
+ 					}
+-					rctx.methodsAllowed = append(rctx.methodsAllowed, endpoints)
++					if !slices.Contains(rctx.methodsAllowed, endpoints) {
++						rctx.methodsAllowed = append(rctx.methodsAllowed, endpoints)
++					}
+ 				}
+ 
+ 				// flag that the routing context found a route, but not a corresponding

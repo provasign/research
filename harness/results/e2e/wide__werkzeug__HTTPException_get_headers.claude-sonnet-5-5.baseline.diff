@@ -1,0 +1,123 @@
+diff --git a/src/werkzeug/exceptions.py b/src/werkzeug/exceptions.py
+index 595a7c4b..47e9ade9 100644
+--- a/src/werkzeug/exceptions.py
++++ b/src/werkzeug/exceptions.py
+@@ -123,7 +123,7 @@ class HTTPException(Exception):
+             f"{self.get_description(environ)}\n"
+         )
+ 
+-    def get_headers(
++    def response_headers(
+         self,
+         environ: WSGIEnvironment | None = None,
+         scope: dict[str, t.Any] | None = None,
+@@ -165,7 +165,7 @@ class HTTPException(Exception):
+             return self.response
+         if environ is not None:
+             environ = _get_environ(environ)
+-        headers = self.get_headers(environ, scope)
++        headers = self.response_headers(environ, scope)
+         return Response(self.get_body(environ, scope), self.code, headers)
+ 
+     def __call__(
+@@ -324,12 +324,12 @@ class Unauthorized(HTTPException):
+ 
+         self.www_authenticate = www_authenticate
+ 
+-    def get_headers(
++    def response_headers(
+         self,
+         environ: WSGIEnvironment | None = None,
+         scope: dict[str, t.Any] | None = None,
+     ) -> list[tuple[str, str]]:
+-        headers = super().get_headers(environ, scope)
++        headers = super().response_headers(environ, scope)
+         if self.www_authenticate:
+             headers.extend(("WWW-Authenticate", str(x)) for x in self.www_authenticate)
+         return headers
+@@ -388,12 +388,12 @@ class MethodNotAllowed(HTTPException):
+         super().__init__(description=description, response=response)
+         self.valid_methods = valid_methods
+ 
+-    def get_headers(
++    def response_headers(
+         self,
+         environ: WSGIEnvironment | None = None,
+         scope: dict[str, t.Any] | None = None,
+     ) -> list[tuple[str, str]]:
+-        headers = super().get_headers(environ, scope)
++        headers = super().response_headers(environ, scope)
+         if self.valid_methods:
+             headers.append(("Allow", ", ".join(self.valid_methods)))
+         return headers
+@@ -548,12 +548,12 @@ class RequestedRangeNotSatisfiable(HTTPException):
+         self.length = length
+         self.units = units
+ 
+-    def get_headers(
++    def response_headers(
+         self,
+         environ: WSGIEnvironment | None = None,
+         scope: dict[str, t.Any] | None = None,
+     ) -> list[tuple[str, str]]:
+-        headers = super().get_headers(environ, scope)
++        headers = super().response_headers(environ, scope)
+         if self.length is not None:
+             headers.append(("Content-Range", f"{self.units} */{self.length}"))
+         return headers
+@@ -670,12 +670,12 @@ class _RetryAfter(HTTPException):
+         super().__init__(description, response)
+         self.retry_after = retry_after
+ 
+-    def get_headers(
++    def response_headers(
+         self,
+         environ: WSGIEnvironment | None = None,
+         scope: dict[str, t.Any] | None = None,
+     ) -> list[tuple[str, str]]:
+-        headers = super().get_headers(environ, scope)
++        headers = super().response_headers(environ, scope)
+ 
+         if self.retry_after:
+             if isinstance(self.retry_after, datetime):
+diff --git a/tests/test_exceptions.py b/tests/test_exceptions.py
+index 4f3cd57f..b1b2500f 100644
+--- a/tests/test_exceptions.py
++++ b/tests/test_exceptions.py
+@@ -92,7 +92,7 @@ def test_exception_repr():
+ 
+ def test_method_not_allowed_methods():
+     exc = exceptions.MethodNotAllowed(["GET", "HEAD", "POST"])
+-    h = dict(exc.get_headers({}))
++    h = dict(exc.response_headers({}))
+     assert h["Allow"] == "GET, HEAD, POST"
+     assert "The method is not allowed" in exc.get_description()
+ 
+@@ -102,15 +102,15 @@ def test_unauthorized_www_authenticate():
+     digest = WWWAuthenticate("digest", {"realm": "test", "nonce": "test"})
+ 
+     exc = exceptions.Unauthorized(www_authenticate=basic)
+-    h = Headers(exc.get_headers({}))
++    h = Headers(exc.response_headers({}))
+     assert h["WWW-Authenticate"] == str(basic)
+ 
+     exc = exceptions.Unauthorized(www_authenticate=[digest, basic])
+-    h = Headers(exc.get_headers({}))
++    h = Headers(exc.response_headers({}))
+     assert h.get_all("WWW-Authenticate") == [str(digest), str(basic)]
+ 
+     exc = exceptions.Unauthorized()
+-    h = Headers(exc.get_headers({}))
++    h = Headers(exc.response_headers({}))
+     assert "WWW-Authenticate" not in h
+ 
+ 
+@@ -133,7 +133,7 @@ def test_response_header_content_type_should_contain_charset():
+ )
+ def test_retry_after_mixin(cls, value, expect):
+     e = cls(retry_after=value)
+-    h = dict(e.get_headers({}))
++    h = dict(e.response_headers({}))
+     assert h["Retry-After"] == expect
+ 
+ 

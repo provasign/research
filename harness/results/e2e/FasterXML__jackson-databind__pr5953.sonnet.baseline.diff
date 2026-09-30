@@ -1,0 +1,89 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java b/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java
+index 7e15155af..18361eb16 100644
+--- a/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java
++++ b/src/main/java/tools/jackson/databind/deser/BeanDeserializerFactory.java
+@@ -574,19 +574,18 @@ ClassUtil.name(propName)));
+         SettableAnyProperty anySetter = _resolveAnySetter(ctxt, beanDescRef, creatorProps);
+         if (anySetter != null) {
+             builder.setAnySetter(anySetter);
+-        } else {
+-            // 23-Jan-2018, tatu: although [databind#1805] would suggest we should block
+-            //   properties regardless, for now only consider unless there's any setter...
+-            // NOTE: getIgnoredPropertyNames() adds per-property @JsonIgnore names on top
+-            //   of the class-level names already registered above; the overlap is harmless
+-            //   (builder uses a Set internally).
+-            Collection<String> ignored2 = beanDesc.getIgnoredPropertyNames();
+-            if (ignored2 != null) {
+-                for (String propName : ignored2) {
+-                    // allow ignoral of similarly named JSON property, but do not force;
+-                    // latter means NOT adding this to 'ignored':
+-                    builder.addIgnorable(propName);
+-                }
++        }
++        // NOTE: getIgnoredPropertyNames() adds per-property @JsonIgnore names on top
++        //   of the class-level names already registered above; the overlap is harmless
++        //   (builder uses a Set internally). Properties explicitly ignored via @JsonIgnore
++        //   must never be routed to an any-setter (see [databind#1805]), so register them
++        //   as ignorable regardless of whether an any-setter is present.
++        Collection<String> ignored2 = beanDesc.getIgnoredPropertyNames();
++        if (ignored2 != null) {
++            for (String propName : ignored2) {
++                // allow ignoral of similarly named JSON property, but do not force;
++                // latter means NOT adding this to 'ignored':
++                builder.addIgnorable(propName);
+             }
+         }
+         final boolean useGettersAsSetters = ctxt.isEnabled(MapperFeature.USE_GETTERS_AS_SETTERS);
+diff --git a/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java b/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
+index 15e614224..3e1401389 100644
+--- a/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
++++ b/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
+@@ -1478,12 +1478,19 @@ ctor.creator()));
+                 //    only explicit inclusion by accessors OTHER than ones with ignoral marker
+                 if (!prop.anyExplicitsWithoutIgnoral()) {
+                     it.remove();
+-                    _collectIgnorals(prop.getName());
++                    // Only record as "explicitly ignored" (which, for deserialization, blocks
++                    // routing the JSON property to an any-setter) if the ignoral actually came
++                    // from an accessor relevant to this direction: otherwise (e.g. a `@JsonIgnore`d
++                    // getter with no deserialization mutator) the property was never usable in
++                    // this direction to begin with, ignoral or not.
++                    if (prop.anyIgnoralsForDirection(_forSerialization)) {
++                        _collectIgnorals(prop.getName());
++                    }
+                     continue;
+                 }
+                 // otherwise just remove ones marked to be ignored
+                 prop.removeIgnored();
+-                if (!prop.couldDeserialize()) {
++                if (!prop.couldDeserialize() && prop.anyIgnoralsForDirection(_forSerialization)) {
+                     _collectIgnorals(prop.getName());
+                 }
+             }
+diff --git a/src/main/java/tools/jackson/databind/introspect/POJOPropertyBuilder.java b/src/main/java/tools/jackson/databind/introspect/POJOPropertyBuilder.java
+index cfbee9f68..5071943f6 100644
+--- a/src/main/java/tools/jackson/databind/introspect/POJOPropertyBuilder.java
++++ b/src/main/java/tools/jackson/databind/introspect/POJOPropertyBuilder.java
+@@ -1221,6 +1221,22 @@ public class POJOPropertyBuilder
+         ;
+     }
+ 
++    /**
++     * Variant of {@link #anyIgnorals()} that only considers accessors relevant
++     * to the given direction: fields and setters/creator-parameters for
++     * deserialization, fields and getters for serialization. Used to decide
++     * whether a property should be recorded as "explicitly ignored" for that
++     * direction (e.g. to block it from an any-setter during deserialization),
++     * as opposed to merely being ignored on the other, unrelated direction
++     * (e.g. a {@code @JsonIgnore}d getter with no deserialization mutator).
++     */
++    public boolean anyIgnoralsForDirection(boolean forSerialization) {
++        if (forSerialization) {
++            return _anyIgnorals(_fields) || _anyIgnorals(_getters);
++        }
++        return _anyIgnorals(_fields) || _anyIgnorals(_setters) || _anyIgnorals(_ctorParameters);
++    }
++
+     private <T> boolean _anyIgnorals(Linked<T> n)
+     {
+         for (; n != null; n = n.next) {

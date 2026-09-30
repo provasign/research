@@ -1,0 +1,73 @@
+diff --git a/src/main/java/tools/jackson/databind/jsontype/BasicPolymorphicTypeValidator.java b/src/main/java/tools/jackson/databind/jsontype/BasicPolymorphicTypeValidator.java
+index e961e7454..e8c3df3b5 100644
+--- a/src/main/java/tools/jackson/databind/jsontype/BasicPolymorphicTypeValidator.java
++++ b/src/main/java/tools/jackson/databind/jsontype/BasicPolymorphicTypeValidator.java
+@@ -50,6 +50,19 @@ public class BasicPolymorphicTypeValidator
+         public abstract boolean match(DatabindContext ctxt, String clazzName);
+     }
+ 
++    /**
++     * Marker {@link TypeMatcher} used by {@link Builder#allowIfSubTypeIsArray()}: besides
++     * matching array classes, its presence signals {@link #validateSubType} to additionally
++     * validate the (possibly nested) array element type, so that array-ness alone cannot be
++     * used to bypass subtype validation for the actual element type being deserialized.
++     */
++    private static class ArrayElementTypeMatcher implements TypeMatcher {
++        @Override
++        public boolean match(DatabindContext ctxt, Class<?> clazz) {
++            return clazz.isArray();
++        }
++    }
++
+     /*
+     /**********************************************************************
+     /* Builder class for configuring instances
+@@ -271,24 +284,16 @@ public class BasicPolymorphicTypeValidator
+         }
+ 
+         /**
+-         * Method for appending matcher that will allow all subtypes that are Java arrays
+-         * (regardless of element type). Note that this does NOT validate element type
+-         * itself as long as Polymorphic Type handling is enabled for element type: this
+-         * is the case with all standard "Default Typing" inclusion criteria as well as for
+-         * annotation ({@code @JsonTypeInfo}) use case (since annotation only applies to element
+-         * types, not container).
++         * Method for appending matcher that will allow subtypes that are Java arrays,
++         * as long as the (possibly nested) array element type itself is deemed
++         * acceptable by other configured rules (base type or subtype matchers).
+          *<p>
+          * NOTE: not used with other Java collection types ({@link java.util.List}s,
+          *    {@link java.util.Collection}s), mostly since use of generic types as polymorphic
+          *    values is not (well) supported.
+          */
+         public Builder allowIfSubTypeIsArray() {
+-            return _appendSubClassMatcher(new TypeMatcher() {
+-                @Override
+-                public boolean match(DatabindContext ctxt, Class<?> clazz) {
+-                    return clazz.isArray();
+-                }
+-            });
++            return _appendSubClassMatcher(new ArrayElementTypeMatcher());
+         }
+ 
+         /**
+@@ -438,6 +443,19 @@ public class BasicPolymorphicTypeValidator
+             final Class<?> subClass = subType.getRawClass();
+             for (TypeMatcher m : _subClassMatchers) {
+                 if (m.match(ctxt, subClass)) {
++                    // 27-Jan-2026: [CVE-2026-54513] `allowIfSubTypeIsArray()` only
++                    // establishes array-ness. If the (possibly nested) element type is
++                    // `final` no further, element-specific type id will ever be written
++                    // or checked for it -- this is the only chance to validate it, so
++                    // recurse into it rather than blindly allowing the array. Non-final
++                    // element types get their own type id and validation per element,
++                    // so it's fine to defer to that check instead.
++                    if ((m instanceof ArrayElementTypeMatcher) && subClass.isArray()) {
++                        final JavaType contentType = subType.getContentType();
++                        if (contentType.isFinal()) {
++                            return validateSubType(ctxt, baseType, contentType);
++                        }
++                    }
+                     return Validity.ALLOWED;
+                 }
+             }

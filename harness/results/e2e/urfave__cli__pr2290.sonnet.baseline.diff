@@ -1,19 +1,13 @@
 diff --git a/flag_impl.go b/flag_impl.go
-index c7cc8dff..f96e9db7 100644
+index c7cc8dff..5ec42dda 100644
 --- a/flag_impl.go
 +++ b/flag_impl.go
-@@ -185,7 +185,13 @@ func (f *FlagBase[T, C, V]) Set(_ string, val string) error {
+@@ -185,7 +185,7 @@ func (f *FlagBase[T, C, V]) Set(_ string, val string) error {
  	// lots of units tests prior to persistent flags assumed that the
  	// flag can be applied to different flag sets multiple times while still
  	// keeping the env set.
 -	if !f.applied || f.Local {
-+	//
-+	// Local flags are re-initialized via PreParse() once per command run
-+	// (see command_run.go), before any of their values are parsed from the
-+	// command line. Re-running PreParse() here on every Set() call would
-+	// wipe out previously accumulated values for multi-value (slice/map)
-+	// flags, so it must only happen once, just like non-local flags.
-+	if !f.applied {
++	if !f.applied || (f.Local && !f.IsMultiValueFlag()) {
  		if err := f.PreParse(); err != nil {
  			return err
  		}

@@ -1,13 +1,10 @@
 diff --git a/src/main/java/tools/jackson/databind/cfg/MapperBuilder.java b/src/main/java/tools/jackson/databind/cfg/MapperBuilder.java
-index 7531c4a54..ab029817d 100644
+index 7531c4a54..ab2971b2f 100644
 --- a/src/main/java/tools/jackson/databind/cfg/MapperBuilder.java
 +++ b/src/main/java/tools/jackson/databind/cfg/MapperBuilder.java
-@@ -1089,9 +1089,10 @@ public abstract class MapperBuilder<M extends ObjectMapper,
- 
+@@ -1090,8 +1090,7 @@ public abstract class MapperBuilder<M extends ObjectMapper,
          // 10-Sep-2019, tatu: [databind#2432] Module dependencies; need to add first
          //   but unlike main module, do NOT replace module if already added
-+        // 24-Sep-2026: [databind#XXXX] Need to recurse into dependencies' own
-+        //   dependencies as well, not just the immediate ones
          for (JacksonModule dep : module.getDependencies()) {
 -            _verifyModuleMetadata(dep);
 -            _modules.putIfAbsent(dep.getRegistrationId(), dep);
@@ -15,15 +12,12 @@ index 7531c4a54..ab029817d 100644
          }
          _modules.put(moduleId, module);
          // [databind#5481]: invalidate cached state when modules are modified
-@@ -1099,6 +1100,24 @@ public abstract class MapperBuilder<M extends ObjectMapper,
+@@ -1099,6 +1098,21 @@ public abstract class MapperBuilder<M extends ObjectMapper,
          return _this();
      }
  
-+    /**
-+     * Helper method for recursively adding given module's dependencies (and,
-+     * transitively, their dependencies) unless already registered; does not
-+     * replace an already-registered module (explicit or dependency-added).
-+     */
++    // Helper method to recursively register transitive module dependencies
++    // (dependencies of dependencies), without replacing modules already added.
 +    private void _addModuleDependency(JacksonModule module)
 +    {
 +        _verifyModuleMetadata(module);
@@ -34,7 +28,7 @@ index 7531c4a54..ab029817d 100644
 +        for (JacksonModule dep : module.getDependencies()) {
 +            _addModuleDependency(dep);
 +        }
-+        _modules.put(moduleId, module);
++        _modules.putIfAbsent(moduleId, module);
 +    }
 +
      private void _verifyModuleMetadata(JacksonModule module)

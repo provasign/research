@@ -1,0 +1,67 @@
+diff --git a/src/main/java/tools/jackson/databind/jsontype/BasicPolymorphicTypeValidator.java b/src/main/java/tools/jackson/databind/jsontype/BasicPolymorphicTypeValidator.java
+index e961e7454..3127cca8d 100644
+--- a/src/main/java/tools/jackson/databind/jsontype/BasicPolymorphicTypeValidator.java
++++ b/src/main/java/tools/jackson/databind/jsontype/BasicPolymorphicTypeValidator.java
+@@ -283,12 +283,14 @@ public class BasicPolymorphicTypeValidator
+          *    values is not (well) supported.
+          */
+         public Builder allowIfSubTypeIsArray() {
+-            return _appendSubClassMatcher(new TypeMatcher() {
+-                @Override
+-                public boolean match(DatabindContext ctxt, Class<?> clazz) {
+-                    return clazz.isArray();
+-                }
+-            });
++            return _appendSubClassMatcher(new ArrayTypeMatcher());
++        }
++
++        static final class ArrayTypeMatcher implements TypeMatcher {
++            @Override
++            public boolean match(DatabindContext ctxt, Class<?> clazz) {
++                return clazz.isArray();
++            }
+         }
+ 
+         /**
+@@ -431,6 +433,23 @@ public class BasicPolymorphicTypeValidator
+         return Validity.INDETERMINATE;
+     }
+ 
++    private boolean _elementAllowed(DatabindContext ctxt, Class<?> elem)
++    {
++        for (TypeMatcher m : _subClassMatchers) {
++            if (!(m instanceof Builder.ArrayTypeMatcher) && m.match(ctxt, elem)) {
++                return true;
++            }
++        }
++        if (_subTypeNameMatchers != null) {
++            for (NameMatcher m : _subTypeNameMatchers) {
++                if (m.match(ctxt, elem.getName())) {
++                    return true;
++                }
++            }
++        }
++        return false;
++    }
++
+     @Override
+     public Validity validateSubType(DatabindContext ctxt, JavaType baseType, JavaType subType)
+     {
+@@ -438,6 +457,17 @@ public class BasicPolymorphicTypeValidator
+             final Class<?> subClass = subType.getRawClass();
+             for (TypeMatcher m : _subClassMatchers) {
+                 if (m.match(ctxt, subClass)) {
++                    if (subClass.isArray() && m instanceof Builder.ArrayTypeMatcher) {
++                        // Array itself is fine, but element type must be allowed too
++                        Class<?> elem = subClass;
++                        while (elem.isArray()) {
++                            elem = elem.getComponentType();
++                        }
++                        if (elem.isPrimitive() || _elementAllowed(ctxt, elem)) {
++                            return Validity.ALLOWED;
++                        }
++                        continue;
++                    }
+                     return Validity.ALLOWED;
+                 }
+             }

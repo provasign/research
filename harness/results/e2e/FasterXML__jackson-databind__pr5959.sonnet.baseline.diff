@@ -1,84 +1,182 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java
+index cf721c6c5..fd9f5ef00 100644
+--- a/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java
++++ b/src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java
+@@ -1384,7 +1384,7 @@ public class BeanDeserializer
+                 continue;
+             }
+             // but others are likely to be part of external type id thingy...
+-            if (ext.handlePropertyValue(p, ctxt, propName, bean)) {
++            if (ext.handlePropertyValue(p, ctxt, propName, bean, activeView)) {
+                 continue;
+             }
+             // if not, the usual fallback handling:
+@@ -1410,6 +1410,7 @@ public class BeanDeserializer
+         final ExternalTypeHandler ext = _externalTypeIdHandler.start();
+         final PropertyBasedCreator creator = _propertyBasedCreator;
+         PropertyValueBuffer buffer = creator.startBuilding(p, ctxt, _objectIdReader, false);
++        final Class<?> activeView = _needViewProcesing ? ctxt.getActiveView() : null;
+ 
+         for (JsonToken t = p.currentToken(); t == JsonToken.PROPERTY_NAME; t = p.nextToken()) {
+             String propName = p.currentName();
+@@ -1431,7 +1432,7 @@ public class BeanDeserializer
+                 // first: let's check to see if this might be part of value with external type id:
+                 // 11-Sep-2015, tatu: Important; do NOT pass buffer as last arg, but null,
+                 //   since it is not the bean
+-                if (!ext.handlePropertyValue(p, ctxt, propName, null)) {
++                if (!ext.handlePropertyValue(p, ctxt, propName, null, activeView)) {
+                     // Last creator property to set?
+                     // [databind#4690] cannot quit early as optimization any more
+                     // if (buffer.assignParameter(creatorProp, value)) { ... build ... }
+@@ -1454,7 +1455,7 @@ public class BeanDeserializer
+                 continue;
+             }
+             // external type id (or property that depends on it)?
+-            if (ext.handlePropertyValue(p, ctxt, propName, null)) {
++            if (ext.handlePropertyValue(p, ctxt, propName, null, activeView)) {
+                 continue;
+             }
+             // Things marked as ignorable should not be passed to any setter
+diff --git a/src/main/java/tools/jackson/databind/deser/bean/BuilderBasedDeserializer.java b/src/main/java/tools/jackson/databind/deser/bean/BuilderBasedDeserializer.java
+index 623a53cbc..1bfb07827 100644
+--- a/src/main/java/tools/jackson/databind/deser/bean/BuilderBasedDeserializer.java
++++ b/src/main/java/tools/jackson/databind/deser/bean/BuilderBasedDeserializer.java
+@@ -965,7 +965,7 @@ public class BuilderBasedDeserializer
+                 continue;
+             }
+             // but others are likely to be part of external type id thingy...
+-            if (ext.handlePropertyValue(p, ctxt, propName, bean)) {
++            if (ext.handlePropertyValue(p, ctxt, propName, bean, activeView)) {
+                 continue;
+             }
+             // if not, the usual fallback handling:
 diff --git a/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java b/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java
-index f538965a7..8c73afc7c 100644
+index f538965a7..ef45b23ca 100644
 --- a/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java
 +++ b/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java
-@@ -232,7 +232,7 @@ public class ExternalTypeHandler
-                     SettableBeanProperty prop = extProp.getProperty();
-                     Object result = TypeDeserializer.deserializeIfNatural(buffered, ctxt, prop.getType());
-                     if (result != null) {
--                        prop.set(ctxt, bean, result);
-+                        _setIfVisibleInView(ctxt, prop, bean, result);
-                         continue;
-                     }
-                 }
-@@ -276,6 +276,7 @@ public class ExternalTypeHandler
-         // first things first: deserialize all data buffered:
-         final int len = _properties.length;
-         Object[] values = new Object[len];
-+        final Class<?> activeView = ctxt.getActiveView();
-         for (int i = 0; i < len; ++i) {
-             String typeId = _typeIds[i];
-             final ExtTypedProperty extProp = _properties[i];
-@@ -301,7 +302,8 @@ public class ExternalTypeHandler
-                         values[i] = result;
-                         // Unlike bean-based complete(), creator-based needs
-                         // to assign parameter to buffer before continuing
--                        if (prop.isCreatorProperty()) {
-+                        if (prop.isCreatorProperty()
-+                                && (activeView == null || prop.visibleInView(activeView))) {
-                             buffer.assignParameter(prop, result);
-                         }
-                         continue;
-@@ -332,9 +334,12 @@ public class ExternalTypeHandler
-             }
+@@ -38,6 +38,16 @@ public class ExternalTypeHandler
+     private final String[] _typeIds;
+     private final TokenBuffer[] _tokens;
  
-             final SettableBeanProperty prop = extProp.getProperty();
-+            final boolean visibleInView = (activeView == null) || prop.visibleInView(activeView);
-             // also: if it's creator prop, fill in
-             if (prop.isCreatorProperty()) {
--                buffer.assignParameter(prop, values[i]);
-+                if (visibleInView) {
-+                    buffer.assignParameter(prop, values[i]);
-+                }
- 
-                 // [databind#999] And maybe there's creator property for type id too?
-                 SettableBeanProperty typeProp = extProp.getTypeProperty();
-@@ -359,7 +364,8 @@ public class ExternalTypeHandler
-         // third: assign non-creator properties
-         for (int i = 0; i < len; ++i) {
-             SettableBeanProperty prop = _properties[i].getProperty();
--            if (!prop.isCreatorProperty()) {
-+            if (!prop.isCreatorProperty()
-+                    && (activeView == null || prop.visibleInView(activeView))) {
-                 prop.set(ctxt, bean, values[i]);
-             }
-         }
-@@ -436,7 +442,7 @@ public class ExternalTypeHandler
-         JsonToken t = p2.nextToken();
-         // 29-Sep-2015, tatu: As per [databind#942], nulls need special support
-         if (t == JsonToken.VALUE_NULL) {
--            prop.set(ctxt, bean, null);
-+            _setIfVisibleInView(ctxt, prop, bean, null);
-             return;
-         }
-         // [databind#2747]: invoke subtype deserializer via the known-type-id entry
-@@ -444,7 +450,18 @@ public class ExternalTypeHandler
-         // would otherwise expose a synthetic array in `JsonParser.streamReadContext()`
-         // to any custom deserializer examining parsing state).
-         Object value = extProp._typeDeserializer.deserializeTypedWithKnownTypeId(p2, ctxt, typeId);
--        prop.set(ctxt, bean, value);
-+        _setIfVisibleInView(ctxt, prop, bean, value);
-+    }
++    /**
++     * Marks indexes of properties whose value was skipped because it is not
++     * visible in the currently active {@code @JsonView}; used so that
++     * {@link #complete} does not treat the (intentionally) missing value as
++     * an error.
++     *
++     * @since 3.2
++     */
++    private final boolean[] _viewSkipped;
 +
-+    // [databind#5348]: `@JsonView` must still be honored for properties using
-+    // external type id inclusion, same as for regular properties.
-+    private static void _setIfVisibleInView(DeserializationContext ctxt,
-+            SettableBeanProperty prop, Object bean, Object value)
-+    {
-+        Class<?> activeView = ctxt.getActiveView();
-+        if (activeView == null || prop.visibleInView(activeView)) {
-+            prop.set(ctxt, bean, value);
-+        }
+     protected ExternalTypeHandler(JavaType beanType,
+             ExtTypedProperty[] properties,
+             Map<String, Object> nameToPropertyIndex,
+@@ -48,6 +58,7 @@ public class ExternalTypeHandler
+         _nameToPropertyIndex = nameToPropertyIndex;
+         _typeIds = typeIds;
+         _tokens = tokens;
++        _viewSkipped = null;
      }
  
-     /*
+     protected ExternalTypeHandler(ExternalTypeHandler h)
+@@ -58,6 +69,7 @@ public class ExternalTypeHandler
+         int len = _properties.length;
+         _typeIds = new String[len];
+         _tokens = new TokenBuffer[len];
++        _viewSkipped = new boolean[len];
+     }
+ 
+     public static Builder builder(JavaType beanType) {
+@@ -143,9 +155,23 @@ public class ExternalTypeHandler
+      *
+      * @return True, if the given property was properly handled
+      */
+-    @SuppressWarnings("unchecked")
+     public boolean handlePropertyValue(JsonParser p, DeserializationContext ctxt,
+             String propName, Object bean) throws JacksonException
++    {
++        return handlePropertyValue(p, ctxt, propName, bean, null);
++    }
++
++    /**
++     * @param activeView Currently active JSON View (if any), used to determine
++     *    whether the (non-type-id) value property should be skipped instead of
++     *    buffered/deserialized, to respect {@code @JsonView} annotations that would
++     *    otherwise be bypassed by "external type id" handling.
++     *
++     * @since 3.2
++     */
++    @SuppressWarnings("unchecked")
++    public boolean handlePropertyValue(JsonParser p, DeserializationContext ctxt,
++            String propName, Object bean, Class<?> activeView) throws JacksonException
+     {
+         Object ob = _nameToPropertyIndex.get(propName);
+         if (ob == null) {
+@@ -167,6 +193,14 @@ public class ExternalTypeHandler
+                     _typeIds[it.next()] = typeId;
+                 }
+             } else {
++                if (_notVisibleInView(prop, activeView)) {
++                    p.skipChildren();
++                    _viewSkipped[index] = true;
++                    while (it.hasNext()) {
++                        _viewSkipped[it.next()] = true;
++                    }
++                    return true;
++                }
+                 TokenBuffer tokens = _bufferValueWithPinnedContext(ctxt, p);
+                 _tokens[index] = tokens;
+                 while (it.hasNext()) {
+@@ -188,6 +222,11 @@ public class ExternalTypeHandler
+             p.skipChildren();
+             canDeserialize = (bean != null) && (_tokens[index] != null);
+         } else {
++            if (_notVisibleInView(prop, activeView)) {
++                p.skipChildren();
++                _viewSkipped[index] = true;
++                return true;
++            }
+             @SuppressWarnings("resource")
+             TokenBuffer tokens = _bufferValueWithPinnedContext(ctxt, p);
+             _tokens[index] = tokens;
+@@ -214,6 +253,9 @@ public class ExternalTypeHandler
+         throws JacksonException
+     {
+         for (int i = 0, len = _properties.length; i < len; ++i) {
++            if (_viewSkipped[i]) {
++                continue;
++            }
+             String typeId = _typeIds[i];
+             final ExtTypedProperty extProp = _properties[i];
+             if (typeId == null) {
+@@ -277,6 +319,9 @@ public class ExternalTypeHandler
+         final int len = _properties.length;
+         Object[] values = new Object[len];
+         for (int i = 0; i < len; ++i) {
++            if (_viewSkipped[i]) {
++                continue;
++            }
+             String typeId = _typeIds[i];
+             final ExtTypedProperty extProp = _properties[i];
+             if (typeId == null) {
+@@ -358,6 +403,9 @@ public class ExternalTypeHandler
+         Object bean = creator.build(ctxt, buffer);
+         // third: assign non-creator properties
+         for (int i = 0; i < len; ++i) {
++            if (_viewSkipped[i]) {
++                continue;
++            }
+             SettableBeanProperty prop = _properties[i].getProperty();
+             if (!prop.isCreatorProperty()) {
+                 prop.set(ctxt, bean, values[i]);
+@@ -366,6 +414,10 @@ public class ExternalTypeHandler
+         return bean;
+     }
+ 
++    private static boolean _notVisibleInView(ExtTypedProperty prop, Class<?> activeView) {
++        return (activeView != null) && !prop.getProperty().visibleInView(activeView);
++    }
++
+     /**
+      * Buffer the value at parser's current position, pinning the buffer's parent
+      * context to a snapshot of the outer parser's context at this moment. Without

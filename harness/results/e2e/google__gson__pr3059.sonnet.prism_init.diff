@@ -1,0 +1,26 @@
+diff --git a/gson/src/main/java/com/google/gson/JsonPrimitive.java b/gson/src/main/java/com/google/gson/JsonPrimitive.java
+index 88f4466f..9f25da04 100644
+--- a/gson/src/main/java/com/google/gson/JsonPrimitive.java
++++ b/gson/src/main/java/com/google/gson/JsonPrimitive.java
+@@ -192,7 +192,7 @@ public final class JsonPrimitive extends JsonElement {
+   public BigInteger getAsBigInteger() {
+     return value instanceof BigInteger
+         ? (BigInteger) value
+-        : isIntegral(this)
++        : isIntegral(this) && !(value instanceof LazilyParsedNumber)
+             ? BigInteger.valueOf(this.getAsNumber().longValue())
+             : NumberLimits.parseBigInteger(this.getAsString());
+   }
+@@ -317,6 +317,12 @@ public final class JsonPrimitive extends JsonElement {
+   private static boolean isIntegral(JsonPrimitive primitive) {
+     if (primitive.value instanceof Number) {
+       Number number = (Number) primitive.value;
++      if (number instanceof LazilyParsedNumber) {
++        String numberString = number.toString();
++        return !(numberString.contains(".")
++            || numberString.contains("e")
++            || numberString.contains("E"));
++      }
+       return number instanceof BigInteger
+           || number instanceof Long
+           || number instanceof Integer

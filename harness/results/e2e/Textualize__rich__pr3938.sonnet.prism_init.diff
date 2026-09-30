@@ -1,0 +1,27 @@
+diff --git a/rich/console.py b/rich/console.py
+index 994adfc..3e1caa4 100644
+--- a/rich/console.py
++++ b/rich/console.py
+@@ -1735,14 +1735,20 @@ class Console:
+                     > 1
+                 ):
+                     new_segments.insert(0, Segment.line())
++            buffer_extend = self._buffer.extend
+             if crop:
+-                buffer_extend = self._buffer.extend
+                 for line in Segment.split_and_crop_lines(
+                     new_segments, self.width, pad=False
+                 ):
+                     buffer_extend(line)
+             else:
+-                self._buffer.extend(new_segments)
++                # Still split on newlines (without cropping or padding) so that any
++                # style doesn't bleed past the end of a line, e.g. into a following
++                # line created when the terminal soft wraps.
++                for line in Segment.split_and_crop_lines(
++                    new_segments, sys.maxsize, pad=False
++                ):
++                    buffer_extend(line)
+ 
+     def print_json(
+         self,

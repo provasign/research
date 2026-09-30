@@ -1,0 +1,446 @@
+diff --git a/src/adapter/aws-lambda/conninfo.test.ts b/src/adapter/aws-lambda/conninfo.test.ts
+index a4421a92..7622a6ea 100644
+--- a/src/adapter/aws-lambda/conninfo.test.ts
++++ b/src/adapter/aws-lambda/conninfo.test.ts
+@@ -32,7 +32,7 @@ describe('getConnInfo', () => {
+ 
+       const info = getConnInfo(c)
+ 
+-      expect(info.remote.address).toBe(ip)
++      expect(info.peer.address).toBe(ip)
+     })
+   })
+ 
+@@ -66,7 +66,7 @@ describe('getConnInfo', () => {
+ 
+       const info = getConnInfo(c)
+ 
+-      expect(info.remote.address).toBe(ip)
++      expect(info.peer.address).toBe(ip)
+     })
+   })
+ 
+@@ -96,7 +96,7 @@ describe('getConnInfo', () => {
+         },
+       })
+       const info = getConnInfo(c)
+-      expect(info.remote.address).toBe(expected)
++      expect(info.peer.address).toBe(expected)
+     })
+ 
+     it('Should return undefined when no x-forwarded-for header', () => {
+@@ -112,7 +112,7 @@ describe('getConnInfo', () => {
+ 
+       const info = getConnInfo(c)
+ 
+-      expect(info.remote.address).toBeUndefined()
++      expect(info.peer.address).toBeUndefined()
+     })
+   })
+ })
+diff --git a/src/adapter/aws-lambda/conninfo.ts b/src/adapter/aws-lambda/conninfo.ts
+index aa83702d..bace2e6a 100644
+--- a/src/adapter/aws-lambda/conninfo.ts
++++ b/src/adapter/aws-lambda/conninfo.ts
+@@ -26,7 +26,7 @@ type Env = {
+  * - ALB: Falls back to x-forwarded-for header
+  *
+  * @param c - Context
+- * @returns Connection information including remote address
++ * @returns Connection information including peer address
+  * @example
+  * ```ts
+  * import { Hono } from 'hono'
+@@ -36,7 +36,7 @@ type Env = {
+  *
+  * app.get('/', (c) => {
+  *   const info = getConnInfo(c)
+- *   return c.text(`Your IP: ${info.remote.address}`)
++ *   return c.text(`Your IP: ${info.peer.address}`)
+  * })
+  *
+  * export const handler = handle(app)
+@@ -66,7 +66,7 @@ export const getConnInfo: GetConnInfo = (c: Context<Env>) => {
+   }
+ 
+   return {
+-    remote: {
++    peer: {
+       address,
+     },
+   }
+diff --git a/src/adapter/bun/conninfo.test.ts b/src/adapter/bun/conninfo.test.ts
+index ceb12046..10a0b98e 100644
+--- a/src/adapter/bun/conninfo.test.ts
++++ b/src/adapter/bun/conninfo.test.ts
+@@ -31,10 +31,10 @@ describe('getConnInfo', () => {
+     const c = new Context(new Request('http://localhost/'), { env: server })
+     const info = getConnInfo(c)
+ 
+-    expect(info.remote.port).toBe(port)
+-    expect(info.remote.address).toBe(address)
+-    expect(info.remote.addressType).toBe('IPv6')
+-    expect(info.remote.transport).toBeUndefined()
++    expect(info.peer.port).toBe(port)
++    expect(info.peer.address).toBe(address)
++    expect(info.peer.addressType).toBe('IPv6')
++    expect(info.peer.transport).toBeUndefined()
+   })
+   it('Should getConnInfo works when env is { server: server }', () => {
+     const { port, server, address } = createRandomBunServer()
+@@ -42,10 +42,10 @@ describe('getConnInfo', () => {
+ 
+     const info = getConnInfo(c)
+ 
+-    expect(info.remote.port).toBe(port)
+-    expect(info.remote.address).toBe(address)
+-    expect(info.remote.addressType).toBe('IPv6')
+-    expect(info.remote.transport).toBeUndefined()
++    expect(info.peer.port).toBe(port)
++    expect(info.peer.address).toBe(address)
++    expect(info.peer.addressType).toBe('IPv6')
++    expect(info.peer.transport).toBeUndefined()
+   })
+   it('should return undefined when addressType is invalid string', () => {
+     const { server } = createRandomBunServer({ family: 'invalid' })
+@@ -53,7 +53,7 @@ describe('getConnInfo', () => {
+ 
+     const info = getConnInfo(c)
+ 
+-    expect(info.remote.addressType).toBeUndefined()
++    expect(info.peer.addressType).toBeUndefined()
+   })
+   it('Should throw error when user did not give server', () => {
+     const c = new Context(new Request('http://localhost/'), { env: {} })
+@@ -68,7 +68,7 @@ describe('getConnInfo', () => {
+     })
+     expect(() => getConnInfo(c)).toThrowError(TypeError)
+   })
+-  it('Should return empty remote when requestIP returns null', () => {
++  it('Should return empty peer when requestIP returns null', () => {
+     const c = new Context(new Request('http://localhost/'), {
+       env: {
+         requestIP() {
+@@ -79,6 +79,6 @@ describe('getConnInfo', () => {
+ 
+     const info = getConnInfo(c)
+ 
+-    expect(info.remote).toEqual({})
++    expect(info.peer).toEqual({})
+   })
+ })
+diff --git a/src/adapter/bun/conninfo.ts b/src/adapter/bun/conninfo.ts
+index c3d150d2..4af30633 100644
+--- a/src/adapter/bun/conninfo.ts
++++ b/src/adapter/bun/conninfo.ts
+@@ -29,12 +29,12 @@ export const getConnInfo: GetConnInfo = (c: Context) => {
+ 
+   if (!info) {
+     return {
+-      remote: {},
++      peer: {},
+     }
+   }
+ 
+   return {
+-    remote: {
++    peer: {
+       address: info.address,
+       addressType: info.family === 'IPv6' || info.family === 'IPv4' ? info.family : undefined,
+       port: info.port,
+diff --git a/src/adapter/cloudflare-pages/conninfo.test.ts b/src/adapter/cloudflare-pages/conninfo.test.ts
+index 61b1573f..c44b813b 100644
+--- a/src/adapter/cloudflare-pages/conninfo.test.ts
++++ b/src/adapter/cloudflare-pages/conninfo.test.ts
+@@ -13,8 +13,8 @@ describe('getConnInfo', () => {
+ 
+     const info = getConnInfo(c)
+ 
+-    expect(info.remote.address).toBe(address)
+-    expect(info.remote.addressType).toBeUndefined()
++    expect(info.peer.address).toBe(address)
++    expect(info.peer.addressType).toBeUndefined()
+   })
+ 
+   it('Should return undefined when cf-connecting-ip header is not present', () => {
+@@ -22,6 +22,6 @@ describe('getConnInfo', () => {
+ 
+     const info = getConnInfo(c)
+ 
+-    expect(info.remote.address).toBeUndefined()
++    expect(info.peer.address).toBeUndefined()
+   })
+ })
+diff --git a/src/adapter/cloudflare-pages/conninfo.ts b/src/adapter/cloudflare-pages/conninfo.ts
+index 90098dfe..228137d3 100644
+--- a/src/adapter/cloudflare-pages/conninfo.ts
++++ b/src/adapter/cloudflare-pages/conninfo.ts
+@@ -3,7 +3,7 @@ import type { GetConnInfo } from '../../helper/conninfo'
+ /**
+  * Get connection information from Cloudflare Pages
+  * @param c - Context
+- * @returns Connection information including remote address
++ * @returns Connection information including peer address
+  * @example
+  * ```ts
+  * import { Hono } from 'hono'
+@@ -13,14 +13,14 @@ import type { GetConnInfo } from '../../helper/conninfo'
+  *
+  * app.get('/', (c) => {
+  *   const info = getConnInfo(c)
+- *   return c.text(`Your IP: ${info.remote.address}`)
++ *   return c.text(`Your IP: ${info.peer.address}`)
+  * })
+  *
+  * export const onRequest = handle(app)
+  * ```
+  */
+ export const getConnInfo: GetConnInfo = (c) => ({
+-  remote: {
++  peer: {
+     address: c.req.header('cf-connecting-ip'),
+   },
+ })
+diff --git a/src/adapter/cloudflare-workers/conninfo.test.ts b/src/adapter/cloudflare-workers/conninfo.test.ts
+index b4264ce1..888c380c 100644
+--- a/src/adapter/cloudflare-workers/conninfo.test.ts
++++ b/src/adapter/cloudflare-workers/conninfo.test.ts
+@@ -13,7 +13,7 @@ describe('getConnInfo', () => {
+ 
+     const info = getConnInfo(c)
+ 
+-    expect(info.remote.address).toBe(address)
+-    expect(info.remote.addressType).toBeUndefined()
++    expect(info.peer.address).toBe(address)
++    expect(info.peer.addressType).toBeUndefined()
+   })
+ })
+diff --git a/src/adapter/cloudflare-workers/conninfo.ts b/src/adapter/cloudflare-workers/conninfo.ts
+index d2d1624d..81544bd9 100644
+--- a/src/adapter/cloudflare-workers/conninfo.ts
++++ b/src/adapter/cloudflare-workers/conninfo.ts
+@@ -1,7 +1,7 @@
+ import type { GetConnInfo } from '../../helper/conninfo'
+ 
+ export const getConnInfo: GetConnInfo = (c) => ({
+-  remote: {
++  peer: {
+     address: c.req.header('cf-connecting-ip'),
+   },
+ })
+diff --git a/src/adapter/deno/conninfo.test.ts b/src/adapter/deno/conninfo.test.ts
+index 9861366e..749aede9 100644
+--- a/src/adapter/deno/conninfo.test.ts
++++ b/src/adapter/deno/conninfo.test.ts
+@@ -17,9 +17,9 @@ describe('getConnInfo', () => {
+     })
+     const info = getConnInfo(c)
+ 
+-    expect(info.remote.port).toBe(port)
+-    expect(info.remote.address).toBe(address)
+-    expect(info.remote.addressType).toBeUndefined()
+-    expect(info.remote.transport).toBe(transport)
++    expect(info.peer.port).toBe(port)
++    expect(info.peer.address).toBe(address)
++    expect(info.peer.addressType).toBeUndefined()
++    expect(info.peer.transport).toBe(transport)
+   })
+ })
+diff --git a/src/adapter/deno/conninfo.ts b/src/adapter/deno/conninfo.ts
+index e22bac12..6b58e6dd 100644
+--- a/src/adapter/deno/conninfo.ts
++++ b/src/adapter/deno/conninfo.ts
+@@ -8,7 +8,7 @@ import type { GetConnInfo } from '../../helper/conninfo'
+ export const getConnInfo: GetConnInfo = (c) => {
+   const { remoteAddr } = c.env
+   return {
+-    remote: {
++    peer: {
+       address: remoteAddr.hostname,
+       port: remoteAddr.port,
+       transport: remoteAddr.transport,
+diff --git a/src/adapter/lambda-edge/conninfo.test.ts b/src/adapter/lambda-edge/conninfo.test.ts
+index 42aa711f..a4c92fb8 100644
+--- a/src/adapter/lambda-edge/conninfo.test.ts
++++ b/src/adapter/lambda-edge/conninfo.test.ts
+@@ -22,6 +22,6 @@ describe('getConnInfo', () => {
+     const c = new Context(new Request('http://localhost/'), { env })
+     const info = getConnInfo(c)
+ 
+-    expect(info.remote.address).toBe(clientIp)
++    expect(info.peer.address).toBe(clientIp)
+   })
+ })
+diff --git a/src/adapter/lambda-edge/conninfo.ts b/src/adapter/lambda-edge/conninfo.ts
+index 395d5fc8..1233be9f 100644
+--- a/src/adapter/lambda-edge/conninfo.ts
++++ b/src/adapter/lambda-edge/conninfo.ts
+@@ -9,7 +9,7 @@ type Env = {
+ }
+ 
+ export const getConnInfo: GetConnInfo = (c: Context<Env>) => ({
+-  remote: {
++  peer: {
+     address: c.env.event.Records[0].cf.request.clientIp,
+   },
+ })
+diff --git a/src/adapter/netlify/conninfo.test.ts b/src/adapter/netlify/conninfo.test.ts
+index a8b585ce..51016839 100644
+--- a/src/adapter/netlify/conninfo.test.ts
++++ b/src/adapter/netlify/conninfo.test.ts
+@@ -14,7 +14,7 @@ describe('getConnInfo', () => {
+ 
+     const info = getConnInfo(c)
+ 
+-    expect(info.remote.address).toBe(ip)
++    expect(info.peer.address).toBe(ip)
+   })
+ 
+   it('Should return undefined when context.ip is not present', () => {
+@@ -26,7 +26,7 @@ describe('getConnInfo', () => {
+ 
+     const info = getConnInfo(c)
+ 
+-    expect(info.remote.address).toBeUndefined()
++    expect(info.peer.address).toBeUndefined()
+   })
+ 
+   it('Should return undefined when context is not present', () => {
+@@ -36,6 +36,6 @@ describe('getConnInfo', () => {
+ 
+     const info = getConnInfo(c)
+ 
+-    expect(info.remote.address).toBeUndefined()
++    expect(info.peer.address).toBeUndefined()
+   })
+ })
+diff --git a/src/adapter/netlify/conninfo.ts b/src/adapter/netlify/conninfo.ts
+index 8b71034e..54627c76 100644
+--- a/src/adapter/netlify/conninfo.ts
++++ b/src/adapter/netlify/conninfo.ts
+@@ -34,7 +34,7 @@ type Env = {
+ /**
+  * Get connection information from Netlify
+  * @param c - Context
+- * @returns Connection information including remote address
++ * @returns Connection information including peer address
+  * @example
+  * ```ts
+  * import { Hono } from 'hono'
+@@ -44,14 +44,14 @@ type Env = {
+  *
+  * app.get('/', (c) => {
+  *   const info = getConnInfo(c)
+- *   return c.text(`Your IP: ${info.remote.address}`)
++ *   return c.text(`Your IP: ${info.peer.address}`)
+  * })
+  *
+  * export default handle(app)
+  * ```
+  */
+ export const getConnInfo: GetConnInfo = (c: Context<Env>) => ({
+-  remote: {
++  peer: {
+     address: c.env.context?.ip,
+   },
+ })
+diff --git a/src/adapter/vercel/conninfo.test.ts b/src/adapter/vercel/conninfo.test.ts
+index 7d390af5..d96ff400 100644
+--- a/src/adapter/vercel/conninfo.test.ts
++++ b/src/adapter/vercel/conninfo.test.ts
+@@ -13,6 +13,6 @@ describe('getConnInfo', () => {
+ 
+     const info = getConnInfo(c)
+ 
+-    expect(info.remote.address).toBe(address)
++    expect(info.peer.address).toBe(address)
+   })
+ })
+diff --git a/src/adapter/vercel/conninfo.ts b/src/adapter/vercel/conninfo.ts
+index 68d3ac0a..ceae8d95 100644
+--- a/src/adapter/vercel/conninfo.ts
++++ b/src/adapter/vercel/conninfo.ts
+@@ -1,7 +1,7 @@
+ import type { GetConnInfo } from '../../helper/conninfo'
+ 
+ export const getConnInfo: GetConnInfo = (c) => ({
+-  remote: {
++  peer: {
+     // https://github.com/vercel/vercel/blob/b70bfb5fbf28a4650d4042ce68ca5c636d37cf44/packages/edge/src/edge-headers.ts#L10-L12C32
+     address: c.req.header('x-real-ip'),
+   },
+diff --git a/src/helper/conninfo/types.ts b/src/helper/conninfo/types.ts
+index e37a3741..3611576e 100644
+--- a/src/helper/conninfo/types.ts
++++ b/src/helper/conninfo/types.ts
+@@ -34,9 +34,9 @@ export type NetAddrInfo = {
+  */
+ export interface ConnInfo {
+   /**
+-   * Remote information
++   * Peer information
+    */
+-  remote: NetAddrInfo
++  peer: NetAddrInfo
+ }
+ 
+ /**
+diff --git a/src/middleware/ip-restriction/index.test.ts b/src/middleware/ip-restriction/index.test.ts
+index 9f31105c..96583a70 100644
+--- a/src/middleware/ip-restriction/index.test.ts
++++ b/src/middleware/ip-restriction/index.test.ts
+@@ -8,7 +8,7 @@ describe('ipRestriction middleware', () => {
+   it('Should restrict', async () => {
+     const getConnInfo: GetConnInfo = (c) => {
+       return {
+-        remote: {
++        peer: {
+           address: c.env.ip,
+         },
+       }
+@@ -73,7 +73,7 @@ describe('ipRestriction middleware', () => {
+         '/invalid',
+         ipRestriction(
+           (c) => ({
+-            remote: {
++            peer: {
+               address: c.env.ip,
+             },
+           }),
+@@ -98,7 +98,7 @@ describe('ipRestriction middleware', () => {
+       '/invalid',
+       ipRestriction(
+         (c) => ({
+-          remote: {
++          peer: {
+             address: c.env.ip,
+           },
+         }),
+@@ -120,7 +120,7 @@ describe('isMatchForRule', () => {
+   const isMatch = async (info: { addr: string; type: AddressType }, rule: IPRestrictionRule) => {
+     const middleware = ipRestriction(
+       () => ({
+-        remote: {
++        peer: {
+           address: info.addr,
+           addressType: info.type,
+         },
+diff --git a/src/middleware/ip-restriction/index.ts b/src/middleware/ip-restriction/index.ts
+index 37a91155..5602cadd 100644
+--- a/src/middleware/ip-restriction/index.ts
++++ b/src/middleware/ip-restriction/index.ts
+@@ -237,12 +237,12 @@ export const ipRestriction = (
+ 
+   return async function ipRestriction(c, next) {
+     const connInfo = getIP(c)
+-    const addr = typeof connInfo === 'string' ? connInfo : connInfo.remote.address
++    const addr = typeof connInfo === 'string' ? connInfo : connInfo.peer.address
+     if (!addr) {
+       throw blockError(c)
+     }
+     const type =
+-      (typeof connInfo !== 'string' && connInfo.remote.addressType) || distinctRemoteAddr(addr)
++      (typeof connInfo !== 'string' && connInfo.peer.addressType) || distinctRemoteAddr(addr)
+ 
+     const remoteData = { addr, type, isIPv4: type === 'IPv4' }
+ 

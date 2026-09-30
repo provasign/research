@@ -1,0 +1,47 @@
+diff --git a/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java b/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
+index 9d108d9c..496028be 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
++++ b/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
+@@ -644,6 +644,20 @@ public class FromXmlParser
+                     if (token == XmlTokenStream.XML_END_ELEMENT) {
+                         if (_streamReadContext.inArray()) {
+                             if (XmlTokenStream._allWs(_currText)) {
++                                // 27-Sep-2026, tatu: [dataformat-xml#449] non-empty
++                                //    whitespace-only text may be the actual value of a
++                                //    `@JacksonXmlText` property, so must still be exposed
++                                //    as the (pseudo) text property of the Object, instead
++                                //    of being silently dropped; but a truly empty ("")
++                                //    text (no CHARACTERS event at all) has no such meaning
++                                //    and continues to produce an empty Object as before.
++                                if (!_currText.isEmpty()) {
++                                    _xmlTokens.pushbackCurrentToken();
++                                    _nextIsLeadingMixed = true;
++                                    _nextToken = JsonToken.PROPERTY_NAME;
++                                    _streamReadContext = _streamReadContext.createChildObjectContext(-1, -1);
++                                    return _updateToken(JsonToken.START_OBJECT);
++                                }
+                                 // 06-Jan-2015, tatu: as per [dataformat-xml#180], need to
+                                 //    expose as empty Object, not null (or, worse, as used to
+                                 //    be done, by swallowing the token)
+@@ -675,6 +689,21 @@ XmlTokenStream.XML_END_ELEMENT, XmlTokenStream.XML_START_ELEMENT, token));
+                         _nextIsLeadingMixed = true;
+                         _nextToken = JsonToken.PROPERTY_NAME;
+                         return _updateToken(JsonToken.START_OBJECT);
++                    } else if (XmlTokenStream._allWs(_currText) && !_currText.isEmpty()) {
++                        // 27-Sep-2026, tatu: [dataformat-xml#449] non-empty whitespace-only
++                        //   text may be the only (and actual) value of a `@JacksonXmlText`
++                        //   property, possible when element also has attributes (forcing
++                        //   Object context); only swallow the text if there is more content
++                        //   coming (i.e. it is separator whitespace), not when it is
++                        //   immediately followed by the closing tag. A truly empty ("")
++                        //   text carries no such meaning and is always swallowed.
++                        int peeked = _nextToken();
++                        if (peeked == XmlTokenStream.XML_END_ELEMENT) {
++                            _xmlTokens.pushbackCurrentToken();
++                        } else {
++                            token = peeked;
++                            continue;
++                        }
+                     } else if (XmlTokenStream._allWs(_currText)) {
+                         token = _nextToken();
+                         continue;

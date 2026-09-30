@@ -1,0 +1,217 @@
+diff --git a/src/main/java/com/fasterxml/jackson/databind/DeserializationContext.java b/src/main/java/com/fasterxml/jackson/databind/DeserializationContext.java
+index 403e9a552..cb79db0f8 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/DeserializationContext.java
++++ b/src/main/java/com/fasterxml/jackson/databind/DeserializationContext.java
+@@ -687,7 +687,7 @@ public abstract class DeserializationContext
+         TypeDeserializer typeDeser = _factory.findTypeDeserializer(_config, type);
+         if (typeDeser != null) {
+             // important: contextualize to indicate this is for root value
+-            typeDeser = typeDeser.forProperty(null);
++            typeDeser = typeDeser.forBeanProperty(null);
+             return new TypeWrappedDeserializer(typeDeser, deser);
+         }
+         return deser;
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java b/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java
+index 5a3fef523..3de7f5926 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java
+@@ -743,7 +743,7 @@ ClassUtil.getTypeDescription(_beanType), ClassUtil.classNameOf(_valueInstantiato
+             dd = (JsonDeserializer<Object>) ctxt.handleSecondaryContextualization(dd, property, delegateType);
+         }
+         if (td != null) {
+-            td = td.forProperty(property);
++            td = td.forBeanProperty(property);
+             return new TypeWrappedDeserializer(td, dd);
+         }
+         return dd;
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/SettableBeanProperty.java b/src/main/java/com/fasterxml/jackson/databind/deser/SettableBeanProperty.java
+index f08a48137..9a6fe7adf 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/SettableBeanProperty.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/SettableBeanProperty.java
+@@ -160,7 +160,7 @@ public abstract class SettableBeanProperty
+ 
+         // 30-Jan-2012, tatu: Important: contextualize TypeDeserializer now...
+         if (typeDeser != null) {
+-            typeDeser = typeDeser.forProperty(this);
++            typeDeser = typeDeser.forBeanProperty(this);
+         }
+         _valueTypeDeserializer = typeDeser;
+         _valueDeserializer = MISSING_VALUE_DESERIALIZER;
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/CollectionDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/CollectionDeserializer.java
+index 05e8453d0..d183d8f0b 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/CollectionDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/CollectionDeserializer.java
+@@ -193,7 +193,7 @@ _containerType,
+         // and finally, type deserializer needs context as well
+         TypeDeserializer valueTypeDeser = _valueTypeDeserializer;
+         if (valueTypeDeser != null) {
+-            valueTypeDeser = valueTypeDeser.forProperty(property);
++            valueTypeDeser = valueTypeDeser.forBeanProperty(property);
+         }
+         NullValueProvider nuller = findContentNullProvider(ctxt, property, valueDeser);
+         if ((!Objects.equals(unwrapSingle, _unwrapSingle))
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/EnumMapDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/EnumMapDeserializer.java
+index 773fa9c07..9b8a7b3b0 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/EnumMapDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/EnumMapDeserializer.java
+@@ -186,7 +186,7 @@ public class EnumMapDeserializer
+         }
+         TypeDeserializer vtd = _valueTypeDeserializer;
+         if (vtd != null) {
+-            vtd = vtd.forProperty(property);
++            vtd = vtd.forBeanProperty(property);
+         }
+         return withResolved(keyDeser, valueDeser, vtd, findContentNullProvider(ctxt, property, valueDeser));
+     }
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/MapDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/MapDeserializer.java
+index 98875853a..4fa6c0a91 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/MapDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/MapDeserializer.java
+@@ -330,7 +330,7 @@ public class MapDeserializer
+         }
+         TypeDeserializer vtd = _valueTypeDeserializer;
+         if (vtd != null) {
+-            vtd = vtd.forProperty(property);
++            vtd = vtd.forBeanProperty(property);
+         }
+         Set<String> ignored = _ignorableProperties;
+         Set<String> included = _includableProperties;
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/MapEntryDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/MapEntryDeserializer.java
+index 526e503af..350a02551 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/MapEntryDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/MapEntryDeserializer.java
+@@ -142,7 +142,7 @@ public class MapEntryDeserializer
+         }
+         TypeDeserializer vtd = _valueTypeDeserializer;
+         if (vtd != null) {
+-            vtd = vtd.forProperty(property);
++            vtd = vtd.forBeanProperty(property);
+         }
+         return withResolved(kd, vtd, vd);
+     }
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/ObjectArrayDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/ObjectArrayDeserializer.java
+index 3748d4958..5fe1a939c 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/ObjectArrayDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/ObjectArrayDeserializer.java
+@@ -154,7 +154,7 @@ public class ObjectArrayDeserializer
+         }
+         TypeDeserializer elemTypeDeser = _elementTypeDeserializer;
+         if (elemTypeDeser != null) {
+-            elemTypeDeser = elemTypeDeser.forProperty(property);
++            elemTypeDeser = elemTypeDeser.forBeanProperty(property);
+         }
+         NullValueProvider nuller = findContentNullProvider(ctxt, property, valueDeser);
+         return withResolved(elemTypeDeser, valueDeser, nuller, unwrapSingle);
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/ReferenceTypeDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/ReferenceTypeDeserializer.java
+index be81d8bee..8fdede93a 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/ReferenceTypeDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/ReferenceTypeDeserializer.java
+@@ -75,7 +75,7 @@ public abstract class ReferenceTypeDeserializer<T>
+ 
+         TypeDeserializer typeDeser = _valueTypeDeserializer;
+         if (typeDeser != null) {
+-            typeDeser = typeDeser.forProperty(property);
++            typeDeser = typeDeser.forBeanProperty(property);
+         }
+         // !!! 23-Oct-2016, tatu: TODO: full support for configurable ValueInstantiators?
+         if ((deser == _valueDeserializer) && (typeDeser == _valueTypeDeserializer)) {
+diff --git a/src/main/java/com/fasterxml/jackson/databind/jsontype/TypeDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/jsontype/TypeDeserializer.java
+index 8b44b4501..d91169def 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/jsontype/TypeDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/jsontype/TypeDeserializer.java
+@@ -37,7 +37,7 @@ public abstract class TypeDeserializer
+      * (for {@link java.util.Collection} or {@link java.util.Map}
+      * valued properties).
+      */
+-    public abstract TypeDeserializer forProperty(BeanProperty prop);
++    public abstract TypeDeserializer forBeanProperty(BeanProperty prop);
+ 
+     /*
+     /**********************************************************
+diff --git a/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsArrayTypeDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsArrayTypeDeserializer.java
+index 90021a108..90e5360c4 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsArrayTypeDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsArrayTypeDeserializer.java
+@@ -39,7 +39,7 @@ public class AsArrayTypeDeserializer
+     }
+ 
+     @Override
+-    public TypeDeserializer forProperty(BeanProperty prop) {
++    public TypeDeserializer forBeanProperty(BeanProperty prop) {
+         // usually if it's null:
+         return (prop == _property) ? this : new AsArrayTypeDeserializer(this, prop);
+     }
+diff --git a/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsDeductionTypeDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsDeductionTypeDeserializer.java
+index 338fe3d16..e55f6b07f 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsDeductionTypeDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsDeductionTypeDeserializer.java
+@@ -55,7 +55,7 @@ public class AsDeductionTypeDeserializer extends AsPropertyTypeDeserializer
+     }
+ 
+     @Override
+-    public TypeDeserializer forProperty(BeanProperty prop) {
++    public TypeDeserializer forBeanProperty(BeanProperty prop) {
+         return (prop == _property) ? this : new AsDeductionTypeDeserializer(this, prop);
+     }
+ 
+diff --git a/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsExternalTypeDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsExternalTypeDeserializer.java
+index e0e44a38a..f2a78a554 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsExternalTypeDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsExternalTypeDeserializer.java
+@@ -34,7 +34,7 @@ public class AsExternalTypeDeserializer extends AsArrayTypeDeserializer
+     }
+ 
+     @Override
+-    public TypeDeserializer forProperty(BeanProperty prop) {
++    public TypeDeserializer forBeanProperty(BeanProperty prop) {
+         if (prop == _property) { // usually if it's null
+             return this;
+         }
+diff --git a/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsPropertyTypeDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsPropertyTypeDeserializer.java
+index e574bf4a5..c8b82e032 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsPropertyTypeDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsPropertyTypeDeserializer.java
+@@ -84,7 +84,7 @@ public class AsPropertyTypeDeserializer extends AsArrayTypeDeserializer
+     }
+ 
+     @Override
+-    public TypeDeserializer forProperty(BeanProperty prop) {
++    public TypeDeserializer forBeanProperty(BeanProperty prop) {
+         return (prop == _property) ? this : new AsPropertyTypeDeserializer(this, prop);
+     }
+ 
+diff --git a/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsWrapperTypeDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsWrapperTypeDeserializer.java
+index 7fe4f13cb..c4b7527ee 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsWrapperTypeDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsWrapperTypeDeserializer.java
+@@ -38,7 +38,7 @@ public class AsWrapperTypeDeserializer
+     }
+ 
+     @Override
+-    public TypeDeserializer forProperty(BeanProperty prop) {
++    public TypeDeserializer forBeanProperty(BeanProperty prop) {
+         return (prop == _property) ? this : new AsWrapperTypeDeserializer(this, prop);
+     }
+ 
+diff --git a/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/TypeDeserializerBase.java b/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/TypeDeserializerBase.java
+index 83bd11261..e96c5716d 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/TypeDeserializerBase.java
++++ b/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/TypeDeserializerBase.java
+@@ -30,7 +30,7 @@ public abstract class TypeDeserializerBase
+      * Property that contains value for which type information
+      * is included; null if value is a root value.
+      * Note that this value is not assigned during construction
+-     * but only when {@link #forProperty} is called to create
++     * but only when {@link #forBeanProperty} is called to create
+      * a copy.
+      */
+     protected final BeanProperty _property;
+@@ -92,7 +92,7 @@ public abstract class TypeDeserializerBase
+     }
+ 
+     @Override
+-    public abstract TypeDeserializer forProperty(BeanProperty prop);
++    public abstract TypeDeserializer forBeanProperty(BeanProperty prop);
+ 
+     /*
+     /**********************************************************

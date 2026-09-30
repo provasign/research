@@ -1,42 +1,65 @@
 diff --git a/tree.go b/tree.go
-index 74ff43d..7d3580c 100644
+index 74ff43d..1d350a5 100644
 --- a/tree.go
 +++ b/tree.go
-@@ -7,6 +7,7 @@ package chi
- import (
- 	"fmt"
- 	"net/http"
-+	"reflect"
- 	"regexp"
- 	"slices"
- 	"sort"
-@@ -629,8 +630,16 @@ func (n *node) routes() []Route {
+@@ -133,6 +133,11 @@ type endpoint struct {
+ 
+ 	// parameter keys recorded on handler nodes
+ 	paramKeys []string
++
++	// mountStub indicates the handler was auto-filled in by a Mount's
++	// catch-all stub registration, rather than explicitly registered for
++	// this specific method.
++	mountStub bool
+ }
+ 
+ func (s endpoints) Value(method methodTyp) *endpoint {
+@@ -360,22 +365,26 @@ func (n *node) setEndpoint(method methodTyp, handler http.Handler, pattern strin
+ 	if method&mSTUB == mSTUB {
+ 		n.endpoints.Value(mSTUB).handler = handler
+ 	}
++	isMountStub := method&mSTUB == mSTUB
+ 	if method&mALL == mALL {
+ 		h := n.endpoints.Value(mALL)
+ 		h.handler = handler
+ 		h.pattern = pattern
+ 		h.paramKeys = paramKeys
++		h.mountStub = isMountStub
+ 		for _, m := range methodMap {
+ 			h := n.endpoints.Value(m)
+ 			h.handler = handler
+ 			h.pattern = pattern
+ 			h.paramKeys = paramKeys
++			h.mountStub = isMountStub
+ 		}
+ 	} else {
+ 		h := n.endpoints.Value(method)
+ 		h.handler = handler
+ 		h.pattern = pattern
+ 		h.paramKeys = paramKeys
++		h.mountStub = false
+ 	}
+ }
+ 
+@@ -629,10 +638,6 @@ func (n *node) routes() []Route {
  	rts := []Route{}
  
  	n.walk(func(eps endpoints, subroutes Routes) bool {
 -		if eps[mSTUB] != nil && eps[mSTUB].handler != nil && subroutes == nil {
 -			return false
-+		// A mount's stub handler blankets every method at the mount point so
-+		// that any request can reach the subrouter. If a method here still
-+		// points at that same stub handler, it's not a real route registered
-+		// by the user, so skip reporting it unless it was overridden (e.g. by
-+		// a Get() on the same pattern as the Mount/Route).
-+		var stubHandlerPtr uintptr
-+		if subroutes == nil {
-+			if h := eps[mSTUB]; h != nil && h.handler != nil {
-+				stubHandlerPtr = reflect.ValueOf(h.handler).Pointer()
-+			}
- 		}
- 
+-		}
+-
  		// Group methodHandlers by unique patterns
-@@ -640,6 +649,12 @@ func (n *node) routes() []Route {
+ 		pats := make(map[string]endpoints)
+ 
+@@ -640,6 +645,12 @@ func (n *node) routes() []Route {
  			if h.pattern == "" {
  				continue
  			}
-+			if mt == mSTUB {
-+				continue
-+			}
-+			if mt != mALL && stubHandlerPtr != 0 && h.handler != nil && reflect.ValueOf(h.handler).Pointer() == stubHandlerPtr {
++			// Skip method entries that were only auto-filled by a Mount's
++			// catch-all stub registration (i.e. never explicitly registered
++			// on this node), so they aren't reported as real routes.
++			if subroutes == nil && h.mountStub {
 +				continue
 +			}
  			p, ok := pats[h.pattern]

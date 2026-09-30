@@ -1,0 +1,33 @@
+diff --git a/src/click/_termui_impl.py b/src/click/_termui_impl.py
+index 3336c37c..91944ca1 100644
+--- a/src/click/_termui_impl.py
++++ b/src/click/_termui_impl.py
+@@ -386,6 +386,15 @@ class ProgressBar(t.Generic[V]):
+ 
+ 
+ class MaybeStripAnsi(io.TextIOWrapper):
++    """Wraps a stream to optionally strip ANSI codes on write.
++
++    The wrapped stream (``stdout``'s buffer, a pager's ``stdin``, etc.) is
++    owned by whoever handed it to :func:`get_pager_file`, not by this
++    wrapper. Overriding ``__del__`` to detach rather than close ensures
++    garbage collecting this wrapper never closes a stream still in use
++    elsewhere, e.g. ``sys.stdout`` during ``CliRunner`` isolation.
++    """
++
+     def __init__(self, stream: t.IO[bytes], *, color: bool, **kwargs: t.Any):
+         super().__init__(stream, **kwargs)
+         self.color = color
+@@ -395,6 +404,12 @@ class MaybeStripAnsi(io.TextIOWrapper):
+             text = strip_ansi(text)
+         return super().write(text)
+ 
++    def __del__(self) -> None:
++        try:
++            self.detach()
++        except Exception:
++            pass
++
+ 
+ def _pager_contextmanager(
+     color: bool | None = None,

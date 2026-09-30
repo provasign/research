@@ -1,0 +1,59 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/jdk/ObjectArrayDeserializer.java b/src/main/java/tools/jackson/databind/deser/jdk/ObjectArrayDeserializer.java
+index d94a7e227..d50ff620b 100644
+--- a/src/main/java/tools/jackson/databind/deser/jdk/ObjectArrayDeserializer.java
++++ b/src/main/java/tools/jackson/databind/deser/jdk/ObjectArrayDeserializer.java
+@@ -540,16 +540,32 @@ ClassUtil.classNameOf(value), ClassUtil.nameOf(_elementClass)));
+                     + "] that wasn't previously seen as unresolved.");
+         }
+ 
+-        // [databind#5909]: no `replaceResolvedItem` here, unlike Collection/Map
+-        // accumulators. The Builder→built rebind path is unreachable for arrays:
+-        //  - Typed arrays (e.g. `Entity[]`) cannot store the Builder instance,
+-        //    so `resolveForwardReference` throws `ArrayStoreException` before
+-        //    any rebind could fire.
+-        //  - Untyped `Object[]` arrays don't trigger the forward-ref accumulator
+-        //    at all because the default element deserializer
+-        //    ({@code UntypedObjectDeserializer}) has no `ObjectIdReader`.
+-        // Regression covered by
+-        // {@code ObjectIdWithBuilder5909Test#forwardReferenceInTypedArrayFailsArrayStoreException}.
++        /**
++         * Replace a resolved item in the accumulator/array. Called when the bound
++         * item is rebound (e.g., builder → built object, or delegate → delegating-
++         * creator result) via {@link Referring#handleItemRebind}. Unlike the
++         * incompatible-runtime-type case handled (and rejected via
++         * {@code ArrayStoreException}) in {@link #resolveForwardReference}, this
++         * path is reachable whenever the old and new item are both assignable to
++         * the array's component type (e.g. a common interface/base class), such as
++         * a delegating-creator rebind.
++         *
++         * @since 3.2
++         */
++        void replaceResolvedItem(Object oldItem, Object newItem) {
++            if (_array != null) {
++                for (int i = 0, len = _array.length; i < len; i++) {
++                    if (_array[i] == oldItem) {
++                        _array[i] = newItem;
++                    }
++                }
++            }
++            for (int i = 0, size = _accumulator.size(); i < size; i++) {
++                if (_accumulator.get(i) == oldItem) {
++                    _accumulator.set(i, newItem);
++                }
++            }
++        }
+ 
+         Object[] buildArray() {
+             final int size = _accumulator.size();
+@@ -583,7 +599,9 @@ ClassUtil.classNameOf(value), ClassUtil.nameOf(_elementClass)));
+             _parent.resolveForwardReference(id, value);
+         }
+ 
+-        // [databind#5909]: no `handleItemRebind` override. The default no-op is
+-        // correct for arrays — see comment in ObjectArrayReferringAccumulator.
++        @Override
++        public void handleItemRebind(Object oldItem, Object newItem) {
++            _parent.replaceResolvedItem(oldItem, newItem);
++        }
+     }
+ }

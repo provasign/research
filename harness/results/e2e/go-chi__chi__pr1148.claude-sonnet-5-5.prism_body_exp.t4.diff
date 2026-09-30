@@ -1,0 +1,51 @@
+diff --git a/tree.go b/tree.go
+index 74ff43d..1b0da2b 100644
+--- a/tree.go
++++ b/tree.go
+@@ -7,6 +7,7 @@ package chi
+ import (
+ 	"fmt"
+ 	"net/http"
++	"reflect"
+ 	"regexp"
+ 	"slices"
+ 	"sort"
+@@ -630,7 +631,20 @@ func (n *node) routes() []Route {
+ 
+ 	n.walk(func(eps endpoints, subroutes Routes) bool {
+ 		if eps[mSTUB] != nil && eps[mSTUB].handler != nil && subroutes == nil {
+-			return false
++			// Mounted stub: only keep methods explicitly registered on the
++			// same pattern (e.g. Get("/bar") alongside Route("/bar")).
++			mount := eps[mSTUB].handler
++			explicit := endpoints{}
++			for mt, h := range eps {
++				if mt == mSTUB || mt == mALL || h.handler == nil || sameHandler(h.handler, mount) {
++					continue
++				}
++				explicit[mt] = h
++			}
++			if len(explicit) == 0 {
++				return false
++			}
++			eps = explicit
+ 		}
+ 
+ 		// Group methodHandlers by unique patterns
+@@ -883,3 +897,16 @@ func walk(r Routes, walkFn WalkFunc, parentRoute string, parentMw ...func(http.H
+ 
+ 	return nil
+ }
++
++// sameHandler reports whether a and b are the same func or pointer handler.
++func sameHandler(a, b http.Handler) bool {
++	va, vb := reflect.ValueOf(a), reflect.ValueOf(b)
++	if !va.IsValid() || !vb.IsValid() || va.Kind() != vb.Kind() {
++		return false
++	}
++	switch va.Kind() {
++	case reflect.Func, reflect.Ptr:
++		return va.Pointer() == vb.Pointer()
++	}
++	return false
++}

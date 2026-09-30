@@ -1,35 +1,63 @@
-diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
-index 443cb01b..784d54a7 100644
---- a/src/urllib3/connection.py
-+++ b/src/urllib3/connection.py
-@@ -78,6 +78,18 @@ RECENT_DATE = datetime.date(2025, 1, 1)
+diff --git a/src/urllib3/util/response.py b/src/urllib3/util/response.py
+index 0f457869..e63efac9 100644
+--- a/src/urllib3/util/response.py
++++ b/src/urllib3/util/response.py
+@@ -1,10 +1,19 @@
+ from __future__ import annotations
  
- _CONTAINS_CONTROL_CHAR_RE = re.compile(r"[^-!#$%&'*+.^_`|~0-9a-zA-Z]")
+ import http.client as httplib
++import re
+ from email.errors import MultipartInvariantViolationDefect, StartBoundaryNotFoundDefect
  
-+# RFC 7230, section 3.2.4: an obs-fold is a CRLF followed by at least one
-+# SP/HTAB, used by obsolete implementations to continue a header line. It
-+# must be replaced with one or more SP octets prior to interpreting the
-+# field value, otherwise the raw CRLF ends up embedded in the header value
-+# (e.g. a malformed Set-Cookie header leaking a CRLF into the Cookie header
-+# on subsequent requests).
-+_OBS_FOLD_RE = re.compile(r"\r\n(?=[ \t])|\r(?=[ \t])|\n(?=[ \t])")
-+
-+
-+def _unfold_obs_fold(value: str) -> str:
-+    return _OBS_FOLD_RE.sub(" ", value)
+ from ..exceptions import HeaderParsingError
+ 
++# RFC 7230 section 3.2.4 obs-fold: a CRLF followed by leading whitespace on
++# the next line. A user agent MUST replace each received obs-fold with one
++# or more SP octets prior to interpreting the field value, since some
++# servers send malformed header blocks (e.g. an unrelated header line
++# swallowed into the previous header's value) that would otherwise leak a
++# raw CRLF into the parsed header value.
++_OBS_FOLD_RE = re.compile(r"\r\n[ \t]+")
 +
  
- class HTTPConnection(_HTTPConnection):
+ def is_fp_closed(obj: object) -> bool:
      """
-@@ -616,7 +628,10 @@ class HTTPConnection(_HTTPConnection):
-                 exc_info=True,
-             )
+@@ -37,6 +46,29 @@ def is_fp_closed(obj: object) -> bool:
+     raise ValueError("Unable to determine whether fp is closed.")
  
--        headers = HTTPHeaderDict(httplib_response.msg.items())
-+        headers = HTTPHeaderDict(
-+            (name, _unfold_obs_fold(value))
-+            for name, value in httplib_response.msg.items()
-+        )
  
-         response = HTTPResponse(
-             body=httplib_response,
++def _unfold_obs_fold_headers(headers: httplib.HTTPMessage) -> None:
++    """
++    Replaces any obs-fold sequence (an unescaped CRLF followed by leading
++    whitespace) still present in a parsed header's value with a single SP,
++    per RFC 7230 section 3.2.4. Mutates ``headers`` in place.
++    """
++    items = headers.items()
++
++    sanitized = [(name, _OBS_FOLD_RE.sub(" ", value)) for name, value in items]
++
++    if sanitized == list(items):
++        return
++
++    # Message.__delitem__ removes every occurrence of a header name, and
++    # Message.__setitem__ appends rather than replaces, so this rebuilds the
++    # header list in its original order while preserving duplicate headers.
++    for name in {name for name, _ in items}:
++        del headers[name]
++
++    for name, value in sanitized:
++        headers[name] = value
++
++
+ def assert_header_parsing(headers: httplib.HTTPMessage) -> None:
+     """
+     Asserts whether all headers have been successfully parsed.
+@@ -55,6 +87,8 @@ def assert_header_parsing(headers: httplib.HTTPMessage) -> None:
+     if not isinstance(headers, httplib.HTTPMessage):
+         raise TypeError(f"expected httplib.Message, got {type(headers)}.")
+ 
++    _unfold_obs_fold_headers(headers)
++
+     unparsed_data = None
+ 
+     # get_payload is actually email.message.Message.get_payload;

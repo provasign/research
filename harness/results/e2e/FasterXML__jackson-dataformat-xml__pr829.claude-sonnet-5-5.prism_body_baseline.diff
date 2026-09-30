@@ -1,0 +1,25 @@
+diff --git a/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java b/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
+index 1df7eeb6..eebd62f7 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
++++ b/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
+@@ -554,6 +554,8 @@ public class FromXmlParser
+             return t;
+         }
+ 
++        // xsi:nil on the element just started is cleared by _nextToken(), so check first
++        final boolean nilElement = _xmlTokens.hasXsiNil();
+         int token = _nextToken();
+         // Need to have a loop just because we may have to eat/convert
+         // a start-element that indicates an array element.
+@@ -600,6 +602,11 @@ public class FromXmlParser
+                 if (_mayBeLeaf) {
+                     _mayBeLeaf = false;
+                     if (_streamReadContext.inArray()) {
++                        // xsi:nil element in array is a real null
++                        if (nilElement) {
++                            _streamReadContext.valueStarted();
++                            return _updateToken(JsonToken.VALUE_NULL);
++                        }
+                         // 06-Jan-2015, tatu: as per [dataformat-xml#180], need to
+                         //    expose as empty Object, not null
+                         _nextToken = JsonToken.END_OBJECT;

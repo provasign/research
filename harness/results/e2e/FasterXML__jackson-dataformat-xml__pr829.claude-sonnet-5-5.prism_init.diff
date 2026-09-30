@@ -1,0 +1,123 @@
+diff --git a/src/main/java/tools/jackson/dataformat/xml/DefaultingXmlTypeResolverBuilder.java b/src/main/java/tools/jackson/dataformat/xml/DefaultingXmlTypeResolverBuilder.java
+index 4c67d265..63aae5ec 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/DefaultingXmlTypeResolverBuilder.java
++++ b/src/main/java/tools/jackson/dataformat/xml/DefaultingXmlTypeResolverBuilder.java
+@@ -7,6 +7,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
+ import tools.jackson.databind.*;
+ import tools.jackson.databind.jsontype.NamedType;
+ import tools.jackson.databind.jsontype.PolymorphicTypeValidator;
++import tools.jackson.databind.jsontype.TypeDeserializer;
+ import tools.jackson.databind.jsontype.TypeIdResolver;
+ import tools.jackson.databind.jsontype.impl.DefaultTypeResolverBuilder;
+ import tools.jackson.databind.jsontype.impl.StdTypeResolverBuilder;
+@@ -54,6 +55,16 @@ public class DefaultingXmlTypeResolverBuilder
+         return this;
+     }
+ 
++    @Override
++    public TypeDeserializer buildTypeDeserializer(DeserializationContext ctxt,
++            JavaType baseType, Collection<NamedType> subtypes)
++    {
++        return XmlTypeResolverBuilder.wrapForNullElements(
++                super.buildTypeDeserializer(ctxt, baseType, subtypes),
++                baseType, defineDefaultImpl(ctxt, baseType),
++                _strictTypeIdHandling(ctxt, baseType));
++    }
++
+     @Override
+     protected TypeIdResolver idResolver(DatabindContext ctxt,
+             JavaType baseType, PolymorphicTypeValidator subtypeValidator,
+diff --git a/src/main/java/tools/jackson/dataformat/xml/XmlTypeResolverBuilder.java b/src/main/java/tools/jackson/dataformat/xml/XmlTypeResolverBuilder.java
+index 6a9d9d73..b121f5be 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/XmlTypeResolverBuilder.java
++++ b/src/main/java/tools/jackson/dataformat/xml/XmlTypeResolverBuilder.java
+@@ -5,9 +5,14 @@ import java.util.Collection;
+ import com.fasterxml.jackson.annotation.JsonTypeInfo;
+ 
+ import tools.jackson.core.JacksonException;
++import tools.jackson.core.JsonParser;
++import tools.jackson.core.JsonToken;
+ 
+ import tools.jackson.databind.*;
+ import tools.jackson.databind.jsontype.NamedType;
++import tools.jackson.databind.jsontype.TypeDeserializer;
++import tools.jackson.databind.jsontype.impl.AsPropertyTypeDeserializer;
++import tools.jackson.databind.util.TokenBuffer;
+ import tools.jackson.databind.jsontype.PolymorphicTypeValidator;
+ import tools.jackson.databind.jsontype.TypeIdResolver;
+ import tools.jackson.databind.jsontype.impl.ClassNameIdResolver;
+@@ -50,6 +55,30 @@ public class XmlTypeResolverBuilder extends StdTypeResolverBuilder
+         return propName;
+     }
+ 
++    @Override
++    public TypeDeserializer buildTypeDeserializer(DeserializationContext ctxt,
++            JavaType baseType, Collection<NamedType> subtypes)
++    {
++        return wrapForNullElements(super.buildTypeDeserializer(ctxt, baseType, subtypes),
++                baseType, defineDefaultImpl(ctxt, baseType),
++                _strictTypeIdHandling(ctxt, baseType));
++    }
++
++    /**
++     * Helper method shared with {@link DefaultingXmlTypeResolverBuilder}.
++     */
++    static TypeDeserializer wrapForNullElements(TypeDeserializer deser,
++            JavaType baseType, JavaType defaultImpl, boolean strict)
++    {
++        if ((deser != null) && (deser.getClass() == AsPropertyTypeDeserializer.class)) {
++            AsPropertyTypeDeserializer d = (AsPropertyTypeDeserializer) deser;
++            return new NullAwareAsPropertyTypeDeserializer(baseType,
++                    d.getTypeIdResolver(), d.getPropertyName(), d.isTypeIdVisible(),
++                    defaultImpl, d.getTypeInclusion(), strict);
++        }
++        return deser;
++    }
++
+     @Override
+     protected TypeIdResolver idResolver(DatabindContext ctxt,
+             JavaType baseType, PolymorphicTypeValidator subtypeValidator,
+@@ -167,4 +196,43 @@ public class XmlTypeResolverBuilder extends StdTypeResolverBuilder
+             return super.typeFromId(ctxt, decodeXmlClassName(id));
+         }
+     }
++
++    /**
++     * Since XML has no distinct {@code null}, {@code null} values in Collections
++     * are written as empty elements, which the parser exposes as empty Objects.
++     * With no type id (and no default impl) such an Object is read as {@code null}.
++     */
++    static class NullAwareAsPropertyTypeDeserializer
++        extends AsPropertyTypeDeserializer
++    {
++        public NullAwareAsPropertyTypeDeserializer(JavaType bt, TypeIdResolver idRes,
++                String typePropertyName, boolean typeIdVisible, JavaType defaultImpl,
++                JsonTypeInfo.As inclusion, boolean strict)
++        {
++            super(bt, idRes, typePropertyName, typeIdVisible, defaultImpl, inclusion, strict);
++        }
++
++        protected NullAwareAsPropertyTypeDeserializer(AsPropertyTypeDeserializer src,
++                BeanProperty prop)
++        {
++            super(src, prop);
++        }
++
++        @Override
++        public TypeDeserializer forProperty(BeanProperty prop) {
++            return (prop == _property) ? this
++                    : new NullAwareAsPropertyTypeDeserializer(this, prop);
++        }
++
++        @Override
++        protected Object _deserializeTypedUsingDefaultImpl(JsonParser p,
++                DeserializationContext ctxt, TokenBuffer tb, String priorFailureMsg)
++            throws JacksonException
++        {
++            if ((tb == null) && !hasDefaultImpl() && p.hasToken(JsonToken.END_OBJECT)) {
++                return null;
++            }
++            return super._deserializeTypedUsingDefaultImpl(p, ctxt, tb, priorFailureMsg);
++        }
++    }
+ }

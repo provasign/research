@@ -1,0 +1,110 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index cc8fb47d..6ac801ff 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -73,7 +73,7 @@ def _complete_visible_commands(
+ 
+     for name in multi.list_commands(ctx):
+         if name.startswith(incomplete):
+-            command = multi.get_command(ctx, name)
++            command = multi.lookup_command(ctx, name)
+ 
+             if command is not None and not command.hidden:
+                 yield name, command
+@@ -1759,7 +1759,7 @@ class Group(Command):
+         commands = {}
+ 
+         for name in self.list_commands(ctx):
+-            command = self.get_command(ctx, name)
++            command = self.lookup_command(ctx, name)
+ 
+             if command is None:
+                 continue
+@@ -1928,7 +1928,7 @@ class Group(Command):
+ 
+         return decorator
+ 
+-    def get_command(self, ctx: Context, cmd_name: str) -> Command | None:
++    def lookup_command(self, ctx: Context, cmd_name: str) -> Command | None:
+         """Given a context and a command name, this returns a :class:`Command`
+         object if it exists or returns ``None``.
+         """
+@@ -1953,7 +1953,7 @@ class Group(Command):
+         """
+         commands = []
+         for subcommand in self.list_commands(ctx):
+-            cmd = self.get_command(ctx, subcommand)
++            cmd = self.lookup_command(ctx, subcommand)
+             # What is this, the tool lied about a command.  Ignore it
+             if cmd is None:
+                 continue
+@@ -2063,13 +2063,13 @@ class Group(Command):
+         cmd_name = make_str(args[0])
+ 
+         # Get the command
+-        cmd = self.get_command(ctx, cmd_name)
++        cmd = self.lookup_command(ctx, cmd_name)
+ 
+         # If we can't find the command but there is a normalization
+         # function available, we try with that one.
+         if cmd is None and ctx.token_normalize_func is not None:
+             cmd_name = ctx.token_normalize_func(cmd_name)
+-            cmd = self.get_command(ctx, cmd_name)
++            cmd = self.lookup_command(ctx, cmd_name)
+ 
+         # If we don't find the command we want to show an error message
+         # to the user that it was not provided.  However, there is
+@@ -2142,14 +2142,14 @@ class CommandCollection(Group):
+         """Add a group as a source of commands."""
+         self.sources.append(group)
+ 
+-    def get_command(self, ctx: Context, cmd_name: str) -> Command | None:
+-        rv = super().get_command(ctx, cmd_name)
++    def lookup_command(self, ctx: Context, cmd_name: str) -> Command | None:
++        rv = super().lookup_command(ctx, cmd_name)
+ 
+         if rv is not None:
+             return rv
+ 
+         for source in self.sources:
+-            rv = source.get_command(ctx, cmd_name)
++            rv = source.lookup_command(ctx, cmd_name)
+ 
+             if rv is not None:
+                 if self.chain:
+diff --git a/tests/test_commands.py b/tests/test_commands.py
+index 35ba65ca..cb369174 100644
+--- a/tests/test_commands.py
++++ b/tests/test_commands.py
+@@ -328,7 +328,7 @@ def test_subcommand_metavar_marks_optional(
+ 
+ def test_aliased_command_canonical_name(runner):
+     class AliasedGroup(click.Group):
+-        def get_command(self, ctx, cmd_name):
++        def lookup_command(self, ctx, cmd_name):
+             return push
+ 
+         def resolve_command(self, ctx, args):
+diff --git a/tests/typing/typing_aliased_group.py b/tests/typing/typing_aliased_group.py
+index 404870bb..a474ef96 100644
+--- a/tests/typing/typing_aliased_group.py
++++ b/tests/typing/typing_aliased_group.py
+@@ -8,15 +8,15 @@ import click
+ 
+ 
+ class AliasedGroup(click.Group):
+-    def get_command(self, ctx: click.Context, cmd_name: str) -> click.Command | None:
+-        rv = click.Group.get_command(self, ctx, cmd_name)
++    def lookup_command(self, ctx: click.Context, cmd_name: str) -> click.Command | None:
++        rv = click.Group.lookup_command(self, ctx, cmd_name)
+         if rv is not None:
+             return rv
+         matches = [x for x in self.list_commands(ctx) if x.startswith(cmd_name)]
+         if not matches:
+             return None
+         elif len(matches) == 1:
+-            return click.Group.get_command(self, ctx, matches[0])
++            return click.Group.lookup_command(self, ctx, matches[0])
+         ctx.fail(f"Too many matches: {', '.join(sorted(matches))}")
+ 
+     def resolve_command(
