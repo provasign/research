@@ -49,6 +49,7 @@ import js_eval
 import c_eval
 import run_local_agent
 import usage_account
+import tool_usage
 from ab_endtoend_arms import ARMS, PRISM_BIN_FOR_ARM
 
 
@@ -458,6 +459,13 @@ def _place_generated_version_files(venv: Path, wt: Path) -> None:
                     shutil.copyfile(gen, dest)
 
 
+MINIMAL_TAIL = "\n\nResolve this issue in this repository."
+FORCED_TAIL = ("\n\nResolve this issue in this repository. Required steps: before editing a function or method, call the prism "
+               "tool with op change_impact on it, for example {\"op\":\"change_impact\",\"args\":{\"name\":\"Type.method\"}}, and read "
+               "the answer. After your last edit and before running any build or tests, call the prism tool with "
+               "{\"op\":\"verify\",\"args\":{}} and act on what it reports.")
+
+
 def _agent_env(wt: Path, task) -> tuple[dict, dict]:
     """The agent's environment, identical for every arm of a task.
 
@@ -659,6 +667,16 @@ def _upstream_guard_settings() -> str:
 def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
     spec = ARMS[arm]
     tail = {"seeded_refactor": SEEDED_TAIL, "wide": WIDE_TAIL}.get(task.get("kind"), TASK_TAIL)
+    if os.environ.get("E2E_TAIL") == "forced":
+        # Probe (2026-09-29): require the graph ops, to see whether the agent
+        # can make the calls and whether their answers change its work.
+        tail = FORCED_TAIL
+    if os.environ.get("E2E_TAIL") == "minimal":
+        # What a user types: the issue and "resolve it". The default tails
+        # coach every arm ("smallest change, then stop", "confirm your test
+        # run exercises THIS checkout"), which can shrink the differences a
+        # context tool makes (2026-09-29).
+        tail = MINIMAL_TAIL
     prompt = spec["guidance"] + "\n\nISSUE:\n" + task["problem_statement"] + tail
     cmd = ["claude", "-p", prompt, "--model", model, "--output-format", "json",
            "--dangerously-skip-permissions", "--strict-mcp-config",
@@ -691,6 +709,10 @@ def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
         if mu:
             rec["model"] = max(mu, key=lambda m: (mu[m] or {}).get("outputTokens", 0))
         rec["session_id"] = rec["usage"].get("session_id")
+        # Which tools the agent used, prism by op (scoring/tool_usage.py), so
+        # adoption is on every cell instead of reconstructed from transcripts
+        # that Claude Code deletes after 30 days.
+        rec["tool_usage"] = tool_usage.usage(rec["session_id"])
         rec["tokens_request"] = rec["usage"]["input_total"]
         u = rec["usage"]["tokens"]
         rec["tokens_out"] = u["output"]
@@ -901,6 +923,11 @@ def main():
     a = ap.parse_args()
     tasks = [json.loads((Path("tasks/e2e") / f"{i}.json").read_text())
              for i in json.loads(Path(a.manifest).read_text())]
+    # Tasks no fix other than the gold one can pass (build/audit_test_coupling.py)
+    # are skipped out loud rather than scored as failures for every arm.
+    for t in [t for t in tasks if t.get("invalid_reason")]:
+        print(f"  (skipped invalid) {t['instance_id']}: {t['invalid_reason'][:140]}", flush=True)
+    tasks = [t for t in tasks if not t.get("invalid_reason")]
     print(f"# {len(tasks)} tasks x {a.arms} x {a.models}", flush=True)
     import os
     wait_on_limit = os.environ.get("E2E_WAIT_ON_LIMIT") == "1"

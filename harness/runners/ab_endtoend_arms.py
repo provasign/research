@@ -113,6 +113,16 @@ ARMS = {
         "allowed": _EDIT_AND_BUILD,
         "mcp": None,
     },
+    # Plain Claude Code: the same issue text and closing instruction the prism
+    # arm gets, and nothing else. "baseline" above carries a one-line working
+    # method ("search, read, reason, then edit and build") that no real user
+    # has and the prism arm does not get (found 2026-09-29 printing the gson
+    # pr3112 prompt). Kept for comparability with earlier runs.
+    "native": {
+        "guidance": "",
+        "allowed": _EDIT_AND_BUILD,
+        "mcp": None,
+    },
     # The real product, set up the real way: `prism init` + `prism index` in
     # the worktree (run_e2e._index_graph), zero hand-written guidance or
     # tool-name allowlist -- CLAUDE.md (written by init, prism's own current
@@ -287,6 +297,7 @@ GRAPH_TOOL_PREFIXES = {
                     "mcp__prism__prism_dead_code"),
     "engine-b": ("mcp__engine-b",),
     "baseline": (),
+    "native": (),
 }
 
 
