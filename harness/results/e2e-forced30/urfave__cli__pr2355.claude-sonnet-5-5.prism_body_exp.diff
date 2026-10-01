@@ -1,0 +1,16 @@
+diff --git a/flag_impl.go b/flag_impl.go
+index ab97da87..db493dec 100644
+--- a/flag_impl.go
++++ b/flag_impl.go
+@@ -159,6 +159,11 @@ func (f *FlagBase[T, C, V]) setMultiValueParsingConfig(c multiValueParsingConfig
+ func (f *FlagBase[T, C, V]) PreParse() error {
+ 	newVal := f.Value
+ 
++	// the value is recreated, so state from a previous run of a flag shared
++	// between commands must be cleared for sources to be looked up again
++	f.hasBeenSet = false
++	f.count = 0
++
+ 	if f.Destination == nil {
+ 		f.value = f.creator.Create(newVal, new(T), f.Config)
+ 	} else {

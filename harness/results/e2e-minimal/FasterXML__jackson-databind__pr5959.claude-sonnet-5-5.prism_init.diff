@@ -1,0 +1,44 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java b/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java
+index f538965a7..5fd153af4 100644
+--- a/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java
++++ b/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java
+@@ -135,6 +135,17 @@ public class ExternalTypeHandler
+                 || !tdb.isTypeIdVisible();
+     }
+ 
++    // Value (not type id) of property not visible in the active view is to be skipped
++    private boolean _isHiddenByView(DeserializationContext ctxt, ExtTypedProperty prop,
++            String propName)
++    {
++        if (prop.hasTypePropertyName(propName)) {
++            return false;
++        }
++        final Class<?> activeView = ctxt.getActiveView();
++        return (activeView != null) && !prop.getProperty().visibleInView(activeView);
++    }
++
+     /**
+      * Method called to ask handler to handle value of given property,
+      * at point where parser points to the first token of the value.
+@@ -157,6 +168,10 @@ public class ExternalTypeHandler
+             Integer index = it.next();
+ 
+             ExtTypedProperty prop = _properties[index];
++            if (_isHiddenByView(ctxt, prop, propName)) {
++                p.skipChildren();
++                return true;
++            }
+             // For now, let's assume it's same type (either type id OR value)
+             // for all mappings, so we'll only check first one
+             if (prop.hasTypePropertyName(propName)) {
+@@ -180,6 +195,10 @@ public class ExternalTypeHandler
+         // handle things in bit more optimal way...
+         int index = ((Integer) ob).intValue();
+         ExtTypedProperty prop = _properties[index];
++        if (_isHiddenByView(ctxt, prop, propName)) {
++            p.skipChildren();
++            return true;
++        }
+         boolean canDeserialize;
+         if (prop.hasTypePropertyName(propName)) {
+             // 19-Feb-2021, tatu: as per [databind#3008], don't use "getText()"

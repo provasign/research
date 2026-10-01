@@ -1,0 +1,31 @@
+diff --git a/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java b/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
+index 9d108d9c..3b43a609 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
++++ b/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
+@@ -647,8 +647,15 @@ public class FromXmlParser
+                                 // 06-Jan-2015, tatu: as per [dataformat-xml#180], need to
+                                 //    expose as empty Object, not null (or, worse, as used to
+                                 //    be done, by swallowing the token)
+-                                _nextToken = JsonToken.END_OBJECT;
+                                 _streamReadContext = _streamReadContext.createChildObjectContext(-1, -1);
++                                if (!_currText.isEmpty()) {
++                                    // [dataformat-xml#449]: retain white space as "XmlText" property
++                                    _xmlTokens.pushbackCurrentToken(); // END_ELEMENT closes object
++                                    _nextIsLeadingMixed = true;
++                                    _nextToken = JsonToken.PROPERTY_NAME;
++                                } else {
++                                    _nextToken = JsonToken.END_OBJECT;
++                                }
+                                 return _updateToken(JsonToken.START_OBJECT);
+                             }
+                         }
+@@ -675,7 +682,8 @@ XmlTokenStream.XML_END_ELEMENT, XmlTokenStream.XML_START_ELEMENT, token));
+                         _nextIsLeadingMixed = true;
+                         _nextToken = JsonToken.PROPERTY_NAME;
+                         return _updateToken(JsonToken.START_OBJECT);
+-                    } else if (XmlTokenStream._allWs(_currText)) {
++                    } else if (_currText.isEmpty()) {
++                        // [dataformat-xml#449]: retain white-space-only text (may be @JacksonXmlText)
+                         token = _nextToken();
+                         continue;
+                     }

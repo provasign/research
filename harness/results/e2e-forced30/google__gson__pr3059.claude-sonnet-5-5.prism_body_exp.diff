@@ -1,0 +1,21 @@
+diff --git a/gson/src/main/java/com/google/gson/JsonPrimitive.java b/gson/src/main/java/com/google/gson/JsonPrimitive.java
+index 88f4466f..2dd0ea05 100644
+--- a/gson/src/main/java/com/google/gson/JsonPrimitive.java
++++ b/gson/src/main/java/com/google/gson/JsonPrimitive.java
+@@ -263,12 +263,11 @@ public final class JsonPrimitive extends JsonElement {
+       return 31;
+     }
+     // Using recommended hashing algorithm from Effective Java for longs and doubles
+-    if (isIntegral(this)) {
+-      long value = getAsNumber().longValue();
+-      return (int) (value ^ (value >>> 32));
+-    }
+     if (value instanceof Number) {
+-      long value = Double.doubleToLongBits(getAsNumber().doubleValue());
++      // Hash all numbers based on their double value; equals() may consider numbers of different
++      // types (e.g. Integer and LazilyParsedNumber) equal by comparing their double values.
++      // Adding 0.0 normalizes -0.0 to +0.0 (which equals() treats as equal).
++      long value = Double.doubleToLongBits(getAsNumber().doubleValue() + 0.0);
+       return (int) (value ^ (value >>> 32));
+     }
+     return value.hashCode();

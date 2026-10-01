@@ -1,0 +1,16 @@
+diff --git a/src/main/java/tools/jackson/dataformat/xml/ser/ToXmlGenerator.java b/src/main/java/tools/jackson/dataformat/xml/ser/ToXmlGenerator.java
+index ed21a45b..5d053565 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/ser/ToXmlGenerator.java
++++ b/src/main/java/tools/jackson/dataformat/xml/ser/ToXmlGenerator.java
+@@ -445,6 +445,11 @@ public class ToXmlGenerator
+             _nameToEncode.localPart = name;
+             _nameProcessor.encodeName(_nameToEncode);
+             setNextName(new QName(_nameToEncode.namespace, _nameToEncode.localPart));
++            // Empty name (default for text element, e.g. from Map read via any-setter)
++            // must be written as text, not as an element with empty name
++            if (name.isEmpty()) {
++                _nextIsUnwrapped = true;
++            }
+         }
+         return this;
+     }

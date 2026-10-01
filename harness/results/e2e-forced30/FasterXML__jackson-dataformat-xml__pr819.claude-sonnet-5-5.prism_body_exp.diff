@@ -1,0 +1,136 @@
+diff --git a/src/main/java/tools/jackson/dataformat/xml/JacksonXmlAnnotationIntrospector.java b/src/main/java/tools/jackson/dataformat/xml/JacksonXmlAnnotationIntrospector.java
+index e765cf6d..88709f2b 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/JacksonXmlAnnotationIntrospector.java
++++ b/src/main/java/tools/jackson/dataformat/xml/JacksonXmlAnnotationIntrospector.java
+@@ -8,6 +8,7 @@ import tools.jackson.databind.PropertyName;
+ import tools.jackson.databind.cfg.MapperConfig;
+ import tools.jackson.databind.introspect.*;
+ import tools.jackson.dataformat.xml.annotation.*;
++import tools.jackson.dataformat.xml.util.TypeUtil;
+ 
+ /**
+  * Extension of {@link JacksonAnnotationIntrospector} that is needed to support
+@@ -71,6 +72,24 @@ public class JacksonXmlAnnotationIntrospector
+     /**********************************************************************
+      */
+ 
++    // [dataformat-xml#27]: for wrapped Collection/array properties, the explicit
++    // property name refers to the wrapped element, so it must not be used as the
++    // logical property name; otherwise multiple properties with same element name
++    // would conflict. Wrapper name is used instead (XML modifiers restore element name).
++    private PropertyName _wrapperNameAsPropertyName(MapperConfig<?> config, Annotated ann)
++    {
++        JacksonXmlElementWrapper w = _findAnnotation(ann, JacksonXmlElementWrapper.class);
++        if ((w == null) || !w.useWrapping() || w.localName().isEmpty()) {
++            return null;
++        }
++        JacksonXmlProperty prop = _findAnnotation(ann, JacksonXmlProperty.class);
++        if ((prop == null) || prop.localName().isEmpty()
++                || !TypeUtil.isIndexedType(ann.getType())) {
++            return null;
++        }
++        return PropertyName.construct(w.localName(), w.namespace());
++    }
++
+     @Override
+     public PropertyName findWrapperName(MapperConfig<?> config, Annotated ann)
+     {
+@@ -202,6 +221,10 @@ public class JacksonXmlAnnotationIntrospector
+     @Override
+     public PropertyName findNameForSerialization(MapperConfig<?> config, Annotated a)
+     {
++        PropertyName wn = _wrapperNameAsPropertyName(config, a);
++        if (wn != null) {
++            return wn;
++        }
+         PropertyName pn = PropertyName.merge(_findXmlName(a),
+                 super.findNameForSerialization(config, a));
+         if (pn == null) {
+@@ -215,6 +238,10 @@ public class JacksonXmlAnnotationIntrospector
+     @Override
+     public PropertyName findNameForDeserialization(MapperConfig<?> config, Annotated a)
+     {
++        PropertyName wn = _wrapperNameAsPropertyName(config, a);
++        if (wn != null) {
++            return wn;
++        }
+         PropertyName pn = PropertyName.merge(_findXmlName(a),
+                 super.findNameForDeserialization(config, a));
+         if (pn == null) {
+diff --git a/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanPropertyWriter.java b/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanPropertyWriter.java
+index 118bf6a2..93ec32b2 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanPropertyWriter.java
++++ b/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanPropertyWriter.java
+@@ -181,7 +181,8 @@ public class XmlBeanPropertyWriter
+         if (xmlGen != null) {
+             xmlGen.startWrappedValue(_wrapperQName, _wrappedQName);
+         }
+-        g.writeName(_name);
++        // [dataformat-xml#27]: element name may differ from property name
++        g.writeName(_wrappedQName.getLocalPart());
+         if (_typeSerializer == null) {
+             ser.serialize(value, g, ctxt);
+         } else {
+diff --git a/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java b/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java
+index c6540351..467ce9e4 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java
++++ b/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java
+@@ -6,6 +6,7 @@ import tools.jackson.databind.*;
+ import tools.jackson.databind.introspect.AnnotatedMember;
+ import tools.jackson.databind.ser.*;
+ import tools.jackson.databind.ser.bean.BeanSerializerBase;
++import tools.jackson.dataformat.xml.annotation.JacksonXmlProperty;
+ import tools.jackson.dataformat.xml.util.AnnotationUtil;
+ import tools.jackson.dataformat.xml.util.TypeUtil;
+ import tools.jackson.dataformat.xml.util.XmlInfo;
+@@ -66,7 +67,14 @@ public class XmlBeanSerializerModifier
+             } else {
+                 continue;
+             }
+-            PropertyName wrappedName = PropertyName.construct(bpw.getName(), ns);
++            // [dataformat-xml#27]: explicit element name is not the property name
++            // if wrapper name was used for it
++            String wrappedLocal = bpw.getName();
++            JacksonXmlProperty xmlProp = member.getAnnotation(JacksonXmlProperty.class);
++            if (xmlProp != null && !xmlProp.localName().isEmpty()) {
++                wrappedLocal = xmlProp.localName();
++            }
++            PropertyName wrappedName = PropertyName.construct(wrappedLocal, ns);
+             PropertyName wrapperName = bpw.getWrapperName();
+ 
+             // first things first: no wrapping?
+diff --git a/src/test/java/tools/jackson/dataformat/xml/tofix/ConflictingGetters27Test.java b/src/test/java/tools/jackson/dataformat/xml/tofix/ConflictingGetters27Test.java
+index 2a488c6e..f6bc6e08 100644
+--- a/src/test/java/tools/jackson/dataformat/xml/tofix/ConflictingGetters27Test.java
++++ b/src/test/java/tools/jackson/dataformat/xml/tofix/ConflictingGetters27Test.java
+@@ -8,8 +8,8 @@ import tools.jackson.dataformat.xml.XmlMapper;
+ import tools.jackson.dataformat.xml.XmlTestUtil;
+ import tools.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;
+ import tools.jackson.dataformat.xml.annotation.JacksonXmlProperty;
+-import tools.jackson.dataformat.xml.testutil.failure.JacksonTestFailureExpected;
+ 
++import static org.junit.jupiter.api.Assertions.assertEquals;
+ import static org.junit.jupiter.api.Assertions.assertNotNull;
+ 
+ // For [dataformat-xml#27]
+@@ -55,7 +55,7 @@ public class ConflictingGetters27Test extends XmlTestUtil
+      */
+ 
+     // [dataformat-xml#27]
+-    @JacksonTestFailureExpected
++
+     @Test
+     public void testIssue27() throws Exception
+     {
+@@ -69,6 +69,10 @@ public class ConflictingGetters27Test extends XmlTestUtil
+ 
+         String json = mapper.writeValueAsString(bean);
+         assertNotNull(json);
+-//        System.out.println(output);
++        assertEquals("<output><beanInfo><item><name>name</name></item></beanInfo>"
++                +"<beanOther><item><name>name</name></item></beanOther></output>", json);
++        Bean result = mapper.readValue(json, Bean.class);
++        assertEquals("name", result.beanInfo[0].name);
++        assertEquals("name", result.beanOther[0].name);
+     }
+ }

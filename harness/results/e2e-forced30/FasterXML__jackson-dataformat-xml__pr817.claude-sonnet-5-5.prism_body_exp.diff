@@ -1,0 +1,193 @@
+diff --git a/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java b/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
+index 9d108d9c..e0f4b815 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
++++ b/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
+@@ -110,6 +110,35 @@ public class FromXmlParser
+      */
+     protected boolean _nextIsLeadingMixed;
+ 
++    /**
++     * Whitespace-only text of an Array element exposed as an empty Object
++     * (see [dataformat-xml#180]); only set while pointing to that START_OBJECT.
++     */
++    protected String _whitespaceOnlyText;
++
++    /**
++     * @return Whitespace-only text of the element exposed as empty Object, if the
++     *    current token is such a START_OBJECT; {@code null} otherwise
++     */
++    /**
++     * Context of the Object (START_OBJECT just returned) whose bean has an
++     * "XML text" property, if any: whitespace-only text is then to be exposed.
++     */
++    protected XmlReadContext _textPropertyContext;
++
++    /**
++     * Method called by {@link XmlTextDeserializer} when starting to deserialize
++     * an Object that has "XML text" property, to prevent skipping of
++     * whitespace-only text (that follows attributes).
++     */
++    public void expectTextProperty() {
++        _textPropertyContext = _streamReadContext;
++    }
++
++    public String getWhitespaceOnlyText() {
++        return (_currToken == JsonToken.START_OBJECT) ? _whitespaceOnlyText : null;
++    }
++
+     /*
+     /**********************************************************************
+     /* Parsing state, parsed values
+@@ -519,6 +548,7 @@ public class FromXmlParser
+     {
+         _binaryValue = null;
+         _numTypesValid = NR_UNKNOWN;
++        _whitespaceOnlyText = null;
+ //System.out.println("FromXmlParser.nextToken0: _nextToken = "+_nextToken);
+         if (_nextToken != null) {
+             final JsonToken t = _updateToken(_nextToken);
+@@ -647,6 +677,9 @@ public class FromXmlParser
+                                 // 06-Jan-2015, tatu: as per [dataformat-xml#180], need to
+                                 //    expose as empty Object, not null (or, worse, as used to
+                                 //    be done, by swallowing the token)
++                                //    Text itself is retained so that a "text property"
++                                //    bean can still get it.
++                                _whitespaceOnlyText = _currText;
+                                 _nextToken = JsonToken.END_OBJECT;
+                                 _streamReadContext = _streamReadContext.createChildObjectContext(-1, -1);
+                                 return _updateToken(JsonToken.START_OBJECT);
+@@ -675,7 +708,10 @@ XmlTokenStream.XML_END_ELEMENT, XmlTokenStream.XML_START_ELEMENT, token));
+                         _nextIsLeadingMixed = true;
+                         _nextToken = JsonToken.PROPERTY_NAME;
+                         return _updateToken(JsonToken.START_OBJECT);
+-                    } else if (XmlTokenStream._allWs(_currText)) {
++                    } else if ((_streamReadContext != _textPropertyContext)
++                            && XmlTokenStream._allWs(_currText)) {
++                        // (unless bean has "XML text" property, in which case whitespace
++                        // is real content of the element and must not be skipped)
+                         token = _nextToken();
+                         continue;
+                     }
+diff --git a/src/main/java/tools/jackson/dataformat/xml/deser/XmlTextDeserializer.java b/src/main/java/tools/jackson/dataformat/xml/deser/XmlTextDeserializer.java
+index 8ffd2811..18a2bc57 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/deser/XmlTextDeserializer.java
++++ b/src/main/java/tools/jackson/dataformat/xml/deser/XmlTextDeserializer.java
+@@ -99,9 +99,38 @@ public class XmlTextDeserializer
+             // synthesize object tokens so the delegate can use property-based creators
+             return _deserializeFromStringViaDelegate(p, ctxt);
+         }
++        if (p instanceof FromXmlParser) {
++            FromXmlParser xp = (FromXmlParser) p;
++            String ws = xp.getWhitespaceOnlyText();
++            if (ws == null) {
++                if (p.currentToken() == JsonToken.START_OBJECT) {
++                    xp.expectTextProperty();
++                }
++            } else {
++                return _deserializeFromWhitespace(p, ctxt, ws);
++            }
++        }
+         return _delegatee.deserialize(p,  ctxt);
+     }
+ 
++    private Object _deserializeFromWhitespace(JsonParser p, DeserializationContext ctxt,
++            String ws)
++        throws JacksonException
++    {
++        try (TokenBuffer tb = ctxt.bufferForInputBuffering(p)) {
++            tb.writeStartObject();
++            tb.writeName(_xmlTextProperty.getName());
++            tb.writeString(ws);
++            tb.writeEndObject();
++            try (JsonParser syntheticParser = tb.asParserOnFirstToken(ctxt, p)) {
++                Object result = _delegatee.deserialize(syntheticParser, ctxt);
++                // consume the real END_OBJECT
++                p.nextToken();
++                return result;
++            }
++        }
++    }
++
+     @SuppressWarnings("unchecked")
+     @Override
+     public Object deserialize(JsonParser p, DeserializationContext ctxt, Object bean)
+diff --git a/src/test/java/tools/jackson/dataformat/xml/deser/XmlTextWhitespaceTest.java b/src/test/java/tools/jackson/dataformat/xml/deser/XmlTextWhitespaceTest.java
+new file mode 100644
+index 00000000..def5d727
+--- /dev/null
++++ b/src/test/java/tools/jackson/dataformat/xml/deser/XmlTextWhitespaceTest.java
+@@ -0,0 +1,46 @@
++package tools.jackson.dataformat.xml.deser;
++
++import java.util.List;
++
++import org.junit.jupiter.api.Test;
++
++import tools.jackson.dataformat.xml.XmlTestUtil;
++import tools.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;
++import tools.jackson.dataformat.xml.annotation.JacksonXmlProperty;
++import tools.jackson.dataformat.xml.annotation.JacksonXmlText;
++
++import static org.junit.jupiter.api.Assertions.assertEquals;
++
++public class XmlTextWhitespaceTest extends XmlTestUtil
++{
++    static class Text {
++        @JacksonXmlProperty(isAttribute = true)
++        public String id;
++        @JacksonXmlText
++        public String content;
++    }
++
++    static class Project {
++        public Text text;
++    }
++
++    static class ProjectList {
++        @JacksonXmlElementWrapper(useWrapping = false)
++        public List<Text> text;
++    }
++
++    @Test
++    public void testWhitespaceWithAttribute() throws Exception {
++        Project p = newMapper().readValue("<project><text id=\"a\">   </text></project>", Project.class);
++        assertEquals("   ", p.text.content);
++    }
++
++    @Test
++    public void testWhitespaceInList() throws Exception {
++        ProjectList p = newMapper().readValue(
++                "<project><text>   </text><text>hello</text></project>", ProjectList.class);
++        assertEquals(2, p.text.size());
++        assertEquals("   ", p.text.get(0).content);
++        assertEquals("hello", p.text.get(1).content);
++    }
++}
+diff --git a/src/test/java/tools/jackson/dataformat/xml/tofix/XmlTextWithEmpty449Test.java b/src/test/java/tools/jackson/dataformat/xml/tofix/XmlTextWithEmpty449Test.java
+index 325fc696..2e01df6f 100644
+--- a/src/test/java/tools/jackson/dataformat/xml/tofix/XmlTextWithEmpty449Test.java
++++ b/src/test/java/tools/jackson/dataformat/xml/tofix/XmlTextWithEmpty449Test.java
+@@ -12,7 +12,6 @@ import tools.jackson.dataformat.xml.XmlMapper;
+ import tools.jackson.dataformat.xml.XmlTestUtil;
+ import tools.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;
+ import tools.jackson.dataformat.xml.annotation.JacksonXmlText;
+-import tools.jackson.dataformat.xml.testutil.failure.JacksonTestFailureExpected;
+ 
+ import static org.junit.jupiter.api.Assertions.assertEquals;
+ import static org.junit.jupiter.api.Assertions.assertNotNull;
+@@ -37,7 +36,6 @@ public class XmlTextWithEmpty449Test extends XmlTestUtil
+     private final XmlMapper MAPPER = newMapper();
+ 
+     // [dataformat-xml#449]
+-    @JacksonTestFailureExpected
+     @Test
+     public void testXmlText449ItemWithAttr() throws Exception
+     {
+@@ -56,7 +54,6 @@ public class XmlTextWithEmpty449Test extends XmlTestUtil
+     }
+ 
+     // [dataformat-xml#449]
+-    @JacksonTestFailureExpected
+     @Test
+     public void testXmlText449ItemWithList() throws Exception
+     {

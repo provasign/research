@@ -1,0 +1,38 @@
+diff --git a/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/DescriptorUtils.java b/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/DescriptorUtils.java
+index e8f34431e..ededc7431 100644
+--- a/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/DescriptorUtils.java
++++ b/dubbo-rpc/dubbo-rpc-triple/src/main/java/org/apache/dubbo/rpc/protocol/tri/DescriptorUtils.java
+@@ -110,10 +110,14 @@ public final class DescriptorUtils {
+             // Response foo(Request)
+             // void foo(Request,StreamObserver<Response>)
+             if (methodDescriptors.size() == 2) {
+-                if (methodDescriptors.get(1).getRpcType() == MethodDescriptor.RpcType.SERVER_STREAM) {
+-                    methodDescriptor = methodDescriptors.get(0);
+-                } else if (methodDescriptors.get(0).getRpcType() == MethodDescriptor.RpcType.SERVER_STREAM) {
+-                    methodDescriptor = methodDescriptors.get(1);
++                MethodDescriptor first = methodDescriptors.get(0);
++                MethodDescriptor second = methodDescriptors.get(1);
++                if (second.getRpcType() == MethodDescriptor.RpcType.SERVER_STREAM
++                        && Arrays.equals(first.getParameterClasses(), second.getActualRequestTypes())) {
++                    methodDescriptor = first;
++                } else if (first.getRpcType() == MethodDescriptor.RpcType.SERVER_STREAM
++                        && Arrays.equals(second.getParameterClasses(), first.getActualRequestTypes())) {
++                    methodDescriptor = second;
+                 }
+             }
+         }
+@@ -131,7 +135,13 @@ public final class DescriptorUtils {
+             // wrapper mode the method can overload so maybe list
+             for (MethodDescriptor descriptor : methodDescriptors) {
+                 // params type is array
+-                if (Arrays.equals(descriptor.getCompatibleParamSignatures(), paramTypes)) {
++                String[] signatures = descriptor.getCompatibleParamSignatures();
++                if (descriptor.getRpcType() == MethodDescriptor.RpcType.SERVER_STREAM) {
++                    signatures = Arrays.stream(descriptor.getActualRequestTypes())
++                            .map(Class::getName)
++                            .toArray(String[]::new);
++                }
++                if (Arrays.equals(signatures, paramTypes)) {
+                     methodDescriptor = descriptor;
+                     break;
+                 }

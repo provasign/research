@@ -1,0 +1,90 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/jdk/ObjectArrayDeserializer.java b/src/main/java/tools/jackson/databind/deser/jdk/ObjectArrayDeserializer.java
+index d94a7e227..71d06df4d 100644
+--- a/src/main/java/tools/jackson/databind/deser/jdk/ObjectArrayDeserializer.java
++++ b/src/main/java/tools/jackson/databind/deser/jdk/ObjectArrayDeserializer.java
+@@ -3,7 +3,10 @@ package tools.jackson.databind.deser.jdk;
+ import java.lang.reflect.Array;
+ import java.util.ArrayList;
+ import java.util.Arrays;
++import java.util.HashMap;
++import java.util.Iterator;
+ import java.util.List;
++import java.util.Map;
+ import java.util.Objects;
+ 
+ import com.fasterxml.jackson.annotation.JsonFormat;
+@@ -510,6 +513,9 @@ ClassUtil.classNameOf(value), ClassUtil.nameOf(_elementClass)));
+         private final List<Object> _accumulator = new ArrayList<>();
+         private Object[] _array;
+ 
++        // Slots whose resolved value is not assignable to element type (yet)
++        private Map<Integer, Object> _pendingItems;
++
+         ObjectArrayReferringAccumulator(boolean untyped, Class<?> elementType) {
+             _untyped = untyped;
+             _elementType = elementType;
+@@ -528,6 +534,15 @@ ClassUtil.classNameOf(value), ClassUtil.nameOf(_elementClass)));
+         void resolveForwardReference(Object id, Object value) {
+             for (int i = 0, size = _accumulator.size(); i < size; i++) {
+                 if ((_accumulator.get(i) instanceof ArrayReferring ref) && ref.hasId(id)) {
++                    if (!_untyped && (value != null) && !_elementType.isInstance(value)) {
++                        // Bound item (e.g. Builder) cannot be stored in typed array;
++                        // keep slot pending until it is rebound to the built value
++                        if (_pendingItems == null) {
++                            _pendingItems = new HashMap<>();
++                        }
++                        _pendingItems.put(i, value);
++                        return;
++                    }
+                     if (_array != null) {
+                         _array[i] = value;
+                     } else {
+@@ -540,16 +555,26 @@ ClassUtil.classNameOf(value), ClassUtil.nameOf(_elementClass)));
+                     + "] that wasn't previously seen as unresolved.");
+         }
+ 
+-        // [databind#5909]: no `replaceResolvedItem` here, unlike Collection/Map
+-        // accumulators. The Builder→built rebind path is unreachable for arrays:
+-        //  - Typed arrays (e.g. `Entity[]`) cannot store the Builder instance,
+-        //    so `resolveForwardReference` throws `ArrayStoreException` before
+-        //    any rebind could fire.
+-        //  - Untyped `Object[]` arrays don't trigger the forward-ref accumulator
+-        //    at all because the default element deserializer
+-        //    ({@code UntypedObjectDeserializer}) has no `ObjectIdReader`.
+-        // Regression covered by
+-        // {@code ObjectIdWithBuilder5909Test#forwardReferenceInTypedArrayFailsArrayStoreException}.
++        // [databind#5909]: replace item bound earlier (e.g. Builder) with the final one
++        void replaceResolvedItem(Object oldItem, Object newItem) {
++            if (_pendingItems == null) {
++                return;
++            }
++            for (Iterator<Map.Entry<Integer, Object>> it = _pendingItems.entrySet().iterator();
++                    it.hasNext(); ) {
++                Map.Entry<Integer, Object> entry = it.next();
++                if (entry.getValue() != oldItem) {
++                    continue;
++                }
++                it.remove();
++                final int i = entry.getKey();
++                if (_array != null) {
++                    _array[i] = newItem;
++                } else {
++                    _accumulator.set(i, newItem);
++                }
++            }
++        }
+ 
+         Object[] buildArray() {
+             final int size = _accumulator.size();
+@@ -583,7 +608,9 @@ ClassUtil.classNameOf(value), ClassUtil.nameOf(_elementClass)));
+             _parent.resolveForwardReference(id, value);
+         }
+ 
+-        // [databind#5909]: no `handleItemRebind` override. The default no-op is
+-        // correct for arrays — see comment in ObjectArrayReferringAccumulator.
++        @Override
++        public void handleItemRebind(Object oldItem, Object newItem) {
++            _parent.replaceResolvedItem(oldItem, newItem);
++        }
+     }
+ }

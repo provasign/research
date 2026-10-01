@@ -1,0 +1,73 @@
+diff --git a/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java b/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
+index 1df7eeb6..65085e54 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
++++ b/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
+@@ -554,6 +554,9 @@ public class FromXmlParser
+             return t;
+         }
+ 
++        // [dataformat-xml#334]: need to know if array element had `xsi:nil="true"`,
++        // as that is consumed by token stream
++        boolean arrayElementXsiNil = _xmlTokens.hasXsiNil();
+         int token = _nextToken();
+         // Need to have a loop just because we may have to eat/convert
+         // a start-element that indicates an array element.
+@@ -568,6 +571,7 @@ public class FromXmlParser
+             if (_streamReadContext.inArray()) {
+                 // Yup: in array, so this element could be verified; but it won't be
+                 // reported anyway, and we need to process following event.
++                arrayElementXsiNil = _xmlTokens.hasXsiNil();
+                 token = _nextToken();
+                 _mayBeLeaf = true;
+                 continue;
+@@ -599,7 +603,7 @@ public class FromXmlParser
+                 // Simple, except that if this is a leaf, need to suppress end:
+                 if (_mayBeLeaf) {
+                     _mayBeLeaf = false;
+-                    if (_streamReadContext.inArray()) {
++                    if (_streamReadContext.inArray() && !arrayElementXsiNil) {
+                         // 06-Jan-2015, tatu: as per [dataformat-xml#180], need to
+                         //    expose as empty Object, not null
+                         _nextToken = JsonToken.END_OBJECT;
+diff --git a/src/test/java/tools/jackson/dataformat/xml/deser/PolymorphicNullInList334Test.java b/src/test/java/tools/jackson/dataformat/xml/deser/PolymorphicNullInList334Test.java
+new file mode 100644
+index 00000000..9ef86fb5
+--- /dev/null
++++ b/src/test/java/tools/jackson/dataformat/xml/deser/PolymorphicNullInList334Test.java
+@@ -0,0 +1,36 @@
++package tools.jackson.dataformat.xml.deser;
++
++import java.util.*;
++
++import org.junit.jupiter.api.Test;
++
++import com.fasterxml.jackson.annotation.JsonTypeInfo;
++
++import tools.jackson.databind.ObjectMapper;
++import tools.jackson.dataformat.xml.XmlTestUtil;
++
++import static org.junit.jupiter.api.Assertions.assertEquals;
++import static org.junit.jupiter.api.Assertions.assertNull;
++
++// null in polymorphic Collection
++public class PolymorphicNullInList334Test extends XmlTestUtil
++{
++    static class Master {
++        public List<Detail> details = new ArrayList<>();
++    }
++
++    @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "cl")
++    static class Detail { }
++
++    @Test
++    public void testNullInPolymorphicList() throws Exception
++    {
++        ObjectMapper mapper = mapperBuilder().build();
++        Master master = new Master();
++        master.details.add(null);
++        String xml = mapper.writeValueAsString(master);
++        Master result = mapper.readValue(xml, Master.class);
++        assertEquals(1, result.details.size());
++        assertNull(result.details.get(0));
++    }
++}

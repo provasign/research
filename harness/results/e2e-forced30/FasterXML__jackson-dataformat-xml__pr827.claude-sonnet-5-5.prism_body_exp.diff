@@ -1,0 +1,68 @@
+diff --git a/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java b/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java
+index 2734a6d0..d8acf148 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java
++++ b/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java
+@@ -2,6 +2,7 @@ package tools.jackson.dataformat.xml.ser;
+ 
+ import java.util.*;
+ 
++import tools.jackson.core.JsonGenerator;
+ import tools.jackson.databind.*;
+ import tools.jackson.databind.introspect.AnnotatedMember;
+ import tools.jackson.databind.ser.*;
+@@ -77,6 +78,23 @@ public class XmlBeanSerializerModifier
+ 
+             // first things first: no wrapping?
+             if (wrapperName == null || wrapperName == PropertyName.NO_NAME) {
++                // Unwrapped indexed values: `null` must be left out (as with wrapping),
++                // otherwise an empty element gets written that reads back as non-null
++                if (!dynamicWrapping) {
++                    beanProperties.set(i, new BeanPropertyWriter(bpw) {
++                        private static final long serialVersionUID = 1L;
++
++                        @Override
++                        public void serializeAsProperty(Object bean, JsonGenerator g,
++                                SerializationContext ctxt) throws Exception
++                        {
++                            if (get(bean) == null) {
++                                return;
++                            }
++                            super.serializeAsProperty(bean, g, ctxt);
++                        }
++                    });
++                }
+                 continue;
+             }
+             // no local name? Just double the wrapped name for wrapper
+diff --git a/src/test/java/tools/jackson/dataformat/xml/lists/NullUnwrappedListTest.java b/src/test/java/tools/jackson/dataformat/xml/lists/NullUnwrappedListTest.java
+new file mode 100644
+index 00000000..66815458
+--- /dev/null
++++ b/src/test/java/tools/jackson/dataformat/xml/lists/NullUnwrappedListTest.java
+@@ -0,0 +1,26 @@
++package tools.jackson.dataformat.xml.lists;
++
++import java.util.List;
++
++import org.junit.jupiter.api.Test;
++
++import tools.jackson.dataformat.xml.XmlMapper;
++import tools.jackson.dataformat.xml.XmlTestUtil;
++
++import static org.junit.jupiter.api.Assertions.*;
++
++public class NullUnwrappedListTest extends XmlTestUtil
++{
++    static class Parent {
++        public List<String> children;
++    }
++
++    @Test
++    public void testNullListNoWrapperRoundTrip() throws Exception
++    {
++        XmlMapper mapper = XmlMapper.builder().defaultUseWrapper(false).build();
++        String xml = mapper.writeValueAsString(new Parent());
++        assertFalse(xml.contains("children"), xml);
++        assertNull(mapper.readValue(xml, Parent.class).children);
++    }
++}

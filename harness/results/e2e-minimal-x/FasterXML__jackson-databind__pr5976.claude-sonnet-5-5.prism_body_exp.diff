@@ -1,0 +1,107 @@
+diff --git a/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java b/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
+index 04366becd..96ff94c5e 100644
+--- a/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
++++ b/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
+@@ -515,6 +515,9 @@ public class POJOPropertiesCollector
+         _collectClassLevelIgnorals();
+         // and then remove unneeded accessors (wrt read-only, read-write)
+         _removeUnwantedAccessors(props);
++        // [databind#5979]: READ_ONLY property with explicit name matching that of
++        // a separate creator property must not block the creator property
++        _rescueCreatorPropertyIgnorals(props);
+ 
+         // Rename remaining properties
+         _renameProperties(props);
+@@ -1747,6 +1750,28 @@ ctor.creator()));
+         }
+     }
+ 
++    // Ignoral names (from READ_ONLY access) that match a property with a creator
++    // parameter are rescued, like in _renameProperties() for [databind#2001]
++    private void _rescueCreatorPropertyIgnorals(Map<String, POJOPropertyBuilder> props)
++    {
++        if (_perPropertyIgnoredNames == null || _creatorProperties == null || isRecordType()) {
++            return;
++        }
++        for (POJOPropertyBuilder cprop : _creatorProperties) {
++            if (cprop == null || cprop.getConstructorParameter() == null
++                    || cprop.anyIgnorals()) {
++                continue;
++            }
++            final String name = cprop.getName();
++            if (props.get(name) == cprop && _perPropertyIgnoredNames.contains(name)) {
++                if (_nonRescuedIgnoredPropertyNames == null) {
++                    _nonRescuedIgnoredPropertyNames = new HashSet<>(_perPropertyIgnoredNames);
++                }
++                _perPropertyIgnoredNames.remove(name);
++            }
++        }
++    }
++
+     protected void _renameUsing(Map<String, POJOPropertyBuilder> propMap,
+             PropertyNamingStrategy naming)
+     {
+diff --git a/src/test/java/tools/jackson/databind/deser/creators/ReadOnlyImplicitCreatorParamTest.java b/src/test/java/tools/jackson/databind/deser/creators/ReadOnlyImplicitCreatorParamTest.java
+new file mode 100644
+index 000000000..9b770f51f
+--- /dev/null
++++ b/src/test/java/tools/jackson/databind/deser/creators/ReadOnlyImplicitCreatorParamTest.java
+@@ -0,0 +1,58 @@
++package tools.jackson.databind.deser.creators;
++
++import org.junit.jupiter.api.Test;
++
++import com.fasterxml.jackson.annotation.JsonProperty;
++
++import tools.jackson.databind.ObjectMapper;
++import tools.jackson.databind.cfg.MapperConfig;
++import tools.jackson.databind.introspect.AnnotatedMember;
++import tools.jackson.databind.introspect.AnnotatedParameter;
++import tools.jackson.databind.introspect.NopAnnotationIntrospector;
++import tools.jackson.databind.json.JsonMapper;
++import tools.jackson.databind.module.SimpleModule;
++import tools.jackson.databind.testutil.DatabindTestUtil;
++
++import static org.junit.jupiter.api.Assertions.assertEquals;
++
++// Creator parameter with implicit name matching a READ_ONLY property's explicit name
++public class ReadOnlyImplicitCreatorParamTest extends DatabindTestUtil
++{
++    static class Bean {
++        private final String uri;
++
++        @JsonProperty(value = "uri", access = JsonProperty.Access.READ_ONLY)
++        public final String redactedUri;
++
++        public Bean(@JsonProperty(access = JsonProperty.Access.WRITE_ONLY) String uri) {
++            this.uri = uri;
++            this.redactedUri = uri == null ? null : uri.replace("password", "***");
++        }
++
++        public String getUri() { return uri; }
++    }
++
++    static class ParamNameIntrospector extends NopAnnotationIntrospector {
++        private static final long serialVersionUID = 1L;
++
++        @Override
++        public String findImplicitPropertyName(MapperConfig<?> config, AnnotatedMember member) {
++            return (member instanceof AnnotatedParameter) ? "uri" : null;
++        }
++    }
++
++    @Test
++    public void testReadOnlyWithImplicitCreatorParam() throws Exception
++    {
++        SimpleModule module = new SimpleModule() {
++            private static final long serialVersionUID = 1L;
++            @Override
++            public void setupModule(SetupContext context) {
++                context.appendAnnotationIntrospector(new ParamNameIntrospector());
++            }
++        };
++        ObjectMapper mapper = JsonMapper.builder().addModule(module).build();
++        Bean result = mapper.readValue("{\"uri\":\"my-password\"}", Bean.class);
++        assertEquals("my-password", result.getUri());
++    }
++}

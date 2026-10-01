@@ -1,0 +1,16 @@
+diff --git a/src/click/_termui_impl.py b/src/click/_termui_impl.py
+index 3336c37c..f30e0569 100644
+--- a/src/click/_termui_impl.py
++++ b/src/click/_termui_impl.py
+@@ -452,6 +452,11 @@ def get_pager_file(color: bool | None = None) -> t.Generator[t.TextIO, None, Non
+             yield stream
+         finally:
+             stream.flush()
++            # The wrapped buffer belongs to the pager context (or to the
++            # caller's stdout), which is responsible for closing it. Detach so
++            # garbage-collecting our wrapper cannot close it underneath them.
++            if isinstance(stream, MaybeStripAnsi):
++                stream.detach()
+ 
+ 
+ @contextlib.contextmanager

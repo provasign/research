@@ -1,0 +1,26 @@
+diff --git a/src/urllib3/connection.py b/src/urllib3/connection.py
+index 443cb01b..9a8a6922 100644
+--- a/src/urllib3/connection.py
++++ b/src/urllib3/connection.py
+@@ -70,6 +70,8 @@ BrokenPipeError = BrokenPipeError
+ 
+ log = logging.getLogger(__name__)
+ 
++_OBS_FOLD_RE = re.compile(r"\r?\n[ \t]+")
++
+ port_by_scheme = {"http": 80, "https": 443}
+ 
+ # When it comes time to update this value as a part of regular maintenance
+@@ -616,7 +618,11 @@ class HTTPConnection(_HTTPConnection):
+                 exc_info=True,
+             )
+ 
+-        headers = HTTPHeaderDict(httplib_response.msg.items())
++        # RFC 9112 5.2: replace each obs-fold with one or more SP octets.
++        headers = HTTPHeaderDict(
++            (name, _OBS_FOLD_RE.sub(" ", value))
++            for name, value in httplib_response.msg.items()
++        )
+ 
+         response = HTTPResponse(
+             body=httplib_response,

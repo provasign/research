@@ -1,0 +1,18 @@
+diff --git a/rich/console.py b/rich/console.py
+index 994adfc..24d9558 100644
+--- a/rich/console.py
++++ b/rich/console.py
+@@ -1742,6 +1742,13 @@ class Console:
+                 ):
+                     buffer_extend(line)
+             else:
++                if style is not None:
++                    # Don't let the style (e.g. background) bleed onto the newline
++                    new_segments = [
++                        Segment.line() if segment.text == "\n" and not segment.control
++                        else segment
++                        for segment in new_segments
++                    ]
+                 self._buffer.extend(new_segments)
+ 
+     def print_json(

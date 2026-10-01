@@ -1,0 +1,16 @@
+diff --git a/src/main/java/tools/jackson/dataformat/xml/ser/ToXmlGenerator.java b/src/main/java/tools/jackson/dataformat/xml/ser/ToXmlGenerator.java
+index ed21a45b..3a0ab390 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/ser/ToXmlGenerator.java
++++ b/src/main/java/tools/jackson/dataformat/xml/ser/ToXmlGenerator.java
+@@ -445,6 +445,11 @@ public class ToXmlGenerator
+             _nameToEncode.localPart = name;
+             _nameProcessor.encodeName(_nameToEncode);
+             setNextName(new QName(_nameToEncode.namespace, _nameToEncode.localPart));
++            // Empty name is what parser uses for text within element that also has
++            // attributes or child elements: write it back as text, not as `<>`
++            if (name.isEmpty()) {
++                setNextIsUnwrapped(true);
++            }
+         }
+         return this;
+     }

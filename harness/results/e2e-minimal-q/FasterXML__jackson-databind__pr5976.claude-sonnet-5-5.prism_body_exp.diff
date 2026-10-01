@@ -1,0 +1,94 @@
+diff --git a/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java b/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
+index 04366becd..effebf03d 100644
+--- a/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
++++ b/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
+@@ -7,6 +7,7 @@ import com.fasterxml.jackson.annotation.JacksonInject;
+ import com.fasterxml.jackson.annotation.JsonCreator;
+ import com.fasterxml.jackson.annotation.JsonFormat;
+ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
++import com.fasterxml.jackson.annotation.JsonProperty;
+ 
+ import tools.jackson.databind.*;
+ import tools.jackson.databind.cfg.ConstructorDetector;
+@@ -1587,6 +1588,23 @@ ctor.creator()));
+             //    addition of ignorals wrt explicit name
+             prop.removeNonVisible(inferMutators, _forSerialization ? null : this);
+         }
++        // Explicit names of READ_ONLY properties are added as ignorals, but that must not
++        // hide a (non-READ_ONLY) property of same name that is passed via Creator parameter
++        // (with implicit name): otherwise the parameter would never be assigned
++        if (!_forSerialization && !_isRecordType && (_perPropertyIgnoredNames != null)) {
++            for (POJOPropertyBuilder prop : props.values()) {
++                if (prop.hasConstructorParameter()
++                        && (prop.findAccess() != JsonProperty.Access.READ_ONLY)) {
++                    final String name = prop.getName();
++                    if (_perPropertyIgnoredNames.remove(name)) {
++                        if (_nonRescuedIgnoredPropertyNames == null) {
++                            _nonRescuedIgnoredPropertyNames = new HashSet<>(_perPropertyIgnoredNames);
++                        }
++                        _nonRescuedIgnoredPropertyNames.add(name);
++                    }
++                }
++            }
++        }
+     }
+ 
+     /**
+diff --git a/src/test/java/tools/jackson/databind/deser/creators/ReadOnlyImplicitParamTest.java b/src/test/java/tools/jackson/databind/deser/creators/ReadOnlyImplicitParamTest.java
+new file mode 100644
+index 000000000..c49f963f7
+--- /dev/null
++++ b/src/test/java/tools/jackson/databind/deser/creators/ReadOnlyImplicitParamTest.java
+@@ -0,0 +1,52 @@
++package tools.jackson.databind.deser.creators;
++
++import org.junit.jupiter.api.Test;
++
++import com.fasterxml.jackson.annotation.JsonProperty;
++
++import tools.jackson.databind.*;
++import tools.jackson.databind.cfg.MapperConfig;
++import tools.jackson.databind.introspect.*;
++import tools.jackson.databind.json.JsonMapper;
++import tools.jackson.databind.module.SimpleModule;
++
++import static org.junit.jupiter.api.Assertions.assertEquals;
++
++// READ_ONLY property whose explicit name matches implicit creator param name
++public class ReadOnlyImplicitParamTest
++{
++    static class Bean {
++        private final String uri;
++
++        @JsonProperty(value = "uri", access = JsonProperty.Access.READ_ONLY)
++        public final String redactedUri;
++
++        public Bean(@JsonProperty(access = JsonProperty.Access.WRITE_ONLY) String uri) {
++            this.uri = uri;
++            this.redactedUri = uri == null ? null : uri.replace("password", "***");
++        }
++
++        public String getUri() { return uri; }
++    }
++
++    static class Intr extends NopAnnotationIntrospector {
++        @Override
++        public String findImplicitPropertyName(MapperConfig<?> config, AnnotatedMember member) {
++            return (member instanceof AnnotatedParameter) ? "uri" : null;
++        }
++    }
++
++    @Test
++    public void testReadOnlyWithImplicitParam() throws Exception {
++        SimpleModule module = new SimpleModule() {
++            @Override
++            public void setupModule(SetupContext context) {
++                context.appendAnnotationIntrospector(new Intr());
++            }
++        };
++        JsonMapper mapper = JsonMapper.builder().addModule(module).build();
++        Bean original = new Bean("my-password");
++        Bean result = mapper.readValue(mapper.writeValueAsString(original), Bean.class);
++        assertEquals(original.redactedUri, result.getUri());
++    }
++}

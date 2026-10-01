@@ -1,0 +1,29 @@
+diff --git a/src/main/java/tools/jackson/dataformat/xml/deser/XmlBeanDeserializerModifier.java b/src/main/java/tools/jackson/dataformat/xml/deser/XmlBeanDeserializerModifier.java
+index 9b25c4d9..1b459833 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/deser/XmlBeanDeserializerModifier.java
++++ b/src/main/java/tools/jackson/dataformat/xml/deser/XmlBeanDeserializerModifier.java
+@@ -5,6 +5,7 @@ import java.util.*;
+ import tools.jackson.databind.*;
+ import tools.jackson.databind.deser.*;
+ import tools.jackson.databind.deser.bean.BeanDeserializerBase;
++import tools.jackson.databind.deser.std.DelegatingDeserializer;
+ import tools.jackson.databind.introspect.AnnotatedMember;
+ import tools.jackson.databind.introspect.BeanPropertyDefinition;
+ import tools.jackson.dataformat.xml.util.AnnotationUtil;
+@@ -83,6 +84,16 @@ public class XmlBeanDeserializerModifier
+             BeanDescription.Supplier beanDescRef, ValueDeserializer<?> deser0)
+     {
+         if (!(deser0 instanceof BeanDeserializerBase)) {
++            // Another modifier may have wrapped the bean deserializer in a delegating one:
++            // if so, apply handling to the delegatee
++            if ((deser0 instanceof DelegatingDeserializer dd)
++                    && !(deser0 instanceof WrapperHandlingDeserializer)) {
++                ValueDeserializer<?> old = dd.getDelegatee();
++                ValueDeserializer<?> mod = modifyDeserializer(config, beanDescRef, old);
++                if (mod != old) {
++                    return dd.replaceDelegatee(mod);
++                }
++            }
+             return deser0;
+         }
+         /* 17-Aug-2013, tatu: One important special case first: if we have one "XML Text"

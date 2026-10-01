@@ -1,0 +1,38 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java b/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java
+index f538965a7..b7aafc2c3 100644
+--- a/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java
++++ b/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java
+@@ -167,6 +167,10 @@ public class ExternalTypeHandler
+                     _typeIds[it.next()] = typeId;
+                 }
+             } else {
++                if (!_visibleInActiveView(ctxt, prop)) {
++                    p.skipChildren();
++                    return true;
++                }
+                 TokenBuffer tokens = _bufferValueWithPinnedContext(ctxt, p);
+                 _tokens[index] = tokens;
+                 while (it.hasNext()) {
+@@ -188,6 +192,10 @@ public class ExternalTypeHandler
+             p.skipChildren();
+             canDeserialize = (bean != null) && (_tokens[index] != null);
+         } else {
++            if (!_visibleInActiveView(ctxt, prop)) {
++                p.skipChildren();
++                return true;
++            }
+             @SuppressWarnings("resource")
+             TokenBuffer tokens = _bufferValueWithPinnedContext(ctxt, p);
+             _tokens[index] = tokens;
+@@ -205,6 +213,11 @@ public class ExternalTypeHandler
+         return true;
+     }
+ 
++    private static boolean _visibleInActiveView(DeserializationContext ctxt, ExtTypedProperty prop) {
++        final Class<?> view = ctxt.getActiveView();
++        return (view == null) || prop.getProperty().visibleInView(view);
++    }
++
+     /**
+      * Method called after JSON Object closes, and has to ensure that all external
+      * type ids have been handled.

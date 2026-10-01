@@ -1,0 +1,46 @@
+diff --git a/src/main/java/tools/jackson/databind/ser/jdk/ObjectArraySerializer.java b/src/main/java/tools/jackson/databind/ser/jdk/ObjectArraySerializer.java
+index d5adb592c..6ad7b2080 100644
+--- a/src/main/java/tools/jackson/databind/ser/jdk/ObjectArraySerializer.java
++++ b/src/main/java/tools/jackson/databind/ser/jdk/ObjectArraySerializer.java
+@@ -166,7 +166,9 @@ public class ObjectArraySerializer
+             // 30-Sep-2012, tatu: One more thing -- if explicit content type is annotated,
+             //   we can consider it a static case as well.
+             if (_elementType != null) {
+-                if (_staticTyping && !_elementType.isJavaLangObject()) {
++                // [databind#1515]: allow per-property DYNAMIC override
++                if (_staticTyping && !_elementType.isJavaLangObject()
++                        && !_hasDynamicTypingOverride(ctxt, property)) {
+                     ser = ctxt.findContentValueSerializer(_elementType, property);
+                 }
+             }
+diff --git a/src/main/java/tools/jackson/databind/ser/std/ReferenceTypeSerializer.java b/src/main/java/tools/jackson/databind/ser/std/ReferenceTypeSerializer.java
+index 91bcc23f4..84654d7d7 100644
+--- a/src/main/java/tools/jackson/databind/ser/std/ReferenceTypeSerializer.java
++++ b/src/main/java/tools/jackson/databind/ser/std/ReferenceTypeSerializer.java
+@@ -250,10 +250,6 @@ public abstract class ReferenceTypeSerializer<T>
+         if (referredType.isFinal()) { // or should we allow annotation override? (only if requested...)
+             return true;
+         }
+-        // also: if indicated by typing, should be considered static
+-        if (referredType.useStaticType()) {
+-            return true;
+-        }
+         // if neither, maybe explicit annotation?
+         AnnotationIntrospector intr = ctxt.getAnnotationIntrospector();
+         if ((intr != null) && (property != null)) {
+@@ -269,6 +265,15 @@ public abstract class ReferenceTypeSerializer<T>
+                 }
+             }
+         }
++        // [databind#1515]: class-level DYNAMIC on referenced type overrides global setting
++        if ((intr != null) && (intr.findSerializationTyping(ctxt.getConfig(),
++                ctxt.introspectClassAnnotations(referredType)) == JsonSerialize.Typing.DYNAMIC)) {
++            return false;
++        }
++        // if indicated by typing, should be considered static
++        if (referredType.useStaticType()) {
++            return true;
++        }
+         // and finally, may be forced by global static typing (unlikely...)
+         return ctxt.isEnabled(MapperFeature.USE_STATIC_TYPING);
+     }

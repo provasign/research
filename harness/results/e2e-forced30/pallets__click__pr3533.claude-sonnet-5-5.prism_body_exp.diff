@@ -1,0 +1,37 @@
+diff --git a/src/click/_termui_impl.py b/src/click/_termui_impl.py
+index 3336c37c..d160cbf0 100644
+--- a/src/click/_termui_impl.py
++++ b/src/click/_termui_impl.py
+@@ -442,16 +442,28 @@ def get_pager_file(color: bool | None = None) -> t.Generator[t.TextIO, None, Non
+         # Split streams by capabilities rather than the abstract TextIO /
+         # BinaryIO annotations: buffered text streams can be unwrapped to bytes,
+         # while text-only streams are yielded as-is.
++        wrapper: MaybeStripAnsi | None = None
+         if _has_binary_buffer(stream):
+             # Text stream backed by a binary buffer.
+-            stream = MaybeStripAnsi(stream.buffer, color=color, encoding=encoding)
++            wrapper = MaybeStripAnsi(stream.buffer, color=color, encoding=encoding)
+         elif isinstance(stream, t.BinaryIO):
+             # Binary stream
+-            stream = MaybeStripAnsi(stream, color=color, encoding=encoding)
++            wrapper = MaybeStripAnsi(stream, color=color, encoding=encoding)
++        if wrapper is None:
++            try:
++                yield stream  # type: ignore[misc]
++            finally:
++                stream.flush()
++            return
+         try:
+-            yield stream
++            yield wrapper
+         finally:
+-            stream.flush()
++            try:
++                wrapper.flush()
++            finally:
++                # Detach so that garbage-collecting the wrapper does not close
++                # the underlying stream, which is owned by the caller.
++                wrapper.detach()
+ 
+ 
+ @contextlib.contextmanager

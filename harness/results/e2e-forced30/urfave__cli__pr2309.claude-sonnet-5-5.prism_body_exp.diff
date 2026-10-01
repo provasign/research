@@ -1,0 +1,13 @@
+diff --git a/command_run.go b/command_run.go
+index 676a14c6..45dede56 100644
+--- a/command_run.go
++++ b/command_run.go
+@@ -214,6 +214,8 @@ func (cmd *Command) run(ctx context.Context, osArgs []string) (_ context.Context
+ 
+ 	for _, flag := range cmd.allFlags() {
+ 		isSet := flag.IsSet()
++		// make sure values from env/file sources are split with the configured separators
++		cmd.setMultiValueParsingConfig(flag)
+ 		if err := flag.PostParse(); err != nil {
+ 			return ctx, err
+ 		}

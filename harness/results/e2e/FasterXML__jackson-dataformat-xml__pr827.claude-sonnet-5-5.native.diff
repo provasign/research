@@ -1,0 +1,29 @@
+diff --git a/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java b/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java
+index 2734a6d0..321fa214 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java
++++ b/src/main/java/tools/jackson/dataformat/xml/ser/XmlBeanSerializerModifier.java
+@@ -2,6 +2,7 @@ package tools.jackson.dataformat.xml.ser;
+ 
+ import java.util.*;
+ 
++import tools.jackson.core.JsonGenerator;
+ import tools.jackson.databind.*;
+ import tools.jackson.databind.introspect.AnnotatedMember;
+ import tools.jackson.databind.ser.*;
+@@ -77,6 +78,16 @@ public class XmlBeanSerializerModifier
+ 
+             // first things first: no wrapping?
+             if (wrapperName == null || wrapperName == PropertyName.NO_NAME) {
++                // Unwrapped `null` Collection/array: write nothing (an empty element
++                // would be read back as a List with one empty element)
++                if (!dynamicWrapping && !bpw.hasNullSerializer()) {
++                    bpw.assignNullSerializer(new ValueSerializer<Object>() {
++                        @Override
++                        public void serialize(Object value, JsonGenerator g, SerializationContext ctxt) {
++                            // nothing to write
++                        }
++                    });
++                }
+                 continue;
+             }
+             // no local name? Just double the wrapped name for wrapper

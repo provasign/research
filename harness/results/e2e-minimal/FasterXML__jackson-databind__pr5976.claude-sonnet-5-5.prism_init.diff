@@ -1,0 +1,98 @@
+diff --git a/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java b/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
+index 04366becd..44f2a4a75 100644
+--- a/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
++++ b/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
+@@ -7,6 +7,7 @@ import com.fasterxml.jackson.annotation.JacksonInject;
+ import com.fasterxml.jackson.annotation.JsonCreator;
+ import com.fasterxml.jackson.annotation.JsonFormat;
+ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
++import com.fasterxml.jackson.annotation.JsonProperty;
+ 
+ import tools.jackson.databind.*;
+ import tools.jackson.databind.cfg.ConstructorDetector;
+@@ -1706,6 +1707,24 @@ ctor.creator()));
+             */
+         }
+ 
++        // [databind#5980]: name added to ignorals by another property's explicit name
++        // (READ_ONLY) must not hide creator parameter that explicitly declares
++        // itself as writable
++        if (!_forSerialization && (_perPropertyIgnoredNames != null)) {
++            for (POJOPropertyBuilder prop : props.values()) {
++                if (prop.hasConstructorParameter()
++                        && _perPropertyIgnoredNames.contains(prop.getName())) {
++                    JsonProperty.Access acc = prop.findAccess();
++                    if ((acc == JsonProperty.Access.WRITE_ONLY) || (acc == JsonProperty.Access.READ_WRITE)) {
++                        if (_nonRescuedIgnoredPropertyNames == null) {
++                            _nonRescuedIgnoredPropertyNames = new HashSet<>(_perPropertyIgnoredNames);
++                        }
++                        _perPropertyIgnoredNames.remove(prop.getName());
++                    }
++                }
++            }
++        }
++
+         // and if any were renamed, merge back in...
+         if (renamed != null) {
+             for (POJOPropertyBuilder prop : renamed) {
+diff --git a/src/test/java/tools/jackson/databind/deser/creators/ReadOnlyImplicitParamTest.java b/src/test/java/tools/jackson/databind/deser/creators/ReadOnlyImplicitParamTest.java
+new file mode 100644
+index 000000000..6f069b55e
+--- /dev/null
++++ b/src/test/java/tools/jackson/databind/deser/creators/ReadOnlyImplicitParamTest.java
+@@ -0,0 +1,55 @@
++package tools.jackson.databind.deser.creators;
++
++import com.fasterxml.jackson.annotation.JsonProperty;
++
++import org.junit.jupiter.api.Test;
++
++import tools.jackson.databind.*;
++import tools.jackson.databind.cfg.MapperConfig;
++import tools.jackson.databind.introspect.*;
++import tools.jackson.databind.module.SimpleModule;
++import tools.jackson.databind.testutil.DatabindTestUtil;
++
++import static org.junit.jupiter.api.Assertions.assertEquals;
++
++// Implicit parameter name matching a READ_ONLY property; param with WRITE_ONLY access
++public class ReadOnlyImplicitParamTest extends DatabindTestUtil
++{
++    static class Bean {
++        private final String uri;
++
++        @JsonProperty(value = "uri", access = JsonProperty.Access.READ_ONLY)
++        public final String redactedUri;
++
++        public Bean(@JsonProperty(access = JsonProperty.Access.WRITE_ONLY) String uri) {
++            this.uri = uri;
++            this.redactedUri = uri == null ? null : uri.replace("password", "***");
++        }
++
++        public String getUri() { return uri; }
++    }
++
++    static class ParamNameIntrospector extends NopAnnotationIntrospector {
++        private static final long serialVersionUID = 1L;
++
++        @Override
++        public String findImplicitPropertyName(MapperConfig<?> config, AnnotatedMember member) {
++            return (member instanceof AnnotatedParameter) ? "uri" : null;
++        }
++    }
++
++    @Test
++    public void testReadOnlyWithImplicitParam() throws Exception {
++        SimpleModule module = new SimpleModule() {
++            private static final long serialVersionUID = 1L;
++            @Override
++            public void setupModule(SetupContext context) {
++                context.appendAnnotationIntrospector(new ParamNameIntrospector());
++            }
++        };
++        ObjectMapper mapper = jsonMapperBuilder().addModule(module).build();
++        Bean original = new Bean("my-password");
++        Bean result = mapper.readValue(mapper.writeValueAsString(original), Bean.class);
++        assertEquals(original.redactedUri, result.getUri());
++    }
++}

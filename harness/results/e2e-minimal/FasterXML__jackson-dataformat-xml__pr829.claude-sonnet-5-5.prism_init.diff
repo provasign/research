@@ -1,0 +1,88 @@
+diff --git a/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java b/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
+index 1df7eeb6..e5ea962d 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
++++ b/src/main/java/tools/jackson/dataformat/xml/deser/FromXmlParser.java
+@@ -98,6 +98,12 @@ public class FromXmlParser
+      */
+     protected boolean _mayBeLeaf;
+ 
++    /**
++     * Whether the most recently seen START_ELEMENT (of a possible array element)
++     * had {@code xsi:nil="true"}.
++     */
++    protected boolean _startElementXsiNil;
++
+     protected JsonToken _nextToken;
+ 
+     protected String _currText;
+@@ -561,6 +567,7 @@ public class FromXmlParser
+             // If we thought we might get leaf, no such luck
+             if (_mayBeLeaf) {
+                 // leave _mayBeLeaf set, as we start a new context
++                _startElementXsiNil = _xmlTokens.hasXsiNil();
+                 _nextToken = JsonToken.PROPERTY_NAME;
+                 _streamReadContext = _streamReadContext.createChildObjectContext(-1, -1);
+                 return _updateToken(JsonToken.START_OBJECT);
+@@ -568,6 +575,7 @@ public class FromXmlParser
+             if (_streamReadContext.inArray()) {
+                 // Yup: in array, so this element could be verified; but it won't be
+                 // reported anyway, and we need to process following event.
++                _startElementXsiNil = _xmlTokens.hasXsiNil();
+                 token = _nextToken();
+                 _mayBeLeaf = true;
+                 continue;
+@@ -600,6 +608,13 @@ public class FromXmlParser
+                 if (_mayBeLeaf) {
+                     _mayBeLeaf = false;
+                     if (_streamReadContext.inArray()) {
++                        // xsi:nil="true" element is a real null, not an empty Object
++                        // (which would break polymorphic handling)
++                        if (_startElementXsiNil) {
++                            _startElementXsiNil = false;
++                            _streamReadContext.valueStarted();
++                            return _updateToken(JsonToken.VALUE_NULL);
++                        }
+                         // 06-Jan-2015, tatu: as per [dataformat-xml#180], need to
+                         //    expose as empty Object, not null
+                         _nextToken = JsonToken.END_OBJECT;
+diff --git a/src/test/java/tools/jackson/dataformat/xml/lists/PolymorphicNullInListTest.java b/src/test/java/tools/jackson/dataformat/xml/lists/PolymorphicNullInListTest.java
+new file mode 100644
+index 00000000..007acb49
+--- /dev/null
++++ b/src/test/java/tools/jackson/dataformat/xml/lists/PolymorphicNullInListTest.java
+@@ -0,0 +1,35 @@
++package tools.jackson.dataformat.xml.lists;
++
++import java.util.*;
++
++import org.junit.jupiter.api.Test;
++
++import com.fasterxml.jackson.annotation.JsonTypeInfo;
++
++import tools.jackson.dataformat.xml.*;
++
++import static org.junit.jupiter.api.Assertions.*;
++
++public class PolymorphicNullInListTest extends XmlTestUtil
++{
++    @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "cl")
++    public static class Detail { }
++
++    public static class Master {
++        public List<Detail> details = new ArrayList<>();
++    }
++
++    @Test
++    public void testNullInPolymorphicList() throws Exception
++    {
++        XmlMapper mapper = new XmlMapper();
++        Master master = new Master();
++        master.details.add(null);
++        master.details.add(new Detail());
++        String xml = mapper.writeValueAsString(master);
++        Master result = mapper.readValue(xml, Master.class);
++        assertEquals(2, result.details.size());
++        assertNull(result.details.get(0));
++        assertNotNull(result.details.get(1));
++    }
++}

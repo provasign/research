@@ -1,0 +1,56 @@
+diff --git a/tree.go b/tree.go
+index 74ff43d..b77f79a 100644
+--- a/tree.go
++++ b/tree.go
+@@ -133,6 +133,10 @@ type endpoint struct {
+ 
+ 	// parameter keys recorded on handler nodes
+ 	paramKeys []string
++
++	// stub marks a handler installed by Mount() for a mount point, as
++	// opposed to a route explicitly registered on the same pattern.
++	stub bool
+ }
+ 
+ func (s endpoints) Value(method methodTyp) *endpoint {
+@@ -365,9 +369,11 @@ func (n *node) setEndpoint(method methodTyp, handler http.Handler, pattern strin
+ 		h.handler = handler
+ 		h.pattern = pattern
+ 		h.paramKeys = paramKeys
++		h.stub = method&mSTUB == mSTUB
+ 		for _, m := range methodMap {
+ 			h := n.endpoints.Value(m)
+ 			h.handler = handler
++			h.stub = method&mSTUB == mSTUB
+ 			h.pattern = pattern
+ 			h.paramKeys = paramKeys
+ 		}
+@@ -376,6 +382,7 @@ func (n *node) setEndpoint(method methodTyp, handler http.Handler, pattern strin
+ 		h.handler = handler
+ 		h.pattern = pattern
+ 		h.paramKeys = paramKeys
++		h.stub = false
+ 	}
+ }
+ 
+@@ -629,15 +636,16 @@ func (n *node) routes() []Route {
+ 	rts := []Route{}
+ 
+ 	n.walk(func(eps endpoints, subroutes Routes) bool {
+-		if eps[mSTUB] != nil && eps[mSTUB].handler != nil && subroutes == nil {
+-			return false
+-		}
++		// A mount point without subroutes is not reported itself, but routes
++		// registered explicitly on the same pattern (e.g. Get("/bar") next to
++		// Route("/bar")) still are.
++		isStub := eps[mSTUB] != nil && eps[mSTUB].handler != nil && subroutes == nil
+ 
+ 		// Group methodHandlers by unique patterns
+ 		pats := make(map[string]endpoints)
+ 
+ 		for mt, h := range eps {
+-			if h.pattern == "" {
++			if h.pattern == "" || (isStub && h.stub) {
+ 				continue
+ 			}
+ 			p, ok := pats[h.pattern]

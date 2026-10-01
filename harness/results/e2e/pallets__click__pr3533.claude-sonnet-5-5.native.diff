@@ -1,0 +1,16 @@
+diff --git a/src/click/_termui_impl.py b/src/click/_termui_impl.py
+index 3336c37c..f5020c46 100644
+--- a/src/click/_termui_impl.py
++++ b/src/click/_termui_impl.py
+@@ -452,6 +452,11 @@ def get_pager_file(color: bool | None = None) -> t.Generator[t.TextIO, None, Non
+             yield stream
+         finally:
+             stream.flush()
++            # Detach the wrapper so that closing or garbage collecting it
++            # can never close the underlying stream, which is owned by the
++            # pager context manager (or by the caller, e.g. CliRunner).
++            if isinstance(stream, MaybeStripAnsi):
++                stream.detach()
+ 
+ 
+ @contextlib.contextmanager

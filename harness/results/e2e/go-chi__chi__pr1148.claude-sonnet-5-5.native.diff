@@ -1,0 +1,50 @@
+diff --git a/tree.go b/tree.go
+index 74ff43d..6145750 100644
+--- a/tree.go
++++ b/tree.go
+@@ -133,6 +133,9 @@ type endpoint struct {
+ 
+ 	// parameter keys recorded on handler nodes
+ 	paramKeys []string
++
++	// mounted is true when the handler was set by Mount on this node
++	mounted bool
+ }
+ 
+ func (s endpoints) Value(method methodTyp) *endpoint {
+@@ -365,14 +368,17 @@ func (n *node) setEndpoint(method methodTyp, handler http.Handler, pattern strin
+ 		h.handler = handler
+ 		h.pattern = pattern
+ 		h.paramKeys = paramKeys
++		h.mounted = method&mSTUB == mSTUB
+ 		for _, m := range methodMap {
+ 			h := n.endpoints.Value(m)
++			h.mounted = method&mSTUB == mSTUB
+ 			h.handler = handler
+ 			h.pattern = pattern
+ 			h.paramKeys = paramKeys
+ 		}
+ 	} else {
+ 		h := n.endpoints.Value(method)
++		h.mounted = false
+ 		h.handler = handler
+ 		h.pattern = pattern
+ 		h.paramKeys = paramKeys
+@@ -629,15 +635,13 @@ func (n *node) routes() []Route {
+ 	rts := []Route{}
+ 
+ 	n.walk(func(eps endpoints, subroutes Routes) bool {
+-		if eps[mSTUB] != nil && eps[mSTUB].handler != nil && subroutes == nil {
+-			return false
+-		}
++		stubbed := eps[mSTUB] != nil && eps[mSTUB].handler != nil && subroutes == nil
+ 
+ 		// Group methodHandlers by unique patterns
+ 		pats := make(map[string]endpoints)
+ 
+ 		for mt, h := range eps {
+-			if h.pattern == "" {
++			if h.pattern == "" || (stubbed && h.mounted) {
+ 				continue
+ 			}
+ 			p, ok := pats[h.pattern]

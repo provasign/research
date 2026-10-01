@@ -1,0 +1,46 @@
+diff --git a/command_run.go b/command_run.go
+index 676a14c6..229d2b3b 100644
+--- a/command_run.go
++++ b/command_run.go
+@@ -214,6 +214,7 @@ func (cmd *Command) run(ctx context.Context, osArgs []string) (_ context.Context
+ 
+ 	for _, flag := range cmd.allFlags() {
+ 		isSet := flag.IsSet()
++		cmd.setMultiValueParsingConfig(flag)
+ 		if err := flag.PostParse(); err != nil {
+ 			return ctx, err
+ 		}
+diff --git a/flag_impl.go b/flag_impl.go
+index 1ca295aa..1dda3fde 100644
+--- a/flag_impl.go
++++ b/flag_impl.go
+@@ -79,6 +79,8 @@ type FlagBase[T any, C any, VC ValueCreator[T, C]] struct {
+ 	applied    bool  // whether the flag has been applied to a flag set already
+ 	creator    VC    // value creator for this flag type
+ 	value      Value // value representing this flag's value
++
++	multiValueConfig *multiValueParsingConfig // parsing config to reapply when value is recreated
+ }
+ 
+ // GetValue returns the flags value as string representation and an empty
+@@ -151,6 +153,7 @@ func (f *FlagBase[T, C, V]) PostParse() error {
+ // pass configuration of parsing to value
+ func (f *FlagBase[T, C, V]) setMultiValueParsingConfig(c multiValueParsingConfig) {
+ 	tracef("setMultiValueParsingConfig %T, %+v", f.value, f.value)
++	f.multiValueConfig = &c
+ 	if cf, ok := f.value.(multiValueParsingConfigSetter); ok {
+ 		cf.setMultiValueParsingConfig(c)
+ 	}
+@@ -165,6 +168,12 @@ func (f *FlagBase[T, C, V]) PreParse() error {
+ 		f.value = f.creator.Create(newVal, f.Destination, f.Config)
+ 	}
+ 
++	if f.multiValueConfig != nil {
++		if cf, ok := f.value.(multiValueParsingConfigSetter); ok {
++			cf.setMultiValueParsingConfig(*f.multiValueConfig)
++		}
++	}
++
+ 	// Validate the given default or values set from external sources as well
+ 	if f.Validator != nil && f.ValidateDefaults {
+ 		if err := f.Validator(f.value.Get().(T)); err != nil {

@@ -1,0 +1,15 @@
+diff --git a/gson/src/main/java/com/google/gson/JsonPrimitive.java b/gson/src/main/java/com/google/gson/JsonPrimitive.java
+index 88f4466f..43b65a96 100644
+--- a/gson/src/main/java/com/google/gson/JsonPrimitive.java
++++ b/gson/src/main/java/com/google/gson/JsonPrimitive.java
+@@ -268,7 +268,9 @@ public final class JsonPrimitive extends JsonElement {
+       return (int) (value ^ (value >>> 32));
+     }
+     if (value instanceof Number) {
+-      long value = Double.doubleToLongBits(getAsNumber().doubleValue());
++      double d = getAsNumber().doubleValue();
++      // Whole numbers must hash like integral values because equals() compares them as equal
++      long value = d == Math.rint(d) && Math.abs(d) < 0x1p63 ? (long) d : Double.doubleToLongBits(d);
+       return (int) (value ^ (value >>> 32));
+     }
+     return value.hashCode();

@@ -1,0 +1,23 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java b/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java
+index f538965a7..8e19973ad 100644
+--- a/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java
++++ b/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java
+@@ -151,6 +151,18 @@ public class ExternalTypeHandler
+         if (ob == null) {
+             return false;
+         }
++        // Value of a property not visible in the active view is skipped
++        final Class<?> activeView = ctxt.getActiveView();
++        if (activeView != null) {
++            final int first = (ob instanceof List<?> l)
++                    ? ((Integer) l.get(0)).intValue() : ((Integer) ob).intValue();
++            final ExtTypedProperty extProp = _properties[first];
++            if (!extProp.hasTypePropertyName(propName)
++                    && !extProp.getProperty().visibleInView(activeView)) {
++                p.skipChildren();
++                return true;
++            }
++        }
+         // 28-Nov-2016, tatu: For [databind#291], need separate handling
+         if (ob instanceof List<?>) {
+             Iterator<Integer> it = ((List<Integer>) ob).iterator();

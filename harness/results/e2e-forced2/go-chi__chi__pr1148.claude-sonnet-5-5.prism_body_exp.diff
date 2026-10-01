@@ -1,0 +1,56 @@
+diff --git a/tree.go b/tree.go
+index 74ff43d..488a92f 100644
+--- a/tree.go
++++ b/tree.go
+@@ -630,7 +630,19 @@ func (n *node) routes() []Route {
+ 
+ 	n.walk(func(eps endpoints, subroutes Routes) bool {
+ 		if eps[mSTUB] != nil && eps[mSTUB].handler != nil && subroutes == nil {
+-			return false
++			// Mount stub without subroutes: skip the stub itself, but keep any
++			// explicitly registered method handlers sharing the same node.
++			filtered := endpoints{}
++			for mt, h := range eps {
++				if mt == mSTUB || mt == mALL {
++					continue
++				}
++				filtered[mt] = h
++			}
++			if len(filtered) == 0 {
++				return false
++			}
++			eps = filtered
+ 		}
+ 
+ 		// Group methodHandlers by unique patterns
+diff --git a/walk_issue_test.go b/walk_issue_test.go
+new file mode 100644
+index 0000000..76c0cdd
+--- /dev/null
++++ b/walk_issue_test.go
+@@ -0,0 +1,25 @@
++package chi
++
++import (
++	"net/http"
++	"testing"
++)
++
++func TestWalkRouteAndGetSamePattern(t *testing.T) {
++	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
++	r := NewRouter()
++	r.Route("/foo", func(r Router) {
++		r.Route("/bar", func(r Router) {})
++		r.Get("/bar", h)
++	})
++	found := false
++	Walk(r, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
++		if method == "GET" && route == "/foo/bar" {
++			found = true
++		}
++		return nil
++	})
++	if !found {
++		t.Fatal("GET /foo/bar not walked")
++	}
++}

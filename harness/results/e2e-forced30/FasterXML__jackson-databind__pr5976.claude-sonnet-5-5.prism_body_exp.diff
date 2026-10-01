@@ -1,0 +1,84 @@
+diff --git a/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java b/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
+index 04366becd..4abc7dcdd 100644
+--- a/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
++++ b/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
+@@ -1711,13 +1711,18 @@ ctor.creator()));
+             for (POJOPropertyBuilder prop : renamed) {
+                 String name = prop.getName();
+                 POJOPropertyBuilder old = props.get(name);
++                boolean mergedIntoCreator = false;
+                 if (old == null) {
+                     props.put(name, prop);
+                 } else {
+                     old.addAll(prop);
++                    // Existing property (already in creator properties) with a
++                    // constructor parameter of this name must not stay ignored
++                    // just because another (READ_ONLY) property was renamed to it
++                    mergedIntoCreator = old.hasConstructorParameter();
+                 }
+                 // replace the creatorProperty too, if there is one
+-                if (_replaceCreatorProperty(_creatorProperties, prop)) {
++                if (_replaceCreatorProperty(_creatorProperties, prop) || mergedIntoCreator) {
+                     // [databind#2001]: New name of property was ignored previously? Remove from ignored
+                     // 01-May-2018, tatu: I have a feeling this will need to be revisited at some point,
+                     //   to avoid removing some types of removals, possibly. But will do for now.
+diff --git a/src/test/java/tools/jackson/databind/deser/creators/ReadOnlyImplicitCreatorParamTest.java b/src/test/java/tools/jackson/databind/deser/creators/ReadOnlyImplicitCreatorParamTest.java
+new file mode 100644
+index 000000000..6ffb76731
+--- /dev/null
++++ b/src/test/java/tools/jackson/databind/deser/creators/ReadOnlyImplicitCreatorParamTest.java
+@@ -0,0 +1,54 @@
++package tools.jackson.databind.deser.creators;
++
++import org.junit.jupiter.api.Test;
++
++import com.fasterxml.jackson.annotation.JsonProperty;
++
++import tools.jackson.databind.*;
++import tools.jackson.databind.cfg.MapperConfig;
++import tools.jackson.databind.introspect.*;
++import tools.jackson.databind.json.JsonMapper;
++import tools.jackson.databind.module.SimpleModule;
++
++import static org.junit.jupiter.api.Assertions.assertEquals;
++
++// READ_ONLY property renamed to same name as implicit creator parameter
++public class ReadOnlyImplicitCreatorParamTest
++{
++    static class Bean {
++        private final String uri;
++
++        @JsonProperty(value = "uri", access = JsonProperty.Access.READ_ONLY)
++        public final String redactedUri;
++
++        public Bean(@JsonProperty(access = JsonProperty.Access.WRITE_ONLY) String uri) {
++            this.uri = uri;
++            this.redactedUri = uri == null ? null : uri.replace("password", "***");
++        }
++
++        public String getUri() { return uri; }
++    }
++
++    static class Intro extends NopAnnotationIntrospector {
++        private static final long serialVersionUID = 1L;
++
++        @Override
++        public String findImplicitPropertyName(MapperConfig<?> config, AnnotatedMember member) {
++            return (member instanceof AnnotatedParameter) ? "uri" : null;
++        }
++    }
++
++    @Test
++    public void testReadOnlyWithImplicitCreatorParam() throws Exception {
++        SimpleModule module = new SimpleModule() {
++            private static final long serialVersionUID = 1L;
++            @Override
++            public void setupModule(SetupContext context) {
++                context.appendAnnotationIntrospector(new Intro());
++            }
++        };
++        JsonMapper mapper = JsonMapper.builder().addModule(module).build();
++        Bean result = mapper.readValue("{\"uri\":\"my-password\"}", Bean.class);
++        assertEquals("my-password", result.getUri());
++    }
++}

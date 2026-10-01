@@ -1,0 +1,101 @@
+diff --git a/src/main/java/tools/jackson/dataformat/xml/DefaultingXmlTypeResolverBuilder.java b/src/main/java/tools/jackson/dataformat/xml/DefaultingXmlTypeResolverBuilder.java
+index 4c67d265..9ad034cf 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/DefaultingXmlTypeResolverBuilder.java
++++ b/src/main/java/tools/jackson/dataformat/xml/DefaultingXmlTypeResolverBuilder.java
+@@ -54,6 +54,15 @@ public class DefaultingXmlTypeResolverBuilder
+         return this;
+     }
+ 
++    @Override
++    public tools.jackson.databind.jsontype.TypeDeserializer buildTypeDeserializer(
++            tools.jackson.databind.DeserializationContext ctxt,
++            JavaType baseType, Collection<NamedType> subtypes)
++    {
++        return XmlTypeResolverBuilder.wrapForEmptyElements(
++                super.buildTypeDeserializer(ctxt, baseType, subtypes));
++    }
++
+     @Override
+     protected TypeIdResolver idResolver(DatabindContext ctxt,
+             JavaType baseType, PolymorphicTypeValidator subtypeValidator,
+diff --git a/src/main/java/tools/jackson/dataformat/xml/XmlTypeResolverBuilder.java b/src/main/java/tools/jackson/dataformat/xml/XmlTypeResolverBuilder.java
+index 6a9d9d73..9ba7f1d2 100644
+--- a/src/main/java/tools/jackson/dataformat/xml/XmlTypeResolverBuilder.java
++++ b/src/main/java/tools/jackson/dataformat/xml/XmlTypeResolverBuilder.java
+@@ -5,9 +5,13 @@ import java.util.Collection;
+ import com.fasterxml.jackson.annotation.JsonTypeInfo;
+ 
+ import tools.jackson.core.JacksonException;
++import tools.jackson.core.JsonParser;
++import tools.jackson.core.JsonToken;
+ 
+ import tools.jackson.databind.*;
+ import tools.jackson.databind.jsontype.NamedType;
++import tools.jackson.databind.jsontype.TypeDeserializer;
++import tools.jackson.databind.jsontype.impl.AsPropertyTypeDeserializer;
+ import tools.jackson.databind.jsontype.PolymorphicTypeValidator;
+ import tools.jackson.databind.jsontype.TypeIdResolver;
+ import tools.jackson.databind.jsontype.impl.ClassNameIdResolver;
+@@ -50,6 +54,25 @@ public class XmlTypeResolverBuilder extends StdTypeResolverBuilder
+         return propName;
+     }
+ 
++    @Override
++    public TypeDeserializer buildTypeDeserializer(DeserializationContext ctxt,
++            JavaType baseType, Collection<NamedType> subtypes)
++    {
++        return wrapForEmptyElements(super.buildTypeDeserializer(ctxt, baseType, subtypes));
++    }
++
++    /**
++     * Helper method for making "as-property" type deserializers accept empty
++     * elements within Arrays as {@code null}s (they cannot have a type id).
++     */
++    static TypeDeserializer wrapForEmptyElements(TypeDeserializer deser)
++    {
++        if ((deser != null) && (deser.getClass() == AsPropertyTypeDeserializer.class)) {
++            return new NullTolerantAsPropertyTypeDeserializer((AsPropertyTypeDeserializer) deser, null);
++        }
++        return deser;
++    }
++
+     @Override
+     protected TypeIdResolver idResolver(DatabindContext ctxt,
+             JavaType baseType, PolymorphicTypeValidator subtypeValidator,
+@@ -167,4 +190,36 @@ public class XmlTypeResolverBuilder extends StdTypeResolverBuilder
+             return super.typeFromId(ctxt, decodeXmlClassName(id));
+         }
+     }
++
++    /**
++     * Type deserializer that maps an empty Object (empty XML element) within
++     * an Array to {@code null}, since there is no room for type id.
++     */
++    static class NullTolerantAsPropertyTypeDeserializer
++        extends AsPropertyTypeDeserializer
++    {
++        NullTolerantAsPropertyTypeDeserializer(AsPropertyTypeDeserializer src,
++                tools.jackson.databind.BeanProperty prop) {
++            super(src, prop);
++        }
++
++        @Override
++        public TypeDeserializer forProperty(tools.jackson.databind.BeanProperty prop) {
++            return (prop == _property) ? this
++                    : new NullTolerantAsPropertyTypeDeserializer(this, prop);
++        }
++
++        @Override
++        public Object deserializeTypedFromObject(JsonParser p, DeserializationContext ctxt)
++            throws JacksonException
++        {
++            if ((p.currentToken() == JsonToken.START_OBJECT)
++                    && p.streamReadContext().getParent().inArray()) {
++                if (p.nextToken() == JsonToken.END_OBJECT) {
++                    return null;
++                }
++            }
++            return super.deserializeTypedFromObject(p, ctxt);
++        }
++    }
+ }

@@ -1,0 +1,34 @@
+diff --git a/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java b/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
+index 04366becd..836b644bf 100644
+--- a/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
++++ b/src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
+@@ -7,6 +7,7 @@ import com.fasterxml.jackson.annotation.JacksonInject;
+ import com.fasterxml.jackson.annotation.JsonCreator;
+ import com.fasterxml.jackson.annotation.JsonFormat;
+ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
++import com.fasterxml.jackson.annotation.JsonProperty;
+ 
+ import tools.jackson.databind.*;
+ import tools.jackson.databind.cfg.ConstructorDetector;
+@@ -1745,6 +1746,21 @@ ctor.creator()));
+                 }
+             }
+         }
++
++        // A separate property (e.g. WRITE_ONLY creator parameter) may share the name of a
++        // READ_ONLY property's explicit name; its creator parameter must not be ignored
++        if (_perPropertyIgnoredNames != null) {
++            for (Iterator<String> ign = _perPropertyIgnoredNames.iterator(); ign.hasNext(); ) {
++                POJOPropertyBuilder p = props.get(ign.next());
++                if (p != null && p.hasConstructorParameter()
++                        && p.findAccess() == JsonProperty.Access.WRITE_ONLY) {
++                    if (_nonRescuedIgnoredPropertyNames == null) {
++                        _nonRescuedIgnoredPropertyNames = new HashSet<>(_perPropertyIgnoredNames);
++                    }
++                    ign.remove();
++                }
++            }
++        }
+     }
+ 
+     protected void _renameUsing(Map<String, POJOPropertyBuilder> propMap,

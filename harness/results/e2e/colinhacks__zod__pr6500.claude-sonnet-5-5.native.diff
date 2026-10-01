@@ -1,0 +1,13 @@
+diff --git a/packages/zod/src/v4/core/memoizer.ts b/packages/zod/src/v4/core/memoizer.ts
+index 72a85db7..5cc632b7 100644
+--- a/packages/zod/src/v4/core/memoizer.ts
++++ b/packages/zod/src/v4/core/memoizer.ts
+@@ -56,6 +56,8 @@ function isRecursive(inst: $ZodType, stack: Set<object>): boolean {
+     // `for...in` skips symbols, so a cycle through a declared symbol key would read as non-recursive
+     if (shape) for (const key of Reflect.ownKeys(shape)) check(shape[key]);
+     for (const key in def) {
++      // reading it would invoke a user default function
++      if (key === "defaultValue") continue;
+       const value = def[key];
+       if (!value || typeof value !== "object") continue;
+       if (value._zod) check(value);

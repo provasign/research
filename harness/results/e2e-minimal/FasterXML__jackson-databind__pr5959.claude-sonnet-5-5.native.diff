@@ -1,0 +1,39 @@
+diff --git a/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java b/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java
+index f538965a7..1d7857f8c 100644
+--- a/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java
++++ b/src/main/java/tools/jackson/databind/deser/impl/ExternalTypeHandler.java
+@@ -108,6 +108,12 @@ public class ExternalTypeHandler
+                 typeId, ((Integer) ob).intValue());
+     }
+ 
++    private static boolean _visibleInActiveView(DeserializationContext ctxt, ExtTypedProperty prop)
++    {
++        final Class<?> activeView = ctxt.getActiveView();
++        return (activeView == null) || prop.getProperty().visibleInView(activeView);
++    }
++
+     private final boolean _handleTypePropertyValue(JsonParser p, DeserializationContext ctxt,
+             String propName, Object bean, String typeId, int index)
+         throws JacksonException
+@@ -167,6 +173,10 @@ public class ExternalTypeHandler
+                     _typeIds[it.next()] = typeId;
+                 }
+             } else {
++                if (!_visibleInActiveView(ctxt, prop)) {
++                    p.skipChildren();
++                    return true;
++                }
+                 TokenBuffer tokens = _bufferValueWithPinnedContext(ctxt, p);
+                 _tokens[index] = tokens;
+                 while (it.hasNext()) {
+@@ -188,6 +198,10 @@ public class ExternalTypeHandler
+             p.skipChildren();
+             canDeserialize = (bean != null) && (_tokens[index] != null);
+         } else {
++            if (!_visibleInActiveView(ctxt, prop)) {
++                p.skipChildren();
++                return true;
++            }
+             @SuppressWarnings("resource")
+             TokenBuffer tokens = _bufferValueWithPinnedContext(ctxt, p);
+             _tokens[index] = tokens;

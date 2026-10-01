@@ -1,0 +1,19 @@
+diff --git a/src/click/_termui_impl.py b/src/click/_termui_impl.py
+index 3336c37c..4bff6f7b 100644
+--- a/src/click/_termui_impl.py
++++ b/src/click/_termui_impl.py
+@@ -395,6 +395,14 @@ class MaybeStripAnsi(io.TextIOWrapper):
+             text = strip_ansi(text)
+         return super().write(text)
+ 
++    def close(self) -> None:
++        """The wrapped buffer belongs to the underlying stream, which may be
++        ``sys.stdout``. Flush but never close it, including when this object
++        is garbage collected.
++        """
++        if not self.closed:
++            self.flush()
++
+ 
+ def _pager_contextmanager(
+     color: bool | None = None,

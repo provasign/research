@@ -1,0 +1,83 @@
+diff --git a/tree.go b/tree.go
+index 74ff43d..83b72ad 100644
+--- a/tree.go
++++ b/tree.go
+@@ -7,6 +7,7 @@ package chi
+ import (
+ 	"fmt"
+ 	"net/http"
++	"reflect"
+ 	"regexp"
+ 	"slices"
+ 	"sort"
+@@ -630,7 +631,20 @@ func (n *node) routes() []Route {
+ 
+ 	n.walk(func(eps endpoints, subroutes Routes) bool {
+ 		if eps[mSTUB] != nil && eps[mSTUB].handler != nil && subroutes == nil {
+-			return false
++			// Mount stub node: skip the mount's own entries, but keep any
++			// method handlers registered explicitly on the same pattern.
++			stub := eps[mSTUB].handler
++			explicit := endpoints{}
++			for mt, h := range eps {
++				if mt == mSTUB || mt == mALL || h.handler == nil || sameHandler(h.handler, stub) {
++					continue
++				}
++				explicit[mt] = h
++			}
++			if len(explicit) == 0 {
++				return false
++			}
++			eps = explicit
+ 		}
+ 
+ 		// Group methodHandlers by unique patterns
+@@ -883,3 +897,17 @@ func walk(r Routes, walkFn WalkFunc, parentRoute string, parentMw ...func(http.H
+ 
+ 	return nil
+ }
++
++// sameHandler reports whether a and b are the same handler, without panicking
++// on uncomparable dynamic types such as http.HandlerFunc.
++func sameHandler(a, b http.Handler) bool {
++	va, vb := reflect.ValueOf(a), reflect.ValueOf(b)
++	if va.Type() != vb.Type() {
++		return false
++	}
++	switch va.Kind() {
++	case reflect.Func, reflect.Pointer, reflect.Map, reflect.Chan, reflect.UnsafePointer:
++		return va.Pointer() == vb.Pointer()
++	}
++	return va.Type().Comparable() && a == b
++}
+diff --git a/walk_same_pattern_test.go b/walk_same_pattern_test.go
+new file mode 100644
+index 0000000..bd6ad39
+--- /dev/null
++++ b/walk_same_pattern_test.go
+@@ -0,0 +1,25 @@
++package chi
++
++import (
++	"net/http"
++	"testing"
++)
++
++func TestWalkRouteAndGetSamePattern(t *testing.T) {
++	h := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})
++	r := NewRouter()
++	r.Route("/foo", func(r Router) {
++		r.Route("/bar", func(r Router) { r.Get("/baz", h) })
++		r.Get("/bar", h)
++	})
++	got := map[string]bool{}
++	Walk(r, func(m, p string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
++		got[m+" "+p] = true
++		return nil
++	})
++	for _, k := range []string{"GET /foo/bar", "GET /foo/bar/baz"} {
++		if !got[k] {
++			t.Errorf("missing %s: %v", k, got)
++		}
++	}
++}

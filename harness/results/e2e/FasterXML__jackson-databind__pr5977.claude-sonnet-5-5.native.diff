@@ -1,0 +1,31 @@
+diff --git a/src/main/java/tools/jackson/databind/ser/jdk/ObjectArraySerializer.java b/src/main/java/tools/jackson/databind/ser/jdk/ObjectArraySerializer.java
+index d5adb592c..f0c9b7a75 100644
+--- a/src/main/java/tools/jackson/databind/ser/jdk/ObjectArraySerializer.java
++++ b/src/main/java/tools/jackson/databind/ser/jdk/ObjectArraySerializer.java
+@@ -166,7 +166,8 @@ public class ObjectArraySerializer
+             // 30-Sep-2012, tatu: One more thing -- if explicit content type is annotated,
+             //   we can consider it a static case as well.
+             if (_elementType != null) {
+-                if (_staticTyping && !_elementType.isJavaLangObject()) {
++                if (_staticTyping && !_elementType.isJavaLangObject()
++                        && !_hasDynamicTypingOverride(ctxt, property)) {
+                     ser = ctxt.findContentValueSerializer(_elementType, property);
+                 }
+             }
+diff --git a/src/main/java/tools/jackson/databind/ser/std/ReferenceTypeSerializer.java b/src/main/java/tools/jackson/databind/ser/std/ReferenceTypeSerializer.java
+index 91bcc23f4..747962adc 100644
+--- a/src/main/java/tools/jackson/databind/ser/std/ReferenceTypeSerializer.java
++++ b/src/main/java/tools/jackson/databind/ser/std/ReferenceTypeSerializer.java
+@@ -250,6 +250,12 @@ public abstract class ReferenceTypeSerializer<T>
+         if (referredType.isFinal()) { // or should we allow annotation override? (only if requested...)
+             return true;
+         }
++        // [databind#1515]: class-level @JsonSerialize(typing=DYNAMIC) on referred type
++        AnnotationIntrospector typeIntr = ctxt.getAnnotationIntrospector();
++        if ((typeIntr != null) && (typeIntr.findSerializationTyping(ctxt.getConfig(),
++                ctxt.introspectClassAnnotations(referredType)) == JsonSerialize.Typing.DYNAMIC)) {
++            return false;
++        }
+         // also: if indicated by typing, should be considered static
+         if (referredType.useStaticType()) {
+             return true;
