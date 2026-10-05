@@ -699,6 +699,10 @@ def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
     rec = {"wall_s": round(time.monotonic() - t0, 1), "runtimes": runtimes}
     try:
         j = json.loads(r.stdout)
+        # `turns` is the CLI's num_turns: TOOL CALLS plus the final answer,
+        # so parallel calls in one response count separately. Cost follows
+        # api_calls (model responses; each re-reads the cached context).
+        # Measured 2026-10-05: one cell = 9 num_turns but 5 API calls.
         rec.update(turns=j.get("num_turns"), cost_usd=j.get("total_cost_usd"))
         rec["usage"] = usage_account.cli_usage(j)
         # The model that actually ran: --model aliases ("sonnet") move to new
@@ -709,6 +713,7 @@ def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
         if mu:
             rec["model"] = max(mu, key=lambda m: (mu[m] or {}).get("outputTokens", 0))
         rec["session_id"] = rec["usage"].get("session_id")
+        rec["api_calls"] = _api_calls(rec["session_id"])
         # Which tools the agent used, prism by op (scoring/tool_usage.py), so
         # adoption is on every cell instead of reconstructed from transcripts
         # that Claude Code deletes after 30 days.
@@ -724,6 +729,29 @@ def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
         rec["agent_error"] = (r.stderr or r.stdout)[-200:]
     rec["tool_trace"] = _tool_trace_for(wt)
     return rec
+
+
+def _api_calls(session_id) -> int | None:
+    """Model responses in the session: distinct assistant message ids in the
+    CLI transcript (one response may hold several tool calls, which num_turns
+    counts separately). None when the transcript is not found; the CLI
+    flushes it asynchronously, so retry briefly."""
+    if not session_id:
+        return None
+    for _ in range(10):
+        for f in Path.home().glob(f".claude/projects/*/{session_id}.jsonl"):
+            ids = set()
+            for line in f.open():
+                try:
+                    m = json.loads(line).get("message") or {}
+                except Exception:
+                    continue
+                if m.get("role") == "assistant" and m.get("id"):
+                    ids.add(m["id"])
+            if ids:
+                return len(ids)
+        time.sleep(1)
+    return None
 
 
 def _tool_trace_for(wt: Path) -> dict:
