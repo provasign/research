@@ -67,6 +67,10 @@ def _require_docker() -> None:
 EXTRA_PIP = {
     "pydantic/pydantic": ["pytest-run-parallel", "dirty-equals", "pytest-mock",
                           "annotated-types", "email-validator", "pytest-examples"],
+    # rich's 2020 poetry backend (poetry>=0.12) cannot build editable on the
+    # current pip, so the package runs from the checkout without its deps.
+    "Textualize/rich": ["pygments", "commonmark", "colorama", "typing-extensions", "pprintpp",
+                        "attrs"],  # tests/test_pretty.py imports attrs
 }
 
 

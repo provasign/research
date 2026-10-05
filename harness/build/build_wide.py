@@ -85,6 +85,8 @@ def build(spec: dict, dry: bool = False) -> dict:
     task.update(kind="wide", patch=gold, test_patch="", fail_to_pass=[],
                 problem_statement=spec["instruction"], prompt_source="wide-mandate")
     repo = wide_eval.repo_dir(task)
+    if task.get("site_mode") == "files":
+        return _build_files_mode(task, gold, repo, dry)
     base_wt = wide_eval._checkout(repo, task["base_commit"], "")
     gold_wt = wide_eval._checkout(repo, task["base_commit"], gold)
     try:
@@ -117,8 +119,57 @@ def build(spec: dict, dry: bool = False) -> dict:
     return task
 
 
+def _build_files_mode(task: dict, gold: str, repo: Path, dry: bool) -> dict:
+    """Signature-change task from a real commit (spec adds site_mode="files",
+    gold_files, stale_patterns, and for go/java/python the test selection:
+    test_functions / test_classes / test_modules). Every stale pattern must
+    match at base and be gone at gold, or the oracle could not tell them apart."""
+    gold_touched = {l[6:] for l in gold.splitlines() if l.startswith("+++ b/")}
+    if not set(task["gold_files"]) <= gold_touched:
+        raise SystemExit(f"gold_files not in gold patch: {sorted(set(task['gold_files']) - gold_touched)}")
+    base_wt = wide_eval._checkout(repo, task["base_commit"], "")
+    gold_wt = wide_eval._checkout(repo, task["base_commit"], gold)
+    try:
+        at_base = wide_eval.stale_hits(base_wt, task["stale_patterns"])
+        at_gold = wide_eval.stale_hits(gold_wt, task["stale_patterns"])
+    finally:
+        shutil.rmtree(base_wt, ignore_errors=True)
+        shutil.rmtree(gold_wt, ignore_errors=True)
+    absent = {f: [p for p in ps if p not in at_base.get(f, [])] for f, ps in task["stale_patterns"].items()}
+    if any(absent.values()) or at_gold:
+        raise SystemExit(f"stale patterns must match at base and not at gold: absent at base {absent}, left at gold {at_gold}")
+    task.setdefault("test_modules", [])
+    res = run_gold_tests(task, gold, repo)
+    # the agent's checkout has only the base tests: require those passing both sides
+    at_base = run_gold_tests(task, "", repo)
+    task["pass_to_pass"] = sorted(n for n, s in res.items() if s == "PASSED" and at_base.get(n) == "PASSED")
+    task["gold_test_outcomes"] = {"run": len(res), "passed": len(task["pass_to_pass"]),
+                                  "new_or_failing_at_base": sum(1 for n, s in res.items() if s == "PASSED" and at_base.get(n) != "PASSED"),
+                                  "failed": sorted(n for n, s in res.items() if s != "PASSED")[:30]}
+    if not task["pass_to_pass"]:
+        raise SystemExit("no test passes with gold: the green layer would be empty")
+    # a gold test file with no passing test means it never ran (collection
+    # error, missing deps): the green layer would not guard this change
+    # (python: only files pytest collects; tests/typing/*.py-style fixtures are type-check only)
+    collected = (lambda f: re.search(r"(^|/)(test_[^/]*|[^/]*_test)\.py$", f)) if task["lang"] == "python" \
+        else TEST_PATH[task["lang"]].search
+    silent = [f for f in task["gold_files"] if collected(f)
+              and not any(n.startswith(f) for n in task["pass_to_pass"])]
+    if silent:
+        raise SystemExit(f"gold test files with no passing tests (did they run?): {silent}")
+    task["gold_sites"] = len(task["gold_files"])
+    # the scorer is stricter than the outcome table (a collection error anywhere
+    # fails green): refuse a task its own gold cannot resolve
+    gold_score = wide_eval.score(task, gold)
+    if not gold_score.get("resolved"):
+        raise SystemExit(f"gold does not resolve under the scorer: {json.dumps(gold_score)[:600]}")
+    if not dry:
+        (H / "tasks/e2e" / f"{task['instance_id']}.json").write_text(json.dumps(task, indent=1))
+    return task
+
+
 if __name__ == "__main__":
     spec = json.loads(Path(sys.argv[1]).read_text())
     t = build(spec, dry="--dry-run" in sys.argv)
-    print(json.dumps({k: t[k] for k in ("instance_id", "gold_sites", "wide_test_files",
-                                        "gold_test_outcomes")}, indent=1))
+    print(json.dumps({k: t.get(k) for k in ("instance_id", "gold_sites", "wide_test_files",
+                                            "gold_test_outcomes")}, indent=1))

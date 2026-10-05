@@ -14,6 +14,9 @@ to that symbol, tests included. Two oracles, both required:
      (java_eval / go_eval / js_eval / docker_eval) with no test_patch and no
      fail_to_pass, only pass_to_pass.
 
+Signature-change tasks (site_mode="files") replace oracle 1 with
+file_site_check: every gold_files entry touched and no stale_patterns left.
+
 Task fields beyond the language scorer's: kind="wide", old, new,
 gold_counts / base_counts {file: [old, new]} over every code file that
 contains either name in the gold / base tree. The builder fills both, and
@@ -145,6 +148,34 @@ def site_check(repo: Path, task: dict, patch: str) -> dict:
             "other": other[:20]}
 
 
+def stale_hits(root: Path, stale: dict) -> dict[str, list[str]]:
+    """{file: [pattern, ...]} -> the patterns still matching in root's files."""
+    hits = {}
+    for f, pats in stale.items():
+        p = root / f
+        text = p.read_text(errors="replace") if p.exists() else ""
+        left = [pat for pat in pats if re.search(pat, text, re.M)]
+        if left:
+            hits[f] = left
+    return hits
+
+
+def file_site_check(repo: Path, task: dict, patch: str) -> dict:
+    """site_mode="files" (signature changes, where old/new token counts mean
+    nothing): the patch must touch every gold file, and none of the task's
+    stale_patterns (old call/override shapes, absent from the gold tree) may
+    remain. Touching alone is not a fix; the stale patterns catch that."""
+    touched = {l[6:] for l in patch.splitlines() if l.startswith("+++ b/")}
+    missed = [f for f in task["gold_files"] if f not in touched]
+    wt = _checkout(repo, task["base_commit"], patch)
+    try:
+        stale = stale_hits(wt, task.get("stale_patterns", {}))
+    finally:
+        shutil.rmtree(wt, ignore_errors=True)
+    return {"sites_ok": not missed and not stale, "gold_files": len(task["gold_files"]),
+            "missed_files": missed, "stale": stale}
+
+
 def _lang_score(task: dict, patch: str) -> dict:
     """The language's own build+test scorer, pass_to_pass only."""
     import run_e2e  # the dispatch table and repo lookup live there
@@ -171,7 +202,8 @@ def score(task: dict, agent_patch: str) -> dict:
     if not agent_patch.strip():
         return {"resolved": False, "empty_diff": True}
     try:
-        sites = site_check(repo_dir(task), task, agent_patch)
+        check = file_site_check if task.get("site_mode") == "files" else site_check
+        sites = check(repo_dir(task), task, agent_patch)
     except RuntimeError as e:
         return {"resolved": False, "error": str(e)[:300]}
     green = _lang_score(task, agent_patch)
