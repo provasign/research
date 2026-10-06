@@ -85,6 +85,107 @@ def _strip_comments(path: str, text: str) -> str:
     return _C_COMMENTS.sub("", text)
 
 
+def _strip_comments_and_strings(path: str, text: str) -> str:
+    """Code with comments and string-literal text blanked. A name inside a
+    string (a test title "Should return empty remote", an assertion message
+    "all Route() calls ...") is prose, not a reference: agents that update it
+    were scored as over-renaming (seeded32, 2026-10-05). Code inside f-string
+    / template-literal braces is kept: f"{x.render()}" and `${x.push()}` are
+    real call sites. Python docstrings are strings, so they go too."""
+    ext = Path(path).suffix
+    py = ext == ".py"
+    out, i, n = [], 0, len(text)
+
+    def keep_braced(j: int, close_at: str) -> int:
+        """Copy an interpolation body {...} (nested braces) through, return index after it."""
+        depth = 1
+        out.append("{")
+        j += 1
+        while j < n and depth:
+            ch = text[j]
+            depth += ch == "{"
+            depth -= ch == "}"
+            out.append(ch if depth else "}")
+            j += 1
+        return j
+
+    while i < n:
+        c = text[i]
+        # comments
+        if py and c == "#":
+            while i < n and text[i] != "\n":
+                i += 1
+            continue
+        if not py and text.startswith("//", i):
+            while i < n and text[i] != "\n":
+                i += 1
+            continue
+        if not py and text.startswith("/*", i):
+            j = text.find("*/", i + 2)
+            j = n if j < 0 else j + 2
+            out.append("\n" * text.count("\n", i, j))
+            i = j
+            continue
+        # strings
+        if py and c in "\"'":
+            # prefix letters (f, r, b, rb, fr ...) were already emitted; detect f
+            k = len(out) - 1
+            prefix = ""
+            while k >= 0 and out[k].isalpha() and len(prefix) < 3:
+                prefix = out[k] + prefix
+                k -= 1
+            fstr = "f" in prefix.lower() and (k < 0 or not (out[k].isalnum() or out[k] == "_"))
+            q = text[i:i + 3] if text[i:i + 3] in ("\"\"\"", "\'\'\'") else c
+            j = i + len(q)
+            out.append(" ")
+            while j < n and not text.startswith(q, j):
+                if text[j] == "\\":
+                    j += 2
+                    continue
+                if fstr and text[j] == "{":
+                    if text.startswith("{{", j):
+                        j += 2
+                        continue
+                    j = keep_braced(j, "}")
+                    continue
+                if text[j] == "\n":
+                    out.append("\n")
+                j += 1
+            i = j + len(q)
+            out.append(" ")
+            continue
+        if not py and c in "\"'`":
+            if c == "'" and ext in (".go", ".java", ".kt") :
+                # rune / char literal: 'x', '\n'
+                j = i + 1
+                while j < n and text[j] != "'" and text[j] != "\n":
+                    j += 2 if text[j] == "\\" else 1
+                i = j + 1
+                out.append(" ")
+                continue
+            q = '"""' if c == '"' and text.startswith('"""', i) and ext in (".java", ".kt") else c
+            j = i + len(q)
+            out.append(" ")
+            while j < n and not text.startswith(q, j):
+                if text[j] == "\\" and not (c == "`" and ext == ".go"):
+                    j += 2
+                    continue
+                if c == "`" and ext != ".go" and text.startswith("${", j):
+                    j = keep_braced(j + 1, "}")
+                    continue
+                if text[j] == "\n":
+                    out.append("\n")
+                    if q in ("\"", "'"):
+                        break  # unterminated single-line string: stop at end of line
+                j += 1
+            i = j + len(q)
+            out.append(" ")
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
 def token_counts(root: Path, old: str, new: str) -> dict[str, list[int]]:
     """{relative code file: [old count, new count]} for files with either."""
     ro, rn = re.compile(rf"\b{re.escape(old)}\b"), re.compile(rf"\b{re.escape(new)}\b")
@@ -94,7 +195,7 @@ def token_counts(root: Path, old: str, new: str) -> dict[str, list[int]]:
         if Path(rel).suffix not in CODE_EXT or SKIP_DIR.search(rel):
             continue
         try:
-            text = _strip_comments(rel, (root / rel).read_text(errors="ignore"))
+            text = _strip_comments_and_strings(rel, (root / rel).read_text(errors="ignore"))
         except OSError:
             continue
         o, n = len(ro.findall(text)), len(rn.findall(text))

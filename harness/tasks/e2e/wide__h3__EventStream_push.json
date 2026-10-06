@@ -9,7 +9,7 @@
  "gold_tool": "TypeScript LanguageService findRenameLocations (repo's typescript; providePrefixAndSuffixTextForRename=true)",
  "instruction": "The `push` method of the `EventStream` class (src/utils/internal/event-stream.ts), used to publish server-sent events, is easy to confuse with `Array.prototype.push`. Rename `EventStream.push` to `pushMessage`, including all of its overload signatures. The rename must cover the declaration and every call site, including tests. Do not rename any other `push` (array pushes, other classes' methods); they are unrelated. Behavior must not change: the project must still work and its tests must pass.",
  "kind": "wide",
- "patch": "diff --git a/src/utils/internal/event-stream.ts b/src/utils/internal/event-stream.ts\nindex 709eef8..adad51e 100644\n--- a/src/utils/internal/event-stream.ts\n+++ b/src/utils/internal/event-stream.ts\n@@ -32,11 +32,11 @@ export class EventStream {\n   /**\n    * Publish new event(s) for the client\n    */\n-  async push(message: string): Promise<void>;\n-  async push(message: string[]): Promise<void>;\n-  async push(message: EventStreamMessage): Promise<void>;\n-  async push(message: EventStreamMessage[]): Promise<void>;\n-  async push(message: EventStreamMessage | EventStreamMessage[] | string | string[]) {\n+  async pushMessage(message: string): Promise<void>;\n+  async pushMessage(message: string[]): Promise<void>;\n+  async pushMessage(message: EventStreamMessage): Promise<void>;\n+  async pushMessage(message: EventStreamMessage[]): Promise<void>;\n+  async pushMessage(message: EventStreamMessage | EventStreamMessage[] | string | string[]) {\n     if (typeof message === \"string\") {\n       await this._sendEvent({ data: message });\n       return;\ndiff --git a/test/sse.test.ts b/test/sse.test.ts\nindex 2135dea..faea094 100644\n--- a/test/sse.test.ts\n+++ b/test/sse.test.ts\n@@ -19,13 +19,13 @@ describeMatrix(\"sse\", (t, { it, expect }) => {\n         if (sendComment) {\n           eventStream.pushComment(\"hello world\");\n         } else if (includeMeta) {\n-          eventStream.push({\n+          eventStream.pushMessage({\n             id: String(counter),\n             event: \"custom-event\",\n             data: \"hello world\",\n           });\n         } else {\n-          eventStream.push(\"hello world\");\n+          eventStream.pushMessage(\"hello world\");\n         }\n       });\n       return eventStream.send();\ndiff --git a/test/unit/sse.test.ts b/test/unit/sse.test.ts\nindex b224884..e19c01e 100644\n--- a/test/unit/sse.test.ts\n+++ b/test/unit/sse.test.ts\n@@ -148,9 +148,9 @@ describe(\"sse (unit)\", () => {\n       await stream.close();\n \n       // First push after close should not throw\n-      await stream.push(\"msg1\");\n+      await stream.pushMessage(\"msg1\");\n       // Second push should also silently skip (not retry on broken stream)\n-      await stream.push(\"msg2\");\n+      await stream.pushMessage(\"msg2\");\n     });\n \n     it(\"pushComment stops retrying after write failure\", async () => {\n@@ -171,11 +171,11 @@ describe(\"sse (unit)\", () => {\n       (stream as any)._writer.write = writeSpy;\n       (stream as any)._writerIsClosed = false;\n \n-      await stream.push(\"test\");\n+      await stream.pushMessage(\"test\");\n       expect((stream as any)._writerIsClosed).toBe(true);\n \n       writeSpy.mockClear();\n-      await stream.push(\"test2\");\n+      await stream.pushMessage(\"test2\");\n       expect(writeSpy).not.toHaveBeenCalled();\n     });\n \n@@ -203,11 +203,11 @@ describe(\"sse (unit)\", () => {\n       (stream as any)._writer.write = writeSpy;\n       (stream as any)._writerIsClosed = false;\n \n-      await stream.push([{ data: \"msg1\" }, { data: \"msg2\" }]);\n+      await stream.pushMessage([{ data: \"msg1\" }, { data: \"msg2\" }]);\n       expect((stream as any)._writerIsClosed).toBe(true);\n \n       writeSpy.mockClear();\n-      await stream.push([{ data: \"msg3\" }]);\n+      await stream.pushMessage([{ data: \"msg3\" }]);\n       expect(writeSpy).not.toHaveBeenCalled();\n     });\n \n@@ -217,7 +217,7 @@ describe(\"sse (unit)\", () => {\n \n       // Pause and buffer data so flush has something to write\n       stream.pause();\n-      await stream.push(\"buffered\");\n+      await stream.pushMessage(\"buffered\");\n \n       const writeSpy = vi.fn().mockRejectedValue(new Error(\"write failed\"));\n       (stream as any)._writer.write = writeSpy;\n@@ -228,7 +228,7 @@ describe(\"sse (unit)\", () => {\n \n       // Subsequent writes should be skipped\n       writeSpy.mockClear();\n-      await stream.push(\"after-flush\");\n+      await stream.pushMessage(\"after-flush\");\n       expect(writeSpy).not.toHaveBeenCalled();\n     });\n   });\n",
+ "patch": "diff --git a/examples/server-sent-events.mjs b/examples/server-sent-events.mjs\nindex 6da9b3a..77a9308 100644\n--- a/examples/server-sent-events.mjs\n+++ b/examples/server-sent-events.mjs\n@@ -7,7 +7,7 @@ app.get(\"/\", (event) => {\n \n   // Send a message every second\n   const interval = setInterval(async () => {\n-    await eventStream.push(\"Hello world\");\n+    await eventStream.pushMessage(\"Hello world\");\n   }, 1000);\n \n   // cleanup the interval when the connection is terminated or the writer is closed\ndiff --git a/src/utils/internal/event-stream.ts b/src/utils/internal/event-stream.ts\nindex 709eef8..adad51e 100644\n--- a/src/utils/internal/event-stream.ts\n+++ b/src/utils/internal/event-stream.ts\n@@ -32,11 +32,11 @@ export class EventStream {\n   /**\n    * Publish new event(s) for the client\n    */\n-  async push(message: string): Promise<void>;\n-  async push(message: string[]): Promise<void>;\n-  async push(message: EventStreamMessage): Promise<void>;\n-  async push(message: EventStreamMessage[]): Promise<void>;\n-  async push(message: EventStreamMessage | EventStreamMessage[] | string | string[]) {\n+  async pushMessage(message: string): Promise<void>;\n+  async pushMessage(message: string[]): Promise<void>;\n+  async pushMessage(message: EventStreamMessage): Promise<void>;\n+  async pushMessage(message: EventStreamMessage[]): Promise<void>;\n+  async pushMessage(message: EventStreamMessage | EventStreamMessage[] | string | string[]) {\n     if (typeof message === \"string\") {\n       await this._sendEvent({ data: message });\n       return;\ndiff --git a/test/sse.test.ts b/test/sse.test.ts\nindex 2135dea..faea094 100644\n--- a/test/sse.test.ts\n+++ b/test/sse.test.ts\n@@ -19,13 +19,13 @@ describeMatrix(\"sse\", (t, { it, expect }) => {\n         if (sendComment) {\n           eventStream.pushComment(\"hello world\");\n         } else if (includeMeta) {\n-          eventStream.push({\n+          eventStream.pushMessage({\n             id: String(counter),\n             event: \"custom-event\",\n             data: \"hello world\",\n           });\n         } else {\n-          eventStream.push(\"hello world\");\n+          eventStream.pushMessage(\"hello world\");\n         }\n       });\n       return eventStream.send();\ndiff --git a/test/unit/sse.test.ts b/test/unit/sse.test.ts\nindex b224884..e19c01e 100644\n--- a/test/unit/sse.test.ts\n+++ b/test/unit/sse.test.ts\n@@ -148,9 +148,9 @@ describe(\"sse (unit)\", () => {\n       await stream.close();\n \n       // First push after close should not throw\n-      await stream.push(\"msg1\");\n+      await stream.pushMessage(\"msg1\");\n       // Second push should also silently skip (not retry on broken stream)\n-      await stream.push(\"msg2\");\n+      await stream.pushMessage(\"msg2\");\n     });\n \n     it(\"pushComment stops retrying after write failure\", async () => {\n@@ -171,11 +171,11 @@ describe(\"sse (unit)\", () => {\n       (stream as any)._writer.write = writeSpy;\n       (stream as any)._writerIsClosed = false;\n \n-      await stream.push(\"test\");\n+      await stream.pushMessage(\"test\");\n       expect((stream as any)._writerIsClosed).toBe(true);\n \n       writeSpy.mockClear();\n-      await stream.push(\"test2\");\n+      await stream.pushMessage(\"test2\");\n       expect(writeSpy).not.toHaveBeenCalled();\n     });\n \n@@ -203,11 +203,11 @@ describe(\"sse (unit)\", () => {\n       (stream as any)._writer.write = writeSpy;\n       (stream as any)._writerIsClosed = false;\n \n-      await stream.push([{ data: \"msg1\" }, { data: \"msg2\" }]);\n+      await stream.pushMessage([{ data: \"msg1\" }, { data: \"msg2\" }]);\n       expect((stream as any)._writerIsClosed).toBe(true);\n \n       writeSpy.mockClear();\n-      await stream.push([{ data: \"msg3\" }]);\n+      await stream.pushMessage([{ data: \"msg3\" }]);\n       expect(writeSpy).not.toHaveBeenCalled();\n     });\n \n@@ -217,7 +217,7 @@ describe(\"sse (unit)\", () => {\n \n       // Pause and buffer data so flush has something to write\n       stream.pause();\n-      await stream.push(\"buffered\");\n+      await stream.pushMessage(\"buffered\");\n \n       const writeSpy = vi.fn().mockRejectedValue(new Error(\"write failed\"));\n       (stream as any)._writer.write = writeSpy;\n@@ -228,7 +228,7 @@ describe(\"sse (unit)\", () => {\n \n       // Subsequent writes should be skipped\n       writeSpy.mockClear();\n-      await stream.push(\"after-flush\");\n+      await stream.pushMessage(\"after-flush\");\n       expect(writeSpy).not.toHaveBeenCalled();\n     });\n   });\n",
  "test_patch": "",
  "fail_to_pass": [],
  "problem_statement": "The `push` method of the `EventStream` class (src/utils/internal/event-stream.ts), used to publish server-sent events, is easy to confuse with `Array.prototype.push`. Rename `EventStream.push` to `pushMessage`, including all of its overload signatures. The rename must cover the declaration and every call site, including tests. Do not rename any other `push` (array pushes, other classes' methods); they are unrelated. Behavior must not change: the project must still work and its tests must pass.",
@@ -79,10 +79,6 @@
    4,
    0
   ],
-  "test/iterable.test.ts": [
-   1,
-   0
-  ],
   "test/json-rpc-ws.test.ts": [
    1,
    0
@@ -108,7 +104,7 @@
    0
   ],
   "test/unit/sse.test.ts": [
-   11,
+   8,
    0
   ]
  },
@@ -118,8 +114,8 @@
    0
   ],
   "examples/server-sent-events.mjs": [
-   1,
-   0
+   0,
+   1
   ],
   "src/h3.ts": [
    3,
@@ -177,10 +173,6 @@
    4,
    0
   ],
-  "test/iterable.test.ts": [
-   1,
-   0
-  ],
   "test/json-rpc-ws.test.ts": [
    1,
    0
@@ -206,7 +198,7 @@
    0
   ],
   "test/unit/sse.test.ts": [
-   3,
+   0,
    8
   ]
  },
@@ -1385,5 +1377,6 @@
    "test/utils.test.ts > utils node writeEarlyHints sets Link header as fallback when native early hints not available (node)"
   ]
  },
- "gold_sites": 15
+ "gold_sites": 16,
+ "notes": "Gold corrected 2026-10-05: the TS LanguageService rename misses examples/server-sent-events.mjs (untyped, outside the TS program), whose `eventStream.push(...)` is an EventStream.push call; both seeded32 agents renamed it."
 }
