@@ -1,0 +1,100 @@
+diff --git a/chi.go b/chi.go
+index 6911bb5..efab296 100644
+--- a/chi.go
++++ b/chi.go
+@@ -125,10 +125,10 @@ type Routes interface {
+ 	// Middlewares returns the list of middlewares in use by the router.
+ 	Middlewares() Middlewares
+ 
+-	// Match searches the routing tree for a handler that matches
++	// MatchRoute searches the routing tree for a handler that matches
+ 	// the method/path - similar to routing a http request, but without
+ 	// executing the handler thereafter.
+-	Match(rctx *Context, method, path string) bool
++	MatchRoute(rctx *Context, method, path string) bool
+ 
+ 	// Find searches the routing tree for the pattern that matches
+ 	// the method/path.
+diff --git a/middleware/get_head.go b/middleware/get_head.go
+index d4606d8..9ff6de5 100644
+--- a/middleware/get_head.go
++++ b/middleware/get_head.go
+@@ -26,7 +26,7 @@ func GetHead(next http.Handler) http.Handler {
+ 			// Attempt to find a HEAD handler for the routing path, if not found, traverse
+ 			// the router as through its a GET route, but proceed with the request
+ 			// with the HEAD method.
+-			if !rctx.Routes.Match(tctx, "HEAD", routePath) {
++			if !rctx.Routes.MatchRoute(tctx, "HEAD", routePath) {
+ 				rctx.RouteMethod = "GET"
+ 				rctx.RoutePath = routePath
+ 				next.ServeHTTP(w, r)
+diff --git a/middleware/supress_notfound.go b/middleware/supress_notfound.go
+index 83a8a87..126f056 100644
+--- a/middleware/supress_notfound.go
++++ b/middleware/supress_notfound.go
+@@ -16,7 +16,7 @@ func SupressNotFound(router *chi.Mux) func(next http.Handler) http.Handler {
+ 	return func(next http.Handler) http.Handler {
+ 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+ 			rctx := chi.RouteContext(r.Context())
+-			match := rctx.Routes.Match(rctx, r.Method, r.URL.Path)
++			match := rctx.Routes.MatchRoute(rctx, r.Method, r.URL.Path)
+ 			if !match {
+ 				router.NotFoundHandler().ServeHTTP(w, r)
+ 				return
+diff --git a/mux.go b/mux.go
+index 7cfc614..6db3f93 100644
+--- a/mux.go
++++ b/mux.go
+@@ -364,13 +364,13 @@ func (mx *Mux) Middlewares() Middlewares {
+ 	return mx.middlewares
+ }
+ 
+-// Match searches the routing tree for a handler that matches the method/path.
++// MatchRoute searches the routing tree for a handler that matches the method/path.
+ // It's similar to routing a http request, but without executing the handler
+ // thereafter.
+ //
+ // Note: the *Context state is updated during execution, so manage
+ // the state carefully or make a NewRouteContext().
+-func (mx *Mux) Match(rctx *Context, method, path string) bool {
++func (mx *Mux) MatchRoute(rctx *Context, method, path string) bool {
+ 	return mx.Find(rctx, method, path) != ""
+ }
+ 
+diff --git a/mux_test.go b/mux_test.go
+index 9d0e7cc..b8a09df 100644
+--- a/mux_test.go
++++ b/mux_test.go
+@@ -1924,12 +1924,12 @@ func TestMuxMatch(t *testing.T) {
+ 	tctx := NewRouteContext()
+ 
+ 	tctx.Reset()
+-	if r.Match(tctx, "GET", "/users/1") == false {
++	if r.MatchRoute(tctx, "GET", "/users/1") == false {
+ 		t.Fatal("expecting to find match for route:", "GET", "/users/1")
+ 	}
+ 
+ 	tctx.Reset()
+-	if r.Match(tctx, "HEAD", "/articles/10") == true {
++	if r.MatchRoute(tctx, "HEAD", "/articles/10") == true {
+ 		t.Fatal("not expecting to find match for route:", "HEAD", "/articles/10")
+ 	}
+ }
+@@ -1944,7 +1944,7 @@ func TestMuxMatch_HasBasePath(t *testing.T) {
+ 	tctx := NewRouteContext()
+ 
+ 	tctx.Reset()
+-	if r.Match(tctx, "GET", "/") != true {
++	if r.MatchRoute(tctx, "GET", "/") != true {
+ 		t.Fatal("expecting to find match for route:", "GET", "/")
+ 	}
+ }
+@@ -1955,7 +1955,7 @@ func TestMuxMatch_DoesNotHaveBasePath(t *testing.T) {
+ 	tctx := NewRouteContext()
+ 
+ 	tctx.Reset()
+-	if r.Match(tctx, "GET", "/") != false {
++	if r.MatchRoute(tctx, "GET", "/") != false {
+ 		t.Fatal("not expecting to find match for route:", "GET", "/")
+ 	}
+ }

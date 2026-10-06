@@ -1,0 +1,315 @@
+diff --git a/README.md b/README.md
+index f65b2207..db3bc005 100644
+--- a/README.md
++++ b/README.md
+@@ -55,7 +55,7 @@ def application(request: Request) -> Response:
+ if __name__ == "__main__":
+     from werkzeug.serving import run_simple
+ 
+-    run_simple("127.0.0.1", 5000, application)
++    run_simple(application, "127.0.0.1", 5000)
+ ```
+ 
+ ```
+diff --git a/docs/debug.rst b/docs/debug.rst
+index d842135a..761d8275 100644
+--- a/docs/debug.rst
++++ b/docs/debug.rst
+@@ -110,7 +110,7 @@ this further, use the debug middleware directly rather than through
+         app = DebuggedApplication(app, evalex=True)
+         app.trusted_hosts = [...]
+ 
+-    run_simple("localhost", 8080, app)
++    run_simple(app, "localhost", 8080)
+ 
+ **This feature is not meant to entirely secure the debugger. It is
+ intended to make it harder for an attacker to exploit the debugger.
+diff --git a/docs/serving.rst b/docs/serving.rst
+index db828daf..803cfe1a 100644
+--- a/docs/serving.rst
++++ b/docs/serving.rst
+@@ -16,7 +16,7 @@ application using the builtin server::
+     from myproject import make_app
+ 
+     app = make_app(...)
+-    run_simple('localhost', 8080, app, use_reloader=True)
++    run_simple(app, 'localhost', 8080, use_reloader=True)
+ 
+ You can also pass it the `extra_files` keyword argument with a list of
+ additional files (like configuration files) you want to observe.
+@@ -128,7 +128,7 @@ is passed back to the parent.
+             q.put(request.args["token"])
+             return Response("", 204)
+ 
+-        run_simple("localhost", 5000, app)
++        run_simple(app, "localhost", 5000)
+ 
+     if __name__ == "__main__":
+         q = multiprocessing.Queue()
+@@ -204,7 +204,7 @@ name of your server on generation or a `CN`.
+ 2.  Now this tuple can be passed as ``ssl_context`` to the
+     :func:`run_simple` method::
+ 
+-        run_simple('localhost', 4000, application,
++        run_simple(application, 'localhost', 4000,
+                    ssl_context=('/path/to/the/key.crt',
+                                 '/path/to/the/key.key'))
+ 
+@@ -221,7 +221,7 @@ control over the TLS configuration.
+     import ssl
+     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+     ctx.load_cert_chain('ssl.cert', 'ssl.key')
+-    run_simple('localhost', 4000, application, ssl_context=ctx)
++    run_simple(application, 'localhost', 4000, ssl_context=ctx)
+ 
+ 
+ .. versionchanged 0.10:: ``OpenSSL`` contexts are not supported anymore.
+@@ -242,7 +242,7 @@ Adhoc Certificates
+ The easiest way to enable SSL is to start the server in adhoc-mode.  In
+ that case Werkzeug will generate an SSL certificate for you::
+ 
+-    run_simple('localhost', 4000, application,
++    run_simple(application, 'localhost', 4000,
+                ssl_context='adhoc')
+ 
+ The downside of this of course is that you will have to acknowledge the
+@@ -261,4 +261,4 @@ The dev server can bind to a Unix socket instead of a TCP socket.
+ parameter starts with ``'unix://'``. ::
+ 
+     from werkzeug.serving import run_simple
+-    run_simple('unix://example.sock', 0, app)
++    run_simple(app, 'unix://example.sock', 0)
+diff --git a/docs/tutorial.rst b/docs/tutorial.rst
+index faff945d..cb42c46c 100644
+--- a/docs/tutorial.rst
++++ b/docs/tutorial.rst
+@@ -171,7 +171,7 @@ server with automatic code reloading and a debugger::
+     if __name__ == '__main__':
+         from werkzeug.serving import run_simple
+         app = create_app()
+-        run_simple('127.0.0.1', 5000, app, use_debugger=True, use_reloader=True)
++        run_simple(app, '127.0.0.1', 5000, use_debugger=True, use_reloader=True)
+ 
+ The basic idea here is that our ``Shortly`` class is an actual WSGI
+ application.  The ``__call__`` method directly dispatches to ``wsgi_app``.
+diff --git a/examples/httpbasicauth.py b/examples/httpbasicauth.py
+index 7ceaa4d4..5fa810a0 100644
+--- a/examples/httpbasicauth.py
++++ b/examples/httpbasicauth.py
+@@ -37,4 +37,4 @@ class Application:
+ 
+ if __name__ == "__main__":
+     application = Application({"user1": "password", "user2": "password"})
+-    run_simple("localhost", 5000, application)
++    run_simple(application, "localhost", 5000)
+diff --git a/examples/manage-coolmagic.py b/examples/manage-coolmagic.py
+index 73bbb8fc..f707a7b5 100644
+--- a/examples/manage-coolmagic.py
++++ b/examples/manage-coolmagic.py
+@@ -23,9 +23,9 @@ def runserver(hostname, port, no_reloader, debugger, no_evalex, threaded, proces
+     reloader = not no_reloader
+     evalex = not no_evalex
+     run_simple(
++        app,
+         hostname,
+         port,
+-        app,
+         use_reloader=reloader,
+         use_debugger=debugger,
+         use_evalex=evalex,
+diff --git a/examples/manage-couchy.py b/examples/manage-couchy.py
+index db9d19b7..48112a33 100644
+--- a/examples/manage-couchy.py
++++ b/examples/manage-couchy.py
+@@ -41,9 +41,9 @@ def runserver(hostname, port, no_reloader, debugger, no_evalex, threaded, proces
+     reloader = not no_reloader
+     evalex = not no_evalex
+     run_simple(
++        app,
+         hostname,
+         port,
+-        app,
+         use_reloader=reloader,
+         use_debugger=debugger,
+         use_evalex=evalex,
+diff --git a/examples/manage-cupoftee.py b/examples/manage-cupoftee.py
+index 99f7179a..c42e67ec 100644
+--- a/examples/manage-cupoftee.py
++++ b/examples/manage-cupoftee.py
+@@ -34,9 +34,9 @@ def runserver(hostname, port, reloader, debugger, evalex, threaded, processes):
+     """Start a new development server."""
+     app = make_app()
+     run_simple(
++        app,
+         hostname,
+         port,
+-        app,
+         use_reloader=reloader,
+         use_debugger=debugger,
+         use_evalex=evalex,
+diff --git a/examples/manage-i18nurls.py b/examples/manage-i18nurls.py
+index 71ddfc94..ec91d608 100644
+--- a/examples/manage-i18nurls.py
++++ b/examples/manage-i18nurls.py
+@@ -23,9 +23,9 @@ def runserver(hostname, port, no_reloader, debugger, no_evalex, threaded, proces
+     reloader = not no_reloader
+     evalex = not no_evalex
+     run_simple(
++        app,
+         hostname,
+         port,
+-        app,
+         use_reloader=reloader,
+         use_debugger=debugger,
+         use_evalex=evalex,
+diff --git a/examples/manage-plnt.py b/examples/manage-plnt.py
+index d48cb8ef..4d02f104 100644
+--- a/examples/manage-plnt.py
++++ b/examples/manage-plnt.py
+@@ -81,9 +81,9 @@ def runserver(hostname, port, no_reloader, debugger, no_evalex, threaded, proces
+     reloader = not no_reloader
+     evalex = not no_evalex
+     run_simple(
++        app,
+         hostname,
+         port,
+-        app,
+         use_reloader=reloader,
+         use_debugger=debugger,
+         use_evalex=evalex,
+diff --git a/examples/manage-shorty.py b/examples/manage-shorty.py
+index 1dc4278e..6c36c777 100644
+--- a/examples/manage-shorty.py
++++ b/examples/manage-shorty.py
+@@ -43,9 +43,9 @@ def runserver(hostname, port, no_reloader, debugger, no_evalex, threaded, proces
+     reloader = not no_reloader
+     evalex = not no_evalex
+     run_simple(
++        app,
+         hostname,
+         port,
+-        app,
+         use_reloader=reloader,
+         use_debugger=debugger,
+         use_evalex=evalex,
+diff --git a/examples/manage-simplewiki.py b/examples/manage-simplewiki.py
+index 9f578183..a6879e69 100644
+--- a/examples/manage-simplewiki.py
++++ b/examples/manage-simplewiki.py
+@@ -44,9 +44,9 @@ def runserver(hostname, port, no_reloader, debugger, no_evalex, threaded, proces
+     reloader = not no_reloader
+     evalex = not no_evalex
+     run_simple(
++        app,
+         hostname,
+         port,
+-        app,
+         use_reloader=reloader,
+         use_debugger=debugger,
+         use_evalex=evalex,
+diff --git a/examples/manage-webpylike.py b/examples/manage-webpylike.py
+index 0cb15aae..6f204026 100644
+--- a/examples/manage-webpylike.py
++++ b/examples/manage-webpylike.py
+@@ -27,9 +27,9 @@ def runserver(hostname, port, no_reloader, debugger, no_evalex, threaded, proces
+     reloader = not no_reloader
+     evalex = not no_evalex
+     run_simple(
++        app,
+         hostname,
+         port,
+-        app,
+         use_reloader=reloader,
+         use_debugger=debugger,
+         use_evalex=evalex,
+diff --git a/examples/shortly/shortly.py b/examples/shortly/shortly.py
+index 5205f226..6f04399a 100644
+--- a/examples/shortly/shortly.py
++++ b/examples/shortly/shortly.py
+@@ -136,4 +136,4 @@ if __name__ == "__main__":
+     from werkzeug.serving import run_simple
+ 
+     app = create_app()
+-    run_simple("127.0.0.1", 5000, app, use_debugger=True, use_reloader=True)
++    run_simple(app, "127.0.0.1", 5000, use_debugger=True, use_reloader=True)
+diff --git a/examples/upload.py b/examples/upload.py
+index 28a55f68..02cee0f7 100644
+--- a/examples/upload.py
++++ b/examples/upload.py
+@@ -34,4 +34,4 @@ def application(environ, start_response):
+ 
+ 
+ if __name__ == "__main__":
+-    run_simple("localhost", 5000, application, use_debugger=True)
++    run_simple(application, "localhost", 5000, use_debugger=True)
+diff --git a/examples/wsecho.py b/examples/wsecho.py
+index 23223c97..2dcb407f 100644
+--- a/examples/wsecho.py
++++ b/examples/wsecho.py
+@@ -76,4 +76,4 @@ def websocket(request):
+ 
+ 
+ if __name__ == "__main__":
+-    run_simple("localhost", 5000, websocket)
++    run_simple(websocket, "localhost", 5000)
+diff --git a/src/werkzeug/serving.py b/src/werkzeug/serving.py
+index 875792fa..58af470d 100644
+--- a/src/werkzeug/serving.py
++++ b/src/werkzeug/serving.py
+@@ -962,9 +962,9 @@ def is_running_from_reloader() -> bool:
+ 
+ 
+ def run_simple(
++    application: WSGIApplication,
+     hostname: str,
+     port: int,
+-    application: WSGIApplication,
+     use_reloader: bool = False,
+     use_debugger: bool = False,
+     use_evalex: bool = True,
+@@ -988,12 +988,12 @@ def run_simple(
+         It is intended for use only during local development. It is not
+         designed to be particularly efficient, stable, or secure.
+ 
++    :param application: The WSGI application to run.
+     :param hostname: The host to bind to, for example ``'localhost'``.
+         Can be a domain, IPv4 or IPv6 address, or file path starting
+         with ``unix://`` for a Unix socket.
+     :param port: The port to bind to, for example ``8080``. Using ``0``
+         tells the OS to pick a random free port.
+-    :param application: The WSGI application to run.
+     :param use_reloader: Use a reloader process to restart the server
+         process when files are changed.
+     :param use_debugger: Use Werkzeug's debugger, which will show
+diff --git a/src/werkzeug/testapp.py b/src/werkzeug/testapp.py
+index 2484f03e..27606c6c 100644
+--- a/src/werkzeug/testapp.py
++++ b/src/werkzeug/testapp.py
+@@ -130,7 +130,7 @@ def test_app(req: Request) -> Response:
+ 
+         >>> from werkzeug.serving import run_simple
+         >>> from werkzeug.testapp import test_app
+-        >>> run_simple('localhost', 3000, test_app)
++        >>> run_simple(test_app, 'localhost', 3000)
+          * Running on http://localhost:3000/
+ 
+     The application displays important information from the WSGI environment,
+@@ -203,4 +203,4 @@ def _get_werkzeug_version() -> str:
+ if __name__ == "__main__":
+     from .serving import run_simple
+ 
+-    run_simple("localhost", 5000, test_app, use_reloader=True)
++    run_simple(test_app, "localhost", 5000, use_reloader=True)
+diff --git a/tests/test_serving.py b/tests/test_serving.py
+index f0b5ee97..3fd38b7d 100644
+--- a/tests/test_serving.py
++++ b/tests/test_serving.py
+@@ -209,7 +209,7 @@ def test_content_type_and_length(standard_app: DevServerClient) -> None:
+ 
+ def test_port_is_int() -> None:
+     with pytest.raises(TypeError, match="port must be an integer"):
+-        run_simple("127.0.0.1", "5000", None)  # type: ignore[arg-type]
++        run_simple(None, "127.0.0.1", "5000")  # type: ignore[arg-type]
+ 
+ 
+ @pytest.mark.parametrize("send_length", [False, True])

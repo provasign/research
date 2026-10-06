@@ -1,0 +1,119 @@
+diff --git a/src/werkzeug/routing/converters.py b/src/werkzeug/routing/converters.py
+index 348f8888..c9393e64 100644
+--- a/src/werkzeug/routing/converters.py
++++ b/src/werkzeug/routing/converters.py
+@@ -40,7 +40,7 @@ class BaseConverter:
+     def to_python(self, value: str) -> t.Any:
+         return value
+ 
+-    def to_url(self, value: t.Any) -> str:
++    def encode_value(self, value: t.Any) -> str:
+         # safe = https://url.spec.whatwg.org/#url-path-segment-string
+         return quote(str(value), safe="!$&'()*+,/:;=@")
+ 
+@@ -101,7 +101,7 @@ class AnyConverter(BaseConverter):
+         self.items = set(items)
+         self.regex = f"(?:{'|'.join([re.escape(x) for x in items])})"
+ 
+-    def to_url(self, value: t.Any) -> str:
++    def encode_value(self, value: t.Any) -> str:
+         if value in self.items:
+             return str(value)
+ 
+@@ -159,7 +159,7 @@ class NumberConverter(BaseConverter):
+             raise ValidationError()
+         return value_num
+ 
+-    def to_url(self, value: t.Any) -> str:
++    def encode_value(self, value: t.Any) -> str:
+         value_str = str(self.num_convert(value))
+         if self.fixed_digits:
+             value_str = value_str.zfill(self.fixed_digits)
+@@ -229,7 +229,7 @@ class FloatConverter(NumberConverter):
+     ) -> None:
+         super().__init__(map, min=min, max=max, signed=signed)  # type: ignore
+ 
+-    def to_url(self, value: t.Any) -> str:
++    def encode_value(self, value: t.Any) -> str:
+         # f format ensures no scientific notation, but forces trailing zeroes
+         return f"{self.num_convert(value):f}".rstrip("0")
+ 
+@@ -252,7 +252,7 @@ class UUIDConverter(BaseConverter):
+     def to_python(self, value: str) -> uuid.UUID:
+         return uuid.UUID(value)
+ 
+-    def to_url(self, value: uuid.UUID) -> str:
++    def encode_value(self, value: uuid.UUID) -> str:
+         return str(value)
+ 
+ 
+diff --git a/src/werkzeug/routing/map.py b/src/werkzeug/routing/map.py
+index e4f3aae5..8c6b0094 100644
+--- a/src/werkzeug/routing/map.py
++++ b/src/werkzeug/routing/map.py
+@@ -681,7 +681,7 @@ class MapAdapter:
+ 
+                     def _handle_match(match: t.Match[str]) -> str:
+                         value = rv[match.group(1)]
+-                        return rule._converters[match.group(1)].to_url(value)
++                        return rule._converters[match.group(1)].encode_value(value)
+ 
+                     redirect_url = _simple_rule_re.sub(_handle_match, rule.redirect_to)
+                 else:
+diff --git a/src/werkzeug/routing/rules.py b/src/werkzeug/routing/rules.py
+index 2ffffe76..234519b6 100644
+--- a/src/werkzeug/routing/rules.py
++++ b/src/werkzeug/routing/rules.py
+@@ -311,7 +311,7 @@ def _prefix_names(src: str, expected_type: type[_ASTT]) -> _ASTT:
+     return tree
+ 
+ 
+-_CALL_CONVERTER_CODE_FMT = "self._converters[{elem!r}].to_url()"
++_CALL_CONVERTER_CODE_FMT = "self._converters[{elem!r}].encode_value()"
+ _IF_KWARGS_URL_ENCODE_CODE = """\
+ if kwargs:
+     params = self._encode_query_vars(kwargs)
+@@ -752,7 +752,7 @@ class Rule(RuleFactory):
+             # if a default is given for a value that appears in the rule,
+             # resolve it to a constant ahead of time
+             if is_dynamic and data in defaults:
+-                data = self._converters[data].to_url(defaults[data])
++                data = self._converters[data].encode_value(defaults[data])
+                 opl.append((False, data))
+             elif not is_dynamic:
+                 # safe = https://url.spec.whatwg.org/#url-path-segment-string
+diff --git a/tests/test_routing.py b/tests/test_routing.py
+index 303855c3..1a954dd4 100644
+--- a/tests/test_routing.py
++++ b/tests/test_routing.py
+@@ -889,7 +889,7 @@ def test_converter_with_tuples():
+             one, two = two_values.split("/")
+             return one, two
+ 
+-        def to_url(self, values):
++        def encode_value(self, values):
+             return f"{values[0]}/{values[1]}"
+ 
+     map = r.Map(
+@@ -982,8 +982,8 @@ def test_part_isolating_default() -> None:
+ )
+ def test_build_values_dict(endpoint, value, expect):
+     class ListConverter(r.BaseConverter):
+-        def to_url(self, value: t.Any) -> str:
+-            return super().to_url(".".join(map(str, value)))
++        def encode_value(self, value: t.Any) -> str:
++            return super().encode_value(".".join(map(str, value)))
+ 
+     url_map = r.Map(
+         [r.Rule("/<int:v>", endpoint="int"), r.Rule("/<list:v>", endpoint="list")],
+@@ -1014,8 +1014,8 @@ def test_build_values_dict(endpoint, value, expect):
+ )
+ def test_build_values_multidict(endpoint, value, expect):
+     class ListConverter(r.BaseConverter):
+-        def to_url(self, value: t.Any) -> str:
+-            return super().to_url(".".join(map(str, value)))
++        def encode_value(self, value: t.Any) -> str:
++            return super().encode_value(".".join(map(str, value)))
+ 
+     url_map = r.Map(
+         [r.Rule("/<int:v>", endpoint="int"), r.Rule("/<list:v>", endpoint="list")],

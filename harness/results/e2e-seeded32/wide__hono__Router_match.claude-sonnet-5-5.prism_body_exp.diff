@@ -1,0 +1,428 @@
+diff --git a/benchmarks/routers-deno/src/hono.mts b/benchmarks/routers-deno/src/hono.mts
+index 66cfed8a..3716c981 100644
+--- a/benchmarks/routers-deno/src/hono.mts
++++ b/benchmarks/routers-deno/src/hono.mts
+@@ -12,7 +12,7 @@ const createHonoRouter = (name: string, router: Router<unknown>): RouterInterfac
+   return {
+     name: `Hono ${name}`,
+     match: (route) => {
+-      router.match(route.method, route.path)
++      router.matchRoute(route.method, route.path)
+     },
+   }
+ }
+diff --git a/benchmarks/routers/src/bench-includes-init.mts b/benchmarks/routers/src/bench-includes-init.mts
+index bd7ba218..8c927aea 100644
+--- a/benchmarks/routers/src/bench-includes-init.mts
++++ b/benchmarks/routers/src/bench-includes-init.mts
+@@ -63,28 +63,28 @@ for (const benchRoute of benchRoutes) {
+       for (const route of routes) {
+         router.add(route.method, route.path, () => {})
+       }
+-      router.match(benchRoute.method, benchRoute.path)
++      router.matchRoute(benchRoute.method, benchRoute.path)
+     })
+     bench('PreparedRegExpRouter', () => {
+       const router = new PreparedRegExpRouter(preparedParams[0], preparedParams[1])
+       for (const route of routes) {
+         router.add(route.method, route.path, () => {})
+       }
+-      router.match(benchRoute.method, benchRoute.path)
++      router.matchRoute(benchRoute.method, benchRoute.path)
+     })
+     bench('TrieRouter', () => {
+       const router = new TrieRouter()
+       for (const route of routes) {
+         router.add(route.method, route.path, () => {})
+       }
+-      router.match(benchRoute.method, benchRoute.path)
++      router.matchRoute(benchRoute.method, benchRoute.path)
+     })
+     bench('LinearRouter', () => {
+       const router = new LinearRouter()
+       for (const route of routes) {
+         router.add(route.method, route.path, () => {})
+       }
+-      router.match(benchRoute.method, benchRoute.path)
++      router.matchRoute(benchRoute.method, benchRoute.path)
+     })
+     bench('MedleyRouter', () => {
+       const router = new MedleyRouter()
+diff --git a/benchmarks/routers/src/hono.mts b/benchmarks/routers/src/hono.mts
+index 66cfed8a..3716c981 100644
+--- a/benchmarks/routers/src/hono.mts
++++ b/benchmarks/routers/src/hono.mts
+@@ -12,7 +12,7 @@ const createHonoRouter = (name: string, router: Router<unknown>): RouterInterfac
+   return {
+     name: `Hono ${name}`,
+     match: (route) => {
+-      router.match(route.method, route.path)
++      router.matchRoute(route.method, route.path)
+     },
+   }
+ }
+diff --git a/src/helper/dev/index.ts b/src/helper/dev/index.ts
+index d7891dfd..4ca4b70a 100644
+--- a/src/helper/dev/index.ts
++++ b/src/helper/dev/index.ts
+@@ -74,6 +74,6 @@ export const showRoutes = <E extends Env>(hono: Hono<E>, opts?: ShowRoutesOption
+ }
+ 
+ export const getRouterName = <E extends Env>(app: Hono<E>): string => {
+-  app.router.match('GET', '/')
++  app.router.matchRoute('GET', '/')
+   return app.router.name
+ }
+diff --git a/src/hono-base.ts b/src/hono-base.ts
+index 387fe89b..2487bb4c 100644
+--- a/src/hono-base.ts
++++ b/src/hono-base.ts
+@@ -418,7 +418,7 @@ class Hono<
+     }
+ 
+     const path = this.getPath(request, { env })
+-    const matchResult = this.router.match(method, path)
++    const matchResult = this.router.matchRoute(method, path)
+ 
+     const c = new Context(request, {
+       path,
+diff --git a/src/middleware/combine/index.ts b/src/middleware/combine/index.ts
+index b148dfd4..115daf55 100644
+--- a/src/middleware/combine/index.ts
++++ b/src/middleware/combine/index.ts
+@@ -157,7 +157,7 @@ export const except = (
+     .filter(Boolean) as Condition[]
+ 
+   if (router) {
+-    conditions.unshift((c: Context) => !!router?.match(METHOD_NAME_ALL, c.req.path)?.[0]?.[0]?.[0])
++    conditions.unshift((c: Context) => !!router?.matchRoute(METHOD_NAME_ALL, c.req.path)?.[0]?.[0]?.[0])
+   }
+ 
+   const handler = some((c: Context) => conditions.some((cond) => cond(c)), every(...middleware))
+diff --git a/src/middleware/method-not-allowed/index.ts b/src/middleware/method-not-allowed/index.ts
+index 425d6bf4..28ec8b65 100644
+--- a/src/middleware/method-not-allowed/index.ts
++++ b/src/middleware/method-not-allowed/index.ts
+@@ -118,7 +118,7 @@ export const methodNotAllowed = <E extends Env = Env>(
+     }
+ 
+     const allowedMethods = new Set<string>()
+-    for (const [methods] of methodRouter.match(METHOD_NAME_ALL, requestPath)[0]) {
++    for (const [methods] of methodRouter.matchRoute(METHOD_NAME_ALL, requestPath)[0]) {
+       for (const method of methods) {
+         allowedMethods.add(method)
+       }
+diff --git a/src/router.ts b/src/router.ts
+index ec12588a..12b38315 100644
+--- a/src/router.ts
++++ b/src/router.ts
+@@ -48,7 +48,7 @@ export interface Router<T> {
+    * @param path - The path to match.
+    * @returns The result of the match.
+    */
+-  match(method: string, path: string): Result<T>
++  matchRoute(method: string, path: string): Result<T>
+ }
+ 
+ /**
+diff --git a/src/router/common.case.test.ts b/src/router/common.case.test.ts
+index 907f3d01..efa2d9ac 100644
+--- a/src/router/common.case.test.ts
++++ b/src/router/common.case.test.ts
+@@ -38,7 +38,7 @@ export const runTest = ({
+ 
+       router = newRouter()
+       match = (method: string, path: string) => {
+-        const [matchRes, stash] = router.match(method, path)
++        const [matchRes, stash] = router.matchRoute(method, path)
+         const res = matchRes.map((r) =>
+           stash
+             ? {
+@@ -291,7 +291,7 @@ export const runTest = ({
+         router.add('GET', '/posts/:id/comments/:comment_id', 'foo')
+         router.add('GET', '/posts/:id', 'bar')
+         expect(() => {
+-          router.match('GET', '/')
++          router.matchRoute('GET', '/')
+         }).not.toThrow()
+       })
+     })
+diff --git a/src/router/linear-router/router.test.ts b/src/router/linear-router/router.test.ts
+index ed8404bd..70a89957 100644
+--- a/src/router/linear-router/router.test.ts
++++ b/src/router/linear-router/router.test.ts
+@@ -44,7 +44,7 @@ describe('LinearRouter', () => {
+ 
+       it('GET /entry/123/show', () => {
+         expect(() => {
+-          router.match('GET', '/entry/123/show')
++          router.matchRoute('GET', '/entry/123/show')
+         }).toThrowError(UnsupportedPathError)
+       })
+     })
+@@ -59,7 +59,7 @@ describe('LinearRouter', () => {
+     })
+ 
+     it('GET /book/', () => {
+-      const [res] = router.match('GET', '/book/')
++      const [res] = router.matchRoute('GET', '/book/')
+       expect(res.length).toBe(1)
+       expect(res[0][0]).toBe('GET /book')
+     })
+@@ -73,7 +73,7 @@ describe('LinearRouter', () => {
+     })
+ 
+     it('GET /products/list', () => {
+-      const [res] = router.match('GET', '/products/list')
++      const [res] = router.matchRoute('GET', '/products/list')
+       expect(res.length).toBe(0)
+     })
+   })
+diff --git a/src/router/linear-router/router.ts b/src/router/linear-router/router.ts
+index 63a30032..cf1c84e5 100644
+--- a/src/router/linear-router/router.ts
++++ b/src/router/linear-router/router.ts
+@@ -22,7 +22,7 @@ export class LinearRouter<T> implements Router<T> {
+     }
+   }
+ 
+-  match(method: string, path: string): Result<T> {
++  matchRoute(method: string, path: string): Result<T> {
+     const handlers: [T, Params][] = []
+     ROUTES_LOOP: for (let i = 0, len = this.#routes.length; i < len; i++) {
+       const [routeMethod, routePath, handler] = this.#routes[i]
+diff --git a/src/router/pattern-router/router.test.ts b/src/router/pattern-router/router.test.ts
+index 847845e8..fe8bf407 100644
+--- a/src/router/pattern-router/router.test.ts
++++ b/src/router/pattern-router/router.test.ts
+@@ -34,7 +34,7 @@ describe('Pattern', () => {
+     })
+ 
+     it('GET /book/', () => {
+-      const [res] = router.match('GET', '/book/')
++      const [res] = router.matchRoute('GET', '/book/')
+       expect(res.length).toBe(1)
+       expect(res[0][0]).toBe('GET /book')
+     })
+diff --git a/src/router/pattern-router/router.ts b/src/router/pattern-router/router.ts
+index 1b016232..78fe848c 100644
+--- a/src/router/pattern-router/router.ts
++++ b/src/router/pattern-router/router.ts
+@@ -35,7 +35,7 @@ export class PatternRouter<T> implements Router<T> {
+     }
+   }
+ 
+-  match(method: string, path: string): Result<T> {
++  matchRoute(method: string, path: string): Result<T> {
+     const handlers: [T, Params][] = []
+ 
+     for (let i = 0, len = this.#routes.length; i < len; i++) {
+diff --git a/src/router/reg-exp-router/matcher.ts b/src/router/reg-exp-router/matcher.ts
+index cfa862b6..ae023fc2 100644
+--- a/src/router/reg-exp-router/matcher.ts
++++ b/src/router/reg-exp-router/matcher.ts
+@@ -26,8 +26,8 @@ export function match<R extends Router<T>, T>(this: R, method: string, path: str
+ 
+     const index = match.indexOf('', 1)
+     return [matcher[1][index], match]
+-  }) as Router<T>['match']
++  }) as Router<T>['matchRoute']
+ 
+-  this.match = match
++  this.matchRoute = match
+   return match(method, path)
+ }
+diff --git a/src/router/reg-exp-router/prepared-router.test.ts b/src/router/reg-exp-router/prepared-router.test.ts
+index 8e561e99..19e755bf 100644
+--- a/src/router/reg-exp-router/prepared-router.test.ts
++++ b/src/router/reg-exp-router/prepared-router.test.ts
+@@ -30,7 +30,7 @@ describe('PreparedRegExpRouter', async () => {
+         add: (method: string, path: string, handler: T) => {
+           routes.push([method, path, handler])
+         },
+-        match: (method: string, path: string) => {
++        matchRoute: (method: string, path: string) => {
+           if (!router) {
+             const serialized = serializeInitParams(
+               buildInitParams({
+@@ -44,7 +44,7 @@ describe('PreparedRegExpRouter', async () => {
+               router.add(...route)
+             }
+           }
+-          return router.match(method, path)
++          return router.matchRoute(method, path)
+         },
+       }
+     },
+@@ -57,7 +57,7 @@ describe('PreparedRegExpRouter', async () => {
+       })
+       const router = new PreparedRegExpRouter(...params)
+       router.add('GET', '/hello', 'get hello')
+-      expect(router.match('GET', '/hello')).toEqual([[['get hello', {}]], []])
++      expect(router.matchRoute('GET', '/hello')).toEqual([[['get hello', {}]], []])
+     })
+ 
+     it('should throw an error if the path is not pre-registered', () => {
+diff --git a/src/router/reg-exp-router/prepared-router.ts b/src/router/reg-exp-router/prepared-router.ts
+index 5b0fed71..1028f56e 100644
+--- a/src/router/reg-exp-router/prepared-router.ts
++++ b/src/router/reg-exp-router/prepared-router.ts
+@@ -89,7 +89,7 @@ export class PreparedRegExpRouter<T> implements Router<T> {
+     return this.#matchers
+   }
+ 
+-  match: typeof match<Router<T>, T> = match
++  matchRoute: typeof match<Router<T>, T> = match
+ }
+ 
+ export const buildInitParams: (params: {
+diff --git a/src/router/reg-exp-router/router.test.ts b/src/router/reg-exp-router/router.test.ts
+index 1d768e43..e1ab2152 100644
+--- a/src/router/reg-exp-router/router.test.ts
++++ b/src/router/reg-exp-router/router.test.ts
+@@ -30,7 +30,7 @@ describe('RegExpRouter', () => {
+       const router = new RegExpRouter<string>()
+       router.add('GET', '/posts/:id', 'get post')
+ 
+-      const [res, stash] = router.match('GET', '/posts/1')
++      const [res, stash] = router.matchRoute('GET', '/posts/1')
+       expect(res.length).toBe(1)
+       expect(res).toEqual([['get post', { id: 1 }]])
+       expect((stash as ParamStash)[1]).toBe('1')
+@@ -130,8 +130,8 @@ describe('RegExpRouter', () => {
+       router.add('GET', '/reg-exp/router', 'foo')
+       router.add('POST', '/reg-exp/:id', 'bar')
+ 
+-      expect(router.match('GET', '/reg-exp/router')[0][0][0]).toBe('foo')
+-      expect(router.match('POST', '/reg-exp/router')[0][0][0]).toBe('bar')
++      expect(router.matchRoute('GET', '/reg-exp/router')[0][0][0]).toBe('foo')
++      expect(router.matchRoute('POST', '/reg-exp/router')[0][0][0]).toBe('bar')
+     })
+ 
+     describe('Capture Group', () => {
+@@ -152,7 +152,7 @@ describe('RegExpRouter', () => {
+       router.add('GET', '/api/:x', 'label')
+       router.add('GET', '/api/*', 'wildcard')
+ 
+-      const [res] = router.match('GET', '/api/foo')
++      const [res] = router.matchRoute('GET', '/api/foo')
+       expect(res.length).toBe(2)
+       expect(res[0][0]).toBe('label')
+       expect(res[1][0]).toBe('wildcard')
+@@ -167,7 +167,7 @@ describe('RegExpRouter', () => {
+         for (const path of paths) {
+           router.add('GET', path, path)
+         }
+-        const [res] = router.match('GET', '/a')
++        const [res] = router.matchRoute('GET', '/a')
+         expect(res[0][0]).toBe('/a*')
+       }
+     })
+@@ -179,7 +179,7 @@ describe('RegExpRouter', () => {
+       router.add('GET', '/a/c', 'static')
+       router.add('GET', '/:x{a}/b', 'pattern')
+ 
+-      const [res, stash] = router.match('GET', '/a/b')
++      const [res, stash] = router.matchRoute('GET', '/a/b')
+       expect(res.length).toBe(1)
+       expect(res[0][0]).toBe('pattern')
+       expect((stash as ParamStash)[(res[0][1] as ParamIndexMap)['x']]).toBe('a')
+@@ -207,8 +207,8 @@ describe('RegExpRouter', () => {
+         for (const path of paths) {
+           router.add('GET', path, path)
+         }
+-        expect(router.match('GET', '/foo/bar')[0][0][0]).toBe('/foo/bar')
+-        expect(router.match('GET', '/b')[0][0][0]).toBe('/:y{b}')
++        expect(router.matchRoute('GET', '/foo/bar')[0][0][0]).toBe('/foo/bar')
++        expect(router.matchRoute('GET', '/b')[0][0][0]).toBe('/:y{b}')
+       }
+     })
+ 
+@@ -221,8 +221,8 @@ describe('RegExpRouter', () => {
+         for (const path of paths) {
+           router.add('GET', path, path)
+         }
+-        expect(router.match('GET', '/a')[0][0][0]).toBe('/:x{a}')
+-        expect(router.match('GET', '/foo/v')[0][0][0]).toBe('/foo/:p')
++        expect(router.matchRoute('GET', '/a')[0][0][0]).toBe('/:x{a}')
++        expect(router.matchRoute('GET', '/foo/v')[0][0][0]).toBe('/foo/:p')
+       }
+     })
+ 
+@@ -240,7 +240,7 @@ describe('RegExpRouter', () => {
+       router.add('GET', '/w/*/x', 'wildcard')
+       router.add('GET', '/w/:id/y', 'label')
+ 
+-      const [res, stash] = router.match('GET', '/w/123/y')
++      const [res, stash] = router.matchRoute('GET', '/w/123/y')
+       expect(res.length).toBe(1)
+       expect(res[0][0]).toBe('label')
+       expect((stash as ParamStash)[(res[0][1] as ParamIndexMap)['id']]).toBe('123')
+@@ -257,8 +257,8 @@ describe('RegExpRouter', () => {
+         for (const path of paths) {
+           router.add('GET', path, path)
+         }
+-        expect(router.match('GET', '/v1/name:activate')[0][0][0]).toBe('/v1/name:activate')
+-        expect(router.match('GET', '/v1/name2')[0][0][0]).toBe('/v1/name2')
++        expect(router.matchRoute('GET', '/v1/name:activate')[0][0][0]).toBe('/v1/name:activate')
++        expect(router.matchRoute('GET', '/v1/name2')[0][0][0]).toBe('/v1/name2')
+       }
+     })
+   })
+diff --git a/src/router/reg-exp-router/router.ts b/src/router/reg-exp-router/router.ts
+index 528d5b44..71a6a778 100644
+--- a/src/router/reg-exp-router/router.ts
++++ b/src/router/reg-exp-router/router.ts
+@@ -126,7 +126,7 @@ export class RegExpRouter<T> implements Router<T> {
+     }
+   }
+ 
+-  match: typeof match<Router<T>, T> = match
++  matchRoute: typeof match<Router<T>, T> = match
+ 
+   protected buildAllMatchers(): MatcherMap<T> {
+     const matchers: MatcherMap<T> = createNullObject()
+diff --git a/src/router/smart-router/router.ts b/src/router/smart-router/router.ts
+index 9ec464da..3ce6d0b2 100644
+--- a/src/router/smart-router/router.ts
++++ b/src/router/smart-router/router.ts
+@@ -18,7 +18,7 @@ export class SmartRouter<T> implements Router<T> {
+     this.#routes.push([method, path, handler])
+   }
+ 
+-  match(method: string, path: string): Result<T> {
++  matchRoute(method: string, path: string): Result<T> {
+     if (!this.#routes) {
+       throw new Error('Fatal error')
+     }
+@@ -35,7 +35,7 @@ export class SmartRouter<T> implements Router<T> {
+         for (let i = 0, len = routes.length; i < len; i++) {
+           router.add(...routes[i])
+         }
+-        res = router.match(method, path)
++        res = router.matchRoute(method, path)
+       } catch (e) {
+         if (e instanceof UnsupportedPathError) {
+           continue
+@@ -43,7 +43,7 @@ export class SmartRouter<T> implements Router<T> {
+         throw e
+       }
+ 
+-      this.match = router.match.bind(router)
++      this.matchRoute = router.matchRoute.bind(router)
+       this.#routers = [router]
+       this.#routes = undefined
+       break
+diff --git a/src/router/trie-router/router.ts b/src/router/trie-router/router.ts
+index 403bacb3..c6e274a6 100644
+--- a/src/router/trie-router/router.ts
++++ b/src/router/trie-router/router.ts
+@@ -12,7 +12,7 @@ export class TrieRouter<T> implements Router<T> {
+     }
+   }
+ 
+-  match(method: string, path: string): Result<T> {
++  matchRoute(method: string, path: string): Result<T> {
+     return this.#node.search(method, path)
+   }
+ }

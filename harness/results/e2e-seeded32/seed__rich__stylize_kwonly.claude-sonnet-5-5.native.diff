@@ -1,0 +1,128 @@
+diff --git a/docs/source/highlighting.rst b/docs/source/highlighting.rst
+index 642afc9e..2c8f0fcd 100644
+--- a/docs/source/highlighting.rst
++++ b/docs/source/highlighting.rst
+@@ -53,7 +53,7 @@ Here's a silly example that highlights every character with a different color::
+     class RainbowHighlighter(Highlighter):
+         def highlight(self, text):
+             for index in range(len(text)):
+-                text.stylize(f"color({randint(16, 255)})", index, index + 1)
++                text.stylize(f"color({randint(16, 255)})", start=index, end=index + 1)
+ 
+ 
+     rainbow = RainbowHighlighter()
+diff --git a/docs/source/text.rst b/docs/source/text.rst
+index c5a1add8..c2195ad6 100644
+--- a/docs/source/text.rst
++++ b/docs/source/text.rst
+@@ -14,7 +14,7 @@ One way to add a style to Text is the :meth:`~rich.text.Text.stylize` method whi
+ 
+     console = Console()
+     text = Text("Hello, World!")
+-    text.stylize("bold magenta", 0, 6)
++    text.stylize("bold magenta", start=0, end=6)
+     console.print(text)
+ 
+ This will print "Hello, World!" to the terminal, with the first word in bold magenta.
+diff --git a/examples/rainbow.py b/examples/rainbow.py
+index 2121a786..20dba048 100644
+--- a/examples/rainbow.py
++++ b/examples/rainbow.py
+@@ -13,7 +13,7 @@ from rich.highlighter import Highlighter
+ class RainbowHighlighter(Highlighter):
+     def highlight(self, text):
+         for index in range(len(text)):
+-            text.stylize(f"color({randint(16, 255)})", index, index + 1)
++            text.stylize(f"color({randint(16, 255)})", start=index, end=index + 1)
+ 
+ 
+ rainbow = RainbowHighlighter()
+diff --git a/rich/syntax.py b/rich/syntax.py
+index 8c8f8315..79ac5496 100644
+--- a/rich/syntax.py
++++ b/rich/syntax.py
+@@ -818,7 +818,7 @@ class Syntax(JupyterMixin):
+                 if stylized_range.style_before:
+                     text.stylize_before(stylized_range.style, start, end)
+                 else:
+-                    text.stylize(stylized_range.style, start, end)
++                    text.stylize(stylized_range.style, start=start, end=end)
+ 
+     def _process_code(self, code: str) -> Tuple[bool, str]:
+         """
+diff --git a/rich/text.py b/rich/text.py
+index 7e087a4e..7313d446 100644
+--- a/rich/text.py
++++ b/rich/text.py
+@@ -457,6 +457,7 @@ class Text(JupyterMixin):
+     def stylize(
+         self,
+         style: Union[str, Style],
++        *,
+         start: int = 0,
+         end: Optional[int] = None,
+     ) -> None:
+@@ -1323,7 +1324,7 @@ class Text(JupyterMixin):
+             full_indents, remaining_space = divmod(len(indent), _indent_size)
+             new_indent = f"{indent_line * full_indents}{' ' * remaining_space}"
+             line.plain = new_indent + line.plain[len(new_indent) :]
+-            line.stylize(style, 0, len(new_indent))
++            line.stylize(style, start=0, end=len(new_indent))
+             if blank_lines:
+                 new_lines.extend([Text(new_indent, style=style)] * blank_lines)
+                 blank_lines = 0
+diff --git a/rich/traceback.py b/rich/traceback.py
+index 66eaecaa..952bd5db 100644
+--- a/rich/traceback.py
++++ b/rich/traceback.py
+@@ -741,7 +741,7 @@ class Traceback:
+         syntax_error_text = highlighter(syntax_error.line.rstrip())
+         syntax_error_text.no_wrap = True
+         offset = min(syntax_error.offset - 1, len(syntax_error_text))
+-        syntax_error_text.stylize("bold underline", offset, offset)
++        syntax_error_text.stylize("bold underline", start=offset, end=offset)
+         syntax_error_text += Text.from_markup(
+             "\n" + " " * offset + "[traceback.offset]▲[/]",
+             style="pygments.text",
+diff --git a/tests/test_text.py b/tests/test_text.py
+index b6d39f59..73bfa352 100644
+--- a/tests/test_text.py
++++ b/tests/test_text.py
+@@ -140,22 +140,22 @@ def test_rstrip_end():
+ 
+ def test_stylize():
+     text = Text("Hello, World!")
+-    text.stylize("bold", 7, 11)
++    text.stylize("bold", start=7, end=11)
+     assert text._spans == [Span(7, 11, "bold")]
+-    text.stylize("bold", 20, 25)
++    text.stylize("bold", start=20, end=25)
+     assert text._spans == [Span(7, 11, "bold")]
+ 
+ 
+ def test_stylize_before():
+     text = Text("Hello, World!")
+-    text.stylize("bold", 0, 5)
++    text.stylize("bold", start=0, end=5)
+     text.stylize_before("italic", 2, 7)
+     assert text._spans == [Span(2, 7, "italic"), Span(0, 5, "bold")]
+ 
+ 
+ def test_stylize_negative_index():
+     text = Text("Hello, World!")
+-    text.stylize("bold", -6, -1)
++    text.stylize("bold", start=-6, end=-1)
+     assert text._spans == [Span(7, 12, "bold")]
+ 
+ 
+@@ -304,8 +304,8 @@ def test_set_length():
+     assert text == Text("Hello     ")
+ 
+     text = Text("Hello World")
+-    text.stylize("bold", 0, 5)
+-    text.stylize("italic", 7, 9)
++    text.stylize("bold", start=0, end=5)
++    text.stylize("italic", start=7, end=9)
+ 
+     text.set_length(3)
+     expected = Text()

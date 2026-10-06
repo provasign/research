@@ -1,0 +1,264 @@
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java b/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java
+index 5a3fef523..b661c76db 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java
+@@ -69,7 +69,7 @@ public abstract class BeanDeserializerBase
+      * to be used for deserializing from JSON Object.
+      *<p>
+      * NOTE: cannot be {@code final} because we need to get it during
+-     * {@code resolve()} method (and not contextualization).
++     * {@code resolveDependencies()} method (and not contextualization).
+      */
+     protected JsonDeserializer<Object> _delegateDeserializer;
+ 
+@@ -78,7 +78,7 @@ public abstract class BeanDeserializerBase
+      * is to be used for deserializing from JSON Object.
+      *<p>
+      * NOTE: cannot be {@code final} because we need to get it during
+-     * {@code resolve()} method (and not contextualization).
++     * {@code resolveDependencies()} method (and not contextualization).
+      */
+     protected JsonDeserializer<Object> _arrayDelegateDeserializer;
+ 
+@@ -514,7 +514,7 @@ public abstract class BeanDeserializerBase
+      * This is needed to handle recursive and transitive dependencies.
+      */
+     @Override
+-    public void resolve(DeserializationContext ctxt) throws JsonMappingException
++    public void resolveDependencies(DeserializationContext ctxt) throws JsonMappingException
+     {
+         ExternalTypeHandler.Builder extTypes = null;
+         // if ValueInstantiator can use "creator" approach, need to resolve it here...
+@@ -835,7 +835,7 @@ ClassUtil.getTypeDescription(_beanType), ClassUtil.classNameOf(_valueInstantiato
+     }
+ 
+     /**
+-     * Although most of post-processing is done in resolve(), we only get
++     * Although most of post-processing is done in resolveDependencies(), we only get
+      * access to referring property's annotations here; and this is needed
+      * to support per-property ObjectIds.
+      * We will also consider Shape transformations (read from Array) at this
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerFactory.java b/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerFactory.java
+index 48129a30f..604a1b2eb 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerFactory.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerFactory.java
+@@ -296,7 +296,7 @@ public class BeanDeserializerFactory
+             deserializer = builder.build();
+         }
+         // may have modifier(s) that wants to modify or replace serializer we just built
+-        // (note that `resolve()` and `createContextual()` called later on)
++        // (note that `resolveDependencies()` and `createContextual()` called later on)
+         if (_factoryConfig.hasDeserializerModifiers()) {
+             for (BeanDeserializerModifier mod : _factoryConfig.deserializerModifiers()) {
+                 deserializer = mod.modifyDeserializer(config, beanDesc, deserializer);
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/DefaultDeserializationContext.java b/src/main/java/com/fasterxml/jackson/databind/deser/DefaultDeserializationContext.java
+index 2386ed768..8bd2e827d 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/DefaultDeserializationContext.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/DefaultDeserializationContext.java
+@@ -250,7 +250,7 @@ public abstract class DefaultDeserializationContext
+         }
+         // First: need to resolve
+         if (deser instanceof ResolvableDeserializer) {
+-            ((ResolvableDeserializer) deser).resolve(this);
++            ((ResolvableDeserializer) deser).resolveDependencies(this);
+         }
+         return (JsonDeserializer<Object>) deser;
+     }
+@@ -291,7 +291,7 @@ public abstract class DefaultDeserializationContext
+         }
+         // First: need to resolve
+         if (deser instanceof ResolvableDeserializer) {
+-            ((ResolvableDeserializer) deser).resolve(this);
++            ((ResolvableDeserializer) deser).resolveDependencies(this);
+         }
+         return deser;
+     }
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/DeserializerCache.java b/src/main/java/com/fasterxml/jackson/databind/deser/DeserializerCache.java
+index f5325f759..72e7a4d11 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/DeserializerCache.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/DeserializerCache.java
+@@ -202,7 +202,7 @@ public final class DeserializerCache
+         }
+         // First: need to resolve?
+         if (kd instanceof ResolvableDeserializer) {
+-            ((ResolvableDeserializer) kd).resolve(ctxt);
++            ((ResolvableDeserializer) kd).resolveDependencies(ctxt);
+         }
+         return kd;
+     }
+@@ -345,7 +345,7 @@ public final class DeserializerCache
+         if (deser instanceof ResolvableDeserializer) {
+             _incompleteDeserializers.put(type, deser);
+             try {
+-                ((ResolvableDeserializer)deser).resolve(ctxt);
++                ((ResolvableDeserializer)deser).resolveDependencies(ctxt);
+             } finally {
+                 _incompleteDeserializers.remove(type);
+             }
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/Deserializers.java b/src/main/java/com/fasterxml/jackson/databind/deser/Deserializers.java
+index 0fd687d73..715017ce0 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/Deserializers.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/Deserializers.java
+@@ -176,7 +176,7 @@ public interface Deserializers
+      * Similarly, a {@link KeyDeserializer} may be passed, but this is only done if there is
+      * a specific configuration override (annotations) to indicate instance to use.
+      * Otherwise null is passed, and key deserializer needs to be obtained later during
+-     * resolution (using {@link ResolvableDeserializer#resolve}).
++     * resolution (using {@link ResolvableDeserializer#resolveDependencies}).
+      *
+      * @param type Type of {@link java.util.Map} instances to deserialize
+      * @param config Configuration in effect
+@@ -212,7 +212,7 @@ public interface Deserializers
+      * Similarly, a {@link KeyDeserializer} may be passed, but this is only done if there is
+      * a specific configuration override (annotations) to indicate instance to use.
+      * Otherwise null is passed, and key deserializer needs to be obtained later during
+-     * resolution (using {@link ResolvableDeserializer#resolve}).
++     * resolution (using {@link ResolvableDeserializer#resolveDependencies}).
+      *
+      * @param type Type of {@link java.util.Map} instances to deserialize
+      * @param config Configuration in effect
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/ResolvableDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/ResolvableDeserializer.java
+index ced8353a8..64e26f531 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/ResolvableDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/ResolvableDeserializer.java
+@@ -14,7 +14,7 @@ import com.fasterxml.jackson.databind.JsonMappingException;
+  * immediately) is to make it possible to cleanly handle self-references;
+  * otherwise it would be easy to get into infinite recursion.
+  *<p>
+- * Note that {@link #resolve} method does NOT allow returning anything
++ * Note that {@link #resolveDependencies} method does NOT allow returning anything
+  * (specifically, a new deserializer instance): reason for this is that
+  * allowing this would not work with proper handling of cyclic dependencies,
+  * which are resolved by two-phase processing, where initially constructed
+@@ -40,6 +40,6 @@ public interface ResolvableDeserializer
+      * @param ctxt Context to use for accessing configuration, resolving
+      *    secondary deserializers
+      */
+-    public abstract void resolve(DeserializationContext ctxt)
++    public abstract void resolveDependencies(DeserializationContext ctxt)
+         throws JsonMappingException;
+ }
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/DelegatingDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/DelegatingDeserializer.java
+index 7ffe50ae9..a04034ff5 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/DelegatingDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/DelegatingDeserializer.java
+@@ -55,9 +55,9 @@ public abstract class DelegatingDeserializer
+      */
+ 
+     @Override
+-    public void resolve(DeserializationContext ctxt) throws JsonMappingException {
++    public void resolveDependencies(DeserializationContext ctxt) throws JsonMappingException {
+         if (_delegatee instanceof ResolvableDeserializer) {
+-            ((ResolvableDeserializer) _delegatee).resolve(ctxt);
++            ((ResolvableDeserializer) _delegatee).resolveDependencies(ctxt);
+         }
+     }
+ 
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/EnumMapDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/EnumMapDeserializer.java
+index 773fa9c07..d6e29c160 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/EnumMapDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/EnumMapDeserializer.java
+@@ -127,7 +127,7 @@ public class EnumMapDeserializer
+      */
+ 
+     @Override
+-    public void resolve(DeserializationContext ctxt) throws JsonMappingException
++    public void resolveDependencies(DeserializationContext ctxt) throws JsonMappingException
+     {
+         // May need to resolve types for delegate- and/or property-based creators:
+         if (_valueInstantiator != null) {
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/MapDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/MapDeserializer.java
+index 98875853a..eef36f458 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/MapDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/MapDeserializer.java
+@@ -40,7 +40,7 @@ public class MapDeserializer
+     /**
+      * Key deserializer to use; either passed via constructor
+      * (when indicated by annotations), or resolved when
+-     * {@link #resolve} is called;
++     * {@link #resolveDependencies} is called;
+      */
+     protected final KeyDeserializer _keyDeserializer;
+ 
+@@ -267,7 +267,7 @@ public class MapDeserializer
+      */
+ 
+     @Override
+-    public void resolve(DeserializationContext ctxt) throws JsonMappingException
++    public void resolveDependencies(DeserializationContext ctxt) throws JsonMappingException
+     {
+         // May need to resolve types for delegate- and/or property-based creators:
+         if (_valueInstantiator.canCreateUsingDelegate()) {
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/StdDelegatingDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/StdDelegatingDeserializer.java
+index b13bb6beb..84d615ffc 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/StdDelegatingDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/StdDelegatingDeserializer.java
+@@ -128,13 +128,13 @@ public class StdDelegatingDeserializer<T>
+      */
+ 
+     // Note: unlikely to get called since most likely instances explicitly constructed;
+-    // if so, caller must ensure delegating deserializer is properly resolve()d.
++    // if so, caller must ensure delegating deserializer is properly resolveDependencies()d.
+     @Override
+-    public void resolve(DeserializationContext ctxt)
++    public void resolveDependencies(DeserializationContext ctxt)
+         throws JsonMappingException
+     {
+         if (_delegateDeserializer != null && _delegateDeserializer instanceof ResolvableDeserializer) {
+-            ((ResolvableDeserializer) _delegateDeserializer).resolve(ctxt);
++            ((ResolvableDeserializer) _delegateDeserializer).resolveDependencies(ctxt);
+         }
+     }
+ 
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/StdNodeBasedDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/StdNodeBasedDeserializer.java
+index 40b802c77..39517d9fe 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/StdNodeBasedDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/StdNodeBasedDeserializer.java
+@@ -49,7 +49,7 @@ public abstract class StdNodeBasedDeserializer<T>
+     }
+ 
+     @Override
+-    public void resolve(DeserializationContext ctxt) throws JsonMappingException {
++    public void resolveDependencies(DeserializationContext ctxt) throws JsonMappingException {
+         _treeDeserializer = ctxt.findRootValueDeserializer(ctxt.constructType(JsonNode.class));
+     }
+ 
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/UntypedObjectDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/UntypedObjectDeserializer.java
+index 761be9c52..f9c2fc90b 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/UntypedObjectDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/UntypedObjectDeserializer.java
+@@ -153,7 +153,7 @@ public class UntypedObjectDeserializer
+      */
+     @SuppressWarnings("unchecked")
+     @Override
+-    public void resolve(DeserializationContext ctxt) throws JsonMappingException
++    public void resolveDependencies(DeserializationContext ctxt) throws JsonMappingException
+     {
+         JavaType obType = ctxt.constructType(Object.class);
+         JavaType stringType = ctxt.constructType(String.class);
+diff --git a/src/test/java/com/fasterxml/jackson/databind/deser/DeserConcurrencyTest.java b/src/test/java/com/fasterxml/jackson/databind/deser/DeserConcurrencyTest.java
+index 909324dbc..801935995 100644
+--- a/src/test/java/com/fasterxml/jackson/databind/deser/DeserConcurrencyTest.java
++++ b/src/test/java/com/fasterxml/jackson/databind/deser/DeserConcurrencyTest.java
+@@ -50,7 +50,7 @@ public class DeserConcurrencyTest
+         }
+ 
+         @Override
+-        public void resolve(DeserializationContext ctxt)
++        public void resolveDependencies(DeserializationContext ctxt)
+         {
+             try {
+                 Thread.sleep(100L);
+diff --git a/src/test/java/com/fasterxml/jackson/databind/misc/ThreadSafetyWithConverterMixin5813Test.java b/src/test/java/com/fasterxml/jackson/databind/misc/ThreadSafetyWithConverterMixin5813Test.java
+index 986581231..c74c4dabe 100644
+--- a/src/test/java/com/fasterxml/jackson/databind/misc/ThreadSafetyWithConverterMixin5813Test.java
++++ b/src/test/java/com/fasterxml/jackson/databind/misc/ThreadSafetyWithConverterMixin5813Test.java
+@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
+  * When multiple threads serialize the same object using the same {@link JsonMapper}, the
+  * property-level converter may be silently replaced by the class-level converter due to
+  * unresolved serializers being read from the shared {@code SerializerCache} before
+- * {@code resolve()} completes.
++ * {@code resolveDependencies()} completes.
+  */
+ public class ThreadSafetyWithConverterMixin5813Test
+         extends DatabindTestUtil

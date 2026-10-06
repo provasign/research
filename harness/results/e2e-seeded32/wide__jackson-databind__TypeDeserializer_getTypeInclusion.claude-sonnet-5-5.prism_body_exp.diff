@@ -1,0 +1,91 @@
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java b/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java
+index 5a3fef523..39ce998dc 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java
+@@ -613,7 +613,7 @@ public abstract class BeanDeserializerBase
+             // it needs different handling altogether
+             if (prop.hasValueTypeDeserializer()) {
+                 TypeDeserializer typeDeser = prop.getValueTypeDeserializer();
+-                if (typeDeser.getTypeInclusion() == JsonTypeInfo.As.EXTERNAL_PROPERTY) {
++                if (typeDeser.inclusionMechanism() == JsonTypeInfo.As.EXTERNAL_PROPERTY) {
+                     if (extTypes == null) {
+                         extTypes = ExternalTypeHandler.builder(_beanType);
+                     }
+diff --git a/src/main/java/com/fasterxml/jackson/databind/jsontype/TypeDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/jsontype/TypeDeserializer.java
+index 8b44b4501..4823484ef 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/jsontype/TypeDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/jsontype/TypeDeserializer.java
+@@ -50,7 +50,7 @@ public abstract class TypeDeserializer
+      * that deserializer uses; indicates how type information
+      * is (expected to be) embedded in JSON input.
+      */
+-    public abstract As getTypeInclusion();
++    public abstract As inclusionMechanism();
+ 
+     /**
+      * Name of property that contains type information, if
+diff --git a/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsArrayTypeDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsArrayTypeDeserializer.java
+index 90021a108..6b3e2d981 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsArrayTypeDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsArrayTypeDeserializer.java
+@@ -45,7 +45,7 @@ public class AsArrayTypeDeserializer
+     }
+ 
+     @Override
+-    public As getTypeInclusion() { return As.WRAPPER_ARRAY; }
++    public As inclusionMechanism() { return As.WRAPPER_ARRAY; }
+ 
+     /**
+      * Method called when actual object is serialized as JSON Array.
+diff --git a/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsExternalTypeDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsExternalTypeDeserializer.java
+index e0e44a38a..5b0ddb943 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsExternalTypeDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsExternalTypeDeserializer.java
+@@ -42,7 +42,7 @@ public class AsExternalTypeDeserializer extends AsArrayTypeDeserializer
+     }
+ 
+     @Override
+-    public As getTypeInclusion() { return As.EXTERNAL_PROPERTY; }
++    public As inclusionMechanism() { return As.EXTERNAL_PROPERTY; }
+ 
+     // yes, very important distinction...
+     @Override
+diff --git a/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsPropertyTypeDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsPropertyTypeDeserializer.java
+index e574bf4a5..cca37201a 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsPropertyTypeDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsPropertyTypeDeserializer.java
+@@ -89,7 +89,7 @@ public class AsPropertyTypeDeserializer extends AsArrayTypeDeserializer
+     }
+ 
+     @Override
+-    public As getTypeInclusion() { return _inclusion; }
++    public As inclusionMechanism() { return _inclusion; }
+ 
+     /**
+      * This is the trickiest thing to handle, since property we are looking
+diff --git a/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsWrapperTypeDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsWrapperTypeDeserializer.java
+index 7fe4f13cb..6a6450517 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsWrapperTypeDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/AsWrapperTypeDeserializer.java
+@@ -43,7 +43,7 @@ public class AsWrapperTypeDeserializer
+     }
+ 
+     @Override
+-    public As getTypeInclusion() { return As.WRAPPER_OBJECT; }
++    public As inclusionMechanism() { return As.WRAPPER_OBJECT; }
+ 
+     /**
+      * Deserializing type id enclosed using WRAPPER_OBJECT style is straightforward
+diff --git a/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/TypeDeserializerBase.java b/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/TypeDeserializerBase.java
+index 83bd11261..d7e7ebfa8 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/TypeDeserializerBase.java
++++ b/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/TypeDeserializerBase.java
+@@ -101,7 +101,7 @@ public abstract class TypeDeserializerBase
+      */
+ 
+     @Override
+-    public abstract JsonTypeInfo.As getTypeInclusion();
++    public abstract JsonTypeInfo.As inclusionMechanism();
+ 
+     public String baseTypeName() { return _baseType.getRawClass().getName(); }
+ 

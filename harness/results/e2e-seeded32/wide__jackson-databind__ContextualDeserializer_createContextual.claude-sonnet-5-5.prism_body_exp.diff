@@ -1,0 +1,458 @@
+diff --git a/src/main/java/com/fasterxml/jackson/databind/DeserializationContext.java b/src/main/java/com/fasterxml/jackson/databind/DeserializationContext.java
+index 403e9a552..c8fc14507 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/DeserializationContext.java
++++ b/src/main/java/com/fasterxml/jackson/databind/DeserializationContext.java
+@@ -873,7 +873,7 @@ public abstract class DeserializationContext
+         if (deser instanceof ContextualDeserializer) {
+             _currentType = new LinkedNode<JavaType>(type, _currentType);
+             try {
+-                deser = ((ContextualDeserializer) deser).createContextual(this, prop);
++                deser = ((ContextualDeserializer) deser).createContextualDeserializer(this, prop);
+             } finally {
+                 _currentType = _currentType.next();
+             }
+@@ -904,7 +904,7 @@ public abstract class DeserializationContext
+         if (deser instanceof ContextualDeserializer) {
+             _currentType = new LinkedNode<JavaType>(type, _currentType);
+             try {
+-                deser = ((ContextualDeserializer) deser).createContextual(this, prop);
++                deser = ((ContextualDeserializer) deser).createContextualDeserializer(this, prop);
+             } finally {
+                 _currentType = _currentType.next();
+             }
+diff --git a/src/main/java/com/fasterxml/jackson/databind/JsonDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/JsonDeserializer.java
+index 1c101e0cf..03f440f6a 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/JsonDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/JsonDeserializer.java
+@@ -33,7 +33,7 @@ import com.fasterxml.jackson.databind.util.NameTransformer;
+  * to implement
+  * {@link com.fasterxml.jackson.databind.deser.ContextualDeserializer},
+  * which allows specialization of deserializers: call to
+- * {@link com.fasterxml.jackson.databind.deser.ContextualDeserializer#createContextual}
++ * {@link com.fasterxml.jackson.databind.deser.ContextualDeserializer#createContextualDeserializer}
+  * is passed information on property, and can create a newly configured
+  * deserializer for handling that particular property.
+  *<p>
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/AbstractDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/AbstractDeserializer.java
+index adcd8c0a0..31cfcd74d 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/AbstractDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/AbstractDeserializer.java
+@@ -120,7 +120,7 @@ public class AbstractDeserializer
+     }
+ 
+     @Override
+-    public JsonDeserializer<?> createContextual(DeserializationContext ctxt,
++    public JsonDeserializer<?> createContextualDeserializer(DeserializationContext ctxt,
+             BeanProperty property) throws JsonMappingException
+     {
+         final AnnotationIntrospector intr = ctxt.getAnnotationIntrospector();
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java b/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java
+index 5a3fef523..ea8bbd0da 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java
+@@ -842,7 +842,7 @@ ClassUtil.getTypeDescription(_beanType), ClassUtil.classNameOf(_valueInstantiato
+      * point, since it may come from either Class definition or property.
+      */
+     @Override
+-    public JsonDeserializer<?> createContextual(DeserializationContext ctxt,
++    public JsonDeserializer<?> createContextualDeserializer(DeserializationContext ctxt,
+             BeanProperty property) throws JsonMappingException
+     {
+         ObjectIdReader oir = _objectIdReader;
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerFactory.java b/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerFactory.java
+index 48129a30f..e80f6e5a7 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerFactory.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerFactory.java
+@@ -296,7 +296,7 @@ public class BeanDeserializerFactory
+             deserializer = builder.build();
+         }
+         // may have modifier(s) that wants to modify or replace serializer we just built
+-        // (note that `resolve()` and `createContextual()` called later on)
++        // (note that `resolve()` and `createContextualDeserializer()` called later on)
+         if (_factoryConfig.hasDeserializerModifiers()) {
+             for (BeanDeserializerModifier mod : _factoryConfig.deserializerModifiers()) {
+                 deserializer = mod.modifyDeserializer(config, beanDesc, deserializer);
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/ContextualDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/ContextualDeserializer.java
+index 6f2875a3f..86e73ccaa 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/ContextualDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/ContextualDeserializer.java
+@@ -37,7 +37,7 @@ public interface ContextualDeserializer
+      *
+      * @throws JsonMappingException If there is problem with contextualization
+      */
+-    public JsonDeserializer<?> createContextual(DeserializationContext ctxt,
++    public JsonDeserializer<?> createContextualDeserializer(DeserializationContext ctxt,
+             BeanProperty property)
+         throws JsonMappingException;
+ }
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/CollectionDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/CollectionDeserializer.java
+index 05e8453d0..de94e12a9 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/CollectionDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/CollectionDeserializer.java
+@@ -148,7 +148,7 @@ public class CollectionDeserializer
+      * for.
+      */
+     @Override
+-    public CollectionDeserializer createContextual(DeserializationContext ctxt,
++    public CollectionDeserializer createContextualDeserializer(DeserializationContext ctxt,
+             BeanProperty property) throws JsonMappingException
+     {
+         // May need to resolve types for delegate-based creators:
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/DateDeserializers.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/DateDeserializers.java
+index 55227d729..588869243 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/DateDeserializers.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/DateDeserializers.java
+@@ -94,7 +94,7 @@ public class DateDeserializers
+         }
+ 
+         @Override
+-        public JsonDeserializer<?> createContextual(DeserializationContext ctxt,
++        public JsonDeserializer<?> createContextualDeserializer(DeserializationContext ctxt,
+                 BeanProperty property)
+            throws JsonMappingException
+         {
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/DelegatingDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/DelegatingDeserializer.java
+index 7ffe50ae9..96aaa6b65 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/DelegatingDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/DelegatingDeserializer.java
+@@ -62,7 +62,7 @@ public abstract class DelegatingDeserializer
+     }
+ 
+     @Override
+-    public JsonDeserializer<?> createContextual(DeserializationContext ctxt,
++    public JsonDeserializer<?> createContextualDeserializer(DeserializationContext ctxt,
+             BeanProperty property)
+         throws JsonMappingException
+     {
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/EnumDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/EnumDeserializer.java
+index 4fcfbc9bf..17f230d1c 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/EnumDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/EnumDeserializer.java
+@@ -229,7 +229,7 @@ public class EnumDeserializer
+     }
+ 
+     @Override // since 2.9
+-    public JsonDeserializer<?> createContextual(DeserializationContext ctxt,
++    public JsonDeserializer<?> createContextualDeserializer(DeserializationContext ctxt,
+             BeanProperty property) throws JsonMappingException
+     {
+         // [databind#5814]: check both ACCEPT_CASE_INSENSITIVE_VALUES (primary) and
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/EnumMapDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/EnumMapDeserializer.java
+index 773fa9c07..3628f5048 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/EnumMapDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/EnumMapDeserializer.java
+@@ -166,7 +166,7 @@ public class EnumMapDeserializer
+      * when it is known for which property deserializer is needed for.
+      */
+     @Override
+-    public JsonDeserializer<?> createContextual(DeserializationContext ctxt, BeanProperty property) throws JsonMappingException
++    public JsonDeserializer<?> createContextualDeserializer(DeserializationContext ctxt, BeanProperty property) throws JsonMappingException
+     {
+         // note: instead of finding key deserializer, with enums we actually
+         // work with regular deserializers (less code duplication; but not
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/EnumSetDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/EnumSetDeserializer.java
+index b9bac2a3d..c15c620df 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/EnumSetDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/EnumSetDeserializer.java
+@@ -169,7 +169,7 @@ public class EnumSetDeserializer
+      */
+ 
+     @Override
+-    public JsonDeserializer<?> createContextual(DeserializationContext ctxt,
++    public JsonDeserializer<?> createContextualDeserializer(DeserializationContext ctxt,
+             BeanProperty property) throws JsonMappingException
+     {
+         // 07-May-2020, tatu: Is the argument `EnumSet.class` correct here?
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/FactoryBasedEnumDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/FactoryBasedEnumDeserializer.java
+index 99cc107b8..5f139619d 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/FactoryBasedEnumDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/FactoryBasedEnumDeserializer.java
+@@ -107,7 +107,7 @@ class FactoryBasedEnumDeserializer
+     }
+ 
+     @Override
+-    public JsonDeserializer<?> createContextual(DeserializationContext ctxt,
++    public JsonDeserializer<?> createContextualDeserializer(DeserializationContext ctxt,
+             BeanProperty property)
+         throws JsonMappingException
+     {
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/JsonNodeDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/JsonNodeDeserializer.java
+index 688be20ae..1b536e841 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/JsonNodeDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/JsonNodeDeserializer.java
+@@ -294,7 +294,7 @@ abstract class BaseNodeDeserializer<T extends JsonNode>
+     }
+ 
+     @Override // @since 2.14
+-    public JsonDeserializer<?> createContextual(DeserializationContext ctxt,
++    public JsonDeserializer<?> createContextualDeserializer(DeserializationContext ctxt,
+             BeanProperty property)
+         throws JsonMappingException
+     {
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/MapDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/MapDeserializer.java
+index 98875853a..a68448e24 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/MapDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/MapDeserializer.java
+@@ -305,7 +305,7 @@ public class MapDeserializer
+      * when it is known for which property deserializer is needed for.
+      */
+     @Override
+-    public JsonDeserializer<?> createContextual(DeserializationContext ctxt,
++    public JsonDeserializer<?> createContextualDeserializer(DeserializationContext ctxt,
+             BeanProperty property) throws JsonMappingException
+     {
+         KeyDeserializer keyDeser = _keyDeserializer;
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/MapEntryDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/MapEntryDeserializer.java
+index 526e503af..3123e479c 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/MapEntryDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/MapEntryDeserializer.java
+@@ -31,7 +31,7 @@ public class MapEntryDeserializer
+     /**
+      * Key deserializer to use; either passed via constructor
+      * (when indicated by annotations), or resolved when
+-     * {@link #createContextual} is called;
++     * {@link #createContextualDeserializer} is called;
+      */
+     protected final KeyDeserializer _keyDeserializer;
+ 
+@@ -121,7 +121,7 @@ public class MapEntryDeserializer
+      * when it is known for which property deserializer is needed for.
+      */
+     @Override
+-    public JsonDeserializer<?> createContextual(DeserializationContext ctxt,
++    public JsonDeserializer<?> createContextualDeserializer(DeserializationContext ctxt,
+             BeanProperty property) throws JsonMappingException
+     {
+         KeyDeserializer kd = _keyDeserializer;
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/ObjectArrayDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/ObjectArrayDeserializer.java
+index 3748d4958..623f214ff 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/ObjectArrayDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/ObjectArrayDeserializer.java
+@@ -135,7 +135,7 @@ public class ObjectArrayDeserializer
+     }
+ 
+     @Override
+-    public JsonDeserializer<?> createContextual(DeserializationContext ctxt,
++    public JsonDeserializer<?> createContextualDeserializer(DeserializationContext ctxt,
+             BeanProperty property) throws JsonMappingException
+     {
+         JsonDeserializer<?> valueDeser = _elementDeserializer;
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/PrimitiveArrayDeserializers.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/PrimitiveArrayDeserializers.java
+index 08a62c777..82377ac8c 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/PrimitiveArrayDeserializers.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/PrimitiveArrayDeserializers.java
+@@ -102,7 +102,7 @@ public abstract class PrimitiveArrayDeserializers<T> extends StdDeserializer<T>
+     }
+ 
+     @Override
+-    public JsonDeserializer<?> createContextual(DeserializationContext ctxt,
++    public JsonDeserializer<?> createContextualDeserializer(DeserializationContext ctxt,
+             BeanProperty property) throws JsonMappingException
+     {
+         Boolean unwrapSingle = findFormatFeature(ctxt, property, _valueClass,
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/ReferenceTypeDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/ReferenceTypeDeserializer.java
+index be81d8bee..b7d7263b9 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/ReferenceTypeDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/ReferenceTypeDeserializer.java
+@@ -61,7 +61,7 @@ public abstract class ReferenceTypeDeserializer<T>
+     }
+ 
+     @Override
+-    public JsonDeserializer<?> createContextual(DeserializationContext ctxt, BeanProperty property)
++    public JsonDeserializer<?> createContextualDeserializer(DeserializationContext ctxt, BeanProperty property)
+             throws JsonMappingException
+     {
+         JsonDeserializer<?> deser = _valueDeserializer;
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/StdDelegatingDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/StdDelegatingDeserializer.java
+index b13bb6beb..3f6eb2ab1 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/StdDelegatingDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/StdDelegatingDeserializer.java
+@@ -139,7 +139,7 @@ public class StdDelegatingDeserializer<T>
+     }
+ 
+     @Override
+-    public JsonDeserializer<?> createContextual(DeserializationContext ctxt, BeanProperty property)
++    public JsonDeserializer<?> createContextualDeserializer(DeserializationContext ctxt, BeanProperty property)
+         throws JsonMappingException
+     {
+         // First: if already got deserializer to delegate to, contextualize it:
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/StringArrayDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/StringArrayDeserializer.java
+index aafdc8023..3e83b74e9 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/StringArrayDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/StringArrayDeserializer.java
+@@ -106,7 +106,7 @@ public final class StringArrayDeserializer
+      * of String values, or if we have to use separate value deserializer.
+      */
+     @Override
+-    public JsonDeserializer<?> createContextual(DeserializationContext ctxt, BeanProperty property)
++    public JsonDeserializer<?> createContextualDeserializer(DeserializationContext ctxt, BeanProperty property)
+             throws JsonMappingException
+     {
+         JsonDeserializer<?> deser = _elementDeserializer;
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/StringCollectionDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/StringCollectionDeserializer.java
+index acfb21f32..5b9d4c852 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/StringCollectionDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/StringCollectionDeserializer.java
+@@ -109,7 +109,7 @@ public final class StringCollectionDeserializer
+      */
+ 
+     @Override
+-    public JsonDeserializer<?> createContextual(DeserializationContext ctxt,
++    public JsonDeserializer<?> createContextualDeserializer(DeserializationContext ctxt,
+             BeanProperty property) throws JsonMappingException
+     {
+         // May need to resolve types for delegate-based creators:
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/UntypedObjectDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/UntypedObjectDeserializer.java
+index 761be9c52..7acf76825 100644
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/UntypedObjectDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/UntypedObjectDeserializer.java
+@@ -160,7 +160,7 @@ public class UntypedObjectDeserializer
+         TypeFactory tf = ctxt.getTypeFactory();
+ 
+         /* 26-Nov-2014, tatu: This is highly unusual, as in general contextualization
+-         *    should always be called separately, from within "createContextual()".
++         *    should always be called separately, from within "createContextualDeserializer()".
+          *    But this is a very singular deserializer since it operates on `Object`
+          *    (and often for `?` type parameter), and as a result, easily and commonly
+          *    results in cycles, being value deserializer for various Maps and Collections.
+@@ -210,7 +210,7 @@ public class UntypedObjectDeserializer
+      * occurred; if so, can slip in a more streamlined version.
+      */
+     @Override
+-    public JsonDeserializer<?> createContextual(DeserializationContext ctxt,
++    public JsonDeserializer<?> createContextualDeserializer(DeserializationContext ctxt,
+             BeanProperty property) throws JsonMappingException
+     {
+         // 14-Jun-2017, tatu: [databind#1625]: may want to block merging, for root value
+diff --git a/src/test/java/com/fasterxml/jackson/databind/contextual/ContextualDeserializationTest.java b/src/test/java/com/fasterxml/jackson/databind/contextual/ContextualDeserializationTest.java
+index 93ec09873..7f73b29ce 100644
+--- a/src/test/java/com/fasterxml/jackson/databind/contextual/ContextualDeserializationTest.java
++++ b/src/test/java/com/fasterxml/jackson/databind/contextual/ContextualDeserializationTest.java
+@@ -113,7 +113,7 @@ public class ContextualDeserializationTest
+         }
+ 
+         @Override
+-        public JsonDeserializer<?> createContextual(DeserializationContext ctxt,
++        public JsonDeserializer<?> createContextualDeserializer(DeserializationContext ctxt,
+                 BeanProperty property)
+         {
+             String name = (property == null) ? "NULL" : property.getName();
+@@ -142,7 +142,7 @@ public class ContextualDeserializationTest
+         }
+ 
+         @Override
+-        public JsonDeserializer<?> createContextual(DeserializationContext ctxt,
++        public JsonDeserializer<?> createContextualDeserializer(DeserializationContext ctxt,
+                 BeanProperty property)
+         {
+             Name ann = property.getAnnotation(Name.class);
+@@ -167,7 +167,7 @@ public class ContextualDeserializationTest
+         }
+ 
+         @Override
+-        public JsonDeserializer<?> createContextual(DeserializationContext ctxt, BeanProperty property) {
++        public JsonDeserializer<?> createContextualDeserializer(DeserializationContext ctxt, BeanProperty property) {
+             return new GenericStringDeserializer(String.valueOf(ctxt.getContextualType().getRawClass().getSimpleName()));
+         }
+ 
+diff --git a/src/test/java/com/fasterxml/jackson/databind/contextual/ContextualWithAnnDeserializerTest.java b/src/test/java/com/fasterxml/jackson/databind/contextual/ContextualWithAnnDeserializerTest.java
+index 8f1c8a617..4828548be 100644
+--- a/src/test/java/com/fasterxml/jackson/databind/contextual/ContextualWithAnnDeserializerTest.java
++++ b/src/test/java/com/fasterxml/jackson/databind/contextual/ContextualWithAnnDeserializerTest.java
+@@ -58,7 +58,7 @@ public class ContextualWithAnnDeserializerTest
+         }
+ 
+         @Override
+-        public JsonDeserializer<?> createContextual(DeserializationContext ctxt,
++        public JsonDeserializer<?> createContextualDeserializer(DeserializationContext ctxt,
+                 BeanProperty property)
+         {
+             Name ann = property.getAnnotation(Name.class);
+diff --git a/src/test/java/com/fasterxml/jackson/databind/deser/BeanDeserializerTest.java b/src/test/java/com/fasterxml/jackson/databind/deser/BeanDeserializerTest.java
+index 5432b5adf..8058f318d 100644
+--- a/src/test/java/com/fasterxml/jackson/databind/deser/BeanDeserializerTest.java
++++ b/src/test/java/com/fasterxml/jackson/databind/deser/BeanDeserializerTest.java
+@@ -122,7 +122,7 @@ public class BeanDeserializerTest
+         }
+ 
+         @Override
+-        public JsonDeserializer<?> createContextual(DeserializationContext ctxt,
++        public JsonDeserializer<?> createContextualDeserializer(DeserializationContext ctxt,
+                 BeanProperty property) {
+             propCount++;
+             return this;
+@@ -195,11 +195,11 @@ public class BeanDeserializerTest
+         }
+ 
+         @Override
+-        public JsonDeserializer<?> createContextual(DeserializationContext ctxt, BeanProperty property)
++        public JsonDeserializer<?> createContextualDeserializer(DeserializationContext ctxt, BeanProperty property)
+                 throws JsonMappingException {
+             if (defaultDeserializer instanceof ContextualDeserializer) {
+                 ContextualDeserializer cd = (ContextualDeserializer) defaultDeserializer;
+-                return new Issue1912CustomBeanDeserializer((BeanDeserializer) cd.createContextual(ctxt, property));
++                return new Issue1912CustomBeanDeserializer((BeanDeserializer) cd.createContextualDeserializer(ctxt, property));
+             }
+             return this;
+         }
+diff --git a/src/test/java/com/fasterxml/jackson/databind/deser/CustomDeserializersTest.java b/src/test/java/com/fasterxml/jackson/databind/deser/CustomDeserializersTest.java
+index 9c792cc43..161367b9e 100644
+--- a/src/test/java/com/fasterxml/jackson/databind/deser/CustomDeserializersTest.java
++++ b/src/test/java/com/fasterxml/jackson/databind/deser/CustomDeserializersTest.java
+@@ -197,7 +197,7 @@ public class CustomDeserializersTest
+             return new Bean375Outer((Bean375Inner) ob);
+         }
+         @Override
+-        public JsonDeserializer<?> createContextual(DeserializationContext ctxt, BeanProperty property)
++        public JsonDeserializer<?> createContextualDeserializer(DeserializationContext ctxt, BeanProperty property)
+         {
+             return new Bean375OuterDeserializer(property);
+         }
+@@ -228,7 +228,7 @@ public class CustomDeserializersTest
+         }
+ 
+         @Override
+-        public JsonDeserializer<?> createContextual(DeserializationContext ctxt, BeanProperty property)
++        public JsonDeserializer<?> createContextualDeserializer(DeserializationContext ctxt, BeanProperty property)
+         {
+             if (property != null) {
+                 Negative n = property.getAnnotation(Negative.class);
+diff --git a/src/test/java/com/fasterxml/jackson/databind/deser/filter/IgnorePropertiesCaseInsensitive5962Test.java b/src/test/java/com/fasterxml/jackson/databind/deser/filter/IgnorePropertiesCaseInsensitive5962Test.java
+index 9da8acbe1..1dccbc81e 100644
+--- a/src/test/java/com/fasterxml/jackson/databind/deser/filter/IgnorePropertiesCaseInsensitive5962Test.java
++++ b/src/test/java/com/fasterxml/jackson/databind/deser/filter/IgnorePropertiesCaseInsensitive5962Test.java
+@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.*;
+  * [databind#5962]: Case-insensitive BeanPropertyMap rebuild undoes per-property
+  * {@code @JsonIgnoreProperties}.
+  *
+- * {@code BeanDeserializerBase.createContextual()} calls {@code _handleByNameInclusion()}
++ * {@code BeanDeserializerBase.createContextualDeserializer()} calls {@code _handleByNameInclusion()}
+  * to filter properties according to per-property {@code @JsonIgnoreProperties}, producing
+  * a contextual deserializer with the restricted {@code BeanPropertyMap}. However, the
+  * subsequent case-insensitivity block read {@code _beanProperties} (the *original*
+diff --git a/src/test/java/com/fasterxml/jackson/databind/deser/jdk/UntypedDeserializationTest.java b/src/test/java/com/fasterxml/jackson/databind/deser/jdk/UntypedDeserializationTest.java
+index d17a1f329..96f75c7c2 100644
+--- a/src/test/java/com/fasterxml/jackson/databind/deser/jdk/UntypedDeserializationTest.java
++++ b/src/test/java/com/fasterxml/jackson/databind/deser/jdk/UntypedDeserializationTest.java
+@@ -77,7 +77,7 @@ public class UntypedDeserializationTest
+         }
+ 
+         @Override
+-        public JsonDeserializer<?> createContextual(DeserializationContext ctxt,
++        public JsonDeserializer<?> createContextualDeserializer(DeserializationContext ctxt,
+                 BeanProperty property) throws JsonMappingException
+         {
+             // For now, we just need to access "untyped" deserializer; not use it.
+diff --git a/src/test/java/com/fasterxml/jackson/databind/node/NodeContext2049Test.java b/src/test/java/com/fasterxml/jackson/databind/node/NodeContext2049Test.java
+index 3d7cc06f0..b6607f548 100644
+--- a/src/test/java/com/fasterxml/jackson/databind/node/NodeContext2049Test.java
++++ b/src/test/java/com/fasterxml/jackson/databind/node/NodeContext2049Test.java
+@@ -102,7 +102,7 @@ public class NodeContext2049Test extends DatabindTestUtil
+     static class ParentSettingDeserializerContextual extends JsonDeserializer<Object> implements ContextualDeserializer {
+ 
+         @Override
+-        public JsonDeserializer<?> createContextual(DeserializationContext ctxt, BeanProperty property)
++        public JsonDeserializer<?> createContextualDeserializer(DeserializationContext ctxt, BeanProperty property)
+             throws JsonMappingException
+         {
+              JavaType propertyType = property.getType();

@@ -1,0 +1,554 @@
+diff --git a/API_CHANGES_V5.md b/API_CHANGES_V5.md
+index 0d21bea..210dfcb 100644
+--- a/API_CHANGES_V5.md
++++ b/API_CHANGES_V5.md
+@@ -917,7 +917,7 @@ type Router interface {
+     Add(routable Route) (RouteInfo, error)
+     Remove(method string, path string) error
+     Routes() Routes
+-    Route(c *Context) HandlerFunc
++    RouteRequest(c *Context) HandlerFunc
+ }
+ 
+ type DefaultRouter struct { ... }
+diff --git a/echo.go b/echo.go
+index 1a86100..f4a59a9 100644
+--- a/echo.go
++++ b/echo.go
+@@ -422,7 +422,7 @@ func (e *Echo) buildRouterChains() {
+ 
+ 	// route performs routing (storing the matched handler on the Context) and then runs the global chain.
+ 	route := func(c *Context) error {
+-		c.handler = e.router.Route(c)
++		c.handler = e.router.RouteRequest(c)
+ 		return e.chain(c)
+ 	}
+ 	e.preChain = applyMiddleware(route, e.premiddleware...)
+@@ -815,7 +815,7 @@ func (e *Echo) serveHTTP(w http.ResponseWriter, r *http.Request) {
+ 	// reused here, so no middleware closures are allocated per request.
+ 	var err error
+ 	if e.premiddleware == nil {
+-		c.handler = e.router.Route(c)
++		c.handler = e.router.RouteRequest(c)
+ 		err = e.chain(c)
+ 	} else {
+ 		err = e.preChain(c)
+diff --git a/router.go b/router.go
+index 99950aa..9e55c07 100644
+--- a/router.go
++++ b/router.go
+@@ -15,7 +15,7 @@ import (
+ // Contract between Echo/Context instance and the router:
+ //   - all routes must be added through methods on echo.Echo instance.
+ //     Reason: Echo instance uses RouteInfo.Params() length to allocate slice for paths parameters (see `Echo.contextPathParamAllocSize`).
+-//   - Router must populate Context during Router.Route call with:
++//   - Router must populate Context during Router.RouteRequest call with:
+ //   - Context.InitializeRoute (IMPORTANT! to reduce allocations use same slice that c.PathValues() returns)
+ //   - Optionally can set additional information to Context with Context.Set
+ type Router interface {
+@@ -38,10 +38,10 @@ type Router interface {
+ 	// was not found (405) or no matching route exists for path (404), router will return its implementation of 405/404
+ 	// handler function.
+ 	//
+-	// Router must populate Context during Router.Route call with:
++	// Router must populate Context during Router.RouteRequest call with:
+ 	// - Context.InitializeRoute() (IMPORTANT! to reduce allocations use same slice that c.PathValues() returns)
+ 	// - optionally can set additional information to Context with Context.Set()
+-	Route(c *Context) HandlerFunc
++	RouteRequest(c *Context) HandlerFunc
+ }
+ 
+ const (
+@@ -883,7 +883,7 @@ var optionsMethodHandler = func(c *Context) error {
+ // - Get context from `Echo#AcquireContext()`
+ // - Reset it `Context#Reset()`
+ // - Return it `Echo#ReleaseContext()`.
+-func (r *DefaultRouter) Route(c *Context) HandlerFunc {
++func (r *DefaultRouter) RouteRequest(c *Context) HandlerFunc {
+ 	pathValues := c.PathValues()
+ 	if cap(pathValues) < r.maxPathParamsLength {
+ 		pathValues = make(PathValues, 0, r.maxPathParamsLength)
+diff --git a/router_concurrent.go b/router_concurrent.go
+index e48463a..f072224 100644
+--- a/router_concurrent.go
++++ b/router_concurrent.go
+@@ -18,11 +18,11 @@ type concurrentRouter struct {
+ 	router Router
+ }
+ 
+-func (r *concurrentRouter) Route(c *Context) HandlerFunc {
++func (r *concurrentRouter) RouteRequest(c *Context) HandlerFunc {
+ 	r.mu.RLock()
+ 	defer r.mu.RUnlock()
+ 
+-	return r.router.Route(c)
++	return r.router.RouteRequest(c)
+ }
+ 
+ func (r *concurrentRouter) Routes() Routes {
+diff --git a/router_concurrent_test.go b/router_concurrent_test.go
+index 182489c..c310711 100644
+--- a/router_concurrent_test.go
++++ b/router_concurrent_test.go
+@@ -59,14 +59,14 @@ func TestConcurrentRouter_ConcurrentReads(t *testing.T) {
+ 		go func(goroutineID int) {
+ 			defer wg.Done()
+ 
+-			// Call Route() 50 times
++			// Call RouteRequest() 50 times
+ 			for j := range routeCallsPerGoroutine {
+ 				path := testPaths[j%len(testPaths)]
+ 				req := httptest.NewRequest(http.MethodGet, path, nil)
+ 				rec := httptest.NewRecorder()
+ 				c := newContext(req, rec, nil)
+ 
+-				handler := router.Route(c)
++				handler := router.RouteRequest(c)
+ 				if handler != nil {
+ 					routeCallCount.Add(1)
+ 				}
+@@ -88,7 +88,7 @@ func TestConcurrentRouter_ConcurrentReads(t *testing.T) {
+ 	expectedRouteCalls := int64(numGoroutines * routeCallsPerGoroutine)
+ 	expectedRoutesCalls := int64(numGoroutines * routesCallsPerGoroutine)
+ 
+-	assert.Equal(t, expectedRouteCalls, routeCallCount.Load(), "all Route() calls should succeed")
++	assert.Equal(t, expectedRouteCalls, routeCallCount.Load(), "all RouteRequest() calls should succeed")
+ 	assert.Equal(t, expectedRoutesCalls, routesCallCount.Load(), "all Routes() calls should succeed")
+ }
+ 
+@@ -154,7 +154,7 @@ func TestConcurrentRouter_ConcurrentReadWrite(t *testing.T) {
+ 	var addCallCount atomic.Int64
+ 	var routesCallCount atomic.Int64
+ 
+-	// Launch 4 reader goroutines: call Route() 100 times each
++	// Launch 4 reader goroutines: call RouteRequest() 100 times each
+ 	for range 4 {
+ 		wg.Go(func() {
+ 			for j := range 100 {
+@@ -164,7 +164,7 @@ func TestConcurrentRouter_ConcurrentReadWrite(t *testing.T) {
+ 				rec := httptest.NewRecorder()
+ 				c := newContext(req, rec, nil)
+ 
+-				handler := router.Route(c)
++				handler := router.RouteRequest(c)
+ 				if handler != nil {
+ 					routeCallCount.Add(1)
+ 				}
+@@ -206,7 +206,7 @@ func TestConcurrentRouter_ConcurrentReadWrite(t *testing.T) {
+ 	wg.Wait()
+ 
+ 	// Verify all operations succeeded
+-	assert.Equal(t, int64(400), routeCallCount.Load(), "all Route() calls should succeed")
++	assert.Equal(t, int64(400), routeCallCount.Load(), "all RouteRequest() calls should succeed")
+ 	assert.Equal(t, int64(40), addCallCount.Load(), "all Add() calls should succeed")
+ 	assert.Equal(t, int64(100), routesCallCount.Load(), "all Routes() calls should succeed")
+ 
+diff --git a/router_test.go b/router_test.go
+index 22c1dc7..e609c5a 100644
+--- a/router_test.go
++++ b/router_test.go
+@@ -680,7 +680,7 @@ func TestRouterFillsRequestPatternField(t *testing.T) {
+ 	e.GET(path, handlerFunc)
+ 
+ 	c := e.NewContext(req, rec)
+-	_ = e.router.Route(c)
++	_ = e.router.RouteRequest(c)
+ 
+ 	assert.Equal(t, path, c.Path())
+ 	assert.Equal(t, path, c.Request().Pattern)
+@@ -695,7 +695,7 @@ func TestRouterStatic(t *testing.T) {
+ 	e.GET(path, handlerFunc)
+ 
+ 	c := e.NewContext(req, rec)
+-	_ = e.router.Route(c)
++	_ = e.router.RouteRequest(c)
+ 
+ 	assert.Equal(t, path, c.Path())
+ 	assert.Equal(t, 0, cap(*c.pathValues))
+@@ -731,7 +731,7 @@ func TestRouterParam(t *testing.T) {
+ 		t.Run(tc.name, func(t *testing.T) {
+ 			c := e.NewContext(nil, nil)
+ 			c.SetRequest(httptest.NewRequest(http.MethodGet, tc.whenURL, nil))
+-			_ = e.router.Route(c)
++			_ = e.router.RouteRequest(c)
+ 
+ 			assert.Equal(t, tc.expectRoute, c.Path())
+ 			for param, expectedValue := range tc.expectParam {
+@@ -785,7 +785,7 @@ func TestRouter_addAndMatchAllSupportedMethods(t *testing.T) {
+ 			rec := httptest.NewRecorder()
+ 			c := e.NewContext(req, rec)
+ 
+-			handler := e.router.Route(c)
++			handler := e.router.RouteRequest(c)
+ 			err := handler(c)
+ 
+ 			if tc.expectError != "" {
+@@ -820,7 +820,7 @@ func TestRouterAllowHeaderForAnyOtherMethodType(t *testing.T) {
+ 	//r.Find("TEST", "/users", c)
+ 	c := e.NewContext(req, rec)
+ 
+-	handler := e.router.Route(c)
++	handler := e.router.RouteRequest(c)
+ 	err = handler(c)
+ 
+ 	assert.EqualError(t, err, "Method Not Allowed")
+@@ -881,7 +881,7 @@ func TestMethodNotAllowedAndNotFound(t *testing.T) {
+ 			req := httptest.NewRequest(method, tc.whenURL, nil)
+ 			rec := httptest.NewRecorder()
+ 			c := e.NewContext(req, rec)
+-			handler := e.router.Route(c)
++			handler := e.router.RouteRequest(c)
+ 
+ 			err := handler(c)
+ 			if tc.expectError != nil {
+@@ -975,7 +975,7 @@ func TestRouterHandleMethodOptions(t *testing.T) {
+ 			rec := httptest.NewRecorder()
+ 			c := e.NewContext(req, rec)
+ 
+-			h := r.Route(c)
++			h := r.RouteRequest(c)
+ 			err := h(c)
+ 
+ 			if tc.expectStatus >= 400 {
+@@ -996,7 +996,7 @@ func TestRouterTwoParam(t *testing.T) {
+ 	e.GET("/users/:uid/files/:fid", handlerFunc)
+ 
+ 	c := e.NewContext(httptest.NewRequest(http.MethodGet, "/users/1/files/1", nil), nil)
+-	_ = e.router.Route(c)
++	_ = e.router.RouteRequest(c)
+ 
+ 	assert.Equal(t, "/users/:uid/files/:fid", c.Path())
+ 	assert.Equal(t, "1", c.pathValues.GetOr("uid", ""))
+@@ -1012,7 +1012,7 @@ func TestRouterParamWithSlash(t *testing.T) {
+ 
+ 	c := e.NewContext(httptest.NewRequest(http.MethodGet, "/a/1/c/d/2/3", nil), nil)
+ 	// `2/3` should mapped to path `/a/:b/c/d/:e` and into `:e`
+-	handler := e.router.Route(c)
++	handler := e.router.RouteRequest(c)
+ 
+ 	err := handler(c)
+ 	assert.Equal(t, "/a/:b/c/d/:e", c.Path())
+@@ -1104,7 +1104,7 @@ func TestRouteMultiLevelBacktracking(t *testing.T) {
+ 			e.GET("/*", handlerFunc)
+ 
+ 			c := e.NewContext(httptest.NewRequest(http.MethodGet, tc.whenURL, nil), nil)
+-			_ = e.router.Route(c)
++			_ = e.router.RouteRequest(c)
+ 
+ 			assert.Equal(t, tc.expectRoute, c.Path())
+ 			for param, expectedValue := range tc.expectParam {
+@@ -1203,7 +1203,7 @@ func TestRouteMultiLevelBacktracking2(t *testing.T) {
+ 	for _, tc := range testCases {
+ 		t.Run(tc.name, func(t *testing.T) {
+ 			c := e.NewContext(httptest.NewRequest(http.MethodGet, tc.whenURL, nil), nil)
+-			_ = e.router.Route(c)
++			_ = e.router.RouteRequest(c)
+ 
+ 			assert.Equal(t, tc.expectRoute, c.Path())
+ 			for param, expectedValue := range tc.expectParam {
+@@ -1268,7 +1268,7 @@ func TestRouterBacktrackingFromMultipleParamKinds(t *testing.T) {
+ 	for _, tc := range testCases {
+ 		t.Run(tc.name, func(t *testing.T) {
+ 			c := e.NewContext(httptest.NewRequest(http.MethodGet, tc.whenURL, nil), nil)
+-			_ = e.router.Route(c)
++			_ = e.router.RouteRequest(c)
+ 
+ 			assert.Equal(t, tc.expectRoute, c.Path())
+ 			for param, expectedValue := range tc.expectParam {
+@@ -1308,7 +1308,7 @@ func TestRouterParamStaticConflict(t *testing.T) {
+ 		t.Run(tc.whenURL, func(t *testing.T) {
+ 			c := e.NewContext(httptest.NewRequest(http.MethodGet, tc.whenURL, nil), nil)
+ 
+-			handler := e.router.Route(c)
++			handler := e.router.RouteRequest(c)
+ 
+ 			assert.NoError(t, handler(c))
+ 			assert.Equal(t, tc.expectRoute, c.Path())
+@@ -1367,7 +1367,7 @@ func TestRouterParam_escapeColon(t *testing.T) {
+ 		t.Run(tc.whenURL, func(t *testing.T) {
+ 			req := httptest.NewRequest(http.MethodPost, tc.whenURL, nil)
+ 			c := e.NewContext(req, nil)
+-			handler := e.router.Route(c)
++			handler := e.router.RouteRequest(c)
+ 
+ 			err := handler(c)
+ 
+@@ -1418,7 +1418,7 @@ func TestRouterMatchAny(t *testing.T) {
+ 		t.Run(tc.whenURL, func(t *testing.T) {
+ 			c := e.NewContext(httptest.NewRequest(http.MethodGet, tc.whenURL, nil), nil)
+ 
+-			handler := e.router.Route(c)
++			handler := e.router.RouteRequest(c)
+ 
+ 			assert.NoError(t, handler(c))
+ 			assert.Equal(t, tc.expectRoute, c.Path())
+@@ -1443,7 +1443,7 @@ func TestRouterAnyMatchesLastAddedAnyRoute(t *testing.T) {
+ 
+ 	req := httptest.NewRequest(http.MethodGet, "/users/xxx/action/sea", nil)
+ 	c := e.NewContext(req, nil)
+-	handler := e.router.Route(c)
++	handler := e.router.RouteRequest(c)
+ 
+ 	assert.NoError(t, handler(c))
+ 	assert.Equal(t, "/users/*/action*", c.Path())
+@@ -1453,7 +1453,7 @@ func TestRouterAnyMatchesLastAddedAnyRoute(t *testing.T) {
+ 	e.GET("/users/*/action/search", handlerFunc)
+ 
+ 	c2 := e.NewContext(httptest.NewRequest(http.MethodGet, "/users/xxx/action/sea", nil), nil)
+-	handler2 := e.router.Route(c2)
++	handler2 := e.router.RouteRequest(c2)
+ 
+ 	assert.NoError(t, handler2(c2))
+ 	assert.Equal(t, "/users/*/action/search", c2.Path())
+@@ -1503,7 +1503,7 @@ func TestRouterMatchAnyPrefixIssue(t *testing.T) {
+ 		t.Run(tc.whenURL, func(t *testing.T) {
+ 			req := httptest.NewRequest(http.MethodGet, tc.whenURL, nil)
+ 			c := e.NewContext(req, nil)
+-			handler := e.router.Route(c)
++			handler := e.router.RouteRequest(c)
+ 
+ 			assert.NoError(t, handler(c))
+ 			assert.Equal(t, tc.expectRoute, c.Path())
+@@ -1584,7 +1584,7 @@ func TestRouterMatchAnySlash(t *testing.T) {
+ 		t.Run(tc.whenURL, func(t *testing.T) {
+ 			req := httptest.NewRequest(http.MethodGet, tc.whenURL, nil)
+ 			c := e.NewContext(req, nil)
+-			handler := e.router.Route(c)
++			handler := e.router.RouteRequest(c)
+ 
+ 			err := handler(c)
+ 			if tc.expectError != nil {
+@@ -1658,7 +1658,7 @@ func TestRouterMatchAnyMultiLevel(t *testing.T) {
+ 		t.Run(tc.whenURL, func(t *testing.T) {
+ 			req := httptest.NewRequest(http.MethodGet, tc.whenURL, nil)
+ 			c := e.NewContext(req, nil)
+-			handler := e.router.Route(c)
++			handler := e.router.RouteRequest(c)
+ 
+ 			err := handler(c)
+ 			if tc.expectError != nil {
+@@ -1724,7 +1724,7 @@ func TestRouterMatchAnyMultiLevelWithPost(t *testing.T) {
+ 
+ 			req := httptest.NewRequest(method, tc.whenURL, nil)
+ 			c := e.NewContext(req, nil)
+-			handler := e.router.Route(c)
++			handler := e.router.RouteRequest(c)
+ 
+ 			err := handler(c)
+ 			if tc.expectError != nil {
+@@ -1747,7 +1747,7 @@ func TestRouterMicroParam(t *testing.T) {
+ 
+ 	req := httptest.NewRequest(http.MethodGet, "/1/2/3", nil)
+ 	c := e.NewContext(req, nil)
+-	handler := e.router.Route(c)
++	handler := e.router.RouteRequest(c)
+ 
+ 	assert.NoError(t, handler(c))
+ 	assert.Equal(t, "1", c.pathValues.GetOr("a", "---none---"))
+@@ -1763,7 +1763,7 @@ func TestRouterMixParamMatchAny(t *testing.T) {
+ 
+ 	req := httptest.NewRequest(http.MethodGet, "/users/joe/comments", nil)
+ 	c := e.NewContext(req, nil)
+-	handler := e.router.Route(c)
++	handler := e.router.RouteRequest(c)
+ 
+ 	assert.NoError(t, handler(c))
+ 	assert.Equal(t, "/users/:id/*", c.Path())
+@@ -1806,7 +1806,7 @@ func TestRouterMultiRoute(t *testing.T) {
+ 		t.Run(tc.whenURL, func(t *testing.T) {
+ 			req := httptest.NewRequest(http.MethodGet, tc.whenURL, nil)
+ 			c := e.NewContext(req, nil)
+-			handler := e.router.Route(c)
++			handler := e.router.RouteRequest(c)
+ 
+ 			err := handler(c)
+ 			if tc.expectError != nil {
+@@ -1920,7 +1920,7 @@ func TestRouterPriority(t *testing.T) {
+ 
+ 			req := httptest.NewRequest(method, tc.whenURL, nil)
+ 			c := e.NewContext(req, nil)
+-			handler := e.router.Route(c)
++			handler := e.router.RouteRequest(c)
+ 
+ 			err := handler(c)
+ 			if tc.expectError != nil {
+@@ -1983,7 +1983,7 @@ func TestRouterPriorityNotFound(t *testing.T) {
+ 
+ 			req := httptest.NewRequest(method, tc.whenURL, nil)
+ 			c := e.NewContext(req, nil)
+-			handler := e.router.Route(c)
++			handler := e.router.RouteRequest(c)
+ 
+ 			err := handler(c)
+ 			if tc.expectError != nil {
+@@ -2043,7 +2043,7 @@ func TestRouterParamNames(t *testing.T) {
+ 
+ 			req := httptest.NewRequest(method, tc.whenURL, nil)
+ 			c := e.NewContext(req, nil)
+-			handler := e.router.Route(c)
++			handler := e.router.RouteRequest(c)
+ 
+ 			err := handler(c)
+ 			if tc.expectError != nil {
+@@ -2120,7 +2120,7 @@ func TestRouterStaticDynamicConflict(t *testing.T) {
+ 
+ 			req := httptest.NewRequest(method, tc.whenURL, nil)
+ 			c := e.NewContext(req, nil)
+-			handler := e.router.Route(c)
++			handler := e.router.RouteRequest(c)
+ 
+ 			err := handler(c)
+ 			if tc.expectError != nil {
+@@ -2198,7 +2198,7 @@ func TestRouterParamBacktraceNotFound(t *testing.T) {
+ 
+ 			req := httptest.NewRequest(method, tc.whenURL, nil)
+ 			c := e.NewContext(req, nil)
+-			handler := e.router.Route(c)
++			handler := e.router.RouteRequest(c)
+ 
+ 			err := handler(c)
+ 			if tc.expectError != nil {
+@@ -2234,7 +2234,7 @@ func testRouterAPI(t *testing.T, api []testRoute) {
+ 	for _, route := range api {
+ 		t.Run(route.Path, func(t *testing.T) {
+ 			c.SetRequest(httptest.NewRequest(route.Method, route.Path, nil))
+-			e.router.Route(c)
++			e.router.RouteRequest(c)
+ 
+ 			tokens := strings.SplitSeq(route.Path[1:], "/")
+ 			for token := range tokens {
+@@ -2293,7 +2293,7 @@ func TestRouter_Match_DifferentParamNamesForSamePlace(t *testing.T) {
+ 
+ 			req := httptest.NewRequest(tc.whenMethod, tc.whenURL, nil)
+ 			c := e.NewContext(req, nil)
+-			handler := e.router.Route(c)
++			handler := e.router.RouteRequest(c)
+ 
+ 			err := handler(c)
+ 			if tc.expectError != nil {
+@@ -2351,7 +2351,7 @@ func TestDefaultRouter_PathValuesCanMatchEmptyValues(t *testing.T) {
+ 
+ 			req := httptest.NewRequest(http.MethodGet, tc.whenURL, nil)
+ 			c := e.NewContext(req, nil)
+-			handler := e.router.Route(c)
++			handler := e.router.RouteRequest(c)
+ 
+ 			err := handler(c)
+ 			if tc.expectError != nil {
+@@ -2500,7 +2500,7 @@ func TestRouterParam1466(t *testing.T) {
+ 			req := httptest.NewRequest(http.MethodGet, tc.whenURL, nil)
+ 			c := e.NewContext(req, nil)
+ 
+-			handler := e.router.Route(c)
++			handler := e.router.RouteRequest(c)
+ 
+ 			err := handler(c)
+ 			if tc.expectError != nil {
+@@ -2536,7 +2536,7 @@ func TestPathValuesSizeOverMultipleRequests(t *testing.T) {
+ 	assert.Equal(t, 1, len(*c.pathValues)) // as SetPathValues was provided
+ 	assert.Equal(t, 2, cap(*c.pathValues)) // SetPathValues did not change that to smaller
+ 
+-	handler := e.router.Route(c)
++	handler := e.router.RouteRequest(c)
+ 	e.ReleaseContext(c)
+ 
+ 	assert.NoError(t, handler(c))
+@@ -2566,7 +2566,7 @@ func TestRouterFindNotPanicOrLoopsWhenContextSetParamValuesIsCalledWithLessValue
+ 	//If this API is called before the next two one panic the other loops ( of course without my fix ;) )
+ 	req := httptest.NewRequest(http.MethodGet, "/v1/admin", nil)
+ 	c := e.NewContext(req, nil)
+-	handler := e.router.Route(c)
++	handler := e.router.RouteRequest(c)
+ 
+ 	assert.NoError(t, handler(c))
+ 	assert.Equal(t, "v1", c.Param("version"))
+@@ -2574,7 +2574,7 @@ func TestRouterFindNotPanicOrLoopsWhenContextSetParamValuesIsCalledWithLessValue
+ 	//panic
+ 	req = httptest.NewRequest(http.MethodGet, "/v1/view/same-data", nil)
+ 	c = e.NewContext(req, nil)
+-	handler = e.router.Route(c)
++	handler = e.router.RouteRequest(c)
+ 
+ 	assert.NoError(t, handler(c))
+ 	assert.Equal(t, "same-data", c.Param("*"))
+@@ -2583,7 +2583,7 @@ func TestRouterFindNotPanicOrLoopsWhenContextSetParamValuesIsCalledWithLessValue
+ 	//looping
+ 	req = httptest.NewRequest(http.MethodGet, "/v1/images/view", nil)
+ 	c = e.NewContext(req, nil)
+-	handler = e.router.Route(c)
++	handler = e.router.RouteRequest(c)
+ 
+ 	assert.NoError(t, handler(c))
+ 	assert.Equal(t, "view", c.Param("id"))
+@@ -2630,7 +2630,7 @@ func TestRouterPanicWhenParamNoRootOnlyChildsFailsFind(t *testing.T) {
+ 			req := httptest.NewRequest(http.MethodGet, tc.whenURL, nil)
+ 			c := e.NewContext(req, nil)
+ 
+-			handler := e.router.Route(c)
++			handler := e.router.RouteRequest(c)
+ 
+ 			err := handler(c)
+ 			if tc.expectError != nil {
+@@ -2877,7 +2877,7 @@ func TestRouterNoRoutablePath(t *testing.T) {
+ 	req := httptest.NewRequest(http.MethodGet, "/notFound", nil)
+ 	c := e.NewContext(req, nil)
+ 
+-	e.router.Route(c)
++	e.router.RouteRequest(c)
+ 	// No routable path, don't set Path.
+ 	assert.Equal(t, "", c.Path())
+ }
+@@ -2911,7 +2911,7 @@ func benchmarkRouterRoutes(b *testing.B, routes []testRoute, routesToFind []test
+ 			req.Method = route.Method
+ 			req.URL.Path = route.Path
+ 
+-			_ = r.Route(c)
++			_ = r.RouteRequest(c)
+ 
+ 			e.contextPool.Put(c)
+ 		}
+@@ -3039,7 +3039,7 @@ func TestDefaultRouter_Remove(t *testing.T) {
+ 			for _, p := range toCheckPaths {
+ 				req := httptest.NewRequest(http.MethodGet, p, nil)
+ 				c := e.NewContext(req, nil)
+-				_ = e.Router().Route(c)
++				_ = e.Router().RouteRequest(c)
+ 				assert.Equal(t, p, c.Path(), "after removing %v we matched wrong route. when matching: %v, got: %v", tc.whenPath, p, c.Path())
+ 			}
+ 		})
+@@ -3164,7 +3164,7 @@ func TestDefaultRouter_UnescapePathParamValues(t *testing.T) {
+ 			req.URL.RawPath = tc.whenURL
+ 
+ 			c := e.NewContext(req, nil)
+-			_ = e.Router().Route(c)
++			_ = e.Router().RouteRequest(c)
+ 
+ 			assert.Equal(t, tc.expectPath, c.Path())
+ 			assert.Equal(t, tc.expectPathValues, c.PathValues())
+@@ -3419,7 +3419,7 @@ func TestRouter_RouteWhenNotFoundRouteAnyKind(t *testing.T) {
+ 			req := httptest.NewRequest(http.MethodGet, tc.whenURL, nil)
+ 			c := e.NewContext(req, nil)
+ 
+-			handler := r.Route(c)
++			handler := r.RouteRequest(c)
+ 			handler(c)
+ 
+ 			testValue, _ := c.Get("ID").(int)
+@@ -3488,7 +3488,7 @@ func TestRouter_RouteWhenNotFoundRouteParamKind(t *testing.T) {
+ 			req := httptest.NewRequest(http.MethodGet, tc.whenURL, nil)
+ 			c := e.NewContext(req, nil)
+ 
+-			handler := r.Route(c)
++			handler := r.RouteRequest(c)
+ 			handler(c)
+ 
+ 			testValue, _ := c.Get("ID").(int)
+@@ -3541,7 +3541,7 @@ func TestRouter_RouteWhenNotFoundRouteStaticKind(t *testing.T) {
+ 			req := httptest.NewRequest(http.MethodGet, tc.whenURL, nil)
+ 			c := e.NewContext(req, nil)
+ 
+-			handler := r.Route(c)
++			handler := r.RouteRequest(c)
+ 			handler(c)
+ 
+ 			testValue, _ := c.Get("ID").(int)

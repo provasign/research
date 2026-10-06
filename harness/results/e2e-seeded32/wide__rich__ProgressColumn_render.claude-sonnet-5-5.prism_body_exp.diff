@@ -1,0 +1,214 @@
+diff --git a/rich/progress.py b/rich/progress.py
+index c2de125a..100ed5aa 100644
+--- a/rich/progress.py
++++ b/rich/progress.py
+@@ -537,12 +537,12 @@ class ProgressColumn(ABC):
+                 if timestamp + self.max_refresh > current_time:
+                     return renderable
+ 
+-        renderable = self.render(task)
++        renderable = self.render_cell(task)
+         self._renderable_cache[task.id] = (current_time, renderable)
+         return renderable
+ 
+     @abstractmethod
+-    def render(self, task: "Task") -> RenderableType:
++    def render_cell(self, task: "Task") -> RenderableType:
+         """Should return a renderable object."""
+ 
+ 
+@@ -559,7 +559,7 @@ class RenderableColumn(ProgressColumn):
+         self.renderable = renderable
+         super().__init__(table_column=table_column)
+ 
+-    def render(self, task: "Task") -> RenderableType:
++    def render_cell(self, task: "Task") -> RenderableType:
+         return self.renderable
+ 
+ 
+@@ -604,7 +604,7 @@ class SpinnerColumn(ProgressColumn):
+         """
+         self.spinner = Spinner(spinner_name, style=spinner_style, speed=speed)
+ 
+-    def render(self, task: "Task") -> RenderableType:
++    def render_cell(self, task: "Task") -> RenderableType:
+         text = (
+             self.finished_text
+             if task.finished
+@@ -632,7 +632,7 @@ class TextColumn(ProgressColumn):
+         self.highlighter = highlighter
+         super().__init__(table_column=table_column or Column(no_wrap=True))
+ 
+-    def render(self, task: "Task") -> Text:
++    def render_cell(self, task: "Task") -> Text:
+         _text = self.text_format.format(task=task)
+         if self.markup:
+             text = Text.from_markup(_text, style=self.style, justify=self.justify)
+@@ -670,7 +670,7 @@ class BarColumn(ProgressColumn):
+         self.pulse_style = pulse_style
+         super().__init__(table_column=table_column)
+ 
+-    def render(self, task: "Task") -> ProgressBar:
++    def render_cell(self, task: "Task") -> ProgressBar:
+         """Gets a progress bar widget for a task."""
+         return ProgressBar(
+             total=max(0, task.total) if task.total is not None else None,
+@@ -688,7 +688,7 @@ class BarColumn(ProgressColumn):
+ class TimeElapsedColumn(ProgressColumn):
+     """Renders time elapsed."""
+ 
+-    def render(self, task: "Task") -> Text:
++    def render_cell(self, task: "Task") -> Text:
+         """Show time elapsed."""
+         elapsed = task.finished_time if task.finished else task.elapsed
+         if elapsed is None:
+@@ -753,7 +753,7 @@ class TaskProgressColumn(TextColumn):
+         data_speed = speed / unit
+         return Text(f"{data_speed:.1f}{suffix} it/s", style="progress.percentage")
+ 
+-    def render(self, task: "Task") -> Text:
++    def render_cell(self, task: "Task") -> Text:
+         if task.total is None and self.show_speed:
+             return self.render_speed(task.finished_speed or task.speed)
+         text_format = (
+@@ -790,7 +790,7 @@ class TimeRemainingColumn(ProgressColumn):
+         self.elapsed_when_finished = elapsed_when_finished
+         super().__init__(table_column=table_column)
+ 
+-    def render(self, task: "Task") -> Text:
++    def render_cell(self, task: "Task") -> Text:
+         """Show time remaining."""
+         if self.elapsed_when_finished and task.finished:
+             task_time = task.finished_time
+@@ -820,7 +820,7 @@ class TimeRemainingColumn(ProgressColumn):
+ class FileSizeColumn(ProgressColumn):
+     """Renders completed filesize."""
+ 
+-    def render(self, task: "Task") -> Text:
++    def render_cell(self, task: "Task") -> Text:
+         """Show data completed."""
+         data_size = filesize.decimal(int(task.completed))
+         return Text(data_size, style="progress.filesize")
+@@ -829,7 +829,7 @@ class FileSizeColumn(ProgressColumn):
+ class TotalFileSizeColumn(ProgressColumn):
+     """Renders total filesize."""
+ 
+-    def render(self, task: "Task") -> Text:
++    def render_cell(self, task: "Task") -> Text:
+         """Show data completed."""
+         data_size = filesize.decimal(int(task.total)) if task.total is not None else ""
+         return Text(data_size, style="progress.filesize.total")
+@@ -851,7 +851,7 @@ class MofNCompleteColumn(ProgressColumn):
+         self.separator = separator
+         super().__init__(table_column=table_column)
+ 
+-    def render(self, task: "Task") -> Text:
++    def render_cell(self, task: "Task") -> Text:
+         """Show completed/total."""
+         completed = int(task.completed)
+         total = int(task.total) if task.total is not None else "?"
+@@ -875,7 +875,7 @@ class DownloadColumn(ProgressColumn):
+         self.binary_units = binary_units
+         super().__init__(table_column=table_column)
+ 
+-    def render(self, task: "Task") -> Text:
++    def render_cell(self, task: "Task") -> Text:
+         """Calculate common unit for completed and total."""
+         completed = int(task.completed)
+ 
+@@ -914,7 +914,7 @@ class DownloadColumn(ProgressColumn):
+ class TransferSpeedColumn(ProgressColumn):
+     """Renders human readable transfer speed."""
+ 
+-    def render(self, task: "Task") -> Text:
++    def render_cell(self, task: "Task") -> Text:
+         """Show data transfer speed."""
+         speed = task.finished_speed or task.speed
+         if speed is None:
+diff --git a/tests/test_progress.py b/tests/test_progress.py
+index 20f426a4..7be75da9 100644
+--- a/tests/test_progress.py
++++ b/tests/test_progress.py
+@@ -64,19 +64,19 @@ def test_bar_columns():
+ def test_text_column():
+     text_column = TextColumn("[b]foo", highlighter=NullHighlighter())
+     task = Task(1, "test", 100, 20, _get_time=lambda: 1.0)
+-    text = text_column.render(task)
++    text = text_column.render_cell(task)
+     assert str(text) == "foo"
+ 
+     text_column = TextColumn("[b]bar", markup=False)
+     task = Task(1, "test", 100, 20, _get_time=lambda: 1.0)
+-    text = text_column.render(task)
++    text = text_column.render_cell(task)
+     assert text == Text("[b]bar")
+ 
+ 
+ def test_time_elapsed_column():
+     column = TimeElapsedColumn()
+     task = Task(1, "test", 100, 20, _get_time=lambda: 1.0)
+-    text = column.render(task)
++    text = column.render_cell(task)
+     assert str(text) == "-:--:--"
+ 
+ 
+@@ -107,7 +107,7 @@ def test_compact_time_remaining_column(task_time, formatted):
+     task = SimpleNamespace(finished=False, time_remaining=task_time, total=100)
+     column = TimeRemainingColumn(compact=True)
+ 
+-    assert str(column.render(task)) == formatted
++    assert str(column.render_cell(task)) == formatted
+ 
+ 
+ def test_time_remaining_column_elapsed_when_finished():
+@@ -117,13 +117,13 @@ def test_time_remaining_column_elapsed_when_finished():
+     task = SimpleNamespace(finished=True, finished_time=task_time, total=100)
+     column = TimeRemainingColumn(elapsed_when_finished=True)
+ 
+-    assert str(column.render(task)) == formatted
++    assert str(column.render_cell(task)) == formatted
+ 
+ 
+ def test_renderable_column():
+     column = RenderableColumn("foo")
+     task = Task(1, "test", 100, 20, _get_time=lambda: 1.0)
+-    assert column.render(task) == "foo"
++    assert column.render_cell(task) == "foo"
+ 
+ 
+ def test_spinner_column():
+@@ -136,14 +136,14 @@ def test_spinner_column():
+     column = SpinnerColumn()
+     column.set_spinner("dots2")
+     task = Task(1, "test", 100, 20, _get_time=get_time)
+-    result = column.render(task)
++    result = column.render_cell(task)
+     print(repr(result))
+     expected = "⣾"
+     assert str(result) == expected
+ 
+     time += 1.0
+     column.spinner.update(speed=0.5)
+-    result = column.render(task)
++    result = column.render_cell(task)
+     print(repr(result))
+     expected = "⡿"
+     assert str(result) == expected
+@@ -152,7 +152,7 @@ def test_spinner_column():
+ def test_download_progress_uses_decimal_units() -> None:
+     column = DownloadColumn()
+     test_task = Task(1, "test", 1000, 500, _get_time=lambda: 1.0)
+-    rendered_progress = str(column.render(test_task))
++    rendered_progress = str(column.render_cell(test_task))
+     expected = "0.5/1.0 kB"
+     assert rendered_progress == expected
+ 
+@@ -160,7 +160,7 @@ def test_download_progress_uses_decimal_units() -> None:
+ def test_download_progress_uses_binary_units() -> None:
+     column = DownloadColumn(binary_units=True)
+     test_task = Task(1, "test", 1024, 512, _get_time=lambda: 1.0)
+-    rendered_progress = str(column.render(test_task))
++    rendered_progress = str(column.render_cell(test_task))
+     expected = "0.5/1.0 KiB"
+     assert rendered_progress == expected
+ 

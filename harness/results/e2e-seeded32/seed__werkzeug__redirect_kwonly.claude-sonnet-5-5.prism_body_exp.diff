@@ -1,0 +1,74 @@
+diff --git a/examples/couchy/views.py b/examples/couchy/views.py
+index c1547e7d..d4702a32 100644
+--- a/examples/couchy/views.py
++++ b/examples/couchy/views.py
+@@ -49,7 +49,7 @@ def link(request, uid):
+     url = URL.load(uid)
+     if not url:
+         raise NotFound()
+-    return redirect(url.target, 301)
++    return redirect(url.target, code=301)
+ 
+ 
+ @expose("/list/", defaults={"page": 1})
+diff --git a/examples/shorty/views.py b/examples/shorty/views.py
+index 7a1ee20b..eec4ac8f 100644
+--- a/examples/shorty/views.py
++++ b/examples/shorty/views.py
+@@ -45,7 +45,7 @@ def link(request, uid):
+     url = URL.query.get(uid)
+     if not url:
+         raise NotFound()
+-    return redirect(url.target, 301)
++    return redirect(url.target, code=301)
+ 
+ 
+ @expose("/list/", defaults={"page": 1})
+diff --git a/src/werkzeug/routing/exceptions.py b/src/werkzeug/routing/exceptions.py
+index fd75ec76..8266cd4b 100644
+--- a/src/werkzeug/routing/exceptions.py
++++ b/src/werkzeug/routing/exceptions.py
+@@ -66,7 +66,7 @@ class RequestRedirect(HTTPException, RoutingException):
+         environ: WSGIEnvironment | Request | None = None,
+         scope: dict[str, t.Any] | None = None,
+     ) -> Response:
+-        return redirect(self.new_url, self.code)
++        return redirect(self.new_url, code=self.code)
+ 
+ 
+ class RequestPath(RoutingException):
+diff --git a/src/werkzeug/utils.py b/src/werkzeug/utils.py
+index b8462a4c..fea11b92 100644
+--- a/src/werkzeug/utils.py
++++ b/src/werkzeug/utils.py
+@@ -208,7 +208,7 @@ def secure_filename(filename: str) -> str:
+ 
+ 
+ def redirect(
+-    location: str, code: int = 303, Response: type[Response] | None = None
++    location: str, *, code: int = 303, Response: type[Response] | None = None
+ ) -> Response:
+     """Create a response that redirects the client to the target location.
+ 
+@@ -298,7 +298,7 @@ def append_slash_redirect(environ: WSGIEnvironment, code: int = 308) -> Response
+     if query_string:
+         new_path = f"{new_path}?{query_string}"
+ 
+-    return redirect(new_path, code)
++    return redirect(new_path, code=code)
+ 
+ 
+ def send_file(
+diff --git a/tests/test_utils.py b/tests/test_utils.py
+index 43e34193..a5dc4836 100644
+--- a/tests/test_utils.py
++++ b/tests/test_utils.py
+@@ -33,7 +33,7 @@ def test_redirect(url: str, code: int | None, expect: str) -> None:
+         resp = utils.redirect(url)
+         assert resp.status_code == 303
+     else:
+-        resp = utils.redirect(url, code)
++        resp = utils.redirect(url, code=code)
+         assert resp.status_code == code
+ 
+     assert resp.headers["Location"] == url

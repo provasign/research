@@ -1,0 +1,97 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index cc8fb47..7d06b50 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -1392,7 +1392,7 @@ class Command:
+         ctx._opt_prefixes.update(parser._opt_prefixes)
+         return args
+ 
+-    def invoke(self, ctx: Context) -> t.Any:
++    def run_command(self, ctx: Context) -> t.Any:
+         """Given a context, this invokes the attached callback (if it exists)
+         in the right way.
+         """
+@@ -1543,7 +1543,7 @@ class Command:
+         try:
+             try:
+                 with self.make_context(prog_name, args, **extra) as ctx:
+-                    rv = self.invoke(ctx)
++                    rv = self.run_command(ctx)
+                     if not standalone_mode:
+                         return rv
+                     # it's not safe to `ctx.exit(rv)` here!
+@@ -1989,7 +1989,7 @@ class Group(Command):
+ 
+         return ctx.args
+ 
+-    def invoke(self, ctx: Context) -> t.Any:
++    def run_command(self, ctx: Context) -> t.Any:
+         def _process_result(value: t.Any) -> t.Any:
+             if self._result_callback is not None:
+                 value = ctx.invoke(self._result_callback, value, **ctx.params)
+@@ -2001,7 +2001,7 @@ class Group(Command):
+                 # invoked with the group return value for regular
+                 # groups, or an empty list for chained groups.
+                 with ctx:
+-                    rv = super().invoke(ctx)
++                    rv = super().run_command(ctx)
+                     return _process_result([] if self.chain else rv)
+             ctx.fail(_("Missing command."))
+ 
+@@ -2020,10 +2020,10 @@ class Group(Command):
+                 cmd_name, cmd, args = self.resolve_command(ctx, args)
+                 assert cmd is not None
+                 ctx.invoked_subcommand = cmd_name
+-                super().invoke(ctx)
++                super().run_command(ctx)
+                 sub_ctx = cmd.make_context(cmd_name, args, parent=ctx)
+                 with sub_ctx:
+-                    return _process_result(sub_ctx.command.invoke(sub_ctx))
++                    return _process_result(sub_ctx.command.run_command(sub_ctx))
+ 
+         # In chain mode we create the contexts step by step, but after the
+         # base command has been invoked.  Because at that point we do not
+@@ -2032,7 +2032,7 @@ class Group(Command):
+         # but nothing else.
+         with ctx:
+             ctx.invoked_subcommand = "*" if args else None
+-            super().invoke(ctx)
++            super().run_command(ctx)
+ 
+             # Otherwise we make every single context and invoke them in a
+             # chain.  In that case the return value to the result processor
+@@ -2054,7 +2054,7 @@ class Group(Command):
+             rv = []
+             for sub_ctx in contexts:
+                 with sub_ctx:
+-                    rv.append(sub_ctx.command.invoke(sub_ctx))
++                    rv.append(sub_ctx.command.run_command(sub_ctx))
+             return _process_result(rv)
+ 
+     def resolve_command(
+diff --git a/tests/test_basic.py b/tests/test_basic.py
+index 1c9c0c1..10fc6f8 100644
+--- a/tests/test_basic.py
++++ b/tests/test_basic.py
+@@ -134,7 +134,7 @@ def test_return_values():
+         return 42
+ 
+     with cli.make_context("foo", []) as ctx:
+-        rv = cli.invoke(ctx)
++        rv = cli.run_command(ctx)
+         assert rv == 42
+ 
+ 
+diff --git a/tests/test_commands.py b/tests/test_commands.py
+index 35ba65c..7212c77 100644
+--- a/tests/test_commands.py
++++ b/tests/test_commands.py
+@@ -168,7 +168,7 @@ def test_custom_parser(runner):
+         def get_help(self, ctx):
+             return self.parser.format_help()
+ 
+-        def invoke(self, ctx):
++        def run_command(self, ctx):
+             ctx.invoke(self.callback, ctx.args, **ctx.params)
+ 
+     parser = optparse.OptionParser(usage="Usage: foo test [OPTIONS]")
