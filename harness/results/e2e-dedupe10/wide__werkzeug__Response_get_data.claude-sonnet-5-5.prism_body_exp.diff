@@ -1,0 +1,255 @@
+diff --git a/src/werkzeug/test.py b/src/werkzeug/test.py
+index c5a6579f..47cf6f0b 100644
+--- a/src/werkzeug/test.py
++++ b/src/werkzeug/test.py
+@@ -1345,7 +1345,7 @@ class TestResponse(Response):
+ 
+         .. versionadded:: 2.1
+         """
+-        return self.get_data(as_text=True)
++        return self.read_body(as_text=True)
+ 
+ 
+ @dataclasses.dataclass
+diff --git a/src/werkzeug/wrappers/response.py b/src/werkzeug/wrappers/response.py
+index 80832426..9ade297c 100644
+--- a/src/werkzeug/wrappers/response.py
++++ b/src/werkzeug/wrappers/response.py
+@@ -260,12 +260,12 @@ class Response(_SansIOResponse):
+         return cls(*run_wsgi_app(app, environ, buffered))
+ 
+     @t.overload
+-    def get_data(self, as_text: t.Literal[False] = False) -> bytes: ...
++    def read_body(self, as_text: t.Literal[False] = False) -> bytes: ...
+ 
+     @t.overload
+-    def get_data(self, as_text: t.Literal[True]) -> str: ...
++    def read_body(self, as_text: t.Literal[True]) -> str: ...
+ 
+-    def get_data(self, as_text: bool = False) -> bytes | str:
++    def read_body(self, as_text: bool = False) -> bytes | str:
+         """The string representation of the response body.  Whenever you call
+         this property the response iterable is encoded and flattened.  This
+         can lead to unwanted behavior if you stream big data.
+@@ -300,7 +300,7 @@ class Response(_SansIOResponse):
+             self.headers["Content-Length"] = str(len(value))
+ 
+     data = property(
+-        get_data,
++        read_body,
+         set_data,
+         doc="A descriptor that calls :meth:`get_data` and :meth:`set_data`.",
+     )
+@@ -614,7 +614,7 @@ class Response(_SansIOResponse):
+         if not (force or self.is_json):
+             return None
+ 
+-        data = self.get_data()
++        data = self.read_body()
+ 
+         try:
+             return self.json_module.loads(data)
+@@ -797,7 +797,7 @@ class Response(_SansIOResponse):
+             Use SHA-1.
+         """
+         if overwrite or "ETag" not in self.headers:
+-            self.set_etag(generate_etag(self.get_data()), weak)
++            self.set_etag(generate_etag(self.read_body()), weak)
+ 
+ 
+ class ResponseStream:
+diff --git a/tests/test_debug.py b/tests/test_debug.py
+index d5278c44..15968507 100644
+--- a/tests/test_debug.py
++++ b/tests/test_debug.py
+@@ -230,7 +230,7 @@ class TestDebugHelpers:
+         debugged = DebuggedApplication(app)
+         client = Client(debugged)
+         response = client.get("/")
+-        data = response.get_data(as_text=True)
++        data = response.read_body(as_text=True)
+         assert 'raise ValueError("inner")' in data
+         assert '<div class="exc-divider">' in data
+         assert 'raise KeyError("outer")' in data
+diff --git a/tests/test_exceptions.py b/tests/test_exceptions.py
+index 4f3cd57f..eab87392 100644
+--- a/tests/test_exceptions.py
++++ b/tests/test_exceptions.py
+@@ -18,7 +18,7 @@ def test_proxy_exception():
+         exceptions.abort(orig_resp)
+     resp = excinfo.value.get_response({})
+     assert resp is orig_resp
+-    assert resp.get_data() == b"Hello World"
++    assert resp.read_body() == b"Hello World"
+ 
+ 
+ @pytest.mark.parametrize(
+diff --git a/tests/test_formparser.py b/tests/test_formparser.py
+index 26c0675a..10472844 100644
+--- a/tests/test_formparser.py
++++ b/tests/test_formparser.py
+@@ -278,7 +278,7 @@ class TestMultiPart:
+                     content_type=f'multipart/form-data; boundary="{boundary}"',
+                     content_length=len(data),
+                 ) as response:
+-                    lines = response.get_data().split(b"\n", 3)
++                    lines = response.read_body().split(b"\n", 3)
+                     assert lines[0] == repr(filename).encode("ascii")
+                     assert lines[1] == repr(field).encode("ascii")
+                     assert lines[2] == repr(content_type).encode("ascii")
+@@ -290,7 +290,7 @@ class TestMultiPart:
+                 content_type=f'multipart/form-data; boundary="{boundary}"',
+                 content_length=len(data),
+             ) as response:
+-                assert response.get_data() == repr(text).encode()
++                assert response.read_body() == repr(text).encode()
+ 
+     def test_ie7_unc_path(self):
+         client = Client(form_data_consumer)
+@@ -303,7 +303,7 @@ class TestMultiPart:
+             content_type=f'multipart/form-data; boundary="{boundary}"',
+             content_length=len(data),
+         ) as response:
+-            lines = response.get_data().split(b"\n", 3)
++            lines = response.read_body().split(b"\n", 3)
+             assert lines[0] == b"'Sellersburg Town Council Meeting 02-22-2010doc.doc'"
+ 
+     def test_premature_end_of_file(self):
+diff --git a/tests/test_utils.py b/tests/test_utils.py
+index 01c233d0..1faef2b5 100644
+--- a/tests/test_utils.py
++++ b/tests/test_utils.py
+@@ -36,18 +36,18 @@ def test_redirect(url: str, code: int | None, expect: str) -> None:
+ 
+     assert resp.headers["Location"] == url
+     assert resp.get_wsgi_headers(environ)["Location"] == expect
+-    assert resp.get_data(as_text=True).count(url) == 2
++    assert resp.read_body(as_text=True).count(url) == 2
+ 
+ 
+ def test_redirect_xss():
+     location = 'http://example.com/?xss="><script>alert(1)</script>'
+     resp = utils.redirect(location)
+-    assert b"<script>alert(1)</script>" not in resp.get_data()
++    assert b"<script>alert(1)</script>" not in resp.read_body()
+ 
+     location = 'http://example.com/?xss="onmouseover="alert(1)'
+     resp = utils.redirect(location)
+     assert (
+-        b'href="http://example.com/?xss="onmouseover="alert(1)"' not in resp.get_data()
++        b'href="http://example.com/?xss="onmouseover="alert(1)"' not in resp.read_body()
+     )
+ 
+ 
+diff --git a/tests/test_wrappers.py b/tests/test_wrappers.py
+index 9cb779b0..c760b649 100644
+--- a/tests/test_wrappers.py
++++ b/tests/test_wrappers.py
+@@ -231,12 +231,12 @@ def test_response_access_control():
+ 
+ def test_base_response():
+     response = wrappers.Response("öäü")
+-    assert response.get_data() == "öäü".encode()
++    assert response.read_body() == "öäü".encode()
+ 
+     # writing
+     response = wrappers.Response("foo")
+     response.stream.write("bar")
+-    assert response.get_data() == b"foobar"
++    assert response.read_body() == b"foobar"
+ 
+     # set cookie
+     response = wrappers.Response()
+@@ -366,7 +366,7 @@ def test_type_forcing():
+         response = SpecialResponse.force_type(orig_resp, fake_env)
+         assert response.__class__ is SpecialResponse
+         assert response.foo() == 42
+-        assert response.get_data() == b"Hello World!"
++        assert response.read_body() == b"Hello World!"
+         assert response.content_type == "text/html"
+ 
+     # without env, no arbitrary conversion
+@@ -510,7 +510,7 @@ def test_etag_response():
+     assert not response.cache_control
+     response.cache_control.must_revalidate = True
+     response.cache_control.max_age = 60
+-    response.headers["Content-Length"] = len(response.get_data())
++    response.headers["Content-Length"] = len(response.read_body())
+     assert response.headers["Cache-Control"] in (
+         "must-revalidate, max-age=60",
+         "max-age=60, must-revalidate",
+@@ -551,7 +551,7 @@ def test_etag_response_412():
+     assert not response.cache_control
+     response.cache_control.must_revalidate = True
+     response.cache_control.max_age = 60
+-    response.headers["Content-Length"] = len(response.get_data())
++    response.headers["Content-Length"] = len(response.read_body())
+     assert response.headers["Cache-Control"] in (
+         "must-revalidate, max-age=60",
+         "max-age=60, must-revalidate",
+@@ -712,7 +712,7 @@ def test_response_stream():
+     response.stream.write("Hello ")
+     response.stream.write("World!")
+     assert response.response == ["Hello ", "World!"]
+-    assert response.get_data() == b"Hello World!"
++    assert response.read_body() == b"Hello World!"
+ 
+ 
+ def test_common_response_descriptors():
+@@ -890,7 +890,7 @@ def test_response_iter_wrapping():
+     del resp.headers["Content-Length"]
+     resp.response = uppercasing(resp.iter_encoded())
+     actual_resp = wrappers.Response.from_app(resp, req.environ, buffered=True)
+-    assert actual_resp.get_data() == b"FOOBAR"
++    assert actual_resp.read_body() == b"FOOBAR"
+ 
+ 
+ def test_response_freeze():
+@@ -944,7 +944,7 @@ def test_new_response_iterator_behavior():
+     # werkzeug encodes when set to `data` now, which happens
+     # if a string is passed to the response object.
+     assert resp.response == ["Hello Wörld!".encode()]
+-    assert resp.get_data() == "Hello Wörld!".encode()
++    assert resp.read_body() == "Hello Wörld!".encode()
+     assert get_content_length(resp) == 13
+     assert not resp.is_streamed
+     assert resp.is_sequence
+@@ -952,7 +952,7 @@ def test_new_response_iterator_behavior():
+     # try the same for manual assignment
+     resp.set_data("Wörd")
+     assert resp.response == ["Wörd".encode()]
+-    assert resp.get_data() == "Wörd".encode()
++    assert resp.read_body() == "Wörd".encode()
+     assert get_content_length(resp) == 5
+     assert not resp.is_streamed
+     assert resp.is_sequence
+@@ -961,7 +961,7 @@ def test_new_response_iterator_behavior():
+     resp.response = generate_items()
+     assert resp.is_streamed
+     assert not resp.is_sequence
+-    assert resp.get_data() == "Hello Wörld!".encode()
++    assert resp.read_body() == "Hello Wörld!".encode()
+     assert resp.response == [b"Hello ", "Wörld!".encode()]
+     assert not resp.is_streamed
+     assert resp.is_sequence
+@@ -971,9 +971,9 @@ def test_new_response_iterator_behavior():
+     resp.implicit_sequence_conversion = False
+     assert resp.is_streamed
+     assert not resp.is_sequence
+-    pytest.raises(RuntimeError, lambda: resp.get_data())
++    pytest.raises(RuntimeError, lambda: resp.read_body())
+     resp.make_sequence()
+-    assert resp.get_data() == "Hello Wörld!".encode()
++    assert resp.read_body() == "Hello Wörld!".encode()
+     assert resp.response == [b"Hello ", "Wörld!".encode()]
+     assert not resp.is_streamed
+     assert resp.is_sequence
+@@ -1160,7 +1160,7 @@ def test_stream_zip():
+     with contextlib.closing(zipfile.ZipFile(response.stream, mode="w")) as z:
+         z.writestr("foo", b"bar")
+ 
+-    buffer = BytesIO(response.get_data())
++    buffer = BytesIO(response.read_body())
+     with contextlib.closing(zipfile.ZipFile(buffer, mode="r")) as z:
+         assert z.namelist() == ["foo"]
+         assert z.read("foo") == b"bar"
