@@ -14,6 +14,7 @@ host repo and the agent's own edits are never mutated by scoring.
 from __future__ import annotations
 
 import json
+import shlex
 import re
 import subprocess
 import tempfile
@@ -81,7 +82,11 @@ def _run_tests_in_docker(task: dict, worktree: Path) -> PytestRun:
     score() do not need to know which language ran."""
     language = task.get("language", "python")
     if language == "python":
-        return _pytest_in_docker(worktree, task["test_modules"], task["repo"],
+        # pytest_args: extra arguments for this task's run, shell-quoted. The
+        # click seed task's suite has four stress tests parametrized 31,000
+        # ways (-k "not test_stress" skips them; none touch the seeded API).
+        args = [shlex.quote(a) for a in task.get("pytest_args", [])]
+        return _pytest_in_docker(worktree, list(task["test_modules"]) + args, task["repo"],
                                   task.get("test_cmds"))
     runner = docker_eval_lang.RUNNERS.get(language)
     if runner is None:
