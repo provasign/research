@@ -30,6 +30,7 @@ for _d in (_H, _os.path.join(_H, "runners"), _os.path.join(_H, "aggregate"),
 import argparse
 import os
 import json
+import random
 import shutil
 import subprocess
 import sys
@@ -176,6 +177,11 @@ def _worktree(task):
     for ref in sh("git", "-C", str(wt), "for-each-ref", "--format=%(refname)").split():
         sh("git", "-C", str(wt), "update-ref", "-d", ref)
     sh("git", "-C", str(wt), "remote", "remove", "origin", check=False)
+    # No automatic maintenance in the throwaway clone. An agent's `git stash`
+    # or commit started `git repack --geometric` on the 4.7 GB jackson clone:
+    # 6 GB RSS per cell, and it stalled an 80-cell run (2026-10-06).
+    for key, value in (("gc.auto", "0"), ("maintenance.auto", "false"), ("gc.autoDetach", "false")):
+        sh("git", "-C", str(wt), "config", key, value)
     head = sh("git", "-C", str(wt), "rev-parse", "HEAD").strip()
     if head != task["base_commit"]:
         raise RuntimeError(f"checkout for {task['instance_id']} is at {head!r}, expected "
@@ -664,6 +670,52 @@ def _upstream_guard_settings() -> str:
         {"matcher": "Bash|WebFetch", "hooks": [{"type": "command", "command": cmd}]}]}})
 
 
+def _cloud_cmd(model: str, arm: str, wt: Path, prompt: str) -> list:
+    spec = ARMS[arm]
+    cmd = ["claude", "-p", prompt, "--model", model, "--output-format", "json",
+           "--dangerously-skip-permissions", "--strict-mcp-config",
+           "--settings", _upstream_guard_settings(),
+           "--allowedTools", *spec["allowed"]]
+    if arm in PRISM_INIT_ARMS:
+        cmd += ["--mcp-config", str(wt / ".mcp.json")]
+    elif spec["mcp"]:
+        cmd += ["--mcp-config", spec["mcp"]]
+    return cmd
+
+
+WARM_TTL_S = 50 * 60  # the CLI's prompt cache lives 1 hour
+
+
+def warm_cache(task: dict, arm: str, model: str) -> None:
+    """Write the arm's shared prompt prefix (system prompt, tool definitions,
+    MCP schemas) to the prompt cache before its first real cell. Measured
+    2026-10-06: the first cell of a cold run wrote 13.7k extra cache tokens
+    (~$0.05) that every later cell read, which made that one cell, and its arm,
+    look more expensive. Same command and setup as a real cell, trivial prompt.
+    Skipped when this arm and model were warmed within WARM_TTL_S."""
+    if model == "local" or arm in ("mason", "mason_walk"):
+        return
+    stamp = OUT / f".warm.{model}.{arm}"
+    if stamp.exists() and time.time() - stamp.stat().st_mtime < WARM_TTL_S:
+        return
+    repo, wt = _worktree(task)
+    try:
+        _prepare_build_env(wt, task)
+        _index_graph(wt, arm, task)
+        env, _ = _agent_env(wt, task)
+        cmd = _cloud_cmd(model, arm, wt, "Reply with the single word OK. Do not use any tools.")
+        r = subprocess.run(cmd, cwd=wt, capture_output=True, text=True, timeout=600, env=env)
+        cost = None
+        try:
+            cost = json.loads(r.stdout).get("total_cost_usd")
+        except Exception:
+            pass
+        print(f"  (warmed {model} {arm}: rc={r.returncode} cost={cost})", flush=True)
+    finally:
+        _remove_worktree(wt)
+    stamp.touch()
+
+
 def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
     spec = ARMS[arm]
     tail = {"seeded_refactor": SEEDED_TAIL, "wide": WIDE_TAIL}.get(task.get("kind"), TASK_TAIL)
@@ -678,14 +730,7 @@ def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
         # context tool makes (2026-09-29).
         tail = MINIMAL_TAIL
     prompt = spec["guidance"] + "\n\nISSUE:\n" + task["problem_statement"] + tail
-    cmd = ["claude", "-p", prompt, "--model", model, "--output-format", "json",
-           "--dangerously-skip-permissions", "--strict-mcp-config",
-           "--settings", _upstream_guard_settings(),
-           "--allowedTools", *spec["allowed"]]
-    if arm in PRISM_INIT_ARMS:
-        cmd += ["--mcp-config", str(wt / ".mcp.json")]
-    elif spec["mcp"]:
-        cmd += ["--mcp-config", spec["mcp"]]
+    cmd = _cloud_cmd(model, arm, wt, prompt)
     env, runtimes = _agent_env(wt, task)
     t0 = time.monotonic()
     r = subprocess.run(cmd, cwd=wt, capture_output=True, text=True, timeout=1800, env=env)
@@ -948,6 +993,11 @@ def main():
     ap.add_argument("--trials", type=int, default=1,
                     help="trials per cell; trial 1 keeps the unsuffixed cell name "
                          "(cache-compatible), trials 2..N write .t<n>.json")
+    ap.add_argument("--order", choices=("interleaved", "blocked"), default="interleaved",
+                    help="interleaved (default): rounds by trial, rotating task order, seeded "
+                         "shuffle of arms per task; blocked: task -> arm -> trial (old order)")
+    ap.add_argument("--no-warm", dest="warm", action="store_false",
+                    help="skip the per-arm prompt-cache warm-up before an arm's first cell")
     a = ap.parse_args()
     tasks = [json.loads((Path("tasks/e2e") / f"{i}.json").read_text())
              for i in json.loads(Path(a.manifest).read_text())]
@@ -960,43 +1010,70 @@ def main():
     import os
     wait_on_limit = os.environ.get("E2E_WAIT_ON_LIMIT") == "1"
     sleep_s = int(os.environ.get("E2E_LIMIT_SLEEP", "1200"))
-    for model in a.models.split(","):
-        for task in tasks:
-            for arm in a.arms.split(","):
-                for trial in range(1, a.trials + 1):
-                    tag = "" if trial == 1 else f".t{trial}"
-                    f = OUT / f"{task['instance_id']}.{model}.{arm}{tag}.json"
-                    if f.exists():
-                        print(f"  (cached) {f.name}", flush=True); continue
-                    while True:  # retry the SAME cell across a rate-limit window
-                        try:
-                            rec = run_cell(task, arm, model, tag)
-                            break
-                        except RateLimited as e:
-                            (OUT / "PAUSED.json").write_text(json.dumps(
-                                {"at": f.name, "reason": str(e)[:200], "ts": int(time.time())}))
-                            if not wait_on_limit:
-                                print(f"  PAUSED at {f.name}: rate-limited", flush=True)
-                                sys.exit(42)
-                            print(f"  RATE-LIMITED at {f.name}; sleeping {sleep_s}s then retrying",
-                                  flush=True)
-                            time.sleep(sleep_s)
-                        except Exception as e:  # noqa: BLE001
-                            # Fault-isolate a single bad cell (engine-b index failure,
-                            # maven timeout, apply reject) so a 30h unattended run does
-                            # not die on one task. Record the error and move on.
-                            import traceback
-                            rec = {"task": task["instance_id"], "arm": arm, "model": model,
-                                   "resolved": False, "error": f"{type(e).__name__}: {str(e)[:200]}"}
-                            print(f"  ERROR {f.name}: {type(e).__name__}: {str(e)[:120]}", flush=True)
-                            traceback.print_exc()
-                            break
-                    (OUT / "PAUSED.json").unlink(missing_ok=True)
-                    rec["trial"] = trial
-                    f.write_text(json.dumps(rec, indent=2))
-                    print(f"  {model:7} {arm:12} {task['instance_id'][-24:]:24} "
-                          f"t{trial} resolved={rec['resolved']} turns={rec.get('turns')} "
-                          f"wall={rec.get('wall_s')}s", flush=True)
+    def cells():
+        """Every (model, task, arm, trial) cell in run order. Interleaved (the
+        default): round k runs trial k of every task, the task order rotates
+        each round, and the arm order is shuffled per (round, task) with a
+        fixed seed, so slow drift (API latency, cache state, time of day)
+        spreads across arms instead of landing on whichever arm ran as a
+        block. Measured 2026-10-06: run as blocks, one arm's five sessions
+        drew an unlucky stretch and looked 4x more expensive on identical
+        search answers."""
+        arms = a.arms.split(",")
+        for model in a.models.split(","):
+            if a.order == "blocked":
+                for task in tasks:
+                    for arm in arms:
+                        for trial in range(1, a.trials + 1):
+                            yield model, task, arm, trial
+                continue
+            for trial in range(1, a.trials + 1):
+                shift = (trial - 1) % max(1, len(tasks))
+                for task in tasks[shift:] + tasks[:shift]:
+                    order = arms[:]
+                    random.Random(f"{trial}-{task['instance_id']}").shuffle(order)
+                    for arm in order:
+                        yield model, task, arm, trial
+
+    for model, task, arm, trial in cells():
+        tag = "" if trial == 1 else f".t{trial}"
+        f = OUT / f"{task['instance_id']}.{model}.{arm}{tag}.json"
+        if f.exists():
+            print(f"  (cached) {f.name}", flush=True); continue
+        if a.warm:
+            try:
+                warm_cache(task, arm, model)
+            except Exception as e:  # noqa: BLE001 -- warming is best-effort
+                print(f"  (warm-up failed for {arm}: {type(e).__name__}: {str(e)[:120]})", flush=True)
+        while True:  # retry the SAME cell across a rate-limit window
+            try:
+                rec = run_cell(task, arm, model, tag)
+                break
+            except RateLimited as e:
+                (OUT / "PAUSED.json").write_text(json.dumps(
+                    {"at": f.name, "reason": str(e)[:200], "ts": int(time.time())}))
+                if not wait_on_limit:
+                    print(f"  PAUSED at {f.name}: rate-limited", flush=True)
+                    sys.exit(42)
+                print(f"  RATE-LIMITED at {f.name}; sleeping {sleep_s}s then retrying",
+                      flush=True)
+                time.sleep(sleep_s)
+            except Exception as e:  # noqa: BLE001
+                # Fault-isolate a single bad cell (engine-b index failure,
+                # maven timeout, apply reject) so a 30h unattended run does
+                # not die on one task. Record the error and move on.
+                import traceback
+                rec = {"task": task["instance_id"], "arm": arm, "model": model,
+                       "resolved": False, "error": f"{type(e).__name__}: {str(e)[:200]}"}
+                print(f"  ERROR {f.name}: {type(e).__name__}: {str(e)[:120]}", flush=True)
+                traceback.print_exc()
+                break
+        (OUT / "PAUSED.json").unlink(missing_ok=True)
+        rec["trial"] = trial
+        f.write_text(json.dumps(rec, indent=2))
+        print(f"  {model:7} {arm:12} {task['instance_id'][-24:]:24} "
+              f"t{trial} resolved={rec['resolved']} turns={rec.get('turns')} "
+              f"wall={rec.get('wall_s')}s", flush=True)
     print("# done", flush=True)
 
 
