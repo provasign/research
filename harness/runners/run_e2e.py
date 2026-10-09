@@ -273,7 +273,7 @@ def _install_read_guard_hook(wt: Path) -> None:
 
 
 PRISM_INIT_ARMS = ("prism_init", "prism_init_deferred", "prism_init_no_guard",
-                    "prism_body_baseline", "prism_body_exp")
+                    "prism_body_baseline", "prism_body_exp", "prism_body_exp2")
 
 
 def _index_graph(wt: Path, arm: str, task=None):
@@ -292,7 +292,7 @@ def _index_graph(wt: Path, arm: str, task=None):
             raise RuntimeError(
                 f"prism init did not create .mcp.json in {wt} "
                 f"(rc={r.returncode}): {r.stdout[-300:]} {r.stderr[-300:]}")
-        if arm in ("prism_init", "prism_init_no_guard", "prism_body_baseline", "prism_body_exp"):
+        if arm in ("prism_init", "prism_init_no_guard", "prism_body_baseline", "prism_body_exp", "prism_body_exp2"):
             # Make the ONE compact tool resident (alwaysLoad) instead of
             # deferred behind a ToolSearch hop. Deferred-by-default was
             # chosen on a 9-task haiku A/B (2026-08-29); on this harness's

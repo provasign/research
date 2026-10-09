@@ -48,6 +48,7 @@ CFG_DIR.mkdir(exist_ok=True)
 PRISM_BIN_FOR_ARM = {
     "prism_body_baseline": os.environ.get("PRISM_BODY_BASELINE_BIN", "/tmp/prism-baseline"),
     "prism_body_exp": os.environ.get("PRISM_BODY_EXP_BIN", "/tmp/prism-experimental"),
+    "prism_body_exp2": os.environ.get("PRISM_BODY_EXP2_BIN", "/tmp/prism-experimental2"),
 }
 # Optional: run prism_init on a candidate build instead of the installed prism
 # (2026-09-25 lookup-overloads fix). `prism init` pins its own path in .mcp.json.
@@ -172,6 +173,13 @@ ARMS = {
         "mcp": "__worktree__",
     },
     "prism_body_exp": {
+        "guidance": "",
+        "allowed": _EDIT_AND_BUILD,
+        "mcp": "__worktree__",
+    },
+    # Third engine-binary arm (2026-10-06 search-body A/B/C): same setup as
+    # prism_body_exp, binary from PRISM_BODY_EXP2_BIN.
+    "prism_body_exp2": {
         "guidance": "",
         "allowed": _EDIT_AND_BUILD,
         "mcp": "__worktree__",
