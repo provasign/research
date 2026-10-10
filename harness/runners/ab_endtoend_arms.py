@@ -150,8 +150,7 @@ ARMS = {
     # Control arm for the read-guard question (2026-09-22 handoff opportunity
     # #1): byte-identical setup to prism_init (same `prism init`, same
     # CLAUDE.md steering, same alwaysLoad residency) except the read-guard
-    # hook (harness/hooks/prism_read_tracker.py / prism_read_guard.py) is
-    # withheld. The prior before/after comparison (overnight-run vs
+    # hook (installed by `prism init --read-guard`) is withheld. The prior before/after comparison (overnight-run vs
     # guard-fix-run) was confounded by different task samples; this arm lets
     # the SAME task set run hook-on (prism_init) vs hook-off (this arm).
     "prism_init_no_guard": {

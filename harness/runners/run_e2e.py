@@ -240,42 +240,20 @@ def _agent_diff(wt: Path, task) -> str:  # noqa: D401
                            *excludes, check=False)
 
 
-def _install_read_guard_hook(wt: Path) -> None:
+def _install_read_guard_hook(wt: Path, arm: str) -> None:
     """Deny a native Read that substantially overlaps a range prism already
-    delivered this session (prism_read_tracker.py/prism_read_guard.py under
-    harness/hooks/). Measured 2026-09-21: the single largest fixable driver
-    of prism-arm token blowup was re-reading content already delivered by
-    prism; advisory steering alone didn't hold up over multi-turn sessions.
-    TOOL_ARTIFACTS already excludes .claude/ from the scored diff, so these
-    files never leak into agent_diff."""
-    hooks_dir = wt / ".claude" / "hooks"
-    hooks_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy(HOOKS_SRC / "prism_read_tracker.py", hooks_dir / "prism_read_tracker.py")
-    shutil.copy(HOOKS_SRC / "prism_read_guard.py", hooks_dir / "prism_read_guard.py")
-
-    settings_path = wt / ".claude" / "settings.json"
-    settings = json.loads(settings_path.read_text()) if settings_path.exists() else {}
-    hooks = settings.setdefault("hooks", {})
-    hooks.setdefault("PostToolUse", []).append({
-        "matcher": "mcp__prism__prism",
-        "hooks": [{"type": "command",
-                  "command": f"python3 {hooks_dir / 'prism_read_tracker.py'}"}],
-    })
-    # The same tracker forgets ranges once the file may have changed: an
-    # edit tool drops that file's ranges, a file-rewriting Bash command drops
-    # all (a stale range denied a Read after an edit + stash pop, jackson
-    # pr5959, 2026-09-26).
-    hooks["PostToolUse"].append({
-        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash",
-        "hooks": [{"type": "command",
-                  "command": f"python3 {hooks_dir / 'prism_read_tracker.py'}"}],
-    })
-    hooks.setdefault("PreToolUse", []).append({
-        "matcher": "Read",
-        "hooks": [{"type": "command",
-                  "command": f"python3 {hooks_dir / 'prism_read_guard.py'}"}],
-    })
-    settings_path.write_text(json.dumps(settings, indent=2))
+    delivered this session. Installed with the arm's own binary
+    (`prism init --read-guard`), the product path, so each arm runs the guard
+    its prism ships. Until 2026-10-09 this copied harness/hooks/, a September
+    copy that had drifted from prism's (no file-change check, old state
+    file), so no benchmark measured the shipped guard. TOOL_ARTIFACTS already
+    excludes .claude/ from the scored diff, so these files never leak into
+    agent_diff."""
+    r = subprocess.run([_prism_bin(arm), "init", "--read-guard", str(wt)],
+                       capture_output=True, text=True, timeout=120)
+    if r.returncode != 0 or not (wt / ".claude" / "hooks" / "prism_read_guard.py").exists():
+        raise RuntimeError(f"prism init --read-guard failed in {wt} (rc={r.returncode}): "
+                           f"{r.stdout[-300:]} {r.stderr[-300:]}")
 
 
 PRISM_INIT_ARMS = ("prism_init", "prism_init_deferred", "prism_init_no_guard",
@@ -333,7 +311,7 @@ def _index_graph(wt: Path, arm: str, task=None):
             raise RuntimeError(f"prism index rc={r2.returncode} for {task['instance_id']} "
                                f"(compiler-backed analysis required): {r2.stderr[-600:]}")
         if arm != "prism_init_no_guard":
-            _install_read_guard_hook(wt)
+            _install_read_guard_hook(wt, arm)
     elif arm.startswith("prism"):
         r = subprocess.run(["prism", "index", str(wt)], capture_output=True,
                             text=True, timeout=300)
