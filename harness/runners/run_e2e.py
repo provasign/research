@@ -83,7 +83,21 @@ def _repo_for(task) -> Path:
     return docker_eval._repo_dir(task)
 
 
+class ScorerRanNoTests(RuntimeError):
+    """The test run produced no results (Docker down, image missing, build
+    broken before any test started). Measured 2026-10-10: with Docker Desktop
+    stopped every cell scored resolved=False with n_run=0, which reads as a
+    real loss for every arm."""
+
+
 def _score(task, diff: str) -> dict:
+    res = _score_inner(task, diff)
+    if res.get("n_run") == 0:
+        raise ScorerRanNoTests(f"scorer ran no tests for {task['instance_id']}: {res}")
+    return res
+
+
+def _score_inner(task, diff: str) -> dict:
     """Kind- and language-aware scoring: fanout tasks are scored on
     green + gold-file coverage (fanout_eval); the rest on fail->pass."""
     if not diff.strip():
@@ -651,6 +665,10 @@ def _upstream_guard_settings() -> str:
 def _cloud_cmd(model: str, arm: str, wt: Path, prompt: str) -> list:
     spec = ARMS[arm]
     cmd = ["claude", "-p", prompt, "--model", model, "--output-format", "json",
+           # Headless sessions store thinking blocks with empty text unless
+           # the display is set explicitly (CLI 2.1.296); summarized keeps
+           # the agent's reasoning readable in the preserved transcript.
+           "--thinking-display", "summarized",
            "--dangerously-skip-permissions", "--strict-mcp-config",
            "--settings", _upstream_guard_settings(),
            "--allowedTools", *spec["allowed"]]
@@ -752,6 +770,22 @@ def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
         rec["agent_error"] = (r.stderr or r.stdout)[-200:]
     rec["tool_trace"] = _tool_trace_for(wt)
     return rec
+
+
+def _preserve_transcript(session_id, dest: Path) -> str | None:
+    """Copy the CLI's session transcript (and its subagent transcripts) into
+    the results dir: Claude Code deletes ~/.claude/projects transcripts after
+    30 days, and the agents' reasoning is part of the evidence."""
+    if not session_id:
+        return None
+    for f in Path.home().glob(f".claude/projects/*/{session_id}.jsonl"):
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(f, dest)
+        side = f.with_suffix("")  # <session>/ holds subagent transcripts
+        if side.is_dir():
+            shutil.copytree(side, dest.with_suffix(""), dirs_exist_ok=True)
+        return str(dest)
+    return None
 
 
 def _api_calls(session_id) -> int | None:
@@ -977,6 +1011,9 @@ def main():
     ap.add_argument("--no-warm", dest="warm", action="store_false",
                     help="skip the per-arm prompt-cache warm-up before an arm's first cell")
     a = ap.parse_args()
+    if any(m != "local" for m in a.models.split(",")) and \
+            subprocess.run(["docker", "info"], capture_output=True).returncode != 0:
+        sys.exit("docker is not running: every scorer needs it (start Docker Desktop)")
     tasks = [json.loads((Path("tasks/e2e") / f"{i}.json").read_text())
              for i in json.loads(Path(a.manifest).read_text())]
     # Tasks no fix other than the gold one can pass (build/audit_test_coupling.py)
@@ -1048,6 +1085,8 @@ def main():
                 break
         (OUT / "PAUSED.json").unlink(missing_ok=True)
         rec["trial"] = trial
+        rec["transcript"] = _preserve_transcript(
+            rec.get("session_id"), OUT / "transcripts" / f"{f.stem}.jsonl")
         f.write_text(json.dumps(rec, indent=2))
         print(f"  {model:7} {arm:12} {task['instance_id'][-24:]:24} "
               f"t{trial} resolved={rec['resolved']} turns={rec.get('turns')} "

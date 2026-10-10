@@ -1,0 +1,63 @@
+"""Fail-fast monitor for the native vs prism_init run.
+
+Reads finished cells in OUT, pairs them per task, prints the running table and
+exits 1 (with the reason) on the first bad number:
+  - LOSS: native resolved a task that prism did not
+  - ERROR: any cell recorded an error / agent_error
+  - RATIO: after >= MIN_PAIRS pairs, prism/native summed cost, tokens, API calls
+    or turns above RATIO_MAX
+  - PAIR: one pair where prism cost > PAIR_MAX x native (and prism >= $0.30)
+"""
+import glob, json, os, sys
+
+OUT = sys.argv[1]
+MIN_PAIRS, RATIO_MAX, PAIR_MAX = 6, 1.15, 2.5
+NATIVE, PRISM = "native", "prism_init"
+
+cells = {}
+for f in glob.glob(os.path.join(OUT, "*.json")):
+    d = json.load(open(f))
+    if "task" not in d or "arm" not in d:
+        continue
+    cells.setdefault(d["task"], {})[d["arm"]] = d
+
+def tok(c):
+    return (c.get("tokens_request") or 0) + (c.get("tokens_out") or 0)
+
+rows, bad = [], []
+for task, arms in cells.items():
+    for c in arms.values():
+        if c.get("error") or c.get("agent_error"):
+            bad.append(f"ERROR {task} {c['arm']}: {c.get('error') or c.get('agent_error')}")
+    if NATIVE not in arms or PRISM not in arms:
+        continue
+    n, p = arms[NATIVE], arms[PRISM]
+    rows.append((task, n, p))
+    if n.get("resolved") and not p.get("resolved"):
+        bad.append(f"LOSS {task}: native resolved, prism did not")
+    nc, pc = n.get("cost_usd") or 0, p.get("cost_usd") or 0
+    if nc and pc >= 0.30 and pc > PAIR_MAX * nc:
+        bad.append(f"PAIR {task}: prism ${pc:.2f} vs native ${nc:.2f} ({pc / nc:.1f}x)")
+
+def total(arm_idx, fn):
+    return sum(fn(r[arm_idx]) or 0 for r in rows)
+
+print(f"{'task':52} {'native':>22} {'prism':>22}")
+for task, n, p in rows:
+    fmt = lambda c: f"{'Y' if c.get('resolved') else 'n'} {c.get('turns') or 0:3}t {c.get('api_calls') or 0:3}c ${c.get('cost_usd') or 0:5.2f}"
+    print(f"{task[-52:]:52} {fmt(n):>22} {fmt(p):>22}")
+if rows:
+    rn, rp = sum(1 for r in rows if r[1].get("resolved")), sum(1 for r in rows if r[2].get("resolved"))
+    print(f"\npairs {len(rows)}  resolved native {rn} prism {rp}")
+    for name, fn in (("cost", lambda c: c.get("cost_usd")), ("tokens", tok),
+                     ("api_calls", lambda c: c.get("api_calls")), ("turns", lambda c: c.get("turns"))):
+        a, b = total(1, fn), total(2, fn)
+        ratio = b / a if a else 0
+        print(f"  {name:9} native {a:12,.2f} prism {b:12,.2f}  prism/native {ratio:.3f}")
+        if len(rows) >= MIN_PAIRS and ratio > RATIO_MAX:
+            bad.append(f"RATIO {name}: prism/native {ratio:.3f} > {RATIO_MAX} over {len(rows)} pairs")
+if bad:
+    print("\nSTOP:")
+    for b in bad:
+        print("  " + b)
+    sys.exit(1)
