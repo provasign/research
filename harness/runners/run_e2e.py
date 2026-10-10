@@ -938,7 +938,46 @@ def _prepare_build_env(wt: Path, task) -> dict:
         setup["java_parent_pinned"] = True
     setup.update(_preinstall_node(wt, task))
     setup.update(_predownload_go_modules(wt, task))
+    setup.update(_prebuild_go(wt, task))
     return setup
+
+
+def _prebuild_go(wt: Path, task) -> dict:
+    """Compile a Go task's packages and tests into the shared build cache
+    before every arm. prism index type-checks the tree (warming GOCACHE)
+    before the prism arm's agent starts, so without this the native agent
+    met a cold cache whenever it ran first and the prism agent never did:
+    the arm order changed build times inside the agent's session."""
+    if task.get("lang") != "go" or not (wt / "go.mod").exists():
+        return {}
+    env, _ = _agent_env(wt, task)
+    t0 = time.monotonic()
+    subprocess.run(["go", "test", "-count=1", "-run", "^$", "./..."], cwd=wt, env=env,
+                   capture_output=True, text=True, timeout=1500)
+    dirty = docker_eval._sh("git", "-C", str(wt), "status", "--porcelain", check=False)
+    if dirty.strip():
+        raise RuntimeError(f"go prebuild left the tree dirty for {task['instance_id']}: {dirty[:300]}")
+    return {"go_prebuild_s": round(time.monotonic() - t0, 1)}
+
+
+def _venv_fingerprint(venv: Path | None) -> str | None:
+    """Every file under the venv with its size and mtime: an agent's
+    pip install changes it."""
+    if venv is None or not venv.exists():
+        return None
+    import hashlib
+    h = hashlib.sha256()
+    for root, _, files in sorted(os.walk(venv)):
+        for name in sorted(files):
+            if name.endswith(".pyc"):
+                continue
+            f = Path(root) / name
+            try:
+                st = f.stat()
+            except OSError:
+                continue
+            h.update(f"{f.relative_to(venv)}\0{st.st_size}\0{int(st.st_mtime)}\n".encode())
+    return h.hexdigest()
 
 
 def _predownload_go_modules(wt: Path, task) -> dict:
@@ -986,7 +1025,16 @@ def run_cell(task: dict, arm: str, model: str, tag: str = "") -> dict:
             meta = {"turns": res.get("turns"), "wall_s": res.get("wall_s"),
                     "trace": res.get("trace"), "agent_error": res.get("error")}
         else:
+            # The task's venv is shared by every arm and trial (it lives
+            # outside the worktree). If this agent installed or removed
+            # packages, the next cell must not inherit them: drop the venv
+            # so it is rebuilt clean, and record that it happened.
+            venv = _python_venv(task) if _is_python(task) else None
+            before = _venv_fingerprint(venv)
             meta = _run_cloud(model, arm, wt, task)
+            if before is not None and _venv_fingerprint(venv) != before:
+                meta["venv_modified"] = True
+                (venv / ".ready").unlink(missing_ok=True)
         diff = _agent_diff(wt, task)
         _save_diff(task, model, arm, tag, diff)
     finally:
