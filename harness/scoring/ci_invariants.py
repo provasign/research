@@ -25,7 +25,7 @@ session transcript, for the full story):
                              byte-identical (determinism).
 
 Usage:
-  python ci_invariants.py --corpus-root /tmp/ci-corpus [--prism /path/to/prism]
+  python ci_invariants.py --corpus-root /tmp/ci-corpus [--prism /path/to/prism] [--decoy-injector /path/to/decoy]
 
 Each corpus is fetched once (GitHub archive tarball at the pinned commit —
 no git history needed) into --corpus-root and reused across all three
@@ -354,10 +354,35 @@ def check_determinism(prism: Path, corpus_root: Path) -> list[str]:
     return [] if first == second else [f"determinism: {first} != {second}"]
 
 
+# Corpora for the decoy invariant: small enough to index twice per run, and
+# together they cover Go, Java and TS plus the C-like comment syntax.
+DECOY_CORPORA = ["gin", "commons-collections", "typeorm"]
+
+
+def check_decoy_invariance(prism: Path, corpus_root: Path, injector: Path | None) -> list[str]:
+    """Comments cannot change a program, so an index of a corpus with
+    code-shaped comments injected must equal the clean index (see
+    decoy_invariant.py). Catches the comment/string-as-code bug class the
+    ceiling regression cannot see: the 2026-10-10 audit found 53 such bugs
+    with every other invariant green."""
+    log("\n=== Decoy invariant (comments must not change the graph) ===")
+    if injector is None:
+        log("  skipped: no --decoy-injector (go install github.com/provasign/astkit/cmd/decoy@<tag>)")
+        return []
+    from decoy_invariant import check_repo
+    failures: list[str] = []
+    for name in DECOY_CORPORA:
+        workdir = fetch_corpus(name, CORPORA[name], corpus_root)
+        failures += check_repo(prism, injector, workdir, examples=5)
+    return [f"decoy: {f}" for f in failures]
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--corpus-root", default="/tmp/ci-corpus")
     ap.add_argument("--prism", default=str(Path.home() / "bin" / "prism"))
+    ap.add_argument("--decoy-injector", default=None,
+                    help="astkit cmd/decoy binary; enables the decoy invariant")
     args = ap.parse_args()
 
     prism = Path(args.prism)
@@ -383,6 +408,8 @@ def main() -> None:
     all_failures += check_compile_invariant(prism, corpus_root)
     all_failures += check_rename_plan_completeness(prism, corpus_root)
     all_failures += check_determinism(prism, corpus_root)
+    injector = Path(args.decoy_injector).resolve() if args.decoy_injector else None
+    all_failures += check_decoy_invariance(prism.resolve(), corpus_root, injector)
 
     log("\n" + "=" * 60)
     if all_failures:

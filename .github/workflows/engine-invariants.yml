@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - "harness/scoring/ci_invariants.py"
+      - "harness/scoring/decoy_invariant.py"
       - "harness/ci_baseline.json"
       - "harness/tasks/**"
       - "harness/scoring/score.py"
@@ -13,6 +14,7 @@ on:
     branches: [main]
     paths:
       - "harness/scoring/ci_invariants.py"
+      - "harness/scoring/decoy_invariant.py"
       - "harness/ci_baseline.json"
       - "harness/tasks/**"
       - "harness/scoring/score.py"
@@ -31,7 +33,8 @@ env:
   # Bumped deliberately after a new prism release is verified — never
   # "latest", so this suite can't start failing (or silently passing
   # differently) from an unrelated, unreviewed release.
-  PRISM_VERSION: "v0.74.0"
+  PRISM_VERSION: "v0.87.0"
+  ASTKIT_DECOY_VERSION: "v0.16.0"
 jobs:
   invariants:
     name: Ceiling regression + compile invariant + structural checks
@@ -49,8 +52,14 @@ jobs:
             "https://github.com/provasign/prism/releases/download/${VERSION}/prism-${VERSION}-linux-amd64"
           chmod +x /usr/local/bin/prism
           prism version
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+      - name: Install decoy injector
+        # Pinned like PRISM_VERSION: the injector decides where comments go.
+        run: GOBIN=/usr/local/bin go install github.com/provasign/astkit/cmd/decoy@${{ env.ASTKIT_DECOY_VERSION }}
       - name: Run invariant suite
-        run: python3 harness/scoring/ci_invariants.py --corpus-root /tmp/ci-corpus --prism /usr/local/bin/prism
+        run: python3 harness/scoring/ci_invariants.py --corpus-root /tmp/ci-corpus --prism /usr/local/bin/prism --decoy-injector /usr/local/bin/decoy
       - name: Upload corpus fetch logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
