@@ -137,6 +137,13 @@ ARMS = {
         "allowed": _EDIT_AND_BUILD,
         "mcp": "__worktree__",
     },
+    # prism_init plus a harness hook denying grep/rg/find and Grep/Glob with a
+    # pointer to prism search (2026-10-11, Topo: "force prism on this").
+    "prism_forced": {
+        "guidance": "",
+        "allowed": _EDIT_AND_BUILD,
+        "mcp": "__worktree__",
+    },
     # Control arm for the residency question: byte-identical setup to
     # prism_init (same `prism init`, same CLAUDE.md steering, same read-guard
     # hook) except alwaysLoad is withheld, so the single compact tool stays

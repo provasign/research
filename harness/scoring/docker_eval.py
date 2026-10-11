@@ -72,7 +72,8 @@ EXTRA_PIP = {
     # rich's 2020 poetry backend (poetry>=0.12) cannot build editable on the
     # current pip, so the package runs from the checkout without its deps.
     "Textualize/rich": ["pygments", "commonmark", "colorama", "typing-extensions", "pprintpp",
-                        "attrs"],  # tests/test_pretty.py imports attrs
+                        "attrs",  # tests/test_pretty.py imports attrs
+                        "black"],  # rich's formatter; agents look for it before finishing
 }
 
 
