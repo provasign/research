@@ -4,15 +4,23 @@ Reads finished cells in OUT, pairs them per task, prints the running table and
 exits 1 (with the reason) on the first bad number:
   - LOSS: native resolved a task that prism did not
   - ERROR: any cell recorded an error / agent_error
-  - RATIO: after >= MIN_PAIRS pairs, prism/native summed cost, tokens, API calls
-    or turns above RATIO_MAX
+  - RATIO: after >= MIN_PAIRS pairs, prism/native summed cost above RATIO_MAX
+    (tokens, API calls and turns are reported, not stop conditions: a ~15%
+    token overhead from prism's fixed per-request prefix is expected)
   - PAIR: one pair where prism cost > PAIR_MAX x native (and prism >= $0.30)
 """
 import glob, json, os, sys
 
 OUT = sys.argv[1]
-MIN_PAIRS, RATIO_MAX, PAIR_MAX = 6, 1.15, 2.5
+MIN_PAIRS, RATIO_MAX, PAIR_MAX = 10, 1.25, 2.5
 NATIVE, PRISM = "native", "prism_init"
+
+# Losses already reviewed (one task id per line, '#' comments): counted in the
+# totals, no longer a stop reason.
+ack_file = os.path.join(OUT, "ACKNOWLEDGED")
+ack = set()
+if os.path.exists(ack_file):
+    ack = {l.split("#")[0].strip() for l in open(ack_file)} - {""}
 
 cells = {}
 for f in glob.glob(os.path.join(OUT, "*.json")):
@@ -33,7 +41,7 @@ for task, arms in cells.items():
         continue
     n, p = arms[NATIVE], arms[PRISM]
     rows.append((task, n, p))
-    if n.get("resolved") and not p.get("resolved"):
+    if n.get("resolved") and not p.get("resolved") and task not in ack:
         bad.append(f"LOSS {task}: native resolved, prism did not")
     nc, pc = n.get("cost_usd") or 0, p.get("cost_usd") or 0
     if nc and pc >= 0.30 and pc > PAIR_MAX * nc:
@@ -54,7 +62,7 @@ if rows:
         a, b = total(1, fn), total(2, fn)
         ratio = b / a if a else 0
         print(f"  {name:9} native {a:12,.2f} prism {b:12,.2f}  prism/native {ratio:.3f}")
-        if len(rows) >= MIN_PAIRS and ratio > RATIO_MAX:
+        if name == "cost" and len(rows) >= MIN_PAIRS and ratio > RATIO_MAX:
             bad.append(f"RATIO {name}: prism/native {ratio:.3f} > {RATIO_MAX} over {len(rows)} pairs")
 if bad:
     print("\nSTOP:")

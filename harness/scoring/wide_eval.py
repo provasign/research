@@ -85,13 +85,15 @@ def _strip_comments(path: str, text: str) -> str:
     return _C_COMMENTS.sub("", text)
 
 
-def _strip_comments_and_strings(path: str, text: str) -> str:
+def _strip_comments_and_strings(path: str, text: str, fill: str = " ") -> str:
     """Code with comments and string-literal text blanked. A name inside a
     string (a test title "Should return empty remote", an assertion message
     "all Route() calls ...") is prose, not a reference: agents that update it
     were scored as over-renaming (seeded32, 2026-10-05). Code inside f-string
     / template-literal braces is kept: f"{x.render()}" and `${x.push()}` are
-    real call sites. Python docstrings are strings, so they go too."""
+    real call sites. Python docstrings are strings, so they go too.
+    fill stands in for each string literal (" " by default; the shapes
+    oracle passes "0" so a string argument still counts as an argument)."""
     ext = Path(path).suffix
     py = ext == ".py"
     out, i, n = [], 0, len(text)
@@ -137,7 +139,7 @@ def _strip_comments_and_strings(path: str, text: str) -> str:
             fstr = "f" in prefix.lower() and (k < 0 or not (out[k].isalnum() or out[k] == "_"))
             q = text[i:i + 3] if text[i:i + 3] in ("\"\"\"", "\'\'\'") else c
             j = i + len(q)
-            out.append(" ")
+            out.append(fill)
             while j < n and not text.startswith(q, j):
                 if text[j] == "\\":
                     j += 2
@@ -161,11 +163,11 @@ def _strip_comments_and_strings(path: str, text: str) -> str:
                 while j < n and text[j] != "'" and text[j] != "\n":
                     j += 2 if text[j] == "\\" else 1
                 i = j + 1
-                out.append(" ")
+                out.append(fill)
                 continue
             q = '"""' if c == '"' and text.startswith('"""', i) and ext in (".java", ".kt") else c
             j = i + len(q)
-            out.append(" ")
+            out.append(fill)
             while j < n and not text.startswith(q, j):
                 if text[j] == "\\" and not (c == "`" and ext == ".go"):
                     j += 2
@@ -277,6 +279,99 @@ def file_site_check(repo: Path, task: dict, patch: str) -> dict:
             "missed_files": missed, "stale": stale}
 
 
+_OPEN, _CLOSE = "([{", ")]}"
+
+
+def call_arities(text: str, name: str) -> list[int]:
+    """Top-level argument count of every `name(...)` in comment/string-stripped
+    code: calls and declarations alike (`def f(a, b)`, `void f(A a, B b)`,
+    `F(a int) error` all count). An explicit type-argument list right after
+    the name (`name<T>(`) is skipped. A trailing comma adds no argument."""
+    out = []
+    for m in re.finditer(rf"(?<![\w$]){re.escape(name)}\s*(?:<[^<>()]*(?:<[^<>()]*>[^<>()]*)*>)?\s*\(", text):
+        i, depth, commas, seg = m.end(), 1, 0, ""
+        nonempty = False
+        while i < len(text) and depth:
+            ch = text[i]
+            if ch in _OPEN:
+                depth += 1
+            elif ch in _CLOSE:
+                depth -= 1
+                if not depth:
+                    break
+            if depth == 1 and ch == ",":
+                commas += 1
+                seg = ""
+            elif not ch.isspace():
+                seg += ch
+                nonempty = True
+            i += 1
+        if not nonempty:
+            out.append(0)
+        else:
+            out.append(commas + (1 if seg else 0))
+    return out
+
+
+def shape_counts(root: Path, shapes: list[dict]) -> dict[str, dict[str, int]]:
+    """{shape id: {relative code file: count}} for the files where it occurs.
+    A shape is {"id", "name", "arity"} (calls/declarations of `name` with
+    that many top-level arguments), {"id", "name"} (identifier tokens), or
+    {"id", "regex"} (matches; over raw text when "raw" is true, e.g. Go/TS
+    import paths, which are string literals)."""
+    out = {s["id"]: {} for s in shapes}
+    files = _sh("git", "-C", str(root), "ls-files", "-co", "--exclude-standard").splitlines()
+    for rel in files:
+        if Path(rel).suffix not in CODE_EXT or SKIP_DIR.search(rel):
+            continue
+        try:
+            raw = (root / rel).read_text(errors="ignore")
+        except OSError:
+            continue
+        code = None
+        for s in shapes:
+            if s.get("raw"):
+                n = len(re.findall(s["regex"], raw, re.M))
+            else:
+                if "name" in s and s["name"] not in raw:
+                    continue
+                if code is None:
+                    code = _strip_comments_and_strings(rel, raw, fill="0")
+                if "regex" in s:
+                    n = len(re.findall(s["regex"], code, re.M))
+                elif "arity" in s:
+                    n = sum(1 for a in call_arities(code, s["name"]) if a == s["arity"])
+                else:
+                    n = len(re.findall(rf"(?<![\w$]){re.escape(s['name'])}(?![\w$])", code))
+            if n:
+                out[s["id"]][rel] = n
+    return out
+
+
+def shape_site_check(repo: Path, task: dict, patch: str) -> dict:
+    """site_mode="shapes" (seeded deep changes: add a parameter, change a
+    return type, move a type): every shape names an OLD form that the change
+    removes -- a call or declaration of the method with its old argument
+    count, the type's old import path, the old name. In no file may the
+    patched tree have more occurrences of a shape than the gold tree: one
+    more is a call site, override or import the patch did not update.
+    Look-alikes (same name and arity on an unrelated type) are in the gold
+    counts too, so they cancel. Per-file counts, not lines, so an equivalent
+    edit that moves code still scores."""
+    wt = _checkout(repo, task["base_commit"], patch)
+    try:
+        got = shape_counts(wt, task["shapes"])
+    finally:
+        shutil.rmtree(wt, ignore_errors=True)
+    left = []
+    for sid, gold in task["gold_shape_counts"].items():
+        for f, n in sorted(got.get(sid, {}).items()):
+            if n > gold.get(f, 0):
+                left.append({"shape": sid, "file": f, "want": gold.get(f, 0), "got": n})
+    return {"sites_ok": not left, "gold_sites": task.get("gold_sites"),
+            "missed_sites": sum(e["got"] - e["want"] for e in left), "left": left[:30]}
+
+
 def _lang_score(task: dict, patch: str) -> dict:
     """The language's own build+test scorer, pass_to_pass only."""
     import run_e2e  # the dispatch table and repo lookup live there
@@ -303,7 +398,7 @@ def score(task: dict, agent_patch: str) -> dict:
     if not agent_patch.strip():
         return {"resolved": False, "empty_diff": True}
     try:
-        check = file_site_check if task.get("site_mode") == "files" else site_check
+        check = {"files": file_site_check, "shapes": shape_site_check}.get(task.get("site_mode"), site_check)
         sites = check(repo_dir(task), task, agent_patch)
     except RuntimeError as e:
         return {"resolved": False, "error": str(e)[:300]}
