@@ -90,10 +90,23 @@ class ScorerRanNoTests(RuntimeError):
     real loss for every arm."""
 
 
+def _docker_up() -> bool:
+    try:
+        return subprocess.run(["docker", "info"], capture_output=True, timeout=60).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 def _score(task, diff: str) -> dict:
     res = _score_inner(task, diff)
     if res.get("n_run") == 0:
         raise ScorerRanNoTests(f"scorer ran no tests for {task['instance_id']}: {res}")
+    # Wide (seeded) tasks nest the test result under "tests"; zero tests there
+    # is either the agent's build failing (a real loss) or Docker being down
+    # (2026-10-11 ~03:10: Docker Desktop died mid-run and an echo cell scored
+    # n_run=0 as a loss). Only the second is an infrastructure error.
+    if (res.get("tests") or {}).get("n_run") == 0 and not _docker_up():
+        raise ScorerRanNoTests(f"scorer ran no tests for {task['instance_id']} and Docker is down: {res}")
     return res
 
 

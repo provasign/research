@@ -251,8 +251,10 @@ def build(tid: str) -> None:
 
 
 def load_recipes() -> None:
-    """Recipes live in deep_recipes_<lang>.py, which register via @recipe."""
-    for mod in ("deep_recipes_java", "deep_recipes_go", "deep_recipes_ts", "deep_recipes_py"):
+    """Recipes live in deep_recipes_<lang>.py and deephard_recipes_<lang>.py
+    (high-turn variants), which register via @recipe."""
+    for mod in ("deep_recipes_java", "deep_recipes_go", "deep_recipes_ts", "deep_recipes_py",
+                "deephard_recipes_java", "deephard_recipes_go", "deephard_recipes_ts", "deephard_recipes_py"):
         try:
             __import__(mod)
         except ModuleNotFoundError as e:

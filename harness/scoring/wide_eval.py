@@ -375,7 +375,7 @@ def shape_site_check(repo: Path, task: dict, patch: str) -> dict:
 def _lang_score(task: dict, patch: str) -> dict:
     """The language's own build+test scorer, pass_to_pass only."""
     import run_e2e  # the dispatch table and repo lookup live there
-    t = dict(task, kind=None, test_patch="", fail_to_pass=[])
+    t = dict(task, kind=None, test_patch="", fail_to_pass=[], p2p_allow_renames=True)
     if task["lang"] == "go":
         import go_eval
         return go_eval.score(go_eval.REPO_DIR[t["repo"]], t, patch)

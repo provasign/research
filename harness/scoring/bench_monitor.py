@@ -8,11 +8,15 @@ exits 1 (with the reason) on the first bad number:
     (tokens, API calls and turns are reported, not stop conditions: a ~15%
     token overhead from prism's fixed per-request prefix is expected)
   - PAIR: one pair where prism cost > PAIR_MAX x native (and prism >= $0.30)
+  - GAP: one pair where prism made > GAP_RATIO x native's API calls and at
+    least GAP_MIN more (2026-10-10: a hook bug cost 9 calls, 24 vs 16, far
+    under PAIR_MAX). Reviewed pairs go in ACKNOWLEDGED like losses.
 """
 import glob, json, os, sys
 
 OUT = sys.argv[1]
 MIN_PAIRS, RATIO_MAX, PAIR_MAX = 10, 1.25, 2.5
+GAP_RATIO, GAP_MIN = 1.5, 6
 NATIVE, PRISM = "native", "prism_init"
 
 # Losses already reviewed (one task id per line, '#' comments): counted in the
@@ -43,6 +47,9 @@ for task, arms in cells.items():
     rows.append((task, n, p))
     if n.get("resolved") and not p.get("resolved") and task not in ack:
         bad.append(f"LOSS {task}: native resolved, prism did not")
+    na, pa = n.get("api_calls") or 0, p.get("api_calls") or 0
+    if na and pa >= GAP_RATIO * na and pa - na >= GAP_MIN and task not in ack:
+        bad.append(f"GAP {task}: prism {pa} API calls vs native {na}")
     nc, pc = n.get("cost_usd") or 0, p.get("cost_usd") or 0
     if nc and pc >= 0.30 and pc > PAIR_MAX * nc:
         bad.append(f"PAIR {task}: prism ${pc:.2f} vs native ${nc:.2f} ({pc / nc:.1f}x)")

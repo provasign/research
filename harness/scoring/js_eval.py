@@ -16,6 +16,7 @@ virtiofs made installs slow and left host worktrees dirty). Package-manager
 caches are persistent host dirs, so repeated validations reuse downloads.
 Tasks from TypeScript repos carry lang "ts"; run_e2e maps "ts" to this module.
 """
+import p2p_check  # noqa: E402
 import json, re, subprocess, sys, tempfile
 from pathlib import Path
 
@@ -192,6 +193,7 @@ def _parse_vitest_json(text: str) -> dict:
     except json.JSONDecodeError:
         return {}
     res = {}
+    seen: dict[str, int] = {}
     for f in doc.get("testResults", []):
         rel = f.get("name", "")
         rel = rel[len("/w/"):] if rel.startswith("/w/") else rel
@@ -199,6 +201,14 @@ def _parse_vitest_json(text: str) -> dict:
             st = a.get("status")
             o = {"passed": "PASSED", "failed": "FAILED"}.get(st, "SKIPPED")
             k = f"{rel} > {a.get('fullName') or a.get('title')}"
+            # Each repeat of an id is also kept under "<id> #<n>" so per-file
+            # test counts stay true (p2p_check's rename rule counts them):
+            # 2026-10-11 a zod agent renamed `.safe() validation` to an
+            # existing `.int() validation`; both ran and passed, but the
+            # merged key made the file look one test short.
+            seen[k] = seen.get(k, 0) + 1
+            if seen[k] > 1:
+                res[f"{k} #{seen[k]}"] = o
             if res.get(k) == "FAILED":
                 continue
             if k in res and res[k] != o:
@@ -272,7 +282,7 @@ def score(repo_dir: Path, repo: str, task: dict, agent_patch: str) -> dict:
     res = _run_tests(repo_dir, repo, task["base_commit"], [task["test_patch"], agent_patch],
                      typecheck_cmd=tc)
     f2p_ok = all(res.get(n) == "PASSED" for n in task["fail_to_pass"])
-    p2p_ok = all(res.get(n) == "PASSED" for n in task.get("pass_to_pass", []))
+    p2p_ok = p2p_check.p2p_ok(res, task)
     if tc:  # the task's own type check is required on top of pass_to_pass
         p2p_ok = p2p_ok and res.get("__typecheck__") == "PASSED"
     return {"resolved": bool(f2p_ok and p2p_ok), "f2p_ok": f2p_ok,
