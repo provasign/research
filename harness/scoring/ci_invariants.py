@@ -81,6 +81,10 @@ CORPORA = {
             "pin": "d75fcd4c9ab260e5225de590f1f0f8c0e0e12d11"},
     "commons-collections": {"owner": "apache", "repo": "commons-collections",
                              "pin": "4db4327796f9679b9e57f6788d1d7bb2e8459360"},
+    # gson's TypeAdapters.java declares 25 adapters as anonymous classes in
+    # static field initializers (the family-size invariant below).
+    "gson": {"owner": "google", "repo": "gson",
+             "pin": "dae37cf0fe12235b76fb09f01118a0a8c8823f42", "subdir": "gson"},
 }
 
 # Tasks whose corpus is identical to (same repo + pin as) an entry already
@@ -125,6 +129,18 @@ RENAME_PLAN_TARGETS = [
 ]
 
 DETERMINISM_CORPUS = "gin"
+
+# Family-size invariant: (corpus, query, production path prefix, expected
+# declaration + override count, provenance). The ceiling tasks score sites at
+# file:name granularity, which cannot see 25 overrides collapsing into one
+# file; this counts them. Expected values come from the Spoon oracle
+# (harness/java-oracle, family = declaration + every override, production
+# sources only), an independent compiler-backed count.
+FAMILY_SIZE_TARGETS = [
+    ("gson", "TypeAdapter.write", "src/main/", 55,
+     "Spoon 2026-10-12: tasks/gson-typeadapter-write.json stats.family=55; "
+     "before the fix the parser indexed 6 of 31 overrides in TypeAdapters.java"),
+]
 
 
 def log(msg: str) -> None:
@@ -297,6 +313,24 @@ def check_ceiling_regression(prism: Path, corpus_root: Path, baseline: dict) -> 
     return failures
 
 
+# --- invariant 1b: family size --------------------------------------------
+
+def check_family_size(prism: Path, corpus_root: Path) -> list[str]:
+    log("\n=== Family-size invariant (declaration + overrides == oracle count) ===")
+    failures = []
+    for corpus_name, query, prefix, expected, why in FAMILY_SIZE_TARGETS:
+        workdir = fetch_corpus(corpus_name, CORPORA[corpus_name], corpus_root)
+        data = run_prism(prism, workdir, "change-impact", query)
+        members = [sym for group in ("declarations", "family") for sym in data.get(group, [])
+                   if (sym.get("filePath") or sym.get("file", "")).startswith(prefix)]
+        got = len(members)
+        status = "OK" if got == expected else "REGRESSION"
+        log(f"  {corpus_name:<20} {query:<28} {prefix} declarations+family={got} (oracle {expected})  [{status}]")
+        if got != expected:
+            failures.append(f"{corpus_name} {query}: family size {got} != {expected} ({why})")
+    return failures
+
+
 # --- invariant 2: compile invariant --------------------------------------
 
 def check_compile_invariant(prism: Path, corpus_root: Path) -> list[str]:
@@ -405,6 +439,7 @@ def main() -> None:
 
     all_failures: list[str] = []
     all_failures += check_ceiling_regression(prism, corpus_root, baseline)
+    all_failures += check_family_size(prism, corpus_root)
     all_failures += check_compile_invariant(prism, corpus_root)
     all_failures += check_rename_plan_completeness(prism, corpus_root)
     all_failures += check_determinism(prism, corpus_root)
