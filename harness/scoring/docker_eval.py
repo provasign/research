@@ -13,6 +13,7 @@ host repo and the agent's own edits are never mutated by scoring.
 """
 from __future__ import annotations
 
+import p2p_check  # noqa: E402
 import json
 import shlex
 import re
@@ -71,7 +72,8 @@ EXTRA_PIP = {
     # rich's 2020 poetry backend (poetry>=0.12) cannot build editable on the
     # current pip, so the package runs from the checkout without its deps.
     "Textualize/rich": ["pygments", "commonmark", "colorama", "typing-extensions", "pprintpp",
-                        "attrs"],  # tests/test_pretty.py imports attrs
+                        "attrs",  # tests/test_pretty.py imports attrs
+                        "black"],  # rich's formatter; agents look for it before finishing
 }
 
 
@@ -227,7 +229,7 @@ def score(task: dict, agent_patch: str) -> dict:
         _cleanup(repo, wt)
     res = run.outcomes
     f2p_ok = all(res.get(n) == "PASSED" for n in task["fail_to_pass"])
-    p2p_ok = all(res.get(n) == "PASSED" for n in task.get("pass_to_pass", []))
+    p2p_ok = p2p_check.p2p_ok(res, task)
     return {"resolved": bool(f2p_ok and p2p_ok and not run.collection_failed),
             "f2p_ok": f2p_ok, "p2p_ok": p2p_ok, "n_run": len(res),
             "collection_failed": run.collection_failed}

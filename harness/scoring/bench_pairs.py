@@ -1,6 +1,6 @@
 """Print one line per finished native/prism pair as the run produces them.
 
-usage: bench_pairs.py <out_dir>
+usage: bench_pairs.py <out_dir> [--skip-existing]
 Polls <out_dir> every few seconds; each newly completed pair prints
   task | native: res turns calls tokens $ | prism: ... | running totals
 Exits when <out_dir>/DONE exists or the monitor stop file appears.
@@ -9,6 +9,7 @@ import glob, json, os, sys, time
 
 OUT = sys.argv[1]
 seen = set()
+SKIP_EXISTING = "--skip-existing" in sys.argv  # resumed run: totals still count them
 tot = {"n": 0, "rn": 0, "rp": 0, "cn": 0.0, "cp": 0.0}
 
 
@@ -19,6 +20,7 @@ def fmt(c):
             f"{c.get('api_calls') or 0:>3} calls {tok / 1000:>6.0f}k tok ${c.get('cost_usd') or 0:.2f}{err}")
 
 
+first_pass = True
 while True:
     cells = {}
     for f in glob.glob(os.path.join(OUT, "*.json")):
@@ -39,8 +41,11 @@ while True:
         tot["cn"] += n.get("cost_usd") or 0
         tot["cp"] += p.get("cost_usd") or 0
         ratio = tot["cp"] / tot["cn"] if tot["cn"] else 0
+        if SKIP_EXISTING and first_pass:
+            continue
         print(f"#{tot['n']} {task} | native {fmt(n)} | prism {fmt(p)} | "
               f"so far resolved native {tot['rn']} prism {tot['rp']}, cost prism/native {ratio:.2f}", flush=True)
+    first_pass = False
     if os.path.exists(os.path.join(OUT, "DONE")):
         stop = os.path.join(OUT, "STOPPED")
         if os.path.exists(stop):

@@ -87,6 +87,8 @@ def build(spec: dict, dry: bool = False) -> dict:
     repo = wide_eval.repo_dir(task)
     if task.get("site_mode") == "files":
         return _build_files_mode(task, gold, repo, dry)
+    if task.get("site_mode") == "shapes":
+        return _build_shapes_mode(task, gold, repo, dry)
     base_wt = wide_eval._checkout(repo, task["base_commit"], "")
     gold_wt = wide_eval._checkout(repo, task["base_commit"], gold)
     try:
@@ -168,8 +170,73 @@ def _build_files_mode(task: dict, gold: str, repo: Path, dry: bool) -> dict:
     return task
 
 
+def _build_shapes_mode(task: dict, gold: str, repo: Path, dry: bool) -> dict:
+    """Seeded deep change (add a required parameter, change a return type,
+    move a type): spec adds site_mode="shapes", shapes (wide_eval.shape_counts:
+    the OLD forms the change removes), optional test selection (test_classes /
+    test_functions / test_modules; defaults below) and optional partial_patch
+    (path to gold minus a few sites, which must NOT resolve). Every shape must
+    occur more often at base than at gold somewhere, or it guards nothing."""
+    partial_path = task.pop("partial_patch", None)
+    gold_touched = sorted({l[6:] for l in gold.splitlines() if l.startswith("+++ b/")})
+    task["gold_files"] = gold_touched
+    base_wt = wide_eval._checkout(repo, task["base_commit"], "")
+    gold_wt = wide_eval._checkout(repo, task["base_commit"], gold)
+    try:
+        task["base_shape_counts"] = wide_eval.shape_counts(base_wt, task["shapes"])
+        task["gold_shape_counts"] = wide_eval.shape_counts(gold_wt, task["shapes"])
+    finally:
+        shutil.rmtree(base_wt, ignore_errors=True)
+        shutil.rmtree(gold_wt, ignore_errors=True)
+    sites = {}
+    for s in task["shapes"]:
+        b, g = task["base_shape_counts"][s["id"]], task["gold_shape_counts"][s["id"]]
+        sites[s["id"]] = {f: n - g.get(f, 0) for f, n in b.items() if n > g.get(f, 0)}
+        if not sites[s["id"]]:
+            raise SystemExit(f"shape {s['id']} is not removed anywhere by gold")
+    task["gold_sites"] = sum(sum(v.values()) for v in sites.values())
+    task["gold_site_files"] = len({f for v in sites.values() for f in v})
+    tests = [f for f in gold_touched if TEST_PATH[task["lang"]].search(f)]
+    if task["lang"] == "java":
+        task.setdefault("test_classes", [_java_class(f) for f in tests if "src/test/java/" in f])
+    elif task["lang"] == "go":
+        task.setdefault("test_functions", _go_test_funcs(repo, task["base_commit"], gold_touched))
+    task.setdefault("test_modules", ["tests"] if task["lang"] == "python" else [])
+    res = run_gold_tests(task, gold, repo)
+    at_base = run_gold_tests(task, "", repo)
+    task["pass_to_pass"] = sorted(n for n, s in res.items() if s == "PASSED" and at_base.get(n) == "PASSED")
+    task["gold_test_outcomes"] = {"run": len(res), "passed": len(task["pass_to_pass"]),
+                                  "failed": sorted(n for n, s in res.items() if s != "PASSED")[:30]}
+    if not task["pass_to_pass"]:
+        raise SystemExit("no test passes with gold: the green layer would be empty")
+    val = {}
+    g = wide_eval.score(task, gold)
+    val["gold"] = {"resolved": g.get("resolved"), "sites_ok": g.get("sites_ok"), "green": g.get("green"),
+                   "n_run": (g.get("tests") or {}).get("n_run")}
+    if not g.get("resolved"):
+        raise SystemExit(f"gold does not resolve under the scorer: {json.dumps(g)[:800]}")
+    # the empty diff is refused outright by score(); show the oracle itself rejects base too
+    e = wide_eval.shape_site_check(repo, task, "")
+    val["empty"] = {"resolved": wide_eval.score(task, "").get("resolved"),
+                    "sites_ok": e["sites_ok"], "missed_sites": e["missed_sites"]}
+    if e["sites_ok"]:
+        raise SystemExit("the base tree passes the site oracle")
+    if partial_path:
+        part = Path(partial_path).read_text()
+        pr = wide_eval.score(task, part)
+        val["partial"] = {"resolved": pr.get("resolved"), "sites_ok": pr.get("sites_ok"),
+                          "green": pr.get("green"), "missed_sites": (pr.get("sites") or {}).get("missed_sites"),
+                          "n_run": (pr.get("tests") or {}).get("n_run")}
+        if pr.get("resolved"):
+            raise SystemExit("the partial patch resolves: the oracle cannot see a missed site")
+    task["validation"] = val
+    if not dry:
+        (H / "tasks/e2e" / f"{task['instance_id']}.json").write_text(json.dumps(task, indent=1))
+    return task
+
+
 if __name__ == "__main__":
     spec = json.loads(Path(sys.argv[1]).read_text())
     t = build(spec, dry="--dry-run" in sys.argv)
     print(json.dumps({k: t.get(k) for k in ("instance_id", "gold_sites", "wide_test_files",
-                                            "gold_test_outcomes")}, indent=1))
+                                            "gold_test_outcomes", "gold_site_files", "validation")}, indent=1))

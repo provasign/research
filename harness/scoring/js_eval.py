@@ -16,6 +16,7 @@ virtiofs made installs slow and left host worktrees dirty). Package-manager
 caches are persistent host dirs, so repeated validations reuse downloads.
 Tasks from TypeScript repos carry lang "ts"; run_e2e maps "ts" to this module.
 """
+import p2p_check  # noqa: E402
 import json, re, subprocess, sys, tempfile
 from pathlib import Path
 
@@ -116,7 +117,7 @@ class PatchError(RuntimeError):
 
 
 def _run_tests(repo_dir: Path, repo: str, base: str, patches: list, image: str = IMAGE,
-               strict: bool = False) -> dict:
+               strict: bool = False, typecheck_cmd: str | None = None) -> dict:
     """Worktree at base + patches; install + the repo's suite in node docker.
     strict=True (validation) raises PatchError when a patch does not apply;
     scoring keeps the lenient behaviour (an unappliable agent diff just runs
@@ -138,7 +139,7 @@ def _run_tests(repo_dir: Path, repo: str, base: str, patches: list, image: str =
                                   "bash", "-c", cmd],
                                  capture_output=True, text=True, timeout=1800)
             return _parse_mocha_json(out.stdout)
-        return _run_vitest(wt, repo, image)
+        return _run_vitest(wt, repo, image, typecheck_cmd)
     finally:
         subprocess.run(["git", "-C", str(repo_dir), "worktree", "remove", "--force",
                         str(wt)], capture_output=True)
@@ -148,12 +149,22 @@ MARK = "__JS_EVAL_VITEST_JSON__"
 LAST_LOG = {"text": ""}  # tail of the last vitest container run, for diagnosis
 
 
-def _run_vitest(wt: Path, repo: str, image: str) -> dict:
+TC_MARK = "__JS_EVAL_TYPECHECK__"
+
+
+def _run_vitest(wt: Path, repo: str, image: str, typecheck_cmd: str | None = None) -> dict:
+    """typecheck_cmd (opt-in, a task's "typecheck_cmd", e.g. hono's own
+    `tsc -p tsconfig.spec.json`) runs after the suite in the same container;
+    its verdict is reported as the synthetic test "__typecheck__". Without it
+    the container command is exactly the old one."""
     cmd = ("set -o pipefail; mkdir -p /w && tar -C /src --exclude=./.git -cf - . | tar -C /w -xf - && cd /w && "
            f"({INSTALL_CMD[repo]}) >/tmp/install.log 2>&1 || "
            "{ echo INSTALL_FAILED; tail -40 /tmp/install.log; exit 3; }; "
            f"CI=1 {TEST_CMD[repo]} >/tmp/test.log 2>&1; "
            f"echo {MARK}; cat /tmp/vitest.json 2>/dev/null; echo; echo {MARK}; tail -40 /tmp/test.log")
+    if typecheck_cmd:
+        cmd += (f"; ({typecheck_cmd}) >/tmp/tc.log 2>&1 && echo {TC_MARK}PASSED || "
+                f"{{ echo {TC_MARK}FAILED; tail -40 /tmp/tc.log; }}")
     out = subprocess.run(["docker", "run", "--rm", "-v", f"{wt}:/src:ro",
                           "-v", f"{NPM_CACHE}:/root/.npm",
                           "-v", f"{PNPM_STORE}:/pnpm-store",
@@ -165,7 +176,11 @@ def _run_vitest(wt: Path, repo: str, image: str) -> dict:
     parts = out.stdout.split(MARK)
     if len(parts) < 3:
         return {}
-    return _parse_vitest_json(parts[1])
+    res = _parse_vitest_json(parts[1])
+    if typecheck_cmd and res:
+        tc = re.search(TC_MARK + r"(PASSED|FAILED)", out.stdout)
+        res["__typecheck__"] = tc.group(1) if tc else "FAILED"
+    return res
 
 
 def _parse_vitest_json(text: str) -> dict:
@@ -178,6 +193,7 @@ def _parse_vitest_json(text: str) -> dict:
     except json.JSONDecodeError:
         return {}
     res = {}
+    seen: dict[str, int] = {}
     for f in doc.get("testResults", []):
         rel = f.get("name", "")
         rel = rel[len("/w/"):] if rel.startswith("/w/") else rel
@@ -185,6 +201,14 @@ def _parse_vitest_json(text: str) -> dict:
             st = a.get("status")
             o = {"passed": "PASSED", "failed": "FAILED"}.get(st, "SKIPPED")
             k = f"{rel} > {a.get('fullName') or a.get('title')}"
+            # Each repeat of an id is also kept under "<id> #<n>" so per-file
+            # test counts stay true (p2p_check's rename rule counts them):
+            # 2026-10-11 a zod agent renamed `.safe() validation` to an
+            # existing `.int() validation`; both ran and passed, but the
+            # merged key made the file look one test short.
+            seen[k] = seen.get(k, 0) + 1
+            if seen[k] > 1:
+                res[f"{k} #{seen[k]}"] = o
             if res.get(k) == "FAILED":
                 continue
             if k in res and res[k] != o:
@@ -254,9 +278,13 @@ def validate(repo_dir: Path, repo: str, task: dict, runs: int = 1) -> dict:
 
 
 def score(repo_dir: Path, repo: str, task: dict, agent_patch: str) -> dict:
-    res = _run_tests(repo_dir, repo, task["base_commit"], [task["test_patch"], agent_patch])
+    tc = task.get("typecheck_cmd")
+    res = _run_tests(repo_dir, repo, task["base_commit"], [task["test_patch"], agent_patch],
+                     typecheck_cmd=tc)
     f2p_ok = all(res.get(n) == "PASSED" for n in task["fail_to_pass"])
-    p2p_ok = all(res.get(n) == "PASSED" for n in task.get("pass_to_pass", []))
+    p2p_ok = p2p_check.p2p_ok(res, task)
+    if tc:  # the task's own type check is required on top of pass_to_pass
+        p2p_ok = p2p_ok and res.get("__typecheck__") == "PASSED"
     return {"resolved": bool(f2p_ok and p2p_ok), "f2p_ok": f2p_ok,
             "p2p_ok": p2p_ok, "n_run": len(res)}
 

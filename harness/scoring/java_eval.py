@@ -9,6 +9,7 @@ cache volume keeps repeat runs from re-downloading the dependency world.
 Single-module Maven projects (jackson-databind, commons-lang) only for the
 prototype; multi-module (netty) needs -pl and is a follow-up.
 """
+import p2p_check  # noqa: E402
 import json, re, subprocess, sys, tempfile, xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -237,7 +238,7 @@ def score(repo_dir: Path, task: dict, agent_patch: str) -> dict:
     res = _run_tests(repo_dir, task["base_commit"],
                      [task["test_patch"], agent_patch], task["test_classes"], image=img)
     f2p_ok = all(_entry_ok(res, n) for n in task["fail_to_pass"])
-    p2p_ok = all(_entry_ok(res, n) for n in task.get("pass_to_pass", []))
+    p2p_ok = p2p_check.p2p_ok(res, task, _entry_ok)
     return {"resolved": bool(f2p_ok and p2p_ok), "f2p_ok": f2p_ok,
             "p2p_ok": p2p_ok, "n_run": len(res)}
 

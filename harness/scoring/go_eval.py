@@ -9,6 +9,7 @@ module cache volume keeps repeat runs from re-downloading deps.
 Single-module repos (gin, ripgrep-equivalent Go projects) for the prototype;
 multi-module (go.work) repos are a follow-up.
 """
+import p2p_check  # noqa: E402
 import json, re, subprocess, sys, tempfile
 from pathlib import Path
 
@@ -192,7 +193,7 @@ def score(repo_dir: Path, task: dict, agent_patch: str) -> dict:
     res = _run_tests(repo_dir, task["base_commit"],
                      [task["test_patch"], agent_patch], task["test_functions"])
     f2p_ok = all(res.get(n) == "PASSED" for n in task["fail_to_pass"])
-    p2p_ok = all(res.get(n) == "PASSED" for n in task.get("pass_to_pass", []))
+    p2p_ok = p2p_check.p2p_ok(res, task)
     return {"resolved": bool(f2p_ok and p2p_ok), "f2p_ok": f2p_ok,
             "p2p_ok": p2p_ok, "n_run": len(res)}
 

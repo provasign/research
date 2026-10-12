@@ -90,10 +90,23 @@ class ScorerRanNoTests(RuntimeError):
     real loss for every arm."""
 
 
+def _docker_up() -> bool:
+    try:
+        return subprocess.run(["docker", "info"], capture_output=True, timeout=60).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 def _score(task, diff: str) -> dict:
     res = _score_inner(task, diff)
     if res.get("n_run") == 0:
         raise ScorerRanNoTests(f"scorer ran no tests for {task['instance_id']}: {res}")
+    # Wide (seeded) tasks nest the test result under "tests"; zero tests there
+    # is either the agent's build failing (a real loss) or Docker being down
+    # (2026-10-11 ~03:10: Docker Desktop died mid-run and an echo cell scored
+    # n_run=0 as a loss). Only the second is an infrastructure error.
+    if (res.get("tests") or {}).get("n_run") == 0 and not _docker_up():
+        raise ScorerRanNoTests(f"scorer ran no tests for {task['instance_id']} and Docker is down: {res}")
     return res
 
 
@@ -270,7 +283,7 @@ def _install_read_guard_hook(wt: Path, arm: str) -> None:
                            f"{r.stdout[-300:]} {r.stderr[-300:]}")
 
 
-PRISM_INIT_ARMS = ("prism_init", "prism_init_deferred", "prism_init_no_guard",
+PRISM_INIT_ARMS = ("prism_init", "prism_init_deferred", "prism_init_no_guard", "prism_forced",
                     "prism_body_baseline", "prism_body_exp", "prism_body_exp2")
 
 
@@ -290,7 +303,7 @@ def _index_graph(wt: Path, arm: str, task=None):
             raise RuntimeError(
                 f"prism init did not create .mcp.json in {wt} "
                 f"(rc={r.returncode}): {r.stdout[-300:]} {r.stderr[-300:]}")
-        if arm in ("prism_init", "prism_init_no_guard", "prism_body_baseline", "prism_body_exp", "prism_body_exp2"):
+        if arm in ("prism_init", "prism_init_no_guard", "prism_forced", "prism_body_baseline", "prism_body_exp", "prism_body_exp2"):
             # Make the ONE compact tool resident (alwaysLoad) instead of
             # deferred behind a ToolSearch hop. Deferred-by-default was
             # chosen on a 9-task haiku A/B (2026-08-29); on this harness's
@@ -412,7 +425,11 @@ def _python_venv(task) -> Path:
     agent tests against the packages the scorer uses) and reused by every arm
     and trial. Lives outside the worktree: nothing enters the scored diff."""
     venv = AGENT_PY_VENVS / f"{task['repo'].replace('/', '__')}@{task['base_commit'][:12]}"
-    if (venv / ".ready").exists():
+    # The stamp names the extra packages too: rich's venvs were built before
+    # attrs joined EXTRA_PIP and were never rebuilt, so test_pretty.py could
+    # not import and agents spent calls working around it (2026-10-11).
+    stamp = task["base_commit"] + " " + " ".join(docker_eval.EXTRA_PIP.get(task["repo"], []))
+    if (venv / ".ready").exists() and (venv / ".ready").read_text() == stamp:
         return venv
     import shutil as _shutil
     _shutil.rmtree(venv, ignore_errors=True)
@@ -437,7 +454,7 @@ def _python_venv(task) -> Path:
         r = subprocess.run(["bash", "-lc", recipe], cwd=src, capture_output=True, text=True, timeout=1800)
         if r.returncode != 0:
             raise RuntimeError(f"agent venv build failed for {task['instance_id']}: {r.stderr[-600:]}")
-        (venv / ".ready").write_text(task["base_commit"])
+        (venv / ".ready").write_text(stamp)
     finally:
         _shutil.rmtree(src, ignore_errors=True)
     return venv
@@ -651,15 +668,20 @@ def _preinstall_node(wt: Path, task) -> dict:
     return {"node_preinstall_s": round(time.monotonic() - t0, 1)}
 
 
-def _upstream_guard_settings() -> str:
+def _upstream_guard_settings(arm: str = "") -> str:
     """--settings JSON passed to EVERY arm's claude -p: a PreToolUse hook that
     denies fetching from the upstream code host (hooks/upstream_guard.py).
     Passed on the command line, not written into the worktree, so native arms
     stay free of .claude/ files and both arms carry the identical hook; it
     merges with the prism arms' worktree read-guard hooks."""
     cmd = f"python3 {HOOKS_SRC / 'upstream_guard.py'}"
-    return json.dumps({"hooks": {"PreToolUse": [
-        {"matcher": "Bash|WebFetch", "hooks": [{"type": "command", "command": cmd}]}]}})
+    hooks = [{"matcher": "Bash|WebFetch", "hooks": [{"type": "command", "command": cmd}]}]
+    if arm == "prism_forced":
+        # Test-only arm (2026-10-11): grep/rg/find and Grep/Glob are denied with
+        # a pointer to prism search (hooks/forced_prism_guard.py).
+        hooks.append({"matcher": "Bash|Grep|Glob", "hooks": [{"type": "command",
+                      "command": f"python3 {HOOKS_SRC / 'forced_prism_guard.py'}"}]})
+    return json.dumps({"hooks": {"PreToolUse": hooks}})
 
 
 def _cloud_cmd(model: str, arm: str, wt: Path, prompt: str) -> list:
@@ -670,7 +692,7 @@ def _cloud_cmd(model: str, arm: str, wt: Path, prompt: str) -> list:
            # the agent's reasoning readable in the preserved transcript.
            "--thinking-display", "summarized",
            "--dangerously-skip-permissions", "--strict-mcp-config",
-           "--settings", _upstream_guard_settings(),
+           "--settings", _upstream_guard_settings(arm),
            "--allowedTools", *spec["allowed"]]
     if arm in PRISM_INIT_ARMS:
         cmd += ["--mcp-config", str(wt / ".mcp.json")]
