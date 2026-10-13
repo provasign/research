@@ -54,7 +54,10 @@ def load_graph(repo: Path):
     name = lambda n: f"{syms[n][0]}::{syms[n][2]}#{syms[n][1]}" if n in syms else BLOB_SHA.sub("@sha", n)
     edges = collections.Counter()
     meta = {}
-    for f, t, et, src, conf in db.execute("select from_node,to_node,edge_type,source,confidence from edges"):
+    # grove >= v0.63.16 stores edges in graph_edges (no derived id column).
+    table = "graph_edges" if db.execute(
+        "select count(*) from sqlite_master where type='table' and name='graph_edges'").fetchone()[0] else "edges"
+    for f, t, et, src, conf in db.execute(f"select from_node,to_node,edge_type,source,confidence from {table}"):
         k = (name(f), et, name(t))
         edges[k] += 1
         meta[k] = (src, conf)
