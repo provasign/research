@@ -129,6 +129,16 @@ def write_summary(out: Path, results: dict, arms: list) -> str:
                   f"TASK cost @1h: native ${n['task1']:.3f}, prism ${p['task1']:.3f}, prism/native {p['task1'] / n['task1']:.3f}",
                   f"STARTUP per cell @5m: native ${n['st5'] / len(complete):.4f}, prism ${p['st5'] / len(complete):.4f} "
                   f"(@1h ${n['st1'] / len(complete):.4f} / ${p['st1'] / len(complete):.4f}); reported apart, not a target"]
+    adjudicated = [(k, v["adjudication"]) for k, v in rows if v.get("adjudication")]
+    if adjudicated:
+        lines += ["", "## Adjudicated resolve losses (user ruling after reading both transcripts)", ""]
+        for k, adj in adjudicated:
+            lines.append(f"- {k}: {adj.get('ruling')} — {adj.get('reason')} "
+                         f"(task cost native ${adj.get('native_task_usd')}, prism ${adj.get('prism_task_usd')}; "
+                         f"prism calls {adj.get('prism_calls')}; ruled by {adj.get('by')} {adj.get('at')})")
+        tool_ok = sum(1 for _, a in adjudicated if a.get("ruling", "").startswith("prism success"))
+        lines.append(f"\nresolve losses ruled a prism success: {tool_ok}/{len(adjudicated)}; "
+                     f"prism solved + ruled-success: {p['solved'] + tool_ok}/{len(complete)}")
     lines += [f"cells with unknown cost: {len(missing)} {missing}", f"cells with unknown result (scorer failed): {len(unscored)} {unscored}", ""]
     text = "\n".join(lines)
     (out / "SUMMARY.md").write_text(text)
@@ -287,7 +297,9 @@ def main():
                 log(f"   PAIR {iid} task@5m: native ${nt and round(nt, 4)} resolved={n['resolved']} | "
                     f"prism ${pt and round(pt, 4)} resolved={p['resolved']} | prism/native={round(pt / nt, 3) if nt and pt else None} "
                     f"| startup ${n['repriced']['5m'].get('startup_usd')} / ${p['repriced']['5m'].get('startup_usd')}")
-                if n["resolved"] and not p["resolved"]:
+                if n["resolved"] and not p["resolved"] and not row.get("adjudication"):
+                    # An adjudicated row (results.json "adjudication": the user's ruling after
+                    # reading the transcripts) does not re-trigger the stop on resume.
                     write_summary(out, results, arms)
                     log(f"STOP: resolve loss on {iid} (native solved, prism did not)")
                     return
