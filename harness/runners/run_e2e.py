@@ -784,6 +784,8 @@ def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
         rec["usage"]["transcript"] = {k: tu[k] for k in (
             "transcript", "messages", "requests", "tokens", "cache_ttl", "per_request",
             "cache_hit_rate", "warnings", "_unavailable") if k in tu}
+        rec["startup"] = usage_account.startup_split(tu.get("per_request") or [], rec.get("model"),
+                                                     rec.get("cost_usd"), cold=os.environ.get("E2E_COLD") == "1")
         # Which tools the agent used, prism by op (scoring/tool_usage.py), so
         # adoption is on every cell instead of reconstructed from transcripts
         # that Claude Code deletes after 30 days.

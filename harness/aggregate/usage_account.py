@@ -252,3 +252,69 @@ def analyze_transcript(p: Path) -> dict:
         "tool_calls": calls,
         "tool_result_bytes": result_bytes,
     }
+
+
+# Sonnet 5.5 list rates per token, fitted 2026-10-16 against CLI cost_usd
+# (median error 0.0%): uncached in, 5m write, 1h write, cache read, output.
+SONNET55_RATES = {"input_uncached": 2e-6, "cache_5m": 2.5e-6, "cache_1h": 4e-6,
+                  "cache_read": 1e-7, "output": 1e-5}
+
+
+def startup_split(per_request: list, model: str | None, cost_usd, cold: bool) -> dict:
+    """The session's first request is the startup write: the system prompt,
+    tool definitions, and steering, written to the cache once. Reported apart
+    from the task cost so arms compare on the work and the startup overhead
+    is its own per-arm number (2026-10-17). `cold` says every cell was made
+    cache-cold by design; `was_cold` says what the API reported."""
+    if not per_request:
+        return {"status": "no per-request usage"}
+    first = per_request[0]
+    was_cold = first.get("cache_read") == 0
+    out = {"cold_by_design": cold, "was_cold": was_cold,
+           "first_request": {k: first.get(k) for k in ("input_uncached", "cache_creation",
+                                                        "cache_5m", "cache_1h", "cache_read", "output")}}
+    if not (model or "").startswith("claude-sonnet-5-5"):
+        out["status"] = "no rate table for model"
+        return out
+    r = SONNET55_RATES
+    write = first.get("cache_5m"), first.get("cache_1h")
+    if None in write or first.get("input_uncached") is None:
+        out["status"] = "first request usage incomplete"
+        return out
+    startup = write[0] * r["cache_5m"] + write[1] * r["cache_1h"] + first["input_uncached"] * r["input_uncached"]
+    out["startup_usd"] = round(startup, 6)
+    if isinstance(cost_usd, (int, float)):
+        out["task_usd"] = round(cost_usd - startup, 6)
+    out["status"] = "ok"
+    return out
+
+
+def reprice(per_request: list, ttl: str, model: str | None = "claude-sonnet-5-5") -> dict:
+    """Dollar cost of a session under prompt caching, reconstructed from
+    per-request token counts (caching changes billing, not the prompt).
+    Claude Code caches the whole prompt at every request, so request n+1
+    reads request n's prompt and writes only what was added since. Holds
+    while every inter-request gap is under the TTL and no compaction
+    occurred; validated against cached cells (see validate_reprice). Also
+    usable on caching-off runs (DISABLE_PROMPT_CACHING=1), where every
+    request bills everything as uncached input and the CLI cost is not
+    what a user pays."""
+    if not (model or "").startswith("claude-sonnet-5-5"):
+        return {"status": "no rate table for model"}
+    r = SONNET55_RATES
+    w = r["cache_5m"] if ttl == "5m" else r["cache_1h"]
+    usd = 0.0
+    prev_total = 0
+    rows = []
+    for req in per_request:
+        parts = [req.get(k) for k in ("input_uncached", "cache_creation", "cache_read", "output")]
+        if any(v is None for v in parts):
+            return {"status": "per-request usage incomplete"}
+        total = parts[0] + parts[1] + parts[2]
+        read = min(prev_total, total)
+        write = max(0, total - read)
+        usd += write * w + read * r["cache_read"] + parts[3] * r["output"]
+        rows.append({"total": total, "write": write, "read": read, "output": parts[3]})
+        prev_total = total
+    return {"status": "ok", "ttl": ttl, "usd": round(usd, 6), "requests": len(rows),
+            "startup_usd": round(rows[0]["write"] * w, 6) if rows else None}
