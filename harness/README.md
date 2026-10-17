@@ -29,6 +29,13 @@ python3 bench.py run --suite e2e --phase pilot --preflight-only
 python3 bench.py run --suite e2e --phase pilot --out results/my-run \
   --prism-binary "$(which prism)"   # or a pinned/built-on-the-fly binary
 
+# STANDARD COST METHOD (2026-10-17): isolated cells, startup/task split.
+#   python3 -u runners/run_ttl.py --manifest <m> --out-dir <d> --no-cache
+# Caching is disabled per cell (no shared prefix between any two cells); cost is
+# reconstructed per request at the 5m/1h cache rates and split into STARTUP
+# (first-request write; reported per arm, not a target) and TASK (the headline
+# native-vs-prism comparison). SUMMARY.md per run. run_overnight.py cost
+# figures are warm-regime and not comparable.
 # Rebuild the cross-run comparison table (tokens/turns/cost/correctness
 # by suite x task x agent x model x prism x time).
 python3 bench.py index

@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """Unattended overnight run: all manifest tasks x (baseline, prism_init resident).
 
+NOT the cost runner any more (2026-10-17): its cells share the cached prompt
+prefix across arms, so its cost figures are warm-regime task costs with the
+startup write silently excluded. For any cost claim use runners/run_ttl.py
+--no-cache (isolated cells, startup/task split). Resolve counts here stay valid.
+
 Auto-resumes through Claude usage-limit rate limits (sleeps and retries the
 SAME cell, does not skip it). Never stops on an individual bad cell -- errors
 are recorded and the run moves on. Every flagged cell (resolve mismatch, or
