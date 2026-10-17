@@ -130,8 +130,10 @@ def _score_inner(task, diff: str) -> dict:
     if _is_java(task):
         return java_eval.score(java_eval.REPO_DIR[task["repo"]], task, diff)
     return docker_eval.score(task, diff)
-RATE_HINTS = ("rate limit", "usage limit", "429", "too many requests",
-              "overloaded", "please try again later")
+# A bare "429" matched paths and ids inside unrelated output (2026-10-17: a
+# workspace-trust error was read as a rate limit and slept 30 minutes).
+RATE_HINTS = ("rate limit", "usage limit", "http 429", "status 429", "error 429",
+              "429 too many", "too many requests", "overloaded", "please try again later")
 
 
 # The agent's session died because the API was unreachable, not because of
@@ -152,6 +154,16 @@ def _network_down(returncode: int, blob: str) -> bool:
 
 class RateLimited(Exception):
     pass
+
+
+class TrustPrompt(RateLimited):
+    """claude -p refused to apply project settings because the workspace was
+    not trusted (2026-10-17, one cell of a 41-cell run, while ~/.claude.json
+    was being rewritten by another session). Transient: retry in a minute."""
+
+
+def _trust_prompt(returncode: int, blob: str) -> bool:
+    return returncode != 0 and "has not been trusted" in blob
 
 
 # The CLI's OAuth session expired mid-run (2026-09-26 21:16): sessions ended
@@ -753,6 +765,8 @@ def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
     t0 = time.monotonic()
     r = subprocess.run(cmd, cwd=wt, capture_output=True, text=True, timeout=1800, env=env)
     blob = (r.stdout + r.stderr).lower()
+    if _trust_prompt(r.returncode, blob):
+        raise TrustPrompt(blob[-300:])
     if r.returncode != 0 and any(h in blob for h in RATE_HINTS):
         raise RateLimited(blob[-300:])
     if _auth_expired(r.returncode, blob):

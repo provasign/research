@@ -57,16 +57,23 @@ UNIT_S = {"second": 1, "minute": 60, "hour": 3600}
 
 
 def run_with_retry(task, arm, model, log):
+    trust_tries = 0
     while True:
         try:
             return run_e2e.run_cell(task, arm, model)
+        except run_e2e.TrustPrompt as e:
+            trust_tries += 1
+            log(f"TRUST PROMPT on {task['instance_id']}/{arm} (try {trust_tries}/5): {str(e)[-200:]!r}")
+            if trust_tries >= 5:
+                return {"resolved": None, "error": f"TrustPrompt after 5 tries: {str(e)[-200:]}"}
+            time.sleep(60)
         except run_e2e.RateLimited as e:
             msg = str(e)
             sleep_s = 300 if isinstance(e, (run_e2e.NetworkDown, run_e2e.AuthExpired)) else 1800
             m = re.search(r"(\d+)\s*(second|minute|hour)s?", msg, re.I)
             if m:
                 sleep_s = int(m.group(1)) * UNIT_S[m.group(2).lower()]
-            log(f"RATE LIMIT on {task['instance_id']}/{arm}: sleeping {sleep_s}s ({msg[:120]!r})")
+            log(f"RATE LIMIT on {task['instance_id']}/{arm}: sleeping {sleep_s}s ({msg[-300:]!r})")
             time.sleep(sleep_s)
         except Exception as e:  # noqa: BLE001
             return {"resolved": None, "error": f"{type(e).__name__}: {str(e)[:300]}"}
