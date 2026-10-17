@@ -95,6 +95,40 @@ class UsageTests(unittest.TestCase):
         self.assertIn("assistant message missing identity", got["warnings"])
         self.assertIsNone(got["tokens"]["output"])
 
+    def test_cache_write_ttl_split_is_kept_per_request_and_in_total(self):
+        with patch.object(usage, "claude_version", return_value="test"):
+            record = usage.cli_usage({"usage": {
+                "input_tokens": 1, "cache_creation_input_tokens": 30, "cache_read_input_tokens": 0,
+                "output_tokens": 2, "cache_creation": {"ephemeral_5m_input_tokens": 10,
+                                                        "ephemeral_1h_input_tokens": 20},
+            }, "total_cost_usd": .01})
+            self.assertEqual(record["cache_ttl"], {"cache_5m": 10, "cache_1h": 20})
+            self.assertEqual(usage.cli_usage({"usage": {}})["cache_ttl"], {"cache_5m": None, "cache_1h": None})
+
+        def message(mid, rid, write_1h):
+            return {"type": "assistant", "requestId": rid, "message": {"id": mid, "usage": {
+                "input_tokens": 1, "cache_creation_input_tokens": write_1h,
+                "cache_read_input_tokens": 5, "output_tokens": 3,
+                "cache_creation": {"ephemeral_5m_input_tokens": 0, "ephemeral_1h_input_tokens": write_1h},
+            }}}
+        with tempfile.TemporaryDirectory() as directory:
+            p = Path(directory)/"session.jsonl"
+            events = [message("m1", "r1", 100), message("m1", "r1", 100), message("m2", "r2", 7)]
+            p.write_text("\n".join(json.dumps(e) for e in events))
+            got = usage.analyze_transcript(p)
+        self.assertEqual(got["cache_ttl"], {"cache_5m": 0, "cache_1h": 107})
+        self.assertEqual([r["message_id"] for r in got["per_request"]], ["m1", "m2"])
+        self.assertEqual(got["per_request"][1], {
+            "message_id": "m2", "request_id": "r2", "input_uncached": 1, "cache_creation": 7,
+            "cache_read": 5, "output": 3, "cache_5m": 0, "cache_1h": 7})
+        # A transcript without the TTL detail stays unknown, never zero.
+        with tempfile.TemporaryDirectory() as directory:
+            p = Path(directory)/"session.jsonl"
+            e = message("m1", "r1", 4); del e["message"]["usage"]["cache_creation"]
+            p.write_text(json.dumps(e))
+            got = usage.analyze_transcript(p)
+        self.assertEqual(got["cache_ttl"], {"cache_5m": None, "cache_1h": None})
+
 
 if __name__ == "__main__":
     unittest.main()

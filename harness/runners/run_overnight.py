@@ -36,6 +36,8 @@ _ap.add_argument("--model", default="claude-sonnet-5-5",
                  help="exact model ID; aliases (sonnet, opus, haiku) move between releases")
 _ap.add_argument("--allow-model-alias", action="store_true",
                  help="accept an alias --model (results then compare across whatever it resolved to)")
+_ap.add_argument("--order-seed", default="2026-10-17",
+                 help="seed for the per-task arm order (which arm runs first); recorded per row")
 _args = _ap.parse_args()
 
 MANIFEST = Path(_args.manifest)
@@ -51,6 +53,7 @@ if MODEL in ("sonnet", "opus", "haiku") and not _args.allow_model_alias:
     _ap.error(f"--model {MODEL} is an alias; pass an exact model ID (e.g. claude-sonnet-5-5) or --allow-model-alias")
 NATIVE_ARM = _args.native_arm
 PRISM_ARM = _args.prism_arm
+ORDER_SEED = _args.order_seed
 TOKEN_FLAG_MULTIPLIER = 1.5
 DEFAULT_RATE_LIMIT_SLEEP = 1800  # 30 min fallback when no reset hint is parseable
 
@@ -99,6 +102,19 @@ def run_with_retry(task: dict, arm: str, model: str) -> dict:
             return {"resolved": False, "error": f"{type(e).__name__}: {str(e)[:300]}"}
 
 
+def arm_row(rec: dict) -> dict:
+    """Everything the summary keeps per arm. `usage` carries the CLI's raw
+    usage, the cache-write TTL split and per-request rows (run_e2e), so cost
+    can be re-attributed later without the transcript."""
+    return {"resolved": rec.get("resolved"), "turns": rec.get("turns"),
+            "tokens": total_tokens(rec), "wall_s": rec.get("wall_s"),
+            "cost_usd": rec.get("cost_usd"), "tool_trace": rec.get("tool_trace"),
+            "api_calls": rec.get("api_calls"), "session_id": rec.get("session_id"),
+            "model": rec.get("model"), "runtimes": rec.get("runtimes"),
+            "usage": rec.get("usage"), "transcript": rec.get("transcript"),
+            "error": rec.get("error") or rec.get("agent_error")}
+
+
 def evidence(rec: dict, label: str) -> str:
     lines = [f"- **{label}**: resolved={rec.get('resolved')} turns={rec.get('turns')} "
              f"tokens={total_tokens(rec)} wall_s={rec.get('wall_s')} cost=${rec.get('cost_usd')}",
@@ -138,8 +154,13 @@ def main():
         lang = task.get("lang") or "python"
         log(f"-- {iid} ({lang}) --")
 
-        native = run_with_retry(task, NATIVE_ARM, MODEL)
-        prism = run_with_retry(task, PRISM_ARM, MODEL)
+        order = run_e2e.arm_order(ORDER_SEED, iid, [NATIVE_ARM, PRISM_ARM])
+        ran = {}
+        for arm in order:
+            ran[arm] = run_with_retry(task, arm, MODEL)
+            ran[arm]["transcript"] = run_e2e._preserve_transcript(
+                ran[arm].get("session_id"), OUT_DIR / "transcripts" / f"{iid}.{MODEL}.{arm}.jsonl")
+        native, prism = ran[NATIVE_ARM], ran[PRISM_ARM]
 
         # Both arms must have run the requested model: a pair across two
         # models measures the models, not prism. Stop the run.
@@ -150,21 +171,8 @@ def main():
             raise SystemExit(3)
         n_tok, p_tok = total_tokens(native), total_tokens(prism)
         p_calls = prism_call_count(prism)
-        row = {
-            "task": iid, "lang": lang,
-            "native": {"resolved": native.get("resolved"), "turns": native.get("turns"),
-                      "tokens": n_tok, "wall_s": native.get("wall_s"),
-                      "cost_usd": native.get("cost_usd"), "tool_trace": native.get("tool_trace"),
-                      "session_id": native.get("session_id"), "model": native.get("model"),
-                      "runtimes": native.get("runtimes"),
-                      "error": native.get("error") or native.get("agent_error")},
-            "prism": {"resolved": prism.get("resolved"), "turns": prism.get("turns"),
-                     "tokens": p_tok, "wall_s": prism.get("wall_s"),
-                     "cost_usd": prism.get("cost_usd"), "tool_trace": prism.get("tool_trace"),
-                     "prism_calls": p_calls, "session_id": prism.get("session_id"), "model": prism.get("model"),
-                     "runtimes": prism.get("runtimes"),
-                     "error": prism.get("error") or prism.get("agent_error")},
-        }
+        row = {"task": iid, "lang": lang, "order": order, "order_seed": ORDER_SEED,
+               "native": arm_row(native), "prism": {**arm_row(prism), "prism_calls": p_calls}}
         results.append(row)
         RESULTS.write_text(json.dumps(results, indent=2))
         state[iid] = "done"
@@ -212,6 +220,15 @@ def main():
     p_res = sum(1 for r in results if r["prism"]["resolved"])
     n_tot = sum(r["native"]["tokens"] for r in results if r["native"]["tokens"])
     p_tot = sum(r["prism"]["tokens"] for r in results if r["prism"]["tokens"])
+    # Dollars over complete pairs only: a cell with unknown cost is missing,
+    # not free, and counting its partner alone skews the ratio (2026-10-17:
+    # one missing prism cell moved issue42 from 0.975x to 0.935x).
+    known = lambda r, a: isinstance(r[a].get("cost_usd"), (int, float))
+    pairs = [r for r in results if known(r, "native") and known(r, "prism")]
+    n_usd = sum(r["native"]["cost_usd"] for r in pairs)
+    p_usd = sum(r["prism"]["cost_usd"] for r in pairs)
+    missing = [(r["task"], a) for r in results for a in ("native", "prism") if not known(r, a)]
+    unscored = [(r["task"], a) for r in results for a in ("native", "prism") if r[a].get("resolved") is None]
     flagged_rows = [r for r in results if r["native"]["resolved"] != r["prism"]["resolved"]
                     or (r["native"]["tokens"] and r["prism"]["tokens"]
                         and (r["prism"]["tokens"] / r["native"]["tokens"] > TOKEN_FLAG_MULTIPLIER
@@ -225,6 +242,10 @@ def main():
                 f"- prism  resolved: {p_res}/{len(results)}\n"
                 f"- native tokens total: {n_tot}\n"
                 f"- prism  tokens total: {p_tot} ({p_tot/n_tot:.2f}x native)\n" if n_tot else "")
+        f.write(f"- cost over {len(pairs)} complete pairs: native ${n_usd:.4f}, prism ${p_usd:.4f}"
+                + (f" ({p_usd/n_usd:.3f}x native)\n" if n_usd else "\n"))
+        f.write(f"- cells with unknown cost: {len(missing)} {missing}\n")
+        f.write(f"- cells with unknown result (scorer failed): {len(unscored)} {unscored}\n")
         f.write(f"- flagged cells: {len(flagged_rows)} "
                 f"({len(non_adoption_flags)} non-adoption, {len(real_flags)} real prism signal)\n")
         if real_flags:

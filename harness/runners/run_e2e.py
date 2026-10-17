@@ -777,6 +777,13 @@ def _run_cloud(model: str, arm: str, wt: Path, task) -> dict:
             rec["model"] = max(mu, key=lambda m: (mu[m] or {}).get("outputTokens", 0))
         rec["session_id"] = rec["usage"].get("session_id")
         rec["api_calls"] = _api_calls(rec["session_id"])
+        # Per-request usage with the cache-write TTL split, persisted now:
+        # Claude Code deletes the transcript after 30 days, and the cost
+        # question (2026-10-17) is which request paid for which cache write.
+        tu = usage_account.transcript_usage(rec["session_id"])
+        rec["usage"]["transcript"] = {k: tu[k] for k in (
+            "transcript", "messages", "requests", "tokens", "cache_ttl", "per_request",
+            "cache_hit_rate", "warnings", "_unavailable") if k in tu}
         # Which tools the agent used, prism by op (scoring/tool_usage.py), so
         # adoption is on every cell instead of reconstructed from transcripts
         # that Claude Code deletes after 30 days.
@@ -1061,10 +1068,27 @@ def run_cell(task: dict, arm: str, model: str, tag: str = "") -> dict:
         _save_diff(task, model, arm, tag, diff)
     finally:
         _remove_worktree(wt)
-    sc = _score(task, diff)
-    return {"task": task["instance_id"], "arm": arm, "model": model,
-            "kind": task.get("kind"), "resolved": sc.get("resolved"),
-            "diff_lines": diff.count("\n"), **meta, "setup": setup, "score": sc}
+    # The agent's spend is known by now; a scorer failure (no tests ran,
+    # Docker down) must not discard it. resolved stays unknown, not False.
+    try:
+        sc = _score(task, diff)
+    except Exception as e:  # noqa: BLE001
+        sc = {"resolved": None, "scorer_error": f"{type(e).__name__}: {str(e)[:300]}"}
+    rec = {"task": task["instance_id"], "arm": arm, "model": model,
+           "kind": task.get("kind"), "resolved": sc.get("resolved"),
+           "diff_lines": diff.count("\n"), **meta, "setup": setup, "score": sc}
+    if sc.get("scorer_error"):
+        rec["error"] = sc["scorer_error"]
+    return rec
+
+
+def arm_order(seed: str, instance_id: str, arms: list[str]) -> list[str]:
+    """Arm order for one task: a seeded shuffle so neither arm always runs
+    first (cache state, API latency and time of day drift within a pair),
+    reproducible from the seed so a resumed run keeps the same order."""
+    order = list(arms)
+    random.Random(f"{seed}-{instance_id}").shuffle(order)
+    return order
 
 
 def main():
@@ -1154,6 +1178,10 @@ def main():
                 traceback.print_exc()
                 break
         (OUT / "PAUSED.json").unlink(missing_ok=True)
+        if rec.get("score", {}).get("scorer_error"):
+            # Keep the spend on disk but not under the cached cell name, so a
+            # rerun scores the task again instead of skipping it.
+            f = f.with_suffix(".scorer-failed.json")
         rec["trial"] = trial
         rec["transcript"] = _preserve_transcript(
             rec.get("session_id"), OUT / "transcripts" / f"{f.stem}.jsonl")

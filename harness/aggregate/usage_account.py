@@ -47,6 +47,22 @@ def normalized_tokens(usage: dict) -> dict:
     return result
 
 
+TTL_FIELDS = {"cache_5m": "ephemeral_5m_input_tokens", "cache_1h": "ephemeral_1h_input_tokens"}
+
+
+def cache_ttl_split(usage: dict) -> dict:
+    """Cache writes by TTL from `usage.cache_creation` (the API bills 5m and
+    1h writes at different rates). Absent or invalid counters stay None."""
+    usage = usage if isinstance(usage, dict) else {}
+    detail = usage.get("cache_creation")
+    detail = detail if isinstance(detail, dict) else {}
+    result = {}
+    for name, source in TTL_FIELDS.items():
+        value = detail.get(source)
+        result[name] = value if type(value) is int and value >= 0 else None
+    return result
+
+
 def input_total(tokens: dict) -> int | None:
     values = [tokens.get(k) for k in ("input_uncached", "cache_creation", "cache_read")]
     return sum(values) if all(type(v) is int and v >= 0 for v in values) else None
@@ -80,6 +96,7 @@ def cli_usage(j: dict) -> dict:
         "usage_version": USAGE_VERSION,
         "session_id": j.get("session_id"),
         "tokens": tokens,
+        "cache_ttl": cache_ttl_split(u),
         "input_total": input_total(tokens),
         "usage_complete": all(v is not None for v in tokens.values()) and valid_cost,
         "raw_usage": u,
@@ -163,6 +180,10 @@ def analyze_transcript(p: Path) -> dict:
             previous = messages.setdefault(mid, {})
             # Streaming fragments may carry only some counters.
             previous.update({k: v for k, v in u.items() if k in TOKEN_FIELDS.values()})
+            if isinstance(u.get("cache_creation"), dict):
+                previous["cache_creation"] = u["cache_creation"]
+            if j.get("requestId"):
+                previous["_request_id"] = j["requestId"]
         elif t == "user":
             m = j.get("message") or {}
             if not isinstance(m, dict):
@@ -183,6 +204,18 @@ def analyze_transcript(p: Path) -> dict:
     for key in TOKEN_FIELDS:
         values = [u[key] for u in normalized]
         tok[key] = sum(values) if values and all(v is not None for v in values) else None
+    # Per-request rows (one per assistant message id, in transcript order) so
+    # cache-write cost can be attributed to the request that paid it, and the
+    # TTL split the API reports per request. Step output may be a streaming
+    # placeholder; the final aggregate below is authoritative for output.
+    per_request = []
+    for mid, u in messages.items():
+        per_request.append({"message_id": mid, "request_id": u.get("_request_id"),
+                            **normalized_tokens(u), **cache_ttl_split(u)})
+    cache_ttl = {}
+    for key in TTL_FIELDS:
+        values = [r[key] for r in per_request]
+        cache_ttl[key] = sum(values) if values and all(v is not None for v in values) else None
     # Transcript step output may be a streaming placeholder, so never use it
     # as the authoritative output total without a final aggregate.
     observed_output = tok["output"]
@@ -207,6 +240,8 @@ def analyze_transcript(p: Path) -> dict:
         "duplicate_lines": dup,
         "requests": len(requests),
         "tokens": tok,
+        "cache_ttl": cache_ttl,
+        "per_request": per_request,
         "step_output_observed": observed_output,
         "usage_complete": usage_complete,
         "diagnostics_complete": diagnostics_complete,
