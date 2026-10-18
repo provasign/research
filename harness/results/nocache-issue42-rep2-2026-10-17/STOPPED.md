@@ -1,0 +1,1 @@
+Stopped by Claude at 33 of 41 pairs on Topo's rule 'if the trend is bad, stop': cumulative task cost 1.111 and a projection of ~1.155 (limit 1.15) from the remaining tasks' costs in the two earlier runs. Remaining: jackson pr6076, pr6215, dataformat-xml pr885, dubbo pr16325, zod pr6500, gson pr3098, pydantic pr13516, urllib3 pr5093.
