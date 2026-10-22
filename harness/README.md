@@ -103,7 +103,7 @@ work described in `docs/BENCH.md`'s "Deferred" section).
 | `ts-oracle/` | ts-morph oracle — TypeScript GT ([README](ts-oracle/README.md)) |
 | `py-oracle/` | Jedi oracle — Python GT ([README](py-oracle/README.md)) |
 | `tasks/<suite>/*.json` | Task definitions **with GT embedded** — self-contained for scoring; see "Benchmarks at a glance" above |
-| `results/` | All scored runs + transcripts (released; layout below) |
+| `results/` | Scored runs + transcripts (released; layout below). New runs land here; runs older than the v0.87.39 benchmark (2026-10-21) were moved to `results/archive-2026-10-22/` (September runs: `results/archive-2026-09-tainted/`) |
 | `results/index.jsonl` | Cross-run comparison table, rebuilt by `bench.py index` |
 | `tests/` | Unit tests for `lib/`, `bench.py`, and the scorer (`python3 -m unittest discover -s tests`); full list in [`tests/CATALOG.md`](tests/CATALOG.md) |
 | `scoring/engine_comparison.py` | Engine-level Prism-vs-Engine B completeness sweep, no LLM — see [docs/AB-ENGINE-COMPARISON.md](docs/AB-ENGINE-COMPARISON.md) |

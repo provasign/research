@@ -7,7 +7,7 @@ one-off runner script — add a flag to `bench.py` or a suite under
 `harness/bench.py` is the CLI entrypoint over `harness/lib/`, the one
 implementation of "invoke `claude`/`codex` with optional Prism and parse the
 result" (generalized from
-`harness/results/daytoday-four-head-2026-09-07/run_readonly.py`, merged with
+`harness/results/archive-2026-09-tainted/daytoday-four-head-2026-09-07/run_readonly.py`, merged with
 the safety properties `harness/runners/coding_suite.py` added: per-task git
 templates, a real dependency-installed venv, a Prism-vs-native template
 content-hash check, PATH isolation, and the protocol-violation audit).
@@ -94,6 +94,9 @@ Flags:
   invalid cell stops new submissions; cells already running finish and retain
   evidence for `bench.py rescore`.
 - `--out DIR` — run directory; default `harness/results/bench-<suite>-<timestamp>`.
+  Runs made before 2026-10-21 were moved to `harness/results/archive-2026-10-22/`;
+  `bench.py index` over `harness/results` also scans the archive unless you point
+  `--results-dir` at a single run.
 - `--preflight-only` — validate tasks, build templates/venvs, write
   `manifest.json`, and stop before invoking any agent.
 

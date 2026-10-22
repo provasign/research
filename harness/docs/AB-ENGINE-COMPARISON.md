@@ -165,7 +165,7 @@ oracle-scored on the agent's own output:
     (harness/results/*/qwen3-coder-30b-gstar/).
 
 Note: a separate general-context run of the same local model (prism_query
-rather than change_impact, harness/results/ab-agentic/jsonnode.local-30b.prism.json)
+rather than change_impact, harness/results/archive-2026-09-tainted/ab-agentic/jsonnode.local-30b.prism.json)
 relayed 5 of 8 — recall 0.625. The task-shaped operation is what gets the
 local model to the ceiling.
 

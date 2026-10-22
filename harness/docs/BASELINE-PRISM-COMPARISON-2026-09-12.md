@@ -1,7 +1,7 @@
 # Claude and Codex native baselines and Prism comparison
 
 Status (12 September 2026): **partial; paid runs stopped**. The [reviewed
-comparison](../results/prism-compare-2026-09-12/comparison.json) has 27 valid
+comparison](../results/archive-2026-09-tainted/archive-pre-09-20/prism-compare-2026-09-12/comparison.json) has 27 valid
 historical native/Prism pairs out of 34 planned. Five original Codex coding
 cells attempted a Prism MCP call that Codex denied under its approval policy.
 The original runner counted the attempt as Prism use, so its `audited_valid`
@@ -13,9 +13,9 @@ timeouts described below.
 
 One Codex coding repair gate, `pallets__click__pr3466`, completed with two
 successful Prism MCP calls and a valid score; it did **not** resolve the task.
-It is archived [separately](../results/prism-compare-2026-09-12/coding-codex-repair-gate/summary.json)
+It is archived [separately](../results/archive-2026-09-tainted/archive-pre-09-20/prism-compare-2026-09-12/coding-codex-repair-gate/summary.json)
 and is not substituted into the aggregate. A four-task repair batch was
-[stopped](../results/prism-compare-2026-09-12/coding-codex-repair-stopped/manifest.json)
+[stopped](../results/archive-2026-09-tainted/archive-pre-09-20/prism-compare-2026-09-12/coding-codex-repair-stopped/manifest.json)
 before producing any completed summary row. No paid cells from this comparison
 are running.
 
@@ -38,12 +38,12 @@ Prism. The other task directories (`e2e-fanout`, `e2e-meaningful`, `seeded`,
 
 | Suite and baseline source | Valid Claude native | Valid Codex native | Scoring |
 | --- | ---: | ---: | --- |
-| `e2e` pilot: [`coding-suite-pilot-2026-09-07`](../results/coding-suite-pilot-2026-09-07/summary.json); remaining: [`product-proof-coding-remaining-2026-09-08`](../results/product-proof-coding-remaining-2026-09-08/summary.json) | 8/8 | 8/8 | Held-out FAIL_TO_PASS and PASS_TO_PASS tests |
-| `manual` pilot: [`product-proof-impact-pilot-2026-09-08`](../results/product-proof-impact-pilot-2026-09-08/summary.json); remaining: [`product-proof-impact-remaining-2026-09-08`](../results/product-proof-impact-remaining-2026-09-08/summary.json) | 7/9 | 9/9 | Site-list oracle, scorer version 4 |
+| `e2e` pilot: [`coding-suite-pilot-2026-09-07`](../results/archive-2026-09-tainted/coding-suite-pilot-2026-09-07/summary.json); remaining: [`product-proof-coding-remaining-2026-09-08`](../results/archive-2026-09-tainted/product-proof-coding-remaining-2026-09-08/summary.json) | 8/8 | 8/8 | Held-out FAIL_TO_PASS and PASS_TO_PASS tests |
+| `manual` pilot: [`product-proof-impact-pilot-2026-09-08`](../results/archive-2026-09-tainted/product-proof-impact-pilot-2026-09-08/summary.json); remaining: [`product-proof-impact-remaining-2026-09-08`](../results/archive-2026-09-tainted/product-proof-impact-remaining-2026-09-08/summary.json) | 7/9 | 9/9 | Site-list oracle, scorer version 4 |
 
 The two invalid Claude native cells in the `manual` remaining run are
 `guava-forwarding-delegate` and `jackson-serialize`: both hit its 300-second
-limit and have incomplete usage. [`four-head-impact-2026-09-07-stopped`](../results/four-head-impact-2026-09-07-stopped/summary.json)
+limit and have incomplete usage. [`four-head-impact-2026-09-07-stopped`](../results/archive-2026-09-tainted/four-head-impact-2026-09-07-stopped/summary.json)
 has valid Claude native results for those same task pins and task hashes, but
 that run allowed 1,200 seconds. Treat them as historical context, not as
 300-second controls. Thus the strict matched impact set is seven tasks.
@@ -65,7 +65,7 @@ Claude pairs had mean recall 0.8849 native versus 0.9447 with Prism; nine
 Codex pairs had 0.9820 versus 0.9983. These are one-trial descriptive results
 against historical native controls. In particular, the Claude impact gain
 does not erase a TypeORM task regression (recall 1.0 to 0.6757). Per-task
-results and provenance are in the [comparison JSON](../results/prism-compare-2026-09-12/comparison.json).
+results and provenance are in the [comparison JSON](../results/archive-2026-09-tainted/archive-pre-09-20/prism-compare-2026-09-12/comparison.json).
 
 The Codex MCP denial was a harness/configuration failure, not evidence about
 Prism's ranking quality. The compact `prism` MCP tool needed an explicit

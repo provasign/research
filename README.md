@@ -6,9 +6,14 @@ The central question is concrete: when an agent must identify every site affecte
 
 ## Current evidence
 
-The latest paired nine-task Sonnet sample covers Go, Java, TypeScript, and Python. Prism reached 0.998 mean recall and 0.955 mean precision at $1.28 total estimated cost. Native tools reached 0.683 recall and 0.770 precision at $3.23. Each cell in this sample is one fresh run, so it is evidence for the current release gate rather than a variance estimate.
+The current reference benchmark is Prism v0.87.39 (2026-10-21), run with Claude Sonnet 5.5 in Claude Code. One arm used Claude Code's own tools; the other used the Prism CLI. Each task ran once per arm.
 
-See [RESULTS.md](RESULTS.md) for the full table, repeated-trial evidence, scoring corrections, and limitations.
+- Change work, 32 tasks (renames and signature changes): Prism solved 32 of 32 and native solved 31 of 32. Prism's task cost was 0.76× native and it made 0.65× as many tool calls.
+- Bug fixes, 40 GitHub issues: Prism solved 25 and native solved 23. That difference is within run-to-run noise. Prism's task cost was 0.92× native and it made 0.85× as many tool calls.
+
+The raw runs are in `harness/results/change32-cli-vs-native-2026-10-21/`, `harness/results/change32-v08739cand-2026-10-21/` and `harness/results/v0837-vs-native41-2026-10-20/`. The full numbers, setup and limits are in the [v0.87.39 benchmark fact sheet](https://github.com/provasign/prism/blob/main/docs/benchmarks/prism-v0.87.39-2026-10-21.md). Older runs are in `harness/results/archive-2026-10-22/`.
+
+See [RESULTS.md](RESULTS.md) for the tables and the earlier, historical evidence.
 
 ## Running a benchmark
 
@@ -84,7 +89,7 @@ Task files contain the authoritative upstream commit. Local absolute paths from 
 - Audit the oracle when precision remains unexpectedly low across unrelated engine changes.
 - Preserve failed and invalid experiments with an explanation; do not cite their toplines.
 
-Prompt caching may reuse identical static prefixes at the provider. It does not share prior answers or agent conversation state. The freshness audit in `harness/results/impact-oracle-reliability-2026-09-07/` records six distinct sessions, snapshots, and transcript directories.
+Prompt caching may reuse identical static prefixes at the provider. It does not share prior answers or agent conversation state. The freshness audit in `harness/results/archive-2026-09-tainted/impact-oracle-reliability-2026-09-07/` records six distinct sessions, snapshots, and transcript directories.
 
 ## Historical studies
 

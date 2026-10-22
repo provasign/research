@@ -45,7 +45,7 @@ upgrade a "single-run" or "estimate" to a pattern without the rerun.
   linked", and both binaries start, index a real repo, and return a correct lookup
   inside `ubuntu:20.04`. Tap refreshed to 0.82.2.
 - **H3 A/B DONE — NEGATIVE. Branch `h3-verify-steering` NOT merged.** 19 movable
-  tasks × 3 passes × 2 arms (`harness/results/h3-ab/pass{1,2,3}/`,
+  tasks × 3 passes × 2 arms (`harness/results/archive-2026-09-tainted/h3-ab/pass{1,2,3}/`,
   `h3_ab_result.py`). Control = main binary, verify optional; treatment = steering
   that mandates a `verify({})` + `testCoverage` read before finishing.
   **Adoption worked: verify called in 45/57 treatment sessions vs 0/57 control.
@@ -75,7 +75,7 @@ upgrade a "single-run" or "estimate" to a pattern without the rerun.
 ## Confirmed this cycle
 
 **Read-guard hook (controlled A/B, 13 tasks, hook-on vs hook-off, byte-identical setup).**
-`harness/results/guard-hook-ab/`: hook-on 0.89x tokens (9.29M vs 10.44M), resolve 10/13 both
+`harness/results/archive-2026-09-tainted/guard-hook-ab/`: hook-on 0.89x tokens (9.29M vs 10.44M), resolve 10/13 both
 arms, same three failures. Holds at 0.94x excluding flagged outliers. First non-confounded
 measurement; supersedes the earlier "wash" note. Shipped as an opt-in `prism init` flag
 (commit 4c46f607): embeds the two hook scripts, writes `.claude/hooks/`, registers
@@ -153,7 +153,7 @@ Ranked by cheapness to prove. All impact figures are estimates from the 50-sessi
    so a broad search still windows every hit.
    **50-task A/B** (`prism_body_baseline` vs `prism_body_exp`, same binary-swap harness
    pattern as the read-guard hook, guard-fix-run's manifest,
-   `harness/results/search-body-ab/`): resolved 31/50 → 33/50, tokens 0.998x overall
+   `harness/results/archive-2026-09-tainted/search-body-ab/`): resolved 31/50 → 33/50, tokens 0.998x overall
    (~1.02x excluding the 4 largest per-task ratio outliers each direction — essentially
    flat, not a token-savings win). 4 resolve mismatches: 3 improvements
    (jackson-databind pr6019, pr6061; jansson pr731) vs 1 regression (click pr3471).
@@ -491,7 +491,7 @@ misses from comma-joined names: 1 in 209 sessions. Prism errors: 4 total.
 
 ## Artifacts
 
-`harness/results/guard-fix-run/` (50-task set), `guard-hook-ab/` (hook A/B),
+`harness/results/archive-2026-09-tainted/guard-fix-run/` (50-task set), `guard-hook-ab/` (hook A/B),
 `residency-ab/` (resident vs deferred), `harness/runners/run_overnight.py`
 (`--native-arm/--prism-arm/--manifest/--out-dir/--model`), `harness/runners/ab_endtoend_arms.py`
 (`prism_init`, `prism_init_deferred`, `prism_init_no_guard`), `harness/hooks/` (harness copy of
