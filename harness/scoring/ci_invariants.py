@@ -178,7 +178,9 @@ def fetch_corpus(name: str, spec: dict, corpus_root: Path) -> Path:
 
 def run_prism(prism: Path, workdir: Path, *args: str) -> dict:
     result = subprocess.run(
-        [str(prism), *args, "."], capture_output=True, text=True, cwd=workdir, timeout=CMD_TIMEOUT,
+        # --format json explicitly: prism's default became text (CON-01);
+        # every prism release accepts the flag.
+        [str(prism), *args, "--format", "json", "."], capture_output=True, text=True, cwd=workdir, timeout=CMD_TIMEOUT,
     )
     if result.returncode != 0:
         raise RuntimeError(f"prism {' '.join(args)} failed in {workdir}: {result.stderr[:400]}")
